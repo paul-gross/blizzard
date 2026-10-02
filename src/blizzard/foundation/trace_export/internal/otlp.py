@@ -1,4 +1,4 @@
-"""The OTLP ``http/protobuf`` binding of :class:`ITraceExporter` — the hub's only OpenTelemetry import.
+"""The OTLP ``http/protobuf`` binding of :class:`ITraceExporter` — the only OpenTelemetry import.
 
 Span records become finished SDK span data carrying their derived contexts; no tracer, no global
 provider, no instrumentation. Endpoint, headers, timeout, compression and certificates are left to
@@ -20,7 +20,6 @@ from blizzard.foundation.trace_ids import DerivedContext
 from blizzard.foundation.trace_spans import Attributes, SpanRecord
 from blizzard.foundation.trace_spans import SpanKind as RecordKind
 from blizzard.foundation.trace_spans import SpanStatus as RecordStatus
-from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 
 _KINDS = {RecordKind.INTERNAL: SpanKind.INTERNAL}
 _STATUSES = {RecordStatus.UNSET: StatusCode.UNSET, RecordStatus.ERROR: StatusCode.ERROR}
@@ -41,9 +40,9 @@ def _attributes(attributes: Attributes) -> dict[str, str | int | float | bool | 
 class OtlpTraceExporter:
     """Maps each :class:`SpanRecord` to a finished ``ReadableSpan`` and hands the batch to ``OTLPSpanExporter``."""
 
-    def __init__(self, *, resource: Mapping[str, str]) -> None:
+    def __init__(self, *, resource: Mapping[str, str], scope: str, scope_version: str) -> None:
         self._resource = Resource.create(dict(resource))
-        self._scope = InstrumentationScope(INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION)
+        self._scope = InstrumentationScope(scope, scope_version)
         self._exporter = OTLPSpanExporter()
 
     def export(self, spans: Sequence[SpanRecord]) -> bool:

@@ -878,10 +878,12 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
     return config
 
 
-def start_runner(runner_dir: Path, *, crash_point: str | None) -> subprocess.Popen[str]:
+def start_runner(
+    runner_dir: Path, *, crash_point: str | None, extra_env: dict[str, str] | None = None
+) -> subprocess.Popen[str]:
     """Start (or restart) the runner daemon; arm ``crash_point`` for a runner-side point."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1"}
+    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})}
     _apply_crash_env(env, crash_point)
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir)],

@@ -12,12 +12,12 @@ import pytest
 import sqlalchemy as sa
 from click.testing import CliRunner
 
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.config import TracingConfig
 from blizzard.hub.domain.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.store import schema
-from blizzard.hub.trace_export.settings import TracingSettings
 from tests.support import HubHarness, InMemoryTraceExporter
 from tests.test_trace_export_sweep import _closed_pair, _sweep
 from tests.trace_hub import trace_hub

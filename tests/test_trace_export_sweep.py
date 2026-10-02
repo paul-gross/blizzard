@@ -10,12 +10,13 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
 from blizzard.foundation.trace_ids import SpanRole, StepKey, span_id
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import Sweep
-from blizzard.hub.config import TracingConfig
-from blizzard.hub.domain.tracing.cursor import BACKOFF_CAP, CursorKey
+from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import TraceCursorRecord
 from blizzard.hub.domain.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema

@@ -7,10 +7,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.outbound import event_payload
 from blizzard.runner.loop.context import LoopContext
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -128,15 +129,9 @@ class OutboundFacts:
         detail: Mapping[str, object] | None,
         at: datetime,
     ) -> None:
-        payload = {
-            "severity": EVENT_LOG_SEVERITY[kind],
-            "kind": kind,
-            "chunk_id": chunk_id,
-            "lease_id": lease_id,
-            "node_name": node_name,
-            "message": message,
-            "detail": detail,
-        }
+        payload = event_payload(
+            kind=kind, chunk_id=chunk_id, lease_id=lease_id, node_name=node_name, message=message, detail=detail
+        )
         self._enqueue(EVENT_RECORDED, chunk_id, lease_id, payload, at)
 
     def _enqueue(

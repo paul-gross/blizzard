@@ -23,6 +23,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.dormant",
     "blizzard.runner.domain.attachments",
     "blizzard.runner.domain.git_commit_declaration",
+    "blizzard.runner.domain.tracing.sweep",
     "blizzard.hub.delivery.hub_node",
     "blizzard.hub.domain.claim",
     "blizzard.hub.domain.apply",

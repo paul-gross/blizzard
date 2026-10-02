@@ -26,6 +26,8 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
@@ -56,12 +58,14 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.registry import RunnerRetired
-from blizzard.hub.domain.tracing.attributes import resource_attributes
+from blizzard.hub.domain.tracing.attributes import (
+    INSTRUMENTATION_SCOPE,
+    INSTRUMENTATION_SCOPE_VERSION,
+    resource_attributes,
+)
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.trace_export.internal.otlp import OtlpTraceExporter
-from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -328,7 +332,13 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         transcript_caps=_transcript_caps(config),
         # No exporter is built unless OpenTelemetry's own variables enable tracing.
         trace_exporter=(
-            OtlpTraceExporter(resource=resource_attributes(os.environ, __version__)) if tracing.enabled() else None
+            OtlpTraceExporter(
+                resource=resource_attributes(os.environ, __version__),
+                scope=INSTRUMENTATION_SCOPE,
+                scope_version=INSTRUMENTATION_SCOPE_VERSION,
+            )
+            if tracing.enabled()
+            else None
         ),
         tracing=config.tracing,
         tracing_settings=tracing,
@@ -356,7 +366,7 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
         chunk_id=None,
         lease_id=None,
         node_name=None,
-        message=tracing.rejection_message,
+        message=tracing.rejection_message("hub"),
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
     )

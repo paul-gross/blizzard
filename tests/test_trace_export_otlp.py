@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
-from blizzard.hub.config import TracingConfig
-from blizzard.hub.trace_export.internal.otlp import OtlpTraceExporter
+from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.trace_hub import trace_hub, transitioned_and_stopped
 
@@ -20,6 +21,7 @@ pytestmark = pytest.mark.component
 _KEY = StepKey.attempt("ch_1", 2)
 _PREVIOUS = StepKey.attempt("ch_1", 1)
 _START = datetime(2026, 7, 13, 12, 0, 0, 123456, tzinfo=UTC)
+_SCOPE = {"scope": INSTRUMENTATION_SCOPE, "scope_version": INSTRUMENTATION_SCOPE_VERSION}
 _RESOURCE = {"service.name": "blizzard-hub", "service.version": "9.9.9", "blizzard.trace.schema_version": "1"}
 
 
@@ -60,7 +62,7 @@ def sink(monkeypatch: pytest.MonkeyPatch) -> Iterator[OtlpSink]:
 def test_the_sink_receives_derived_ids_parent_times_attributes_events_links_and_resource(sink: OtlpSink) -> None:
     root, child = _records()
 
-    assert OtlpTraceExporter(resource=_RESOURCE).export([root, child]) is True
+    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export([root, child]) is True
 
     [resource_spans] = sink.resource_spans()
     resource = {a.key: a.value.string_value for a in resource_spans.resource.attributes}
@@ -102,12 +104,12 @@ def test_the_sink_receives_derived_ids_parent_times_attributes_events_links_and_
 def test_a_sink_answering_5xx_makes_export_return_false(sink: OtlpSink) -> None:
     sink.status = 500
 
-    assert OtlpTraceExporter(resource=_RESOURCE).export(list(_records())) is False
+    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export(list(_records())) is False
     assert sink.requests == []
 
 
 def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpSink) -> None:
-    exporter = OtlpTraceExporter(resource=_RESOURCE)
+    exporter = OtlpTraceExporter(resource=_RESOURCE, **_SCOPE)
     hub, graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=TracingConfig(settle_seconds=0))
     sweep = hub.services.trace_export
     assert sweep is not None

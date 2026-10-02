@@ -157,6 +157,31 @@ lease_closures = Table(
     Column("reason", String, nullable=False),  # transitioned | reaped | failed | escalated
     Column("closed_at", UtcDateTime, nullable=False),
 )
+# The trace sweep's window read, in cursor order.
+Index("ix_lease_closures_closed_at_lease_id", lease_closures.c.closed_at, lease_closures.c.lease_id)
+
+# --- Trace export cursor and failure latch -----------------------------------
+# Append-only; the newest row of each is the cursor's position and the latch's state.
+
+trace_cursor = Table(
+    "trace_cursor",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("position_at", UtcDateTime, nullable=False),  # the told lease's first closure time
+    Column("lease_id", String, nullable=False),  # empty on an opening row
+    Column("span_count", Integer, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+Index("ix_trace_cursor_recorded_at_id", trace_cursor.c.recorded_at, trace_cursor.c.id)
+
+trace_export_latch = Table(
+    "trace_export_latch",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String, nullable=False),  # trace-export-failed | trace-export-recovered
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+Index("ix_trace_export_latch_recorded_at_id", trace_export_latch.c.recorded_at, trace_export_latch.c.id)
 
 # --- Binding releases (released iff a release fact exists) -------------------
 # Held env ids are `env_bindings` minus `binding_releases`.

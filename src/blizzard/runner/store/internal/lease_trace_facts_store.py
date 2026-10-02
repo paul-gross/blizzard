@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the lease trace-facts read seam (package-private).
+"""SQLAlchemy adapter for the lease trace seam (package-private).
 
 Hydrates :class:`~blizzard.runner.domain.tracing.facts.LeaseTraceFacts` for closed leases only,
 selecting the columns the bundle declares and never a content column. The plural read issues a
@@ -10,12 +10,15 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Connection, Row, func, select
+from sqlalchemy import Connection, Row, and_, func, insert, or_, select
 
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
+from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
 from blizzard.runner.domain.tracing.facts import (
     BoundaryRow,
     CheckResultRow,
@@ -37,6 +40,7 @@ from blizzard.runner.domain.tracing.facts import (
     TakeoverRow,
     UsageRow,
 )
+from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseCursorRecord
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs
 from blizzard.runner.store.schema import (
@@ -49,6 +53,7 @@ from blizzard.runner.store.schema import (
     lease_spawns,
     leases,
     nudge_facts,
+    outbound_buffer,
     overload_facts,
     park_facts,
     park_resumes,
@@ -57,6 +62,8 @@ from blizzard.runner.store.schema import (
     session_ends,
     takeover_ends,
     takeovers,
+    trace_cursor,
+    trace_export_latch,
     usage_facts,
 )
 
@@ -315,8 +322,11 @@ def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
     }
 
 
+_LATCH_KINDS: tuple[EventLogKind, ...] = ("trace-export-failed", "trace-export-recovered")
+
+
 class LeaseTraceFactsStore:
-    """Read-only lease trace-facts adapter over the runner store engine."""
+    """Lease trace adapter over the runner store engine: closed-lease facts, the sweep's window, cursor and latch."""
 
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
@@ -331,3 +341,66 @@ class LeaseTraceFactsStore:
             for batch in id_batches(sorted(set(lease_ids))):
                 result.update(_facts(conn, batch))
         return result
+
+    def closed_leases_after(self, since: LeaseCursorKey, until: datetime, limit: int) -> tuple[LeaseCursorKey, ...]:
+        c = lease_closures.c
+        earlier = lease_closures.alias("earlier")
+        stmt = (
+            select(c.closed_at, c.lease_id)
+            .where(
+                c.closed_at >= since.at,
+                c.closed_at <= until,
+                or_(c.closed_at > since.at, c.lease_id > since.lease_id),
+                ~select(earlier.c.id).where(and_(earlier.c.lease_id == c.lease_id, earlier.c.id < c.id)).exists(),
+            )
+            .order_by(c.closed_at, c.lease_id)
+            .limit(limit)
+        )
+        with self._store.connect() as conn:
+            return tuple(LeaseCursorKey(r.closed_at, str(r.lease_id)) for r in conn.execute(stmt))
+
+    def oldest_unsent_lease(self, since: LeaseCursorKey, until: datetime) -> LeaseCursorKey | None:
+        return next(iter(self.closed_leases_after(since, until, 1)), None)
+
+    def newest_trace_cursor(self) -> LeaseCursorRecord | None:
+        c = trace_cursor.c
+        with self._store.connect() as conn:
+            row = conn.execute(select(trace_cursor).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)).first()
+        if row is None:
+            return None
+        return LeaseCursorRecord(LeaseCursorKey(row.position_at, row.lease_id), row.span_count, row.recorded_at)
+
+    def newest_trace_latch(self) -> EventLogKind | None:
+        c = trace_export_latch.c
+        with self._store.connect() as conn:
+            kind = conn.execute(
+                select(c.kind).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+            ).scalar_one_or_none()
+        return next((k for k in _LATCH_KINDS if k == kind), None)
+
+    def append_trace_cursor(self, record: LeaseCursorRecord) -> None:
+        with self._store.begin() as conn:
+            conn.execute(
+                insert(trace_cursor).values(
+                    position_at=record.position.at,
+                    lease_id=record.position.lease_id,
+                    span_count=record.span_count,
+                    recorded_at=record.recorded_at,
+                )
+            )
+
+    def record_trace_latch(self, kind: EventLogKind, *, at: datetime, report_kind: str, report_payload: str) -> int:
+        # One transaction: a kill between the two would either re-announce after restart or never announce.
+        with self._store.begin() as conn:
+            conn.execute(insert(trace_export_latch).values(kind=kind, recorded_at=at))
+            result = conn.execute(
+                insert(outbound_buffer).values(
+                    kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
+                )
+            )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
+
+
+def _conforms_lease_trace_facts_store(x: LeaseTraceFactsStore) -> IWriteLeaseTraces:
+    return x

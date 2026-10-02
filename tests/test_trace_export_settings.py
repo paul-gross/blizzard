@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.trace_export.settings import TracingSettings
+from blizzard.foundation.trace_export.settings import TracingSettings
 
 pytestmark = pytest.mark.unit
 
@@ -42,8 +42,8 @@ def test_another_protocol_is_rejected_naming_its_variable(name: str) -> None:
     settings = TracingSettings.of({**_ENDPOINT, name: "grpc"})
     assert settings == TracingSettings("rejected", setting=name, value="grpc", endpoint="http://collector:4318")
     assert not settings.enabled()
-    assert name in settings.rejection_message
-    assert "grpc" in settings.rejection_message
+    assert name in settings.rejection_message("hub")
+    assert "grpc" in settings.rejection_message("hub")
 
 
 def test_the_traces_protocol_overrides_the_general_one() -> None:

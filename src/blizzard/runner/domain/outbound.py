@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
+
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 
 __all__ = [
     "BufferedFact",
     "IReadOutboundRepository",
     "IWriteOutboundRepository",
     "OutboundFactRecord",
+    "event_payload",
 ]
 
 
@@ -37,6 +41,27 @@ class OutboundFactRecord:
     lease_id: str | None
     created_at: datetime
     acked_at: datetime | None
+
+
+def event_payload(
+    *,
+    kind: EventLogKind,
+    chunk_id: str | None,
+    lease_id: str | None,
+    node_name: str | None,
+    message: str,
+    detail: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """The ``event.recorded`` payload — one shape for every operational event this runner buffers."""
+    return {
+        "severity": EVENT_LOG_SEVERITY[kind],
+        "kind": kind,
+        "chunk_id": chunk_id,
+        "lease_id": lease_id,
+        "node_name": node_name,
+        "message": message,
+        "detail": detail,
+    }
 
 
 class IReadOutboundRepository(Protocol):

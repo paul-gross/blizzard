@@ -18,6 +18,7 @@ from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
@@ -634,6 +635,8 @@ class RunnerConfig:
     #: the periodic sweep prunes them (``[worker_stdout] retention_days``) —
     #: independent of lease release, which leaves them in place.
     worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
+    #: Lease-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
+    tracing: TracingConfig = field(default_factory=TracingConfig)
 
     @property
     def worker_env(self) -> AllowlistedEnv:
@@ -943,6 +946,7 @@ class RunnerConfig:
             "# worker-stdout/<lease_id>.<generation>.{stdout,stderr}.\n"
             "[worker_stdout]\n"
             f"retention_days = {self.worker_stdout_retention_days}\n"
+            + "".join(self.tracing.to_toml(unit="closed leases"))
             + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
@@ -1167,6 +1171,7 @@ class RunnerConfig:
             effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             worker_stdout_retention_days=worker_stdout.retention_days,
+            tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
             opencode_enabled=opencode_enabled,
             opencode_auth_path=opencode.word("auth_path"),

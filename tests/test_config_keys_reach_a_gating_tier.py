@@ -30,7 +30,7 @@ _CONFIGS = (
     ("hub", "OAuthProviderConfig"),
     ("hub", "AuthConfig"),
     ("hub", "TranscriptCapsConfig"),
-    ("hub", "TracingConfig"),
+    ("foundation/trace_export", "TracingConfig"),
 )
 
 

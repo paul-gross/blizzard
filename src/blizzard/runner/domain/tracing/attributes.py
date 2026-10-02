@@ -6,10 +6,13 @@ Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/spans.md`` §Attri
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.runner.runner_spans"
 INSTRUMENTATION_SCOPE_VERSION = "1"
+DEFAULT_SERVICE_NAME = "blizzard-runner"
 
 # Dimensions
 RUNNER_ID = "blizzard.runner.id"
@@ -41,6 +44,9 @@ GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 INVOKE_AGENT = "invoke_agent"
 
+# Resource
+SERVICE_VERSION = "service.version"
+
 # Event names
 EVENT_SESSION_IDENTIFIED = "session identified"
 EVENT_SESSION_END = "session end"
@@ -57,3 +63,10 @@ DECLARED_ATTRIBUTES: frozenset[str] = shared.SHARED_ATTRIBUTES | frozenset(
     for name, value in tuple(globals().items())
     if name.isupper() and isinstance(value, str) and value.startswith(_PREFIXES) and name != "INSTRUMENTATION_SCOPE"
 )
+
+
+def resource_attributes(environ: Mapping[str, str], version: str) -> dict[str, str]:
+    """The runner's resource attributes. ``service.name`` is ``blizzard-runner`` only when neither
+    ``OTEL_SERVICE_NAME`` nor a ``service.name`` entry of ``OTEL_RESOURCE_ATTRIBUTES`` names one."""
+    name = shared.service_name(environ, DEFAULT_SERVICE_NAME)
+    return {shared.SERVICE_NAME: name, SERVICE_VERSION: version, shared.TRACE_SCHEMA_VERSION: shared.SCHEMA_VERSION}

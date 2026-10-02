@@ -33,6 +33,17 @@ def test_every_disposition_is_recorded_or_projected_with_a_real_site() -> None:
         assert disposition.where
 
 
+def test_every_named_site_exists() -> None:
+    """Each ``path:Qualified.name`` resolves to a file under ``src/blizzard/`` defining its last name."""
+    for kind, disposition in CENSUS.items():
+        sites = (disposition.where, *(disposition.also if isinstance(disposition, Recorded) else ()))
+        for site in sites:
+            path, _, qualname = site.partition(":")
+            source = (_REPO_ROOT / "src" / "blizzard" / path).read_text()
+            name = qualname.rsplit(".", 1)[-1]
+            assert re.search(rf"\b(def|class) {re.escape(name)}\b", source), f"{kind}: {site} names no definition"
+
+
 def _event_kinds_table() -> list[tuple[str, str]]:
     """The ``### Event kinds`` table's ``(Kind, Severity)`` rows, in document order — bounded
     to this one table, not every ``|``-prefixed line for the rest of the file, so a later

@@ -164,6 +164,35 @@ Collector configuration that receives OTLP over HTTP and sends every trace to tw
 
 Adjust the endpoints and the header name to your backends; keep the pipeline shape.
 
+## Runner spans
+
+A runner tells each lease it closes into the trace of the step the lease ran, under the instrumentation scope
+`blizzard.runner.runner_spans` at version `1`. A `worker <node>` span covers the lease, with the lease's invocations,
+parks, overload backoffs and takeovers as its children.
+
+- **Turning them on.** The runner reads the same OpenTelemetry variables as the hub, and only those:
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns its sweep on, and a protocol other than
+  `http/protobuf` is rejected. `service.name` is `blizzard-runner` unless `OTEL_SERVICE_NAME` or
+  `OTEL_RESOURCE_ATTRIBUTES` names one. The sweep's knobs are the `[tracing]` block of `blizzard-runner.toml`, with the
+  same names and defaults as the hub's; `batch_limit` counts closed leases.
+- **Where it runs.** Only `blizzard runner host` sweeps, on a thread of its own, so a slow or hung backend never delays
+  a tick. `blizzard runner tick` never tells anything. At shutdown the runner waits a few seconds for an export in
+  flight, then exits without it; the lease is told again on the next start.
+- **Events.** The runner reports `trace-export-failed`, `trace-export-recovered`, `trace-window-skipped` and
+  `trace-config-rejected` the same way the hub does. They reach the hub's event log attributed to the runner, carrying
+  no chunk or lease. A rejected setting is reported once each time the runner starts, and the runner keeps working with
+  tracing off.
+
+**Meeting the hub's step.** No message passes between the daemons. Both derive the step's trace id from the chunk and
+epoch, and the `worker` span's parent is the span id the hub derives for that step's root, so a backend shows the
+runner's spans under the hub's step. A runner span id uses the same derivation with its role prefixed `runner/`. If the
+hub has tracing off, the runner's spans still group by trace id under a parent that never arrives.
+
+**The gap between them.** The two daemons stamp times with their own clocks, and a runner mints its lease before the hub
+hears of it, so a `worker` span can start before its parent. Neither side clamps to the other. The gap is the start bias
+described under [Runner steps start at the claim](#runner-steps-start-at-the-claim), made visible; a gap that does not
+match the runner's drain cadence points at clock skew between the hosts.
+
 ## Checking on tracing
 
 `blizzard hub traces status` reads `GET /api/traces/status`, open to anyone who can view the fleet. It reports:

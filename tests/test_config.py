@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, TracingConfig, WorkSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
@@ -1989,3 +1990,40 @@ def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -
     )
     with pytest.raises(HubConfigError, match=f"tracing.{key}"):
         HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_runner_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path / "runner", "")
+    assert RunnerConfig.load(tmp_path / "runner").tracing == TracingConfig()
+
+
+@pytest.mark.unit
+def test_runner_tracing_scaffold_renders_every_knob_commented_and_names_closed_leases(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    text = RunnerConfig.scaffold(root).to_toml()
+    assert "[tracing]\n" in text
+    assert "closed leases per export" in text
+    for key, value in dataclasses.asdict(TracingConfig()).items():
+        assert f"# {key} = {value}\n" in text
+    (root / "blizzard-runner.toml").write_text(text)
+    assert RunnerConfig.load(root).tracing == TracingConfig()
+
+
+@pytest.mark.unit
+def test_runner_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    tracing = TracingConfig(sweep_seconds=5, settle_seconds=0, batch_limit=10, max_lag_seconds=3600)
+    config = dataclasses.replace(RunnerConfig.scaffold(root), tracing=tracing)
+    (root / "blizzard-runner.toml").write_text(config.to_toml())
+    assert RunnerConfig.load(root).tracing == tracing
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("key", "value"), [("sweep_seconds", "0"), ("settle_seconds", "-1"), ("batch_limit", '"x"')])
+def test_runner_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -> None:
+    _write_runner_config(tmp_path / "runner", f"\n[tracing]\n{key} = {value}\n")
+    with pytest.raises(ConfigError, match=f"tracing.{key}"):
+        RunnerConfig.load(tmp_path / "runner")

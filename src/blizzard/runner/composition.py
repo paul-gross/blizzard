@@ -9,15 +9,27 @@ Mirrors :func:`blizzard.hub.composition.build_services`."""
 
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from sqlalchemy import Engine
 
+from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.tracing.attributes import (
+    INSTRUMENTATION_SCOPE,
+    INSTRUMENTATION_SCOPE_VERSION,
+    resource_attributes,
+)
+from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
@@ -45,6 +57,7 @@ from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessSto
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
@@ -76,6 +89,10 @@ class RunnerProcess:
     health: HarnessHealthCache
     events: EventBroker | None
     executor: ThreadPoolExecutor
+    #: Whether OpenTelemetry's own variables enable lease tracing, read once for this process.
+    trace_settings: TracingSettings
+    #: The lease-trace sweep — ``None`` unless tracing is enabled. Only ``runner host`` drives it.
+    trace_sweep: LeaseTraceSweep | None
 
     def close(self) -> None:
         try:
@@ -85,9 +102,17 @@ class RunnerProcess:
 
 
 def build_runner_process(
-    config: RunnerConfig, *, events: EventBroker | None = None, bundle: BundleSnapshot | None = None
+    config: RunnerConfig,
+    *,
+    events: EventBroker | None = None,
+    bundle: BundleSnapshot | None = None,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
 ) -> RunnerProcess:
-    """Construct the process-scoped graph; dispose partial resources on failure."""
+    """Construct the process-scoped graph; dispose partial resources on failure.
+
+    ``environ`` (default ``os.environ``) decides whether tracing is enabled; ``trace_exporter``
+    replaces the OTLP binding an enabled sweep would otherwise build."""
     engine = create_engine_from_url(config.db_url)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
@@ -110,13 +135,46 @@ def build_runner_process(
                 OPENCODE_HARNESS_ID: config.opencode_model_aliases,
             },
         )
-        return RunnerProcess(engine, stores, connections, provider, harnesses, clock, process, health, events, executor)
+        tracing = TracingSettings.of(os.environ if environ is None else environ)
+        trace_sweep = (
+            LeaseTraceSweep(
+                leases=stores.lease_traces,
+                outbound=stores.outbound,
+                exporter=trace_exporter or _otlp_exporter(environ),
+                clock=clock,
+                config=config.tracing,
+            )
+            if tracing.enabled()
+            else None
+        )
+        return RunnerProcess(
+            engine,
+            stores,
+            connections,
+            provider,
+            harnesses,
+            clock,
+            process,
+            health,
+            events,
+            executor,
+            trace_settings=tracing,
+            trace_sweep=trace_sweep,
+        )
     except BaseException:
         try:
             executor.shutdown(wait=True)
         finally:
             engine.dispose()
         raise
+
+
+def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
+    return OtlpTraceExporter(
+        resource=resource_attributes(os.environ if environ is None else environ, __version__),
+        scope=INSTRUMENTATION_SCOPE,
+        scope_version=INSTRUMENTATION_SCOPE_VERSION,
+    )
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
@@ -160,6 +218,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
+        lease_traces=LeaseTraceFactsStore(connections),
     )
 
 
