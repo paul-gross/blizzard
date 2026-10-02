@@ -30,6 +30,9 @@ from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCR
 LEGACY_ANTHROPIC_SLUG = "anthropic"
 LEGACY_ANTHROPIC_NAME = "Anthropic"
 
+#: Winter's own exporter variables; only the runner sets them, and only under `worker_programs`.
+_WINTER_OTEL_PREFIX = "WINTER_OTEL_"
+
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned directory the published harness-config snapshots live under.
@@ -647,18 +650,23 @@ class RunnerConfig:
         return self._build_worker_env()
 
     def _build_worker_env(self) -> AllowlistedEnv:
-        dropped = self.dropped_otel_passthrough
+        # `WINTER_OTEL_*` is withheld unconditionally: the runner alone hands winter its exporter, and only under
+        # `worker_programs`, so a passed-through value would skip the receiver's lease check and redaction.
+        dropped = {
+            *self.dropped_otel_passthrough,
+            *(n for n in self.worker_env_passthrough if n.startswith(_WINTER_OTEL_PREFIX)),
+        }
         passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
         return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
 
     @property
     def dropped_otel_passthrough(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
-        """The ``OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every worker
-        while tracing is on — a worker must never inherit the runner's exporter configuration or
+        """The ``OTEL_*`` and ``WINTER_OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every
+        worker while tracing is on — a worker must never inherit the runner's exporter configuration or
         credentials. ``host``'s own startup warning names them."""
         if not TracingSettings.of(os.environ).enabled():
             return ()
-        return tuple(name for name in self.worker_env_passthrough if name.startswith("OTEL_"))
+        return tuple(name for name in self.worker_env_passthrough if name.startswith(("OTEL_", _WINTER_OTEL_PREFIX)))
 
     @property
     def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates

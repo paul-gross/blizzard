@@ -437,6 +437,19 @@ def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_ano
     assert dict(span.attributes or {})["blizzard.lease.id"] == "lease_1"
 
 
+def test_winters_command_span_lands_in_the_step_and_another_chunks_is_dropped(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+        ours = _post_json(client, _export(_own_trace(), scope="winter_cli"))
+        assert "partialSuccess" not in ours.json()
+        foreign = trace_id(StepKey.attempt("ch_other", 1))
+        theirs = _post_json(client, _export(foreign, scope="winter_cli"))
+        assert int(theirs.json()["partialSuccess"]["rejectedSpans"]) == 1
+    (span,) = _finished(handle, exporter)
+    assert dict(span.attributes or {})["blizzard.lease.id"] == "lease_1"
+
+
 def test_a_body_past_the_size_cap_is_refused_413(tmp_path: Path) -> None:
     handle = _handle(InMemorySpanExporter())
     with TestClient(_app(tmp_path, handle, [])) as client:
