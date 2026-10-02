@@ -1793,10 +1793,10 @@
    "total": 301
   },
   "blizzard/hub/app.py": {
-   "comments": 23,
+   "comments": 24,
    "docstrings": 45,
    "over_cap": 2,
-   "total": 403
+   "total": 409
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -4121,10 +4121,10 @@
    "total": 71
   },
   "blizzard/runner/app.py": {
-   "comments": 52,
+   "comments": 53,
    "docstrings": 25,
    "over_cap": 7,
-   "total": 471
+   "total": 477
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -6824,9 +6824,9 @@
   },
   "test_apps.py": {
    "comments": 5,
-   "docstrings": 7,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 68
+   "total": 100
   },
   "test_artifact_seq_concurrency.py": {
    "comments": 6,

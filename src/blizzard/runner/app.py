@@ -205,7 +205,13 @@ def create_app(
     process = process or LinuxProcessProbe()
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
-    app = FastAPI(title="blizzard-runner", version=__version__, lifespan=_lifespan)
+    # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
+    app = FastAPI(
+        title="blizzard-runner",
+        version=__version__,
+        lifespan=_lifespan,
+        telemetry={"auto_configure": False},
+    )
     app.state.config = config
     app.state.readiness = readiness
     # The seams below are None on the store-free app.
