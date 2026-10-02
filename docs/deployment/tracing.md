@@ -254,18 +254,17 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
 ### Worker spans
 
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
-`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own
-platform pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own.
-The receiver exists only while platform tracing is on; with it off the path answers `404`, and a sender is expected to
-carry on.
+`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
+pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
+only while platform tracing is on; with it off the path answers `404`, and a sender is expected to carry on.
 
 - **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
   request names no lease: the runner finds the lease the token was minted for, which must still be active or under an
   open takeover. A missing, unknown or closed-lease token is refused `403`.
 - **Encodings.** `application/json` and `application/x-protobuf`, both identity-encoded; any `Content-Encoding` but
-  `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an
-  OTLP `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans
-  that were refused.
+  `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an OTLP
+  `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans that
+  were refused.
 - **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
   scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
   never kept.
@@ -278,6 +277,24 @@ carry on.
   sustained; a request needing more spans than its bucket holds is refused `429` whole, and its spans are counted as
   dropped. A span keeps at most 64 of its attributes, and a span name, scope version or string attribute value is cut at
   1024 characters.
+
+#### Worker programs
+
+With `worker_programs = true` in the `[tracing]` block of `blizzard-runner.toml`, default `false` and effective only
+alongside `platform = true`, the runner also lets the programs a worker runs send their own spans. Each invocation's
+environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the runner's `/v1/traces`),
+`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token); with it
+off, no `OTEL_EXPORTER_*` variable reaches a worker.
+
+- **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
+  `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's step are kept, the runner
+  stamps caller, chunk and lease, and every cap and the redacting export apply. The CLI's own spans are unchanged.
+- **Risk.** Blizzard cannot control what a third-party program puts in its spans; one may record request bodies or query
+  parameters. Turn this on only for programs you trust with that.
+- **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports to the runner as
+  well.
+- **`TRACEPARENT`.** Most SDKs do not read it on their own; a program joins the step's trace only if it is configured
+  to.
 
 ### Platform attributes
 

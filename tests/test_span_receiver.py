@@ -346,3 +346,15 @@ def test_the_disabled_handle_forwards_nothing() -> None:
     handle = DisabledPlatformTracing()
     assert not handle.enabled
     handle.forward([_span()], "blizzard-cli")
+
+
+def test_an_open_allowlist_keeps_another_scope_and_its_attributes_but_only_inside_the_step() -> None:
+    lease = _lease()
+    other = _span(trace_id=_trace(), scope_name="third.party", attributes={"db.statement": "x"})
+    foreign = _span(trace_id=_trace("ch_2"), scope_name="third.party")
+    admission = admit([other, foreign], lease, Allowlist(scope=None, attributes=None))
+    assert admission.dropped == 1
+    (kept,) = admission.kept
+    assert kept.scope_name == "third.party"
+    assert kept.attributes["db.statement"] == "x"
+    assert kept.attributes["blizzard.lease.id"] == lease.lease_id

@@ -111,9 +111,15 @@ def _app(  # type: ignore[no-untyped-def]
     seen: list[httpx.Request],
     counter: ReceiverCounter | None = None,
     limiter: SpanRateLimiter | None = None,
+    worker_programs: bool = False,
 ):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url="http://hub.local:8421")
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=f"sqlite:///{tmp_path / 'runner.db'}",
+        hub_url="http://hub.local:8421",
+        tracing=TracingConfig(worker_programs=worker_programs),
+    )
 
     def hub(request: httpx.Request) -> httpx.Response:
         seen.append(request)
@@ -395,6 +401,28 @@ def test_a_foreign_scope_is_dropped(tmp_path: Path) -> None:
         response = _post_json(client, _export(_own_trace(), scope="some.library"))
         assert int(response.json()["partialSuccess"]["rejectedSpans"]) == 1
     assert _finished(handle, exporter) == []
+
+
+def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_another_chunks(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+        ours = _post_json(
+            client,
+            _export(
+                _own_trace(),
+                scope="some.library",
+                extra={"attributes": [{"key": "db.system", "value": {"stringValue": "sqlite"}}]},
+            ),
+        )
+        assert "partialSuccess" not in ours.json()
+        foreign = trace_id(StepKey.attempt("ch_other", 1))
+        theirs = _post_json(client, _export(foreign, scope="some.library"))
+        assert int(theirs.json()["partialSuccess"]["rejectedSpans"]) == 1
+    (span,) = _finished(handle, exporter)
+    assert span.resource.attributes["service.name"] == "blizzard-worker-program"
+    assert dict(span.attributes or {})["db.system"] == "sqlite"
+    assert dict(span.attributes or {})["blizzard.lease.id"] == "lease_1"
 
 
 def test_a_body_past_the_size_cap_is_refused_413(tmp_path: Path) -> None:

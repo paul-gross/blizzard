@@ -377,6 +377,7 @@ class Spawner:
             lease_token=lease_token,
             tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
             traceparent=self._traceparent(lease.chunk_id, lease.epoch),
+            worker_programs=self.ctx.config.worker_program_tracing,
         )
 
     def _traceparent(self, chunk_id: str, epoch: int) -> str:
@@ -499,4 +500,5 @@ class Spawner:
             lease_token=lease.token,
             tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
             traceparent=self._traceparent(chunk_id, lease.epoch),
+            worker_programs=self.ctx.config.worker_program_tracing,
         )

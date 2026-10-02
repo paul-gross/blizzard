@@ -69,3 +69,30 @@ def test_otel_names_pass_through_untouched_while_tracing_is_off(
     config = _config(tmp_path)
     assert config.dropped_otel_passthrough == ()
     assert config.worker_env.passthrough == config.worker_env_passthrough
+
+
+def _programs_preamble(*, worker_programs: bool, traceparent: str = _TRACEPARENT) -> WorkerPreamble:
+    return WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        lease_token="tok",
+        traceparent=traceparent,
+        worker_programs=worker_programs,
+    )
+
+
+def test_identity_env_points_exporters_at_the_receiver_only_for_worker_programs() -> None:
+    env = build_identity_env(_programs_preamble(worker_programs=True), "ch_1", "sess", AllowlistedEnv.of(()))
+    assert env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == "http://127.0.0.1:8431/v1/traces"
+    assert env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] == "http/protobuf"
+    assert env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] == "X-Blizzard-Lease-Token=tok"
+
+
+@pytest.mark.parametrize(("worker_programs", "traceparent"), [(False, _TRACEPARENT), (True, "")])
+def test_identity_env_carries_no_exporter_variable_without_both_switches(
+    worker_programs: bool, traceparent: str
+) -> None:
+    preamble = _programs_preamble(worker_programs=worker_programs, traceparent=traceparent)
+    env = build_identity_env(preamble, "ch_1", "sess", AllowlistedEnv.of(()))
+    assert not [name for name in env if name.startswith("OTEL_EXPORTER_")]
