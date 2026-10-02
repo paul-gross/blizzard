@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import SpanRecord
-from blizzard.hub.config import TracingConfig
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.tracing.window import assemble_window, read_window
 

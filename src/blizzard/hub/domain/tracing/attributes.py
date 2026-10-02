@@ -60,16 +60,5 @@ DECLARED_ATTRIBUTES: frozenset[str] = shared.SHARED_ATTRIBUTES | frozenset(
 def resource_attributes(environ: Mapping[str, str], version: str) -> dict[str, str]:
     """The hub's resource attributes. ``service.name`` is ``blizzard-hub`` only when neither
     ``OTEL_SERVICE_NAME`` nor a ``service.name`` entry of ``OTEL_RESOURCE_ATTRIBUTES`` names one."""
-    name = (
-        environ.get("OTEL_SERVICE_NAME") or _resource_entries(environ).get(shared.SERVICE_NAME) or DEFAULT_SERVICE_NAME
-    )
+    name = shared.service_name(environ, DEFAULT_SERVICE_NAME)
     return {shared.SERVICE_NAME: name, SERVICE_VERSION: version, shared.TRACE_SCHEMA_VERSION: shared.SCHEMA_VERSION}
-
-
-def _resource_entries(environ: Mapping[str, str]) -> dict[str, str]:
-    entries: dict[str, str] = {}
-    for pair in environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","):
-        key, sep, value = pair.partition("=")
-        if sep and key.strip() and value.strip():
-            entries[key.strip()] = value.strip()
-    return entries

@@ -21,7 +21,8 @@ import httpx
 import pytest
 import uvicorn
 
-from blizzard.hub.config import HubConfig, TracingConfig, WorkSourceConfig
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker

@@ -13,17 +13,12 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.cursor import CursorJump, backoff_delay, first_pass_jump, lag_cap_jump
+from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import SpanRecord
-from blizzard.hub.config import TracingConfig
 from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.tracing.cursor import (
-    CursorJump,
-    CursorKey,
-    backoff_delay,
-    first_pass_jump,
-    lag_cap_jump,
-)
-from blizzard.hub.domain.tracing.export import ITraceExporter
+from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IWriteTraceCursor, TraceCursorRecord
 from blizzard.hub.domain.tracing.window import assemble_window, oldest_unsent, read_window
 
@@ -79,7 +74,7 @@ class TraceExportSweep:
             self._first_pass = False
             # A restart mid-outage must not announce the same failure again.
             self._failing = self._steps.newest_export_latch() == _FAILED
-            jump = first_pass_jump(newest.position if newest else None, now, self._max_lag)
+            jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=CursorKey)
             if jump is not None:
                 self._jump(jump, now)
                 return
@@ -129,7 +124,7 @@ class TraceExportSweep:
         self._failing = False
         self._record(_RECOVERED, "fleet trace export recovered; held steps are being told", None)
 
-    def _jump(self, jump: CursorJump, now: datetime) -> None:
+    def _jump(self, jump: CursorJump[CursorKey], now: datetime) -> None:
         if (
             jump.skipped_from is not None
             and oldest_unsent(self._steps, jump.skipped_from, jump.to.at - timedelta(microseconds=1)) is not None

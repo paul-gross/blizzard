@@ -48,6 +48,18 @@ _MOVED_HOMES = {
     "GENAI_SEMCONV_VERSION": "blizzard.foundation.trace_attributes",
     "SHARED_ATTRIBUTES": "blizzard.foundation.trace_attributes",
     "genai_usage": "blizzard.foundation.trace_attributes",
+    "service_name": "blizzard.foundation.trace_attributes",
+    "ITraceExporter": "blizzard.foundation.trace_export.exporter",
+    "TracingSettings": "blizzard.foundation.trace_export.settings",
+    "TracingState": "blizzard.foundation.trace_export.settings",
+    "endpoint_origin": "blizzard.foundation.trace_export.settings",
+    "OtlpTraceExporter": "blizzard.foundation.trace_export.internal.otlp",
+    "TracingConfig": "blizzard.foundation.trace_export.config",
+    "JumpReason": "blizzard.foundation.trace_export.cursor",
+    "CursorJump": "blizzard.foundation.trace_export.cursor",
+    "first_pass_jump": "blizzard.foundation.trace_export.cursor",
+    "lag_cap_jump": "blizzard.foundation.trace_export.cursor",
+    "BACKOFF_CAP": "blizzard.foundation.trace_export.cursor",
 }
 
 
@@ -677,9 +689,9 @@ def test_trace_assembly_loads_no_http_driver_opentelemetry_or_hub_store() -> Non
 
 
 def test_only_the_trace_export_binding_imports_opentelemetry() -> None:
-    """The hub installs no global provider and no instrumentation: OpenTelemetry is named only
-    by the OTLP binding, which builds finished spans and calls the exporter directly."""
-    binding = _HUB_DIR / "trace_export" / "internal"
+    """No daemon installs a global provider or instrumentation: OpenTelemetry is named only
+    by the shared OTLP binding, which builds finished spans and calls the exporter directly."""
+    binding = _FOUNDATION_DIR / "trace_export" / "internal"
     violations = [
         v for v in _violations(_SRC_DIR, ("opentelemetry",)) if not v.startswith(str(binding.relative_to(_REPO_ROOT)))
     ]
@@ -688,9 +700,10 @@ def test_only_the_trace_export_binding_imports_opentelemetry() -> None:
 
 def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
     tracing = _HUB_DIR / "domain" / "tracing"
+    shared_cursor = _FOUNDATION_DIR / "trace_export" / "cursor.py"
     violations = [
         f"{path.relative_to(_REPO_ROOT)} imports {module}"
-        for path in (tracing / "sweep.py", tracing / "cursor.py")
+        for path in (tracing / "sweep.py", tracing / "cursor.py", shared_cursor)
         for module in sorted(_imported_modules(path))
         if module.split(".")[0] in ("opentelemetry", "sqlalchemy") or module.startswith("blizzard.hub.store")
     ]

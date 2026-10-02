@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, TracingConfig, WorkSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,

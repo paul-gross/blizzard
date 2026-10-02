@@ -5,6 +5,8 @@ Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Attrib
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from blizzard.foundation.trace_spans import AttributeValue
 
 SCHEMA_VERSION = "1"
@@ -71,3 +73,16 @@ def genai_usage(
         INVOCATION_CACHE_READ_TOKENS: cache_read_tokens,
         INVOCATION_CACHE_CREATE_TOKENS: cache_create_tokens,
     }
+
+
+def service_name(environ: Mapping[str, str], default: str) -> str:
+    return environ.get("OTEL_SERVICE_NAME") or _resource_entries(environ).get(SERVICE_NAME) or default
+
+
+def _resource_entries(environ: Mapping[str, str]) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    for pair in environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","):
+        key, sep, value = pair.partition("=")
+        if sep and key.strip() and value.strip():
+            entries[key.strip()] = value.strip()
+    return entries

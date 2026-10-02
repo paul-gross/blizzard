@@ -2,7 +2,7 @@
 
 A pure parse: no exporter is built here, and endpoint, headers, timeout, compression and
 certificates stay the SDK's own concern — this module reads only what decides whether
-the hub can export at all (``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md``
+a daemon can export at all (``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md``
 §Configuration)."""
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ ENV_SDK_DISABLED = "OTEL_SDK_DISABLED"
 ENV_TRACES_PROTOCOL = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
 ENV_PROTOCOL = "OTEL_EXPORTER_OTLP_PROTOCOL"
 
-#: The one OTLP transport the hub exports over.
+#: The one OTLP transport either daemon exports over.
 SUPPORTED_PROTOCOL = "http/protobuf"
 
 #: What an endpoint that does not parse as a URL reads as — the raw value is never echoed.
@@ -47,7 +47,7 @@ def endpoint_origin(raw: str) -> str:
 @dataclass(frozen=True)
 class TracingSettings:
     """Whether fleet tracing runs: ``enabled``, ``disabled``, or ``rejected`` — configured
-    in a way the hub cannot honor, naming the offending ``setting`` and its ``value``."""
+    in a way the daemon cannot honor, naming the offending ``setting`` and its ``value``."""
 
     state: TracingState
     setting: str | None = None
@@ -80,10 +80,9 @@ class TracingSettings:
     def enabled(self) -> bool:
         return self.state == "enabled"
 
-    @property
-    def rejection_message(self) -> str:
-        """The operator-facing line a ``trace-config-rejected`` event carries."""
+    def rejection_message(self, daemon: str) -> str:
+        """The operator-facing line a ``trace-config-rejected`` event carries, naming the ``daemon``."""
         return (
             f"fleet tracing is off: {self.setting}={self.value!r} is not supported; "
-            f"the hub exports only {SUPPORTED_PROTOCOL}"
+            f"the {daemon} exports only {SUPPORTED_PROTOCOL}"
         )

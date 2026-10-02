@@ -6,15 +6,15 @@ from datetime import timedelta
 
 import pytest
 
-from blizzard.hub.domain.tracing.cursor import (
+from blizzard.foundation.trace_export.cursor import (
     BACKOFF_CAP,
     CursorJump,
-    CursorKey,
     JumpReason,
     backoff_delay,
     first_pass_jump,
     lag_cap_jump,
 )
+from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import ChunkStoppedRecord, EpochOwnerRecord, LeaseRecord, StepFacts
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.tracing.window import select_window
@@ -66,19 +66,21 @@ def test_key_of_an_open_step_is_refused() -> None:
 
 
 def test_first_pass_with_no_cursor_starts_at_now() -> None:
-    assert first_pass_jump(None, fx.at(100), _LAG) == CursorJump(JumpReason.START, CursorKey.opening(fx.at(100)))
+    assert first_pass_jump(None, fx.at(100), _LAG, key=CursorKey) == CursorJump(
+        JumpReason.START, CursorKey.opening(fx.at(100))
+    )
 
 
 def test_first_pass_over_a_cursor_older_than_the_lag_jumps_to_now_and_names_the_window() -> None:
     now = fx.at(0) + timedelta(days=3)
     stale = CursorKey(fx.at(0), "ch_1", 1)
-    assert first_pass_jump(stale, now, _LAG) == CursorJump(
+    assert first_pass_jump(stale, now, _LAG, key=CursorKey) == CursorJump(
         JumpReason.ENABLE_AFTER_GAP, CursorKey.opening(now), skipped_from=stale
     )
 
 
 def test_first_pass_over_a_recent_cursor_keeps_it() -> None:
-    assert first_pass_jump(CursorKey(fx.at(0)), fx.at(0) + _LAG, _LAG) is None
+    assert first_pass_jump(CursorKey(fx.at(0)), fx.at(0) + _LAG, _LAG, key=CursorKey) is None
 
 
 # --- lag cap ---------------------------------------------------------------------------

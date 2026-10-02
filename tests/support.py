@@ -37,6 +37,9 @@ from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
@@ -51,14 +54,12 @@ from blizzard.hub.config import (
     RUNNER_AUTH_WARN,
     AuthConfig,
     HubConfig,
-    TracingConfig,
     WorkSourceConfig,
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import Edge, Graph, Node
-from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,
@@ -75,7 +76,6 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor

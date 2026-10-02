@@ -22,6 +22,9 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
@@ -39,7 +42,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import OAuthProviderConfig, TracingConfig
+from blizzard.hub.config import OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -102,7 +105,6 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
-from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.tracing.replay import TraceReplay
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.tracing.status import TraceStatusReader
@@ -139,7 +141,6 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
