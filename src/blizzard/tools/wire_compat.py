@@ -296,9 +296,14 @@ def resolve_merge_base_baseline(against: str, cwd: Path) -> str:
     return _run_git(["merge-base", "HEAD", against], cwd).strip()
 
 
+#: How many of the newest ``push.yml`` runs on ``master`` are searched for a successful one.
+_DEPLOYED_SEARCH_DEPTH = 100
+
+
 def resolve_deployed_baseline(repo: str, cwd: Path) -> str:
     """The head commit of the newest successful ``push.yml`` run on ``master`` — what the
-    hosted hub's ``edge`` currently runs."""
+    hosted hub's ``edge`` currently runs. Success is filtered here, not by ``--status``:
+    GitHub answers ``branch`` and ``status`` together from a stale index."""
     result = subprocess.run(
         [
             "gh",
@@ -310,12 +315,10 @@ def resolve_deployed_baseline(repo: str, cwd: Path) -> str:
             "push.yml",
             "--branch",
             "master",
-            "--status",
-            "success",
             "--limit",
-            "1",
+            str(_DEPLOYED_SEARCH_DEPTH),
             "--json",
-            "headSha",
+            "headSha,conclusion",
         ],
         capture_output=True,
         text=True,
@@ -325,9 +328,10 @@ def resolve_deployed_baseline(repo: str, cwd: Path) -> str:
     if result.returncode != 0:
         raise WireCompatError(f"gh run list failed: {result.stderr.strip()}")
     runs = json.loads(result.stdout or "[]")
-    if not runs:
-        raise WireCompatError(f"no successful push.yml run found on {repo}@master")
-    return runs[0]["headSha"]
+    for run in runs:
+        if run.get("conclusion") == "success":
+            return run["headSha"]
+    raise WireCompatError(f"no successful push.yml run among the newest {_DEPLOYED_SEARCH_DEPTH} on {repo}@master")
 
 
 def _first_parent_steps(baseline: str, cwd: Path) -> list[str]:

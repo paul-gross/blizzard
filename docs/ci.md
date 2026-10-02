@@ -76,9 +76,9 @@ only on proven commits, `dev-build` solely to reuse its computed dev version for
 advances past an unacknowledged hub↔runner wire break. Unlike the release fan-out, the dev tags and OCI annotations
 are inlined in the `dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
 
-`wire-compat-deployed` diffs every commit since the newest successful `push.yml` run — resolved via
-`gh run list --workflow push.yml --branch master --status success --limit 1`, since that run's commit is what `edge`
-currently runs — against `HEAD`, one first-parent step at a time, failing on any step whose break is not acknowledged
+`wire-compat-deployed` diffs every commit since the newest successful `push.yml` run — the first `success` among
+`gh run list --workflow push.yml --branch master`'s newest runs, since that run's commit is what `edge` currently runs;
+never `--status success` alongside `--branch`, which GitHub answers from a stale index — against `HEAD`, one first-parent step at a time, failing on any step whose break is not acknowledged
 by a `!`-marked Conventional Commit subject on the commits that land it (`bzh:fleet-wire-additive`). It needs job-level
 `permissions: actions: read` to call `gh run list` with the workflow's own `GITHUB_TOKEN`; the job fails outright if no
 successful run is found. Its local equivalent is `uv run blizzard-wire-compat --baseline deployed`, run with the

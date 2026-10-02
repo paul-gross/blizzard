@@ -432,7 +432,7 @@ def test_resolve_deployed_baseline_reads_gh_run_list(monkeypatch: pytest.MonkeyP
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
-        return _FakeCompleted(stdout=json.dumps([{"headSha": "deadbeef"}]))
+        return _FakeCompleted(stdout=json.dumps([{"headSha": "deadbeef", "conclusion": "success"}]))
 
     monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
     assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "deadbeef"
@@ -440,11 +440,33 @@ def test_resolve_deployed_baseline_reads_gh_run_list(monkeypatch: pytest.MonkeyP
     assert "push.yml" in captured["cmd"]
 
 
+def test_resolve_deployed_baseline_skips_unsuccessful_runs_without_a_status_filter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """GitHub answers ``--branch`` with ``--status`` from a stale index, so success is picked
+    from the newest runs here: an in-progress and a failed run are passed over."""
+    captured = {}
+    runs = [
+        {"headSha": "inflight", "conclusion": ""},
+        {"headSha": "broken", "conclusion": "failure"},
+        {"headSha": "deployed", "conclusion": "success"},
+        {"headSha": "older", "conclusion": "success"},
+    ]
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _FakeCompleted(stdout=json.dumps(runs))
+
+    monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
+    assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "deployed"
+    assert "--status" not in captured["cmd"]
+
+
 def test_resolve_deployed_baseline_fails_when_no_successful_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     def fake_run(cmd, **kwargs):
-        return _FakeCompleted(stdout="[]")
+        return _FakeCompleted(stdout=json.dumps([{"headSha": "broken", "conclusion": "failure"}]))
 
     monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
     with pytest.raises(WireCompatError):
