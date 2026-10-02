@@ -1,0 +1,141 @@
+"""Platform spans from real daemons (service tier) — each host exports to an OTLP sink the test serves."""
+
+from __future__ import annotations
+
+import dataclasses
+import os
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
+
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.config import HubConfig
+from blizzard.runner.config import RunnerConfig
+from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
+from tests.otlp_sink import OtlpSink, otlp_sink
+from tests.service.support import (
+    mint_fixture,
+    mock_hub,
+    poll_until,
+    require_mock_fleet,
+    require_winter_source,
+    service_gate,
+)
+from tests.support import daemon_log_sink, read_daemon_log
+
+pytestmark = [pytest.mark.service, service_gate]
+
+#: The step-trace scopes — every other scope on the wire is a platform span's, whichever library opened it.
+_FLEET_SCOPES = ("blizzard.hub.fleet_spans", "blizzard.runner.runner_spans")
+
+
+def _platform_spans(sink: OtlpSink) -> list[tuple[dict[str, str], object]]:
+    """Each platform span with its resource attributes."""
+    found = []
+    for resource_spans in sink.resource_spans():
+        resource = {kv.key: kv.value.string_value for kv in resource_spans.resource.attributes}
+        for scope_spans in resource_spans.scope_spans:
+            if scope_spans.scope.name not in _FLEET_SCOPES:
+                found.extend((resource, span) for span in scope_spans.spans)
+    return found
+
+
+def _stop(proc: subprocess.Popen[str]) -> None:
+    """SIGTERM and wait — a graceful stop flushes what the daemon still buffers."""
+    proc.send_signal(signal.SIGTERM)
+    proc.wait(timeout=30.0)
+
+
+def _hub(hub_dir: Path, port: int, env: dict[str, str], *, platform: bool) -> subprocess.Popen[str]:
+    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
+    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    config = HubConfig.load(hub_dir)
+    tracing = TracingConfig(platform=platform, platform_sample_ratio=1.0)
+    config = dataclasses.replace(config, tracing=tracing)
+    config.config_path.write_text(config.to_toml())
+    return subprocess.Popen(
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
+        env=env,
+        stdout=daemon_log_sink(hub_dir / "daemon.log"),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+
+def _drive_hub(tmp_path: Path, *, platform: bool) -> list[tuple[dict[str, str], object]]:
+    port = _free_port()
+    hub_dir = tmp_path / "hub"
+    with otlp_sink() as sink:
+        env = {**os.environ, "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        proc = _hub(hub_dir, port, env, platform=platform)
+        client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+        try:
+            _await_http(proc, client, "/api/health", log=hub_dir / "daemon.log")
+            client.get("/api/chunks/ch_service?token=planted-secret")
+        finally:
+            client.close()
+            _stop(proc)
+        assert "planted-secret" not in repr(sink.requests)
+        return _platform_spans(sink)
+
+
+def test_a_hub_with_platform_on_delivers_request_and_query_spans(tmp_path: Path) -> None:
+    spans = _drive_hub(tmp_path, platform=True)
+    assert spans, "no platform span reached the sink"
+    assert {resource["service.name"] for resource, _ in spans} == {"blizzard-hub"}
+    names = {span.name for _, span in spans}  # type: ignore[attr-defined]
+    assert "GET /api/chunks/{chunk_id}" in names
+    assert any(not name.startswith(("GET ", "POST ", "sweep ")) for name in names), "no query span"
+
+
+def test_a_hub_with_platform_unset_delivers_no_platform_span(tmp_path: Path) -> None:
+    assert _drive_hub(tmp_path, platform=False) == []
+
+
+def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_spans(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
+        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
+        config.config_path.write_text(config.to_toml())
+        env = {
+            **os.environ,
+            "BLIZZARD_MOCK_HARNESS_FENCE": "1",
+            "BZ_RUNNER_TICK_SECONDS": "0.5",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url,
+        }
+        log = config.root / "daemon.log"
+        proc = subprocess.Popen(
+            [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
+            env=env,
+            stdout=daemon_log_sink(log),
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx.Client(
+            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        )
+        try:
+            _await_http(proc, tcp, "/api/health", log=log)
+            assert tcp.get("/api/health?token=planted-secret").status_code == 200
+            assert uds.get("/api/health").status_code == 200
+            assert poll_until(lambda: read_daemon_log(log).count('"tick end"') >= 2, timeout=30.0)
+        finally:
+            tcp.close()
+            uds.close()
+            _stop(proc)
+        spans = _platform_spans(sink)
+        assert spans, read_daemon_log(log)
+        assert {resource["service.name"] for resource, _ in spans} == {"blizzard-runner"}
+        names = [span.name for _, span in spans]  # type: ignore[attr-defined]
+        assert names.count("GET /api/health") >= 2
+        assert "tick" in names
+        assert any(name == "Reap" for name in names)
+        assert "planted-secret" not in repr(sink.requests)

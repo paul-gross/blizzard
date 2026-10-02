@@ -8,7 +8,7 @@ to ``internal/`` (``bzh:dependency-inversion``), keeping ``httpx`` out of the ro
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
@@ -33,14 +33,16 @@ class WorkSourceEntry:
     """One ``[[work_source]]`` entry, resolved to the adapter it names."""
 
     config: WorkSourceConfig
+    #: Applied to the source's client as it is built — the composition root's tracing hook.
+    instrument: Callable[[httpx.Client], None] = lambda _client: None
 
     @classmethod
-    def of(cls, config: WorkSourceConfig) -> WorkSourceEntry:
+    def of(cls, config: WorkSourceConfig, instrument: Callable[[httpx.Client], None] | None = None) -> WorkSourceEntry:
         kinds: dict[str, type[WorkSourceEntry]] = {"github": GithubEntry}
         kind = kinds.get(config.provider)
         if kind is None:
             raise ConfigError(f"work_source {config.name!r} has unknown provider {config.provider!r}")
-        return kind(config)
+        return kind(config) if instrument is None else kind(config, instrument)
 
     @classmethod
     def registry(
@@ -52,18 +54,20 @@ class WorkSourceEntry:
         edits: WorkItemEditService,
         resolution: GardenProposalDeliveryResolution,
         close_forge_writes_enabled: bool = True,
+        instrument_client: Callable[[httpx.Client], None] | None = None,
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
         ``hub`` source — always seated, both an editor and a closer, neither
         opt-in. ``close_forge_writes_enabled=False`` seats no closer for a *configured*
         source (never the unaffected `hub` one) — see ``docs/deployment/work-sources.md``.
-        A source's ``token_env`` naming an unset variable fails here, at boot."""
+        A source's ``token_env`` naming an unset variable fails here, at boot.
+        ``instrument_client`` is applied to each configured source's client."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
         editors: dict[str, IWorkEditor] = {}
         for config in sources:
-            adapter = cls.of(config).source()
+            adapter = cls.of(config, instrument_client).source()
             built[config.name] = adapter
             if config.annotate:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
@@ -90,7 +94,9 @@ class WorkSourceEntry:
     @property
     def client(self) -> httpx.Client:
         headers = {"Authorization": f"token {self.token}"}
-        return httpx.Client(base_url=self.api_base, headers=headers, timeout=30.0)
+        client = httpx.Client(base_url=self.api_base, headers=headers, timeout=30.0)
+        self.instrument(client)
+        return client
 
     @property
     def api_base(self) -> str:

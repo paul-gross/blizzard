@@ -13,19 +13,28 @@ import os
 import random
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
-from fastapi import FastAPI, Request, status
+import httpx
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.attributes import annotate
+from blizzard.foundation.platform_tracing.handle import (
+    DisabledPlatformTracing,
+    IPlatformTracing,
+    build_platform_tracing,
+)
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend
@@ -61,6 +70,8 @@ from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
+    PLATFORM_INSTRUMENTATION_SCOPE,
+    PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
 from blizzard.hub.domain.transcripts import TranscriptCaps
@@ -88,6 +99,9 @@ WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 #: The close-intent drain sweep's own interval.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
+#: How long the hub's shutdown waits for buffered platform spans to leave.
+PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
+
 
 class _Sweepable(Protocol):
     """The one capability :class:`Sweep` needs — structural, so any reconciler
@@ -101,7 +115,8 @@ class Sweep:
     """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
     The first pass runs immediately, unjittered; ``jitter_seconds`` offsets only the
     second pass, so sibling sweeps synchronize once at boot then decorrelate for good.
-    ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with."""
+    ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with;
+    ``tracer`` opens each pass's ``sweep <name>`` root."""
 
     reconciler: _Sweepable
     interval_seconds: int
@@ -109,6 +124,7 @@ class Sweep:
     logger_name: str
     jitter_seconds: float | None = None
     timer: Callable[[], float] = time.monotonic
+    tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
@@ -122,6 +138,7 @@ class Sweep:
         if services is None:
             return
         interval = app.state.config.annotation_interval_seconds
+        tracer = app.state.platform_tracing.tracer
         if services.annotation is not None:
             yield cls(
                 services.annotation,
@@ -129,6 +146,7 @@ class Sweep:
                 app.state.shutdown,
                 "blizzard.hub.forge_status",
                 jitter_seconds=random.uniform(0, interval),
+                tracer=tracer,
             )
         yield cls(
             services.event_derivation,
@@ -136,6 +154,7 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.transcript_events",
             jitter_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
+            tracer=tracer,
         )
         yield cls(
             services.work_item_materialization,
@@ -143,6 +162,7 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.work_item_materialization",
             jitter_seconds=random.uniform(0, WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS),
+            tracer=tracer,
         )
         yield cls(
             services.close_drain,
@@ -150,6 +170,7 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.work_closure",
             jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
+            tracer=tracer,
         )
         if services.trace_export is not None:
             every = app.state.config.tracing.sweep_seconds
@@ -159,7 +180,13 @@ class Sweep:
                 app.state.shutdown,
                 "blizzard.hub.trace_export",
                 jitter_seconds=random.uniform(0, every),
+                tracer=tracer,
             )
+
+    @property
+    def name(self) -> str:
+        """The sweep's own name — the last segment of its logger name."""
+        return self.logger_name.rsplit(".", 1)[-1]
 
     async def _wait(self, timeout: float) -> None:
         with contextlib.suppress(TimeoutError):
@@ -176,7 +203,8 @@ class Sweep:
         while not self.shutdown.is_set():
             started = self.timer()
             try:
-                await asyncio.to_thread(self.reconciler.sweep)
+                with self.tracer.root(f"sweep {self.name}"):
+                    await asyncio.to_thread(self.reconciler.sweep)
             except Exception:
                 log.exception("sweep failed")
             elapsed = self.timer() - started
@@ -201,6 +229,13 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def _annotate_chunk(request: Request) -> None:
+    """Stamp ``blizzard.chunk.id`` on the request's span from a ``chunk_id`` path parameter."""
+    chunk_id = request.path_params.get("chunk_id")
+    if chunk_id is not None:
+        annotate({CHUNK_ID: str(chunk_id)})
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
@@ -219,21 +254,25 @@ def create_app(
     *,
     readiness: ReadinessService | None = None,
     services: HubServices | None = None,
+    platform_tracing: IPlatformTracing | None = None,
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config.
 
     ``readiness`` and ``services`` are optional so the store-free paths build the app
-    without opening a database.
+    without opening a database. ``platform_tracing`` is off unless the composition root passes one.
     """
     log = get_logger("blizzard.hub")
 
+    platform_tracing = platform_tracing or DisabledPlatformTracing()
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
         title="blizzard-hub",
         version=__version__,
         lifespan=_lifespan,
-        telemetry={"auto_configure": False},
+        telemetry=platform_tracing.fastapi_telemetry(),
+        dependencies=[Depends(_annotate_chunk)],
     )
+    app.state.platform_tracing = platform_tracing
     app.state.config = config
     app.state.readiness = readiness
     app.state.services = services
@@ -293,9 +332,26 @@ def _transcript_caps(config: HubConfig) -> TranscriptCaps:
     )
 
 
-def build_hosted_app(config: HubConfig) -> FastAPI:
-    """The ``host`` composition root: open the store and wire every fleet seam."""
+def build_hosted_app(
+    config: HubConfig,
+    *,
+    platform_tracing: IPlatformTracing | None = None,
+    oauth_http_client: httpx.Client | None = None,
+) -> FastAPI:
+    """The ``host`` composition root: open the store and wire every fleet seam.
+
+    ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide;
+    tests inject one over an in-memory exporter. ``oauth_http_client`` replaces the OAuth
+    providers' client. Either way, the engine and every outbound client are instrumented through it."""
+    platform_tracing = platform_tracing or build_platform_tracing(
+        config.tracing,
+        os.environ,
+        resource=resource_attributes(os.environ, __version__),
+        scope=PLATFORM_INSTRUMENTATION_SCOPE,
+        scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+    )
     engine = create_engine_from_url(config.db_url)
+    platform_tracing.instrument_engine(engine)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
@@ -311,6 +367,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         edits=core.work_item_edits,
         resolution=core.garden_proposal_resolution,
         close_forge_writes_enabled=config.close_forge_writes_enabled,
+        instrument_client=platform_tracing.instrument_client,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
     tracing = TracingSettings.of(os.environ)
@@ -321,6 +378,10 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
+    oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
+    forge_client = httpx.Client(timeout=10.0)
+    for client in (oauth_client, forge_client):
+        platform_tracing.instrument_client(client)
 
     services = build_services(
         core,
@@ -332,7 +393,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         forge_url=os.environ.get(ENV_FORGE_URL),
         forge_token=os.environ.get(ENV_FORGE_TOKEN),
         forge_owner=owner,
+        forge_http_client=forge_client,
         oauth_providers=oauth_providers,
+        oauth_http_client=oauth_client,
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
@@ -355,7 +418,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
-    app = create_app(config, readiness=readiness, services=services)
+    app = create_app(config, readiness=readiness, services=services, platform_tracing=platform_tracing)
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app

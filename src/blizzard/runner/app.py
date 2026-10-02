@@ -23,6 +23,8 @@ from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.exclusion import is_excluded
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
@@ -200,15 +202,18 @@ def create_app(
     events: EventBroker | None = None,
     clock: IClock | None = None,
     process: LinuxProcessProbe | None = None,
+    platform_tracing: IPlatformTracing | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
     Every store-backed seam is optional, so a store-free build is possible; those routes
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
-    wired; ``events`` defaults absent, leaving the route silent."""
+    wired; ``events`` defaults absent, leaving the route silent. ``platform_tracing`` is off unless the
+    composition root passes a handle."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
+    platform_tracing = platform_tracing or DisabledPlatformTracing()
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
@@ -216,7 +221,7 @@ def create_app(
         title="blizzard-runner",
         version=__version__,
         lifespan=_lifespan,
-        telemetry={"auto_configure": False},
+        telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded),
     )
     app.state.config = config
     app.state.readiness = readiness
@@ -310,6 +315,15 @@ def create_app(
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:
         return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
 
+    # An excluded request (the worker heartbeat, a trace-receiver path) makes no server span, and
+    # none of its store reads may start a sampled root of their own either.
+    @app.middleware("http")
+    async def _suppress_excluded(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if is_excluded(request.scope):
+            with platform_tracing.suppressed():
+                return await call_next(request)
+        return await call_next(request)
+
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -388,6 +402,7 @@ def _wire_hosted_app(
     clock = graph.clock
     process = graph.process
     events = graph.events
+    platform_tracing = graph.platform_tracing
     # ``stale_after`` is left at its default so the two readers never desync (#28).
     leases = LocalLeaseService(stores=RunnerReadStores.of(runner_stores), clock=clock, process=process)
     # The archived-transcript seam needs its own authenticated client:
@@ -395,6 +410,7 @@ def _wire_hosted_app(
     archived_transcript_client = startup.enter_context(
         httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     )
+    platform_tracing.instrument_client(archived_transcript_client)
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
     # The route-forward seam (`HubProxy`) needs its own authenticated client too — separate
     # from `hub_http_client` (no auth headers) and from `archived_transcript_client` (its own
@@ -402,6 +418,7 @@ def _wire_hosted_app(
     hub_proxy_client = startup.enter_context(
         httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     )
+    platform_tracing.instrument_client(hub_proxy_client)
     transcripts = TranscriptService(
         leases=runner_stores.lease_record,
         transcript_ledger=runner_stores.transcript_ledger,
@@ -446,8 +463,10 @@ def _wire_hosted_app(
     jti_cache = JtiCacheRepository(connections, clock)
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
+    platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         config,
+        platform_tracing=platform_tracing,
         readiness=readiness,
         workspace_provider=workspace_provider,
         harnesses=harnesses,

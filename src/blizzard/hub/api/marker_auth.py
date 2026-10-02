@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from blizzard.auth_core import CHUNK_CONTROL
+from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR, require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -29,6 +30,7 @@ def require_marker_authority(request: Request) -> ResolvedIdentity:
     """
     mode = request.app.state.config.auth.mode
     if mode == AUTH_MODE_NONE:
+        annotate_caller("operator")
         return IMPLICIT_OPERATOR
     token = request.headers.get(_MARKER_TOKEN_HEADER)
     if token:

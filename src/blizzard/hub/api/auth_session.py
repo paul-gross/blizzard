@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request, status
 
 from blizzard.auth_core import Permission, Role, expand
+from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.hashing import SessionId
@@ -46,6 +47,10 @@ class PresentedSession:
         session_id = self.request.cookies.get(_SESSION_COOKIE_NAME) or presented_bearer(self.request)
         return None if session_id is None else SessionId(session_id).hash
 
+    def caller(self) -> Caller:
+        """Whom a resolved session speaks for: the board's cookie, else the operator's bearer."""
+        return "board" if self.request.cookies.get(_SESSION_COOKIE_NAME) else "operator"
+
 
 def resolve_identity(request: Request, services: HubServices | None) -> ResolvedIdentity | None:
     """Resolve the presented session to a :class:`ResolvedIdentity`, or ``None`` when
@@ -74,11 +79,13 @@ def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
     def _dependency(request: Request) -> ResolvedIdentity:
         mode = request.app.state.config.auth.mode
         if mode == AUTH_MODE_NONE:
+            annotate_caller("operator")
             return IMPLICIT_OPERATOR
         services = get_services(request)
         identity = resolve_identity(request, services)
         if identity is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        annotate_caller(PresentedSession(request).caller())
         if permission not in identity.permissions:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission {permission!r}")
         return identity
