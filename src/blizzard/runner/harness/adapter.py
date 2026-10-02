@@ -53,6 +53,7 @@ class WorkerPreamble:
     stderr_path: str = ""  # per-lease stderr capture; empty discards
     lease_token: str = ""  # a per-spawn identity var, never a daemon secret
     tmpdir: str = ""  # per-lease scratch directory (BLIZZARD_TMPDIR); empty disables it
+    traceparent: str = ""  # the step root's W3C traceparent; empty (tracing off) sets no trace variable
 
 
 @dataclass(frozen=True)

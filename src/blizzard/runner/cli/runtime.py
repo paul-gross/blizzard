@@ -91,6 +91,9 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     bundle = _publish_harness_bundle(config)
     for missing in config.missing_worker_path_prepend_entries:
         click.echo(f"warning: [worker] path_prepend entry does not exist: {missing}")
+    if config.dropped_otel_passthrough:
+        names = ", ".join(config.dropped_otel_passthrough)
+        click.echo(f"warning: [worker] env_passthrough OTEL_* names are dropped while tracing is on: {names}")
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
     # One broker for the process: `host` is the one composer building both the

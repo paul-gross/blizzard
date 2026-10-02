@@ -29,6 +29,11 @@ def platform_tracing_enabled(config: TracingConfig, environ: Mapping[str, str]) 
 
 class IPlatformTracing(Protocol):
     @property
+    def enabled(self) -> bool:
+        """Whether platform spans are being recorded by this process."""
+        ...
+
+    @property
     def tracer(self) -> IPlatformTracer: ...
 
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
@@ -51,6 +56,10 @@ class IPlatformTracing(Protocol):
 class DisabledPlatformTracing:
     def __init__(self) -> None:
         self._tracer = NoopPlatformTracer()
+
+    @property
+    def enabled(self) -> bool:
+        return False
 
     @property
     def tracer(self) -> IPlatformTracer:

@@ -126,6 +126,10 @@ def build_identity_env(
     env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
     if preamble.tmpdir:
         env["BLIZZARD_TMPDIR"] = preamble.tmpdir
+    if preamble.traceparent:
+        # `BLIZZARD_TRACEPARENT` is the only name the CLI reads; `TRACEPARENT` is OpenTelemetry's carrier name.
+        env["BLIZZARD_TRACEPARENT"] = preamble.traceparent
+        env["TRACEPARENT"] = preamble.traceparent
     if elicitation:
         env["BLIZZARD_ELICITATION"] = "1"
     return env

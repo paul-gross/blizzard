@@ -95,6 +95,13 @@ def span_id(key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = 
     return int.from_bytes(nonzero(digest), "big")
 
 
+def step_traceparent(chunk_id: str, epoch: int) -> str:
+    """The W3C ``traceparent`` of a step's root span — what a worker's environment carries so its
+    commands nest inside the step. Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md``."""
+    root = DerivedContext.of(StepKey.attempt(chunk_id, epoch), SpanRole.STEP)
+    return f"00-{root.trace_id:032x}-{root.span_id:016x}-{root.trace_flags:02x}"
+
+
 @dataclass(frozen=True)
 class DerivedContext:
     """One span's derived context; every derived context is sampled."""
