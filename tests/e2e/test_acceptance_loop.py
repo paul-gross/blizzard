@@ -94,8 +94,7 @@ _PUSH_AND_DECLARE_SCRIPT = (
 )
 
 # The scripted build-node prompt: the prompt is the program, run under the mock harness
-# with the acquired env dir as cwd, so it targets `toy-api` by relative path. Every child
-# process's output is captured, so the script runs under either mock harness.
+# with the acquired env dir as cwd, so it targets `toy-api` by relative path.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -145,7 +144,7 @@ _WORK_ITEM_BUILD_SCRIPT = (
 
 
 def _graph_yaml(harness: MockHarness = CLAUDE_CODE) -> str:
-    """The scripted ``default-delivery`` graph — ``build -> review -> deliver`` — its runner nodes on ``harness``.
+    """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
     pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``.
@@ -466,8 +465,6 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
                 ],
             )
 
-        # 4d. The runner's side of the same run: one worker per runner step, nested on its root by id alone, each
-        #    invocation carrying the harness's GenAI usage.
         with subtests.test(msg="runner traces"):
             fleet_traces.require()
             runner = fleet_traces.runner_spans(roots=3, workers=2)

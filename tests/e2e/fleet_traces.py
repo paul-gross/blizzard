@@ -1,18 +1,7 @@
-"""Fleet-trace proof for the e2e tier: a real ``otelcol-contrib`` between a real hub and a file.
+"""Fleet-trace proof for the e2e tier: a real ``otelcol-contrib`` between a real hub (and runner) and a file.
 
-The collector runs the documented operator config (``packaging/otel-collector/collector.yaml``) under a
-test overlay that rebinds the receiver and swaps the exporters for one ``file`` exporter, so the receiver,
-processor and pipeline shape stay the ones ``docs/deployment/tracing.md`` documents. A scenario starts it
-before the hub (the export cursor opens at enable time, and a failed first export backs off for minutes),
-drives its chunk, then reads the file back and checks it against the published dictionary and the span spec
-(``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md``). Expectations come from the spec, never from
-captured output.
-
-Runner spans ride the same collector. An in-process scenario drives the runner's real lease-trace sweep through its
-composition root (:func:`runner_sweep`); a scenario running ``runner host`` lets the host's own sweep thread export.
-Either way the runner's ``worker`` spans must hang on the hub's step roots by derived id alone
-(:func:`assert_runner_nesting`), and each ``invoke_agent`` span must carry the harness's GenAI usage
-(:func:`assert_invocations`)."""
+The collector starts before the hub; its file is read back against the dictionary and the span spec, runner
+``worker`` spans nesting on hub step roots by id (:func:`assert_runner_nesting`)."""
 
 from __future__ import annotations
 
@@ -206,7 +195,7 @@ def parse_export(text: str) -> list[ExportedSpan]:
 
 
 def traces_of(spans: Sequence[ExportedSpan]) -> list[StepTrace]:
-    """The hub's step traces in the export, ordered by their root's start; runner spans are not the hub's children."""
+    """The hub's step traces in the export, ordered by root start."""
     roots = {s.trace_id: StepTrace(s) for s in spans if s.is_root}
     for span in spans:
         if not span.is_root and not span.is_runner:
@@ -295,12 +284,11 @@ def assert_identity(traces: Sequence[StepTrace], *, decision_ids: Sequence[str] 
 
 @dataclass(frozen=True)
 class StepExpect:
-    """One step root's expected skeleton: the span name, outcome, status and destination, the child span names
-    and event names it carries, and the reason of the link to the previous step (``None`` for a first step).
+    """One step root's expected skeleton: name, outcome, status, destination, child span and event names, and
+    the previous-step link reason (``None`` for a first step).
 
-    ``events`` and ``children`` are compared as exact multisets; a hub-poll count that varies with timing is
-    asserted as ``min_events`` (and ``min_children``) instead. ``invocation`` events are never compared: how many a step carries is the
-    harness's usage reporting, not the trace shape."""
+    ``events`` and ``children`` compare as exact multisets; timing-varying counts use ``min_events`` /
+    ``min_children``. ``invocation`` events are never compared."""
 
     name: str
     outcome: str
@@ -349,13 +337,8 @@ def assert_skeleton(traces: Sequence[StepTrace], expected: Sequence[StepExpect])
             assert child.attributes.get(key) == value, f"{where}: {child_name} {key}"
 
 
-# --------------------------------------------------------------------------- #
-# Runner spans: nested on the hub's step roots, by id alone
-
-
 def assert_runner_nesting(spans: Sequence[ExportedSpan], *, workers: int) -> list[ExportedSpan]:
-    """Every runner span sits in a hub step root's trace; each ``worker`` span's parent is that root, and every
-    other runner span's parent is a ``worker`` span in the same trace. Returns the runner spans."""
+    """Every runner span sits in a hub step root's trace; ``worker`` spans parent on that root, others on a worker."""
     roots = {s.trace_id: s for s in spans if s.is_root and s.role == "step"}
     runner = [s for s in spans if s.is_runner]
     worker_ids = {(s.trace_id, s.span_id) for s in runner if s.role == _WORKER_ROLE}
@@ -379,8 +362,7 @@ def assert_runner_nesting(spans: Sequence[ExportedSpan], *, workers: int) -> lis
 
 @dataclass(frozen=True)
 class InvocationExpect:
-    """What every ``invoke_agent`` span of one node carries: the harness that ran it, the model the mock harness
-    reports, and the model its session declares (``None`` where none is declared)."""
+    """What a node's ``invoke_agent`` spans carry: harness, reported model, declared model (``None`` if none)."""
 
     harness_id: str
     response_model: str
@@ -388,7 +370,6 @@ class InvocationExpect:
 
 
 def assert_invocations(runner: Sequence[ExportedSpan], expect: Mapping[str, InvocationExpect]) -> None:
-    """Each ``invoke_agent`` span, keyed to ``expect`` by its node name, carries the GenAI invocation shape."""
     invocations = [s for s in runner if s.role == _INVOCATION_ROLE]
     nodes = {s.attributes[shared.NODE_NAME] for s in invocations}
     assert nodes == set(expect), f"invoke_agent spans for nodes {sorted(nodes)}, expected {sorted(expect)}"
@@ -505,8 +486,6 @@ class FleetCollector:
         return sum(1 for s in spans if s.is_root), sum(1 for s in spans if s.is_runner and s.role == _WORKER_ROLE)
 
     def await_workers(self, workers: int, *, drive: Callable[[], None] | None = None, timeout: float = 60.0) -> None:
-        """Expect ``workers`` runner ``worker`` spans, and wait until the file holds them, calling ``drive``
-        between reads (an in-process sweep pass). Never fails: the ``runner traces`` subtest asserts the count."""
         if self._proc is None:
             return
         self._workers = workers
@@ -548,8 +527,7 @@ class FleetCollector:
         return traces
 
     def runner_spans(self, *, roots: int, workers: int, exact: bool = True) -> list[ExportedSpan]:
-        """The runner spans, once every exported span conforms, the hub roots re-derive, and the runner spans nest
-        on them."""
+        """The runner spans, once every span conforms and they nest on the hub roots."""
         spans = self.spans(roots=roots, exact=exact)
         assert_conforms(spans)
         assert_identity(traces_of(spans))
@@ -567,16 +545,8 @@ def fleet_collector(workdir: Path) -> Iterator[FleetCollector]:
         collector.stop()
 
 
-# --------------------------------------------------------------------------- #
-# The runner's lease-trace sweep, driven in-process
-
-
 class RunnerSweep:
-    """The runner's real :class:`LeaseTraceSweep`, built through its composition root and exporting to the
-    collector with the real OTLP exporter; inert where there is no collector.
-
-    Its first pass plants the cursor at *now* and exports nothing, so a scenario calls :meth:`plant` before its
-    first tick, then :meth:`drain` once its chunk is terminal."""
+    """The runner's real sweep via its composition root; :meth:`plant` before the first tick, then :meth:`drain`."""
 
     def __init__(self, sweep: LeaseTraceSweep | None, collector: FleetCollector) -> None:
         self._sweep = sweep
@@ -587,21 +557,18 @@ class RunnerSweep:
             self._sweep.sweep()
 
     def drain(self, *, workers: int) -> None:
-        """Sweep until the collector holds ``workers`` runner ``worker`` spans."""
         if self._sweep is not None:
             self._collector.await_workers(workers, drive=self._sweep.sweep)
 
 
 @contextlib.contextmanager
 def runner_sweep(config: RunnerConfig, collector: FleetCollector) -> Iterator[RunnerSweep]:
-    """A :class:`RunnerSweep` over ``config``'s runner store, at a one-second, zero-settle cadence."""
     if not collector.available:
         yield RunnerSweep(None, collector)
         return
     environ = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
     environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint
     traced = dataclasses.replace(config, tracing=TracingConfig(sweep_seconds=1, settle_seconds=0))
-    # The OTLP exporter reads its endpoint from the process environment when it is built.
     with mock.patch.dict(os.environ, environ, clear=True):
         process = build_runner_process(traced, environ=environ)
     try:

@@ -42,9 +42,6 @@ relaunch unarmed) — no crash point armed, since that recovery proof already be
    `TICK_SECONDS`) for every start from here on, so the rest of the run is not needlessly
    slow.
 
-Where a collector is usable, the hub and every runner start export to it, so the run's runner spans are proven to
-nest on the hub's step roots with each node's invocations attributed to its own harness.
-
 Needs the sibling provisioned `blizzard-mock` worktree plus a local winter source; skips
 without `BLIZZARD_E2E=1`."""
 
@@ -155,13 +152,10 @@ _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 #: actually makes this non-racy; this constant only bounds how long that slack is.
 _BOUNDARY_TICK_SECONDS = "8"
 
-#: Both daemons' trace sweeps: a pass every second, a closed unit exported at once.
 _TRACING = TracingConfig(sweep_seconds=1, settle_seconds=0)
 
 
 def _scaffold_traced_hub(hub_dir: Path, forge_port: int) -> None:
-    """Scaffold the hub as :func:`tests.crash.support.start_hub` would, with its ``[tracing]`` knobs set before it
-    ever starts."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     config = dataclasses.replace(write_work_sources(hub_dir, default_work_sources(forge_port)), tracing=_TRACING)
@@ -430,7 +424,6 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     runner_client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=15.0)
     daemon_log = runner_dir / "daemon.log"
-    # The collector is already listening (the fixture starts it), so both daemons trace from their first start.
     otel_env = {"OTEL_EXPORTER_OTLP_ENDPOINT": fleet_traces.endpoint} if fleet_traces.available else {}
     try:
         with forge_daemon(bin_dir, origins, forge_port) as forge:
@@ -644,8 +637,6 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             assert {e["effort"] for e in review_spawn} == {_SESSION_EFFORT}, review_spawn
             assert {e["model"] for e in review_spawn} == set(_SESSION_MODEL), review_spawn
 
-            # --- Traces: the runner host's own sweep thread exports across both restarts, and each node's
-            # invocations carry its own harness and model, in one run.
             fleet_traces.await_workers(2)
             with subtests.test(msg="runner traces"):
                 fleet_traces.require()

@@ -187,7 +187,6 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
                 ],
             )
 
-        # The runner's side of the same run: each attempt's lease is its own worker on its own root.
         with subtests.test(msg="runner traces"):
             fleet_traces.require()
             runner = fleet_traces.runner_spans(roots=2, workers=2)
@@ -214,7 +213,6 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         assert result.returncode == 0, f"takeover command failed ({result.returncode}):\n{result.stderr}"
 
     if harness is not CLAUDE_CODE:
-        # `mock-opencode`'s interactive shape is a paste target that names the session, never an automated turn.
         assert session_id in result.stdout, f"the opencode takeover did not open the parked session: {result.stdout!r}"
         return
     # The verbatim command actually resumed the session: its persisted state advanced a

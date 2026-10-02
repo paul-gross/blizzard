@@ -246,8 +246,6 @@ def test_review_cycle_fails_once_then_delivers(
             assert [t.root.attributes["blizzard.step.visit"] for t in traces] == [1, 1, 2, 2, 1]
             assert [t.root.attributes.get("blizzard.step.choice") for t in traces[:2]] == ["pass", "fail"]
 
-        # The runner's side of the same run: each of the four runner steps — the review fail's re-entry included —
-        # has its own worker on its own root.
         with subtests.test(msg="runner traces"):
             fleet_traces.require()
             runner = fleet_traces.runner_spans(roots=5, workers=4)

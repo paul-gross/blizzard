@@ -1,9 +1,8 @@
 """Ask/answer park→resume round trip — the `test_ask_answer_e2e` scenario of the e2e smoke — MVP criterion 7.
 
-End to end: a worker asks and parks (waiting_on_human); a human answers via
-`blizzard hub question answer` and the runner resumes the dormant session to done.
-Runs under both mock harnesses. Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
-provisioned.
+A worker asks and parks (waiting_on_human); a human answers via `blizzard hub question answer` and the runner
+resumes the dormant session to done, under both mock harnesses. Skipped unless ``BLIZZARD_E2E=1`` with the
+sibling ``blizzard-mock`` worktree provisioned.
 """
 
 from __future__ import annotations
@@ -322,8 +321,6 @@ def test_ask_parks_then_answer_resumes_session_to_done(
                 ],
             )
 
-        # The runner's side of the same run: build's one worker spans the park and the resume, and every
-        # invocation on either node carries the harness's GenAI usage.
         with subtests.test(msg="runner traces"):
             fleet_traces.require()
             runner = fleet_traces.runner_spans(roots=3, workers=2)
