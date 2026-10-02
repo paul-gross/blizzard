@@ -1439,10 +1439,10 @@
    "total": 0
   },
   "blizzard/foundation/platform_tracing/internal/pipeline.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 120
+   "total": 130
   },
   "blizzard/foundation/platform_tracing/internal/redaction.py": {
    "comments": 1,
@@ -8308,7 +8308,7 @@
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 136
+   "total": 150
   },
   "test_hub_proxy_retry.py": {
    "comments": 6,
@@ -8692,7 +8692,7 @@
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 201
+   "total": 220
   },
   "test_pr_opened_migration.py": {
    "comments": 9,
