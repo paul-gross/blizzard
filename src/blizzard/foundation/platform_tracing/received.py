@@ -7,7 +7,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-__all__ = ["JSON_CONTENT_TYPE", "PROTOBUF_CONTENT_TYPE", "OtlpDecodeError", "ReceivedSpan", "Scalar", "decode_otlp"]
+__all__ = [
+    "JSON_CONTENT_TYPE",
+    "PROTOBUF_CONTENT_TYPE",
+    "OtlpDecodeError",
+    "ReceivedSpan",
+    "Scalar",
+    "decode_otlp",
+    "encode_export_response",
+]
 
 JSON_CONTENT_TYPE = "application/json"
 PROTOBUF_CONTENT_TYPE = "application/x-protobuf"
@@ -42,3 +50,10 @@ def decode_otlp(body: bytes, content_type: str) -> list[ReceivedSpan]:
     from blizzard.foundation.platform_tracing.internal.otlp_decode import decode
 
     return decode(body, content_type)
+
+
+def encode_export_response(rejected_spans: int, content_type: str) -> bytes:
+    """An ``ExportTraceServiceResponse`` in the request's encoding, naming ``rejected_spans`` only when some were."""
+    from blizzard.foundation.platform_tracing.internal.otlp_decode import encode_response
+
+    return encode_response(rejected_spans, content_type)

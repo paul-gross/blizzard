@@ -1868,6 +1868,23 @@ export type ReadinessResponse = {
 };
 
 /**
+ * ReceiverStatus
+ *
+ * The runner's span receiver since it started: worker spans accepted into its export pipeline, and
+ * spans refused — out of step, off allowlist, or over a cap.
+ */
+export type ReceiverStatus = {
+    /**
+     * Accepted Spans
+     */
+    accepted_spans: number;
+    /**
+     * Dropped Spans
+     */
+    dropped_spans: number;
+};
+
+/**
  * RequeueResponse
  *
  * ``POST /chunks/{id}/requeues`` — the local hold is cleared.
@@ -2429,7 +2446,8 @@ export type TraceReplayRequest = {
  * scheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not
  * honor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when
  * nothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no
- * export has succeeded since; no exporter error text is carried, only the event's fixed message.
+ * export has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``
+ * is the runner's span-receiver tally and is ``None`` on the hub, which has no receiver.
  */
 export type TraceStatusResponse = {
     /**
@@ -2464,6 +2482,7 @@ export type TraceStatusResponse = {
      * Last Export Span Count
      */
     last_export_span_count: number | null;
+    receiver?: ReceiverStatus | null;
     /**
      * Rejected Setting
      */

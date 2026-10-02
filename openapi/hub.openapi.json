@@ -6316,6 +6316,25 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "ReceiverStatus": {
+        "description": "The runner's span receiver since it started: worker spans accepted into its export pipeline, and\nspans refused \u2014 out of step, off allowlist, or over a cap.",
+        "properties": {
+          "accepted_spans": {
+            "title": "Accepted Spans",
+            "type": "integer"
+          },
+          "dropped_spans": {
+            "title": "Dropped Spans",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accepted_spans",
+          "dropped_spans"
+        ],
+        "title": "ReceiverStatus",
+        "type": "object"
+      },
       "RestartView": {
         "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
@@ -8187,7 +8206,7 @@
         "type": "object"
       },
       "TraceStatusResponse": {
-        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message.",
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``\nis the runner's span-receiver tally and is ``None`` on the hub, which has no receiver.",
         "properties": {
           "cursor_at": {
             "anyOf": [
@@ -8269,6 +8288,16 @@
               }
             ],
             "title": "Last Export Span Count"
+          },
+          "receiver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReceiverStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "rejected_setting": {
             "anyOf": [

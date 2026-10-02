@@ -57,6 +57,9 @@ def _status_lines(s: dict[str, Any]) -> list[str]:
     else:
         ongoing = "ongoing" if s["last_error_ongoing"] else "recovered"
         lines.append(f"last error: {s['last_error_at']}  ({ongoing})  {s['last_error_message']}")
+    receiver = s.get("receiver")
+    if receiver is not None:
+        lines.append(f"worker spans: {receiver['accepted_spans']} accepted, {receiver['dropped_spans']} dropped")
     return lines
 
 

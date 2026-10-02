@@ -28,6 +28,10 @@ class TokenStore:
         rows = self._store.all(select(lease_tokens.c.token_hash).where(lease_tokens.c.lease_id == lease_id))
         return str(rows[0].token_hash) if rows else None
 
+    def lease_for_token_hash(self, token_hash: str) -> str | None:
+        rows = self._store.all(select(lease_tokens.c.lease_id).where(lease_tokens.c.token_hash == token_hash))
+        return str(rows[0].lease_id) if rows else None
+
     def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
         with self._store.begin() as conn:
             existing = conn.execute(

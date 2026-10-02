@@ -17,9 +17,9 @@ from opentelemetry.instrumentation.sqlalchemy.engine import EngineTracer
 from opentelemetry.instrumentation.utils import suppress_instrumentation
 from opentelemetry.metrics import NoOpMeterProvider
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
 from sqlalchemy import Engine
 

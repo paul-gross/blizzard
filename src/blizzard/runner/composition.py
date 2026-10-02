@@ -39,6 +39,7 @@ from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
 )
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.environments.factory import build_workspace_provider
@@ -106,6 +107,9 @@ class RunnerProcess:
     trace_sweep: LeaseTraceSweep | None
     #: The operator's replay over the same assembly and exporter — dry-run only while tracing is off.
     trace_replay: LeaseTraceReplay
+    #: The worker-span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
+    span_limiter: SpanRateLimiter
+    receiver_counter: ReceiverCounter
     #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
 
@@ -203,6 +207,8 @@ def build_runner_process(
             trace_settings=tracing,
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
+            span_limiter=SpanRateLimiter(clock),
+            receiver_counter=ReceiverCounter(),
             platform_tracing=platform_tracing,
         )
     except BaseException:

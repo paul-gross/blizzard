@@ -1,10 +1,8 @@
 """The admission policy for spans a worker sends the runner — what is kept, and what it says once kept.
 
-Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md`` §Out of the worker. Every
-received span is untrusted: it is kept only inside the presenting lease's step trace and the allowed
-scope, rebuilt to carry only allowlisted attributes plus who sent it, and bounded by the caps. Pure over
-:class:`ReceivedSpan` — no OpenTelemetry or web import — and the allowlist is a value, so widening what a
-worker may send is a different argument, not a branch here."""
+Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md`` §Out of the worker. A span is kept only
+inside the presenting lease's step trace and the allowed scope, rebuilt to carry allowlisted attributes plus who sent
+it, within the caps. Pure over :class:`ReceivedSpan`; the allowlist is a value, so widening it needs no branch here."""
 
 from __future__ import annotations
 

@@ -7,9 +7,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.traces import TraceReplayRequest, TraceStatusResponse
+from blizzard.wire.traces import ReceiverStatus, TraceReplayRequest, TraceStatusResponse
 
-__all__ = ["RunnerTraceReplayFailure", "RunnerTraceReplayResponse", "TraceReplayRequest", "TraceStatusResponse"]
+__all__ = [
+    "ReceiverStatus",
+    "RunnerTraceReplayFailure",
+    "RunnerTraceReplayResponse",
+    "TraceReplayRequest",
+    "TraceStatusResponse",
+]
 
 
 class RunnerTraceReplayResponse(BaseModel):

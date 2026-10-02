@@ -6,9 +6,12 @@ import base64
 import json
 from typing import Any
 
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import MessageToJson, ParseDict
 from google.protobuf.message import DecodeError
-from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+    ExportTraceServiceRequest,
+    ExportTraceServiceResponse,
+)
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue
 from opentelemetry.proto.trace.v1.trace_pb2 import Span
 
@@ -37,6 +40,15 @@ def decode(body: bytes, content_type: str) -> list[ReceivedSpan]:
     else:
         raise OtlpDecodeError(f"unsupported content type {content_type!r}")
     return _spans(message)
+
+
+def encode_response(rejected_spans: int, content_type: str) -> bytes:
+    response = ExportTraceServiceResponse()
+    if rejected_spans:
+        response.partial_success.rejected_spans = rejected_spans
+    if content_type == PROTOBUF_CONTENT_TYPE:
+        return response.SerializeToString()
+    return MessageToJson(response, indent=None).encode()
 
 
 def _parse_json(body: bytes, message: ExportTraceServiceRequest) -> None:
@@ -112,5 +124,3 @@ def _scalar(value: AnyValue) -> Scalar | None:
     if kind == "double_value":
         return value.double_value
     return None
-
-

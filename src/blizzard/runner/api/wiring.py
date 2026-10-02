@@ -17,6 +17,7 @@ from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -28,6 +29,7 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -97,6 +99,18 @@ class RunnerWiring:
     def trace_replay(self) -> LeaseTraceReplay:
         replay: LeaseTraceReplay | None = getattr(self.state, "trace_replay", None)
         return replay if replay is not None else self._refuse("trace replay")
+
+    def platform_tracing(self) -> IPlatformTracing:
+        """The process's platform-tracing handle; the disabled one where the composer wired none."""
+        return getattr(self.state, "platform_tracing", None) or DisabledPlatformTracing()
+
+    def span_limiter(self) -> SpanRateLimiter:
+        limiter: SpanRateLimiter | None = getattr(self.state, "span_limiter", None)
+        return limiter if limiter is not None else self._refuse("span rate limiter")
+
+    def receiver_counter(self) -> ReceiverCounter:
+        counter: ReceiverCounter | None = getattr(self.state, "receiver_counter", None)
+        return counter if counter is not None else self._refuse("span receiver counter")
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)

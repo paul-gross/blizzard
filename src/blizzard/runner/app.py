@@ -48,6 +48,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.leases import router as leases_router
+from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
@@ -83,6 +84,7 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -136,6 +138,7 @@ _UNGATED = (
     finding_router,
     scope_router,
     analytics_router,
+    otlp_receiver_router,
 )
 # The human web lane: the local panel's own reads and writes, the runner's own
 # pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
@@ -161,6 +164,10 @@ _HUMAN = (
 )
 
 
+# OTLP/HTTP's fixed path: authenticated by the worker's lease token, where a browser session cannot bounce.
+_OTLP_TRACES_PATH = "/v1/traces"
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
@@ -184,6 +191,8 @@ def create_app(
     runner_status: RunnerStatusService | None = None,
     trace_status: LeaseTraceStatusReader | None = None,
     trace_replay: LeaseTraceReplay | None = None,
+    span_limiter: SpanRateLimiter | None = None,
+    receiver_counter: ReceiverCounter | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
@@ -246,6 +255,10 @@ def create_app(
     app.state.runner_status = runner_status
     app.state.trace_status = trace_status
     app.state.trace_replay = trace_replay
+    app.state.platform_tracing = platform_tracing
+    # The worker-span receiver's bound and tally, process-scoped: the host passes the graph's own.
+    app.state.span_limiter = span_limiter or SpanRateLimiter(clock)
+    app.state.receiver_counter = receiver_counter or ReceiverCounter()
     app.state.takeover = takeover
     app.state.requeue = requeue
     app.state.attachments = attachments
@@ -327,7 +340,7 @@ def create_app(
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
-        if not request.url.path.startswith("/api"):
+        if not (request.url.path.startswith("/api") or request.url.path == _OTLP_TRACES_PATH):
             try:
                 require_human_session(request)
             except NeedsFederationBounce as exc:
@@ -475,9 +488,14 @@ def _wire_hosted_app(
         transcripts=transcripts,
         runner_status=runner_status,
         trace_status=LeaseTraceStatusReader(
-            settings=graph.trace_settings, leases=RunnerReadStores.of(runner_stores).lease_traces, clock=clock
+            settings=graph.trace_settings,
+            leases=RunnerReadStores.of(runner_stores).lease_traces,
+            clock=clock,
+            receiver=graph.receiver_counter,
         ),
         trace_replay=graph.trace_replay,
+        span_limiter=graph.span_limiter,
+        receiver_counter=graph.receiver_counter,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,

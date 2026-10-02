@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from google.protobuf.json_format import Parse
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+    ExportTraceServiceRequest,
+    ExportTraceServiceResponse,
+)
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
@@ -23,6 +32,9 @@ from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     TICK_STEP,
 )
+from blizzard.runner.domain.tracing.receiver import MAX_BODY_BYTES
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
+from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.loop.tick import tick
 from tests.runner_fakes import (
     FakeHarness,
@@ -93,7 +105,13 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
     store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)
 
 
-def _app(tmp_path: Path, handle: IPlatformTracing, seen: list[httpx.Request]):  # type: ignore[no-untyped-def]
+def _app(  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    handle: IPlatformTracing,
+    seen: list[httpx.Request],
+    counter: ReceiverCounter | None = None,
+    limiter: SpanRateLimiter | None = None,
+):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url="http://hub.local:8421")
 
@@ -115,6 +133,14 @@ def _app(tmp_path: Path, handle: IPlatformTracing, seen: list[httpx.Request]):  
         hub_proxy_client=proxy,
         hub_retry_clock=no_retry_clock(),
         platform_tracing=handle,
+        span_limiter=limiter,
+        receiver_counter=counter,
+        trace_status=LeaseTraceStatusReader(
+            settings=TracingSettings.of(_ENDPOINT),
+            leases=make_stores(store).lease_traces,
+            clock=FixedClock(_NOW),
+            receiver=counter,
+        ),
     )
     return app
 
@@ -232,3 +258,201 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     hub_calls = [s for s in spans if s.kind.name == "CLIENT"]
     assert hub_calls and all(_parent_id(s) in step_ids or _parent_id(s) == _span_id(roots[0]) for s in hub_calls)
     assert all(_attr(s, RUNNER_ID) == _RUNNER for s in spans)
+
+
+# --- The OTLP receiver --------------------------------------------------------------------------------
+
+_TOKEN = {"X-Blizzard-Lease-Token": _LEASE_TOKEN}
+_SPAN = 0x00F067AA0BA902B7
+
+
+def _export(trace: int, *, scope: str = "blizzard.cli", extra: dict[str, object] | None = None) -> dict[str, object]:
+    attributes = [
+        {"key": "blizzard.cli.command", "value": {"stringValue": "artifact create"}},
+        {"key": "blizzard.caller", "value": {"stringValue": "operator"}},
+        {"key": "secret", "value": {"stringValue": "s3cret"}},
+    ]
+    span = {
+        "traceId": f"{trace:032x}",
+        "spanId": f"{_SPAN:016x}",
+        "name": "blizzard artifact create",
+        "kind": 3,
+        "startTimeUnixNano": "1000",
+        "endTimeUnixNano": "2000",
+        "attributes": attributes,
+        **(extra or {}),
+    }
+    return {
+        "resourceSpans": [
+            {
+                "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "planted"}}]},
+                "scopeSpans": [{"scope": {"name": scope, "version": "1"}, "spans": [span]}],
+            }
+        ]
+    }
+
+
+def _own_trace() -> int:
+    return trace_id(StepKey.attempt("ch_1", 1))
+
+
+def _protobuf(document: dict[str, object]) -> bytes:
+    import base64
+
+    for resource in document["resourceSpans"]:  # type: ignore[attr-defined]
+        for scope in resource["scopeSpans"]:
+            for span in scope["spans"]:
+                for key in ("traceId", "spanId"):
+                    span[key] = base64.b64encode(bytes.fromhex(span[key])).decode()
+    return Parse(json.dumps(document), ExportTraceServiceRequest()).SerializeToString()
+
+
+def _post_json(client: TestClient, document: dict[str, object], headers: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+    return client.post(
+        "/v1/traces",
+        content=json.dumps(document),
+        headers={"Content-Type": "application/json", **(_TOKEN if headers is None else headers)},
+    )
+
+
+def _worker_spans(spans: list[ReadableSpan]) -> list[ReadableSpan]:
+    return [s for s in spans if s.instrumentation_scope is not None and s.instrumentation_scope.name == "blizzard.cli"]
+
+
+def test_an_otlp_json_post_with_the_lease_token_exports_a_rebuilt_span(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        response = _post_json(client, _export(_own_trace()))
+        assert response.status_code == 200
+        assert "partialSuccess" not in response.json()
+    (span,) = _worker_spans(_finished(handle, exporter))
+    assert span.resource.attributes["service.name"] == "blizzard-cli"
+    assert dict(span.attributes or {}) == {
+        "blizzard.cli.command": "artifact create",
+        _CALLER: "worker",
+        "blizzard.chunk.id": "ch_1",
+        "blizzard.lease.id": "lease_1",
+    }
+    assert span.context is not None and span.context.trace_id == _own_trace()
+
+
+def test_an_otlp_protobuf_post_exports_the_same_span(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        response = client.post(
+            "/v1/traces",
+            content=_protobuf(_export(_own_trace())),
+            headers={"Content-Type": "application/x-protobuf", **_TOKEN},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/x-protobuf"
+        assert ExportTraceServiceResponse.FromString(response.content).partial_success.rejected_spans == 0
+    (span,) = _worker_spans(_finished(handle, exporter))
+    assert span.resource.attributes["service.name"] == "blizzard-cli"
+    assert (span.attributes or {})[_CALLER] == "worker"
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Blizzard-Lease-Token": "wrong"}])
+def test_a_request_without_a_valid_lease_token_is_refused_403(tmp_path: Path, headers: dict[str, str]) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        assert _post_json(client, _export(_own_trace()), headers).status_code == 403
+    assert _worker_spans(_finished(handle, exporter)) == []
+
+
+def test_a_closed_leases_token_is_refused_403(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    app = _app(tmp_path, handle, [])
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
+    with TestClient(app) as client:
+        assert _post_json(client, _export(_own_trace())).status_code == 403
+
+
+def test_another_chunks_span_is_dropped_reported_and_counted(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    counter = ReceiverCounter()
+    with TestClient(_app(tmp_path, handle, [], counter)) as client:
+        foreign = trace_id(StepKey.attempt("ch_other", 1))
+        response = _post_json(client, _export(foreign))
+        assert response.status_code == 200
+        assert int(response.json()["partialSuccess"]["rejectedSpans"]) == 1
+        assert _post_json(client, _export(_own_trace())).status_code == 200
+        status = client.get("/api/traces/status").json()
+    assert status["receiver"] == {"accepted_spans": 1, "dropped_spans": 1}
+    assert len(_worker_spans(_finished(handle, exporter))) == 1
+
+
+def test_a_foreign_scope_is_dropped(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        response = _post_json(client, _export(_own_trace(), scope="some.library"))
+        assert int(response.json()["partialSuccess"]["rejectedSpans"]) == 1
+    assert _finished(handle, exporter) == []
+
+
+def test_a_body_past_the_size_cap_is_refused_413(tmp_path: Path) -> None:
+    handle = _handle(InMemorySpanExporter())
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        declared = client.post(
+            "/v1/traces", content=b"x" * (MAX_BODY_BYTES + 1), headers={"Content-Type": "application/json", **_TOKEN}
+        )
+        assert declared.status_code == 413
+        streamed = client.post(
+            "/v1/traces",
+            content=iter([b"x" * MAX_BODY_BYTES, b"x"]),
+            headers={"Content-Type": "application/json", **_TOKEN},
+        )
+        assert streamed.status_code == 413
+
+
+def test_a_request_past_the_span_rate_is_refused_429_and_counted(tmp_path: Path) -> None:
+    handle = _handle(InMemorySpanExporter())
+    counter = ReceiverCounter()
+    limiter = SpanRateLimiter(FixedClock(_NOW), capacity=1, refill_per_second=0.001)
+    document = _export(_own_trace())
+    document["resourceSpans"][0]["scopeSpans"][0]["spans"] *= 2  # type: ignore[index]
+    with TestClient(_app(tmp_path, handle, [], counter, limiter)) as client:
+        assert _post_json(client, document).status_code == 429
+        assert counter.count().dropped == 2
+
+
+@pytest.mark.parametrize(
+    ("headers", "body", "expected"),
+    [
+        ({"Content-Type": "text/plain"}, b"{}", 415),
+        ({"Content-Type": "application/json", "Content-Encoding": "gzip"}, b"{}", 415),
+        ({"Content-Type": "application/json"}, b"not json", 400),
+        ({"Content-Type": "application/x-protobuf"}, b"\xff\xff", 400),
+    ],
+)
+def test_an_unsupported_or_malformed_request_is_refused(
+    tmp_path: Path, headers: dict[str, str], body: bytes, expected: int
+) -> None:
+    handle = _handle(InMemorySpanExporter())
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        assert client.post("/v1/traces", content=body, headers={**headers, **_TOKEN}).status_code == expected
+
+
+def test_the_receiver_is_404_while_platform_tracing_is_off(tmp_path: Path) -> None:
+    disabled = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
+    with TestClient(_app(tmp_path, disabled, [])) as client:
+        assert _post_json(client, _export(_own_trace())).status_code == 404
+
+
+_RESOURCE_OFF = {"service.name": "blizzard-runner"}
+
+
+def test_the_receiver_makes_no_server_span_of_its_own(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        _post_json(client, _export(_own_trace()))
+    spans = _finished(handle, exporter)
+    assert [s for s in spans if s not in _worker_spans(spans)] == []

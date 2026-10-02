@@ -819,6 +819,17 @@ def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  # type: igno
 
 
 @pytest.mark.unit
+def test_lease_for_token_hash_finds_the_lease_that_minted_it(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_lease_token("lease_1", "deadbeef" * 8, _NOW)
+    assert store.lease_for_token_hash("deadbeef" * 8) == "lease_1"
+    assert store.lease_for_token_hash("cafe" * 16) is None
+    store.record_lease_token("lease_1", "new" * 16, _NOW)
+    assert store.lease_for_token_hash("deadbeef" * 8) is None
+
+
+@pytest.mark.unit
 def test_record_lease_token_overwrites_on_re_mint(tmp_path):  # type: ignore[no-untyped-def]
     # A resume re-mints the lease's capability token; the second write replaces the
     # first for the same `lease_id` PK, and the prior token no longer authorizes attach.
