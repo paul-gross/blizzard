@@ -68,8 +68,15 @@ Setting it together with `[harness] autonomy` fails config load, naming both and
 
 `dangerous` may skip your own Claude Code deny rules, and blizzard does not compensate for that. The runner-owned
 denials — Claude Code's in the `--settings` file, OpenCode's in its worker config — hold under every value. OpenCode's
-`normal` omits `--auto` only; a permission that resolves to `ask` can still stall a headless turn. What an attended
-takeover keeps or drops is owned by [takeover.md](./chunk-operations/takeover.md).
+`normal` omits `--auto`, and an unanswered request would be auto-rejected, which ends an OpenCode turn. So before every
+unattended OpenCode launch in `normal`, the binding asks OpenCode for the effective rules of every agent (built-in
+defaults, user and project config, `.opencode/` agents) and composes each reachable `ask` to `deny` in
+`OPENCODE_CONFIG_CONTENT`, in the layer it came from. The worker gets a rule-denied tool error and continues. OpenCode
+then re-resolves the result, and a launch it cannot prove ask-free fails before any process starts, naming the agent,
+permission, and pattern; an `ask` from a layer later than `OPENCODE_CONFIG_CONTENT` (managed or org config,
+`OPENCODE_PERMISSION`) is one such. `auto` and `dangerous` compose nothing. Claude Code needs no composition:
+`--permission-prompts none` refuses an `ask` rule as a tool error. What an attended takeover keeps or drops is owned by
+[takeover.md](./chunk-operations/takeover.md).
 
 ## Harness configuration bundle
 
@@ -151,7 +158,8 @@ file as `OPENCODE_CONFIG`, its JSON as
 operator plugins are colocated there; the runner's plugin is explicitly referenced from its runtime-root scaffold.
 For relative `{file:…}` companions, OpenCode resolves `OPENCODE_CONFIG_CONTENT` against the worker cwd rather than the
 config file. The binding supplies absolute snapshot paths in that variable's JSON for those references only; the
-published file retains its original relative references. All other keys and values are identical in both entry points.
+published file retains its original relative references. Other keys and values are identical in both entry points, except that in `normal` autonomy
+`OPENCODE_CONFIG_CONTENT` also carries the `deny` overrides for every `ask` ([Harness autonomy](#harness-autonomy)).
 Config content takes precedence over project settings for keys it declares; independent
 user and project settings remain discoverable. Before each worker launch, duplicate plugin identities from the visible
 user configuration and project `.opencode/` directories are checked against the effective config and each other; an

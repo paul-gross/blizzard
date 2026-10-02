@@ -32,6 +32,15 @@ from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_descendant_usage import DescendantStep, OpenCodeDescendantUsage
+from blizzard.runner.harness.internal.opencode_permission_compose import (
+    compose_ask_denials,
+    merge_overrides,
+    residual_asks,
+)
+from blizzard.runner.harness.internal.opencode_permission_resolver import (
+    IOpenCodePermissionResolver,
+    OpenCodePermissionResolveError,
+)
 from blizzard.runner.harness.internal.opencode_price_cache import (
     IOpenCodePriceCatalog,
     OpenCodeModelPrice,
@@ -216,6 +225,7 @@ class OpenCodeAdapter:
         transcript_source: IHarnessTranscriptSource | None = None,
         price_catalog: IOpenCodePriceCatalog | None = None,
         descendant_usage: OpenCodeDescendantUsage | None = None,
+        permission_resolver: IOpenCodePermissionResolver | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
     ) -> None:
@@ -243,6 +253,9 @@ class OpenCodeAdapter:
         # Injected, optional: with none, an invocation's usage is its root session's steps alone.
         self._descendant_usage = descendant_usage
         self._process: IProcessProbe = process
+        # Injected (`bzh:dependency-injection`): `Normal` asks OpenCode what a launch can `ask` before it starts,
+        # and with none injected refuses to launch rather than launch unproven.
+        self._permission_resolver = permission_resolver
         # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
 
@@ -342,6 +355,7 @@ class OpenCodeAdapter:
         env = self._spawn_env(envelope, preamble, resume_from or "")
         if workdir is not None:
             self._check_plugins(workdir, env)
+            env = self._deny_unanswerable_asks(workdir, env)
         # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
@@ -416,6 +430,7 @@ class OpenCodeAdapter:
             else self._config_env()
         )
         self._check_plugins(session_cwd, env)
+        env = self._deny_unanswerable_asks(session_cwd, env)
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -460,6 +475,7 @@ class OpenCodeAdapter:
         )
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
         self._check_plugins(session_cwd, env)
+        env = self._deny_unanswerable_asks(session_cwd, env)
         # Deferred: a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
@@ -524,6 +540,35 @@ class OpenCodeAdapter:
     def _check_plugins(self, cwd: str, env: dict[str, str]) -> None:
         if self._effective_config_dir:
             check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
+
+    def _deny_unanswerable_asks(self, cwd: str, env: dict[str, str]) -> dict[str, str]:
+        """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
+
+        Every reachable ask is composed to ``deny`` in ``OPENCODE_CONFIG_CONTENT``, then OpenCode re-resolves the
+        result; a launch it cannot prove clean fails here, before any process starts. Takeover never comes through."""
+        if self._autonomy is not Autonomy.Normal:
+            return env
+        resolver = self._permission_resolver
+        if resolver is None:
+            raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")
+        try:
+            resolved = resolver.resolve(cwd=cwd, env=env)
+            overrides = compose_ask_denials(resolved.merged_config, resolved.agent_rulesets)
+            if not overrides:
+                return env
+            content = env.get("OPENCODE_CONFIG_CONTENT")
+            document = merge_overrides(json.loads(content) if content else {}, overrides)
+            composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
+            remaining = residual_asks(resolver.resolve(cwd=cwd, env=composed).agent_rulesets)
+        except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
+            raise HarnessSpawnError(f"cannot establish that an unattended OpenCode launch never asks: {exc}") from exc
+        if remaining:
+            raise HarnessSpawnError(
+                "an unattended OpenCode launch in `normal` autonomy could still ask for permission, which stops the "
+                f"agent loop; cannot deny {remaining[0].describe()}"
+                + (f" (and {len(remaining) - 1} more)" if len(remaining) > 1 else "")
+            )
+        return composed
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)
