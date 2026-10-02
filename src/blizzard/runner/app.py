@@ -53,6 +53,7 @@ from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.subscriptions import router as subscriptions_router
 from blizzard.runner.api.takeovers import router as takeovers_router
+from blizzard.runner.api.traces import router as traces_router
 from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.work_items import router as work_items_router
@@ -80,6 +81,8 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
+from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
@@ -147,6 +150,7 @@ _HUMAN = (
     escalations_router,
     facts_router,
     takeovers_router,
+    traces_router,
     harness_health_router,
     subscriptions_router,
     dashboard_router,
@@ -176,6 +180,8 @@ def create_app(
     leases: LocalLeaseService | None = None,
     transcripts: TranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
+    trace_status: LeaseTraceStatusReader | None = None,
+    trace_replay: LeaseTraceReplay | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
@@ -233,6 +239,8 @@ def create_app(
     app.state.leases = leases
     app.state.transcripts = transcripts
     app.state.runner_status = runner_status
+    app.state.trace_status = trace_status
+    app.state.trace_replay = trace_replay
     app.state.takeover = takeover
     app.state.requeue = requeue
     app.state.attachments = attachments
@@ -447,6 +455,10 @@ def _wire_hosted_app(
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,
+        trace_status=LeaseTraceStatusReader(
+            settings=graph.trace_settings, leases=RunnerReadStores.of(runner_stores).lease_traces, clock=clock
+        ),
+        trace_replay=graph.trace_replay,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,

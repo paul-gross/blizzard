@@ -29,6 +29,7 @@ from blizzard.runner.domain.tracing.attributes import (
     INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -93,6 +94,8 @@ class RunnerProcess:
     trace_settings: TracingSettings
     #: The lease-trace sweep — ``None`` unless tracing is enabled. Only ``runner host`` drives it.
     trace_sweep: LeaseTraceSweep | None
+    #: The operator's replay over the same assembly and exporter — dry-run only while tracing is off.
+    trace_replay: LeaseTraceReplay
 
     def close(self) -> None:
         try:
@@ -136,17 +139,19 @@ def build_runner_process(
             },
         )
         tracing = TracingSettings.of(os.environ if environ is None else environ)
+        exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None
         trace_sweep = (
             LeaseTraceSweep(
                 leases=stores.lease_traces,
                 outbound=stores.outbound,
-                exporter=trace_exporter or _otlp_exporter(environ),
+                exporter=exporter,
                 clock=clock,
                 config=config.tracing,
             )
-            if tracing.enabled()
+            if exporter is not None
             else None
         )
+        trace_replay = LeaseTraceReplay(leases=stores.lease_traces, exporter=exporter, config=config.tracing)
         return RunnerProcess(
             engine,
             stores,
@@ -160,6 +165,7 @@ def build_runner_process(
             executor,
             trace_settings=tracing,
             trace_sweep=trace_sweep,
+            trace_replay=trace_replay,
         )
     except BaseException:
         try:

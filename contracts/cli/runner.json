@@ -1257,6 +1257,136 @@
       "path": "runner tick",
       "short_help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE)."
     },
+    "traces": {
+      "commands": {
+        "replay": {
+          "help": "Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor\ndoes not move, so spans the backend already holds arrive again \u2014 it dedupes on their ids. The window is\nbounded by the runner's replay_max_window.",
+          "params": [
+            {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Only records before this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Count what would be told; export nothing.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dry_run",
+              "opts": [
+                "--dry-run"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner traces replay",
+          "short_help": "Tell every lease that closed in [since, until) again, with the live sweep's span ids."
+        },
+        "status": {
+          "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",
+          "params": [
+            {
+              "help": "Print the response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner traces status",
+          "short_help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the last error."
+        }
+      },
+      "help": "Operator verbs over the runner's lease-trace export.",
+      "params": [],
+      "path": "runner traces",
+      "short_help": "Operator verbs over the runner's lease-trace export."
+    },
     "transcript": {
       "commands": {
         "backfill": {

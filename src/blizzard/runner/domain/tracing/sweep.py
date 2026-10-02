@@ -39,6 +39,10 @@ _SKIPPED: EventLogKind = "trace-window-skipped"
 _REJECTED: EventLogKind = "trace-config-rejected"
 
 
+#: The one message a runner export failure carries — the exporter's own error is never kept.
+FAILED_MESSAGE = "runner trace export failed; the cursor holds and the sweep retries with backoff"
+
+
 def _report(kind: EventLogKind, message: str, detail: dict[str, object] | None) -> str:
     return json.dumps(
         event_payload(kind=kind, chunk_id=None, lease_id=None, node_name=None, message=message, detail=detail)
@@ -132,7 +136,7 @@ class LeaseTraceSweep:
         if self._failing:
             return
         self._failing = True
-        self._latch(_FAILED, "runner trace export failed; the cursor holds and the sweep retries with backoff")
+        self._latch(_FAILED, FAILED_MESSAGE)
 
     def _recovered(self) -> None:
         self._failures = 0

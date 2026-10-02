@@ -40,7 +40,7 @@ from blizzard.runner.domain.tracing.facts import (
     TakeoverRow,
     UsageRow,
 )
-from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseCursorRecord
+from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseCursorRecord, LeaseFailureRecord
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs
 from blizzard.runner.store.schema import (
@@ -363,9 +363,18 @@ class LeaseTraceFactsStore:
         return next(iter(self.closed_leases_after(since, until, 1)), None)
 
     def newest_trace_cursor(self) -> LeaseCursorRecord | None:
+        return self._newest_cursor()
+
+    def newest_export_cursor(self) -> LeaseCursorRecord | None:
+        """The newest row that told spans — rows of zero are jumps and idle advances."""
+        return self._newest_cursor(trace_cursor.c.span_count > 0)
+
+    def _newest_cursor(self, *where) -> LeaseCursorRecord | None:  # type: ignore[no-untyped-def]
         c = trace_cursor.c
         with self._store.connect() as conn:
-            row = conn.execute(select(trace_cursor).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)).first()
+            row = conn.execute(
+                select(trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+            ).first()
         if row is None:
             return None
         return LeaseCursorRecord(LeaseCursorKey(row.position_at, row.lease_id), row.span_count, row.recorded_at)
@@ -377,6 +386,13 @@ class LeaseTraceFactsStore:
                 select(c.kind).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
             ).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
+
+    def newest_export_failure(self) -> LeaseFailureRecord | None:
+        c = trace_export_latch.c
+        stmt = select(c.recorded_at).where(c.kind == "trace-export-failed").order_by(c.recorded_at.desc(), c.id.desc())
+        with self._store.connect() as conn:
+            at = conn.execute(stmt.limit(1)).scalar_one_or_none()
+        return LeaseFailureRecord(at) if at is not None else None
 
     def append_trace_cursor(self, record: LeaseCursorRecord) -> None:
         with self._store.begin() as conn:

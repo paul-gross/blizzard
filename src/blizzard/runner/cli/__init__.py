@@ -16,6 +16,7 @@ from blizzard.runner.cli.opencode import opencode_group
 from blizzard.runner.cli.prompt import prompt_group
 from blizzard.runner.cli.runtime import host, init, migrate_cmd, tick_cmd
 from blizzard.runner.cli.scope import scope_group
+from blizzard.runner.cli.traces import traces_group
 from blizzard.runner.cli.transcript import transcript_group
 from blizzard.runner.cli.worker import ask, attach, chunk_group, heartbeat, pm_items, session_end, work_items
 
@@ -52,6 +53,7 @@ runner.add_command(garden_group)
 runner.add_command(finding_group)
 runner.add_command(scope_group)
 runner.add_command(analytics_group)
+runner.add_command(traces_group)
 
 runner.add_command(status)
 runner.add_command(pause)

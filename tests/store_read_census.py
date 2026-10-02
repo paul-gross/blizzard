@@ -776,6 +776,8 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseTraceCursor, "newest_trace_cursor"): lambda w: w.read.lease_traces.newest_trace_cursor(),
     (IReadLeaseTraceCursor, "newest_trace_latch"): lambda w: w.read.lease_traces.newest_trace_latch(),
+    (IReadLeaseTraceCursor, "newest_export_cursor"): lambda w: w.read.lease_traces.newest_export_cursor(),
+    (IReadLeaseTraceCursor, "newest_export_failure"): lambda w: w.read.lease_traces.newest_export_failure(),
 }
 
 #: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.

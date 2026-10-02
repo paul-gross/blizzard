@@ -51,6 +51,8 @@ _HUMAN: set[tuple[str, str]] = {
     ("GET", "/api/chunks/{chunk_id}"),
     ("POST", "/api/chunks/{chunk_id}/pause"),
     ("POST", "/api/chunks/{chunk_id}/resume"),
+    ("GET", "/api/traces/status"),
+    ("POST", "/api/traces/replay"),
 }
 
 #: Open — the worker-hook lane (workers call over TCP and cannot SSO-bounce) plus the
