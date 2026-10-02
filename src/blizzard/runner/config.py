@@ -644,6 +644,9 @@ class RunnerConfig:
         """The one allowlisted env every runner-spawned child is built from
         (``bzh:worker-env-allowlist``) — the sole accessor a composition root reads instead
         of constructing an :class:`AllowlistedEnv` from the raw fields itself."""
+        return self._build_worker_env()
+
+    def _build_worker_env(self) -> AllowlistedEnv:
         dropped = self.dropped_otel_passthrough
         passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
         return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
