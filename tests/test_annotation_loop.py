@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
 
@@ -123,11 +124,12 @@ class _FakeState:
         self.services = services
         self.config = config
         self.shutdown = asyncio.Event()
+        self.platform_tracing = DisabledPlatformTracing()
 
 
 class _FakeApp:
     """Duck-types the two attributes ``_lifespan`` reads off a real ``FastAPI``
-    instance — ``app.state.{services,config,shutdown}`` — with no ASGI machinery."""
+    instance — ``app.state.{services,config,shutdown,platform_tracing}`` — with no ASGI machinery."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
         self.state = _FakeState(services, config)

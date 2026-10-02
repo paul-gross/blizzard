@@ -12,7 +12,7 @@ import click
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.hub.app import build_hosted_app
+from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
@@ -104,3 +104,4 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # has actually stopped serving and the sweeps have drained. In `finally` so
         # an exception out of `run()` still disposes it rather than leaking `-wal`.
         app.state.engine.dispose()
+        app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)

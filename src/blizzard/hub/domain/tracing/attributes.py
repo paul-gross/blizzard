@@ -11,6 +11,9 @@ from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.hub.fleet_spans"
 INSTRUMENTATION_SCOPE_VERSION = "1"
+#: The scope the hub's own platform spans (sweep roots) are opened under.
+PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.hub.platform"
+PLATFORM_INSTRUMENTATION_SCOPE_VERSION = "1"
 DEFAULT_SERVICE_NAME = "blizzard-hub"
 
 # Dimensions
@@ -53,7 +56,10 @@ _PREFIXES = ("blizzard.", "gen_ai.", "service.")
 DECLARED_ATTRIBUTES: frozenset[str] = shared.SHARED_ATTRIBUTES | frozenset(
     value
     for name, value in tuple(globals().items())
-    if name.isupper() and isinstance(value, str) and value.startswith(_PREFIXES) and name != "INSTRUMENTATION_SCOPE"
+    if name.isupper()
+    and isinstance(value, str)
+    and value.startswith(_PREFIXES)
+    and not name.endswith("INSTRUMENTATION_SCOPE")
 )
 
 

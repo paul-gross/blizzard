@@ -12,11 +12,13 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain.tracing.attributes import RUNNER_ID
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -81,6 +83,7 @@ class RunnerAuth:
         since ``warn`` would otherwise let it through as anonymous."""
         principal = self.principal
         if principal is not None:
+            annotate({CALLER: "runner", RUNNER_ID: principal.runner_id})
             return principal
         token = presented_bearer(self.request)
         if token is not None and self.services.registry.is_token_revoked(TokenHash(token).hex):

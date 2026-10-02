@@ -411,6 +411,7 @@ def build_services(
     forge_url: str | None = None,
     forge_token: str | None = None,
     forge_owner: str | None = None,
+    forge_http_client: httpx.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
     oauth_http_client: httpx.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
@@ -560,7 +561,10 @@ def build_services(
     # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
-        httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
+        forge_http_client or httpx.Client(timeout=10.0),
+        forge_url=forge_url,
+        forge_token=forge_token,
+        forge_owner=forge_owner,
     ).resolve
     work_ref_label = _work_ref_label(work_sources)
     return HubServices(
