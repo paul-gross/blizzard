@@ -29,7 +29,7 @@ import pytest
 from blizzard.foundation.trace_ids import SpanRole, StepKey, span_id, trace_id
 from tests.repo_files import repo_root
 from tests.support import daemon_log_sink, free_port, read_daemon_log
-from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name
+from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name, scope_of_role
 
 ENV_COLLECTOR = "BLIZZARD_OTELCOL"
 _BINARY = "otelcol-contrib"
@@ -223,7 +223,7 @@ def assert_conforms(spans: Sequence[ExportedSpan]) -> None:
             raise AssertionError(f"span name {span.name!r} is not in the dictionary") from None
         where = f"span {span.name!r}"
         check_bag(span.attributes, role, where)
-        assert span.scope == d["instrumentation_scope"]["name"], f"{where}: scope {span.scope!r}"
+        assert span.scope == scope_of_role(role), f"{where}: scope {span.scope!r}"
         # The SDK adds its own `telemetry.sdk.*`; the contract is that the published ones are all there.
         assert resource_keys <= set(span.resource), f"{where}: resource lacks {resource_keys - set(span.resource)}"
         assert span.resource.get("blizzard.trace.schema_version") == d["schema_version"], where

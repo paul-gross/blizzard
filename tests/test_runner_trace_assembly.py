@@ -91,7 +91,7 @@ def test_runner_invocation_span_id_vector() -> None:
 
 
 def test_every_child_parents_into_the_worker() -> None:
-    spans = assemble_lease(_busy_facts())
+    spans = assemble_lease(fx.busy_facts())
     worker = spans[0]
     assert worker is _worker(spans)
     assert all(s.parent_span_id == worker.context.span_id for s in spans[1:])
@@ -567,26 +567,8 @@ def test_worker_events_are_clamped_into_the_lease() -> None:
 # --- shape -----------------------------------------------------------------------------------------------------------
 
 
-def _busy_facts() -> facts_module.LeaseTraceFacts:
-    return fx.make_facts(
-        spawns=(fx.spawn(1, 1), fx.spawn(2, 41)),
-        boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 41, 100)),
-        usage=(fx.usage(1, 1, "spawn", 30), fx.usage(2, 2, "resume", 90, estimated_cost_usd=0.1)),
-        session_ends=(SessionEndRow(1, fx.at(19)),),
-        context_samples=(ContextSampleRow(1, fx.at(10), 500),),
-        parks=(ParkRow(1, "q1", fx.at(20)),),
-        park_resumes=(ParkResumeRow(1, "q1", fx.at(40)),),
-        pause_parks=(PauseParkRow(1, fx.at(50)),),
-        overloads=(OverloadRow(1, 2, 1, fx.at(60), fx.at(70)),),
-        takeovers=(TakeoverRow("tko_1", fx.at(80)),),
-        nudges=(NudgeRow(1, fx.EPOCH, fx.at(85)),),
-        check_results=(CheckResultRow(1, fx.EPOCH, False),),
-        checks_ran=(ChecksRanRow(1, fx.EPOCH, fx.at(95)),),
-    )
-
-
 def test_every_emitted_key_is_declared_and_every_span_is_internal_and_unset() -> None:
-    spans = assemble_lease(_busy_facts())
+    spans = assemble_lease(fx.busy_facts())
     assert len(spans) == 7
     for span in spans:
         assert span.kind is SpanKind.INTERNAL and span.status is SpanStatus.UNSET
@@ -640,7 +622,7 @@ def test_planted_content_never_reaches_a_span() -> None:
     planted = ("What is the secret plan?", "pytest -k secret", "FAILED secret output", "/home/secret/workdir")
     question, command, output, workdir = planted
     facts = replace(
-        _busy_facts(),
+        fx.busy_facts(),
         parks=(
             _load(
                 ParkRow,

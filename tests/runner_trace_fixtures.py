@@ -8,11 +8,21 @@ from datetime import UTC, datetime, timedelta
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.tracing.facts import (
     BoundaryRow,
+    CheckResultRow,
+    ChecksRanRow,
+    ContextSampleRow,
     LeaseClosureRow,
     LeaseContextRow,
     LeaseRow,
     LeaseTraceFacts,
+    NudgeRow,
+    OverloadRow,
+    ParkResumeRow,
+    ParkRow,
+    PauseParkRow,
+    SessionEndRow,
     SpawnRow,
+    TakeoverRow,
     UsageRow,
 )
 
@@ -82,3 +92,21 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
 
 def with_context(facts: LeaseTraceFacts, **kw: object) -> LeaseTraceFacts:
     return replace(facts, context=replace(facts.context, **kw))  # type: ignore[arg-type]
+
+
+def busy_facts() -> LeaseTraceFacts:
+    return make_facts(
+        spawns=(spawn(1, 1), spawn(2, 41)),
+        boundaries=(boundary(1, 1, "spawn", 1, 100), boundary(2, 2, "resume", 41, 100)),
+        usage=(usage(1, 1, "spawn", 30), usage(2, 2, "resume", 90, estimated_cost_usd=0.1)),
+        session_ends=(SessionEndRow(1, at(19)),),
+        context_samples=(ContextSampleRow(1, at(10), 500),),
+        parks=(ParkRow(1, "q1", at(20)),),
+        park_resumes=(ParkResumeRow(1, "q1", at(40)),),
+        pause_parks=(PauseParkRow(1, at(50)),),
+        overloads=(OverloadRow(1, 2, 1, at(60), at(70)),),
+        takeovers=(TakeoverRow("tko_1", at(80)),),
+        nudges=(NudgeRow(1, EPOCH, at(85)),),
+        check_results=(CheckResultRow(1, EPOCH, False),),
+        checks_ran=(ChecksRanRow(1, EPOCH, at(95)),),
+    )

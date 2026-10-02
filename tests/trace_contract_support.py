@@ -11,8 +11,15 @@ from tests.repo_files import repo_root
 
 CONTRACT_DIR = repo_root() / "contracts" / "traces"
 
-#: The two span names the dictionary publishes as a template over a node name.
-PARAMETERIZED_NAMES = {"step": "step <node>", "gate": "gate <node>"}
+#: The span names the dictionary publishes as a template over a node or session name, by role.
+PARAMETERIZED_NAMES = {
+    "step": "step <node>",
+    "gate": "gate <node>",
+    "runner/worker": "worker <node>",
+    "runner/invocation": "invoke_agent <session>",
+}
+
+BARE_NAMES = {"invoke_agent": "runner/invocation"}
 
 #: The dictionary's attribute type for each Python scalar an OTLP value decodes to.
 OTLP_TYPE_OF = {str: "string", bool: "bool", int: "int", float: "double"}
@@ -25,10 +32,16 @@ def dictionary() -> dict[str, Any]:
 
 def role_of_name(name: str) -> str:
     """The dictionary role of a span name; a name the dictionary does not publish raises ``StopIteration``."""
-    for role in PARAMETERIZED_NAMES:
-        if name.startswith(f"{role} "):
+    for role, template in PARAMETERIZED_NAMES.items():
+        if name.startswith(template.split(" ", 1)[0] + " "):
             return role
+    if name in BARE_NAMES:
+        return BARE_NAMES[name]
     return next(entry["role"] for entry in dictionary()["spans"] if entry["name"] == name)
+
+
+def scope_of_role(role: str) -> str:
+    return next(entry["scope"] for entry in dictionary()["spans"] if entry["role"] == role)
 
 
 def otlp_type(value: object) -> str:
@@ -40,5 +53,9 @@ def otlp_type(value: object) -> str:
 
 
 def required_by_role() -> dict[str, list[str]]:
-    """Each non-optional attribute name, with the roles it must ride (``event:<name>`` and ``link`` included)."""
-    return {a["name"]: a["on"] for a in dictionary()["attributes"] if not a["optional"]}
+    """Each non-optional attribute name, with the roles it must ride bar its ``optional_on``."""
+    return {
+        a["name"]: [role for role in a["on"] if role not in a.get("optional_on", ())]
+        for a in dictionary()["attributes"]
+        if not a["optional"]
+    }

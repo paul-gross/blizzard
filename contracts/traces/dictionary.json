@@ -11,7 +11,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "string"
@@ -27,7 +33,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": true,
       "type": "string[]"
@@ -43,9 +55,23 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
+      ],
       "type": "string"
     },
     {
@@ -59,7 +85,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "string"
@@ -75,7 +107,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "string"
@@ -91,7 +129,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "string"
@@ -107,7 +151,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "string"
@@ -123,7 +173,13 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": false,
       "type": "int"
@@ -209,7 +265,7 @@
       "type": "string"
     },
     {
-      "meaning": "The runner that held the step.",
+      "meaning": "The runner that held the step or ran the lease.",
       "name": "blizzard.runner.id",
       "on": [
         "step",
@@ -219,13 +275,19 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
       ],
       "optional": true,
       "type": "string"
     },
     {
-      "meaning": "The harness that ran the step's last invocation that recorded one.",
+      "meaning": "The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.",
       "name": "blizzard.harness.id",
       "on": [
         "step",
@@ -236,16 +298,20 @@
         "pause",
         "pickup",
         "hub-exec",
-        "event:invocation"
+        "event:invocation",
+        "runner/worker",
+        "runner/invocation"
       ],
       "optional": true,
       "type": "string"
     },
     {
-      "meaning": "The harness version the invocation recorded.",
+      "meaning": "The version of that harness.",
       "name": "blizzard.harness.version",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/worker",
+        "runner/invocation"
       ],
       "optional": true,
       "type": "string"
@@ -431,10 +497,11 @@
       "type": "int"
     },
     {
-      "meaning": "What the invocation was, such as `spawn`.",
+      "meaning": "What the invocation was: `spawn`, `resume` or `judge`; a nudge reads `resume`.",
       "name": "blizzard.invocation.kind",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
       "type": "string"
@@ -443,43 +510,60 @@
       "meaning": "Input tokens, not counting cache.",
       "name": "blizzard.invocation.input_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Output tokens.",
       "name": "blizzard.invocation.output_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Input tokens read from the cache.",
       "name": "blizzard.invocation.cache_read_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Input tokens written to the cache.",
       "name": "blizzard.invocation.cache_create_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "The invocation's cost in US dollars, including any estimate.",
       "name": "blizzard.invocation.cost.usd",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": true,
       "type": "double"
@@ -488,7 +572,8 @@
       "meaning": "Whether the cost is a subscription estimate.",
       "name": "blizzard.invocation.cost.estimated",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": true,
       "type": "bool"
@@ -497,56 +582,250 @@
       "meaning": "The model that answered.",
       "name": "gen_ai.response.model",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "string"
     },
     {
       "meaning": "All input tokens, cache reads and writes included.",
       "name": "gen_ai.usage.input_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Output tokens.",
       "name": "gen_ai.usage.output_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Input tokens read from the cache.",
       "name": "gen_ai.usage.cache_read.input_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
       ],
       "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
       "type": "int"
     },
     {
       "meaning": "Input tokens written to the cache.",
       "name": "gen_ai.usage.cache_creation.input_tokens",
       "on": [
-        "event:invocation"
+        "event:invocation",
+        "runner/invocation"
+      ],
+      "optional": false,
+      "optional_on": [
+        "runner/invocation"
+      ],
+      "type": "int"
+    },
+    {
+      "meaning": "The runner lease the span belongs to.",
+      "name": "blizzard.lease.id",
+      "on": [
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "Why the lease closed, such as `transitioned`; either escalation reads `escalated`.",
+      "name": "blizzard.lease.close_reason",
+      "on": [
+        "runner/worker"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The declared session the node ran in.",
+      "name": "blizzard.session.name",
+      "on": [
+        "runner/worker",
+        "runner/invocation"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The model the runner resolved the session's tier to.",
+      "name": "blizzard.model.resolved",
+      "on": [
+        "runner/worker"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The effort the runner resolved the session's effort to.",
+      "name": "blizzard.effort.resolved",
+      "on": [
+        "runner/worker"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "Whether a nudge opened the invocation.",
+      "name": "blizzard.invocation.nudge",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "The worker generation the invocation belongs to.",
+      "name": "blizzard.invocation.generation",
+      "on": [
+        "runner/invocation"
       ],
       "optional": false,
       "type": "int"
+    },
+    {
+      "meaning": "What ended the invocation: `session_end`, `next_invocation` or `lease_close`.",
+      "name": "blizzard.invocation.end_source",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The backoff's place in its streak of overloads, counting from 1.",
+      "name": "blizzard.overload.streak",
+      "on": [
+        "runner/overload"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "The session's context size in tokens when sampled.",
+      "name": "blizzard.context.tokens",
+      "on": [
+        "event:context sample"
+      ],
+      "optional": true,
+      "type": "int"
+    },
+    {
+      "meaning": "The check's position in the node's declared checks, counting from 1.",
+      "name": "blizzard.check.index",
+      "on": [
+        "event:check"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Whether that check passed.",
+      "name": "blizzard.check.passed",
+      "on": [
+        "event:check"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "Whether every check passed.",
+      "name": "blizzard.checks.passed",
+      "on": [
+        "event:checks ran"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "How many checks ran.",
+      "name": "blizzard.checks.count",
+      "on": [
+        "event:checks ran"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Always `invoke_agent`.",
+      "name": "gen_ai.operation.name",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The declared session the node ran in.",
+      "name": "gen_ai.agent.name",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The harness session id, for a worker invocation.",
+      "name": "gen_ai.conversation.id",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The model the runner resolved for the session.",
+      "name": "gen_ai.request.model",
+      "on": [
+        "runner/invocation"
+      ],
+      "optional": true,
+      "type": "string"
     }
   ],
   "event_names": [
     "bounce",
+    "check",
+    "checks ran",
+    "context sample",
     "hub poll pending",
-    "invocation"
+    "invocation",
+    "nudge",
+    "session end",
+    "session identified"
   ],
   "genai_semconv_version": "1.44.0",
   "ids": {
-    "discriminators": "The source row's own id for a role that occurs more than once in a step (ask, pause, hub-exec); empty otherwise.",
+    "discriminators": "The source row's own id for a role that occurs more than once in a step (ask, pause, hub-exec); empty otherwise. A runner span's is the lease id for runner/worker, `<generation>/<kind>` for runner/invocation, and its source row's id for the other runner roles.",
     "flags": "Every derived context is sampled.",
     "hash": "sha256",
     "key": {
@@ -594,14 +873,31 @@
         "role": "gate",
         "span_id": "43607f0078ab5f54",
         "trace_id": "02e23e56fc308497307e06c3e01d3360"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "lease_1",
+        "epoch": 1,
+        "key": "ch_1/1",
+        "kind": "attempt",
+        "parent_span_id": "88d23b1ca9cc34d2",
+        "role": "runner/worker",
+        "span_id": "b122cf84fa5df19f",
+        "trace_id": "914265ea3262e40441fa95402ba66e6d"
       }
     ],
     "zero_rule": "An all-zero digest has its last byte set to 01."
   },
-  "instrumentation_scope": {
-    "name": "blizzard.hub.fleet_spans",
-    "version": "1"
-  },
+  "instrumentation_scopes": [
+    {
+      "name": "blizzard.hub.fleet_spans",
+      "version": "1"
+    },
+    {
+      "name": "blizzard.runner.runner_spans",
+      "version": "1"
+    }
+  ],
   "link_reasons": [
     {
       "meaning": "The chunk moved on to the next node.",
@@ -626,12 +922,12 @@
   ],
   "resource_attributes": [
     {
-      "meaning": "The service name; `blizzard-hub` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
+      "meaning": "The service name; `blizzard-hub` or `blizzard-runner` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
       "name": "service.name",
       "type": "string"
     },
     {
-      "meaning": "The running hub's version.",
+      "meaning": "The running hub's or runner's version.",
       "name": "service.version",
       "type": "string"
     },
@@ -646,42 +942,86 @@
     {
       "meaning": "One runner or hub attempt at a node, the root of its trace.",
       "name": "step <node>",
-      "role": "step"
+      "role": "step",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "One human decision at a node, the root of its trace.",
       "name": "gate <node>",
-      "role": "gate"
+      "role": "gate",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "The chunk waiting claimable, pauses excluded.",
       "name": "queue wait",
-      "role": "queue"
+      "role": "queue",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "From the claim to the runner starting the step.",
       "name": "claim",
-      "role": "claim"
+      "role": "claim",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "A question to a person, from asked to answered.",
       "name": "ask",
-      "role": "ask"
+      "role": "ask",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "The fleet paused during the step.",
       "name": "pause",
-      "role": "pause"
+      "role": "pause",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "From a person deciding a gate to the decision being picked up.",
       "name": "decision pickup",
-      "role": "pickup"
+      "role": "pickup",
+      "scope": "blizzard.hub.fleet_spans"
     },
     {
       "meaning": "A hub node's run holding its execution slot.",
       "name": "hub exec",
-      "role": "hub-exec"
+      "role": "hub-exec",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "One runner lease, from its minting to its close, parented to the hub's step root.",
+      "name": "worker <node>",
+      "role": "runner/worker",
+      "scope": "blizzard.runner.runner_spans"
+    },
+    {
+      "meaning": "One harness invocation in the lease; plain `invoke_agent` when the node declares no session.",
+      "name": "invoke_agent <session>",
+      "role": "runner/invocation",
+      "scope": "blizzard.runner.runner_spans"
+    },
+    {
+      "meaning": "The worker parked on a question until it resumed.",
+      "name": "parked on ask",
+      "role": "runner/ask-park",
+      "scope": "blizzard.runner.runner_spans"
+    },
+    {
+      "meaning": "The worker parked by a fleet pause until it resumed.",
+      "name": "parked on pause",
+      "role": "runner/pause-park",
+      "scope": "blizzard.runner.runner_spans"
+    },
+    {
+      "meaning": "The worker backing off after the provider reported overload.",
+      "name": "provider overload backoff",
+      "role": "runner/overload",
+      "scope": "blizzard.runner.runner_spans"
+    },
+    {
+      "meaning": "A person took the worker's session over, until they handed it back.",
+      "name": "takeover",
+      "role": "runner/takeover",
+      "scope": "blizzard.runner.runner_spans"
     }
   ]
 }
