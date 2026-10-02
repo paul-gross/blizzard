@@ -933,6 +933,16 @@
         "meaning": "The chunk a request's route names."
       },
       {
+        "name": "blizzard.cli.command",
+        "type": "string",
+        "meaning": "The CLI command a worker ran, as a span of the scope `blizzard.cli`."
+      },
+      {
+        "name": "blizzard.lease.id",
+        "type": "string",
+        "meaning": "The lease a worker's span arrived under, stamped by the runner."
+      },
+      {
         "name": "blizzard.runner.id",
         "type": "string",
         "meaning": "The runner the span belongs to, or the runner a request authenticated as."
@@ -941,6 +951,41 @@
         "name": "blizzard.tick.step",
         "type": "string",
         "meaning": "The tick step a child span covers."
+      },
+      {
+        "name": "error.type",
+        "type": "string",
+        "meaning": "The error class when the CLI's request failed."
+      },
+      {
+        "name": "http.request.method",
+        "type": "string",
+        "meaning": "The HTTP method of the CLI's request to a daemon."
+      },
+      {
+        "name": "http.response.status_code",
+        "type": "int",
+        "meaning": "The status the daemon answered the CLI's request with."
+      },
+      {
+        "name": "process.exit.code",
+        "type": "int",
+        "meaning": "The exit code of the CLI command."
+      },
+      {
+        "name": "server.address",
+        "type": "string",
+        "meaning": "The host the CLI's request went to."
+      },
+      {
+        "name": "server.port",
+        "type": "int",
+        "meaning": "The port the CLI's request went to."
+      },
+      {
+        "name": "url.full",
+        "type": "string",
+        "meaning": "The CLI request's URL, without query string or fragment."
       }
     ],
     "database_semconv_version": "1.25.0",
@@ -952,6 +997,10 @@
       },
       {
         "name": "blizzard.runner.platform",
+        "version": "1"
+      },
+      {
+        "name": "blizzard.cli",
         "version": "1"
       }
     ]

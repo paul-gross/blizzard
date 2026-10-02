@@ -435,17 +435,22 @@ def test_the_platform_section_is_the_code_constants() -> None:
             "name": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE,
             "version": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
         },
+        {"name": platform_attr.CLI_SCOPE, "version": "1"},
     ]
     assert platform["http_semconv_version"] == HTTP_SEMCONV_VERSION
     assert platform["database_semconv_version"] == DATABASE_SEMCONV_VERSION
     assert {a["name"] for a in platform["attributes"]} == {
         platform_attr.CALLER,
         shared.CHUNK_ID,
+        platform_attr.LEASE_ID,
         attr.RUNNER_ID,
         runner_platform.TICK_STEP,
+        *platform_attr.CLI_ATTRIBUTES,
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
-    assert all(a["type"] == "string" for a in platform["attributes"])
+    declared = {a["name"]: a["type"] for a in platform["attributes"]}
+    assert all(declared[name] == type_ for name, type_ in platform_attr.CLI_ATTRIBUTES.items())
+    assert all(t == "string" for n, t in declared.items() if n not in platform_attr.CLI_ATTRIBUTES)
 
 
 def test_the_published_platform_attribute_table_is_thedictionary() -> None:

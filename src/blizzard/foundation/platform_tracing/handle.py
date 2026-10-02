@@ -5,12 +5,13 @@ accept. The SDK pipeline and every instrumentation package are imported only on 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from typing import TYPE_CHECKING, Any, Protocol
 
 from fastapi.telemetry import TelemetryConfig
 
+from blizzard.foundation.platform_tracing.received import ReceivedSpan
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -36,6 +37,11 @@ class IPlatformTracing(Protocol):
     @property
     def tracer(self) -> IPlatformTracer: ...
 
+    @property
+    def enabled(self) -> bool:
+        """Whether spans are exported at all — what a span receiver has nothing to forward to without."""
+        ...
+
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
         """The ``FastAPI(telemetry=...)`` config for one app; ``exclude`` skips a request's server span."""
         ...
@@ -46,6 +52,11 @@ class IPlatformTracing(Protocol):
 
     def suppressed(self) -> AbstractContextManager[object]:
         """No span of any instrumentation starts inside — an excluded request's children included."""
+        ...
+
+    def forward(self, spans: Sequence[ReceivedSpan], resource_service_name: str) -> None:
+        """Hand already-admitted spans to the process's own export pipeline, under this process's resource
+        with ``service.name`` replaced by ``resource_service_name``. A no-op when platform tracing is off."""
         ...
 
     def shutdown(self, timeout: float) -> None:
@@ -65,6 +76,10 @@ class DisabledPlatformTracing:
     def tracer(self) -> IPlatformTracer:
         return self._tracer
 
+    @property
+    def enabled(self) -> bool:
+        return False
+
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
         return {"tracing": False, "auto_configure": False}
 
@@ -76,6 +91,9 @@ class DisabledPlatformTracing:
 
     def suppressed(self) -> AbstractContextManager[object]:
         return nullcontext()
+
+    def forward(self, spans: Sequence[ReceivedSpan], resource_service_name: str) -> None:
+        return None
 
     def shutdown(self, timeout: float) -> None:
         return None

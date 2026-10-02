@@ -253,12 +253,21 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
 
 ### Platform attributes
 
-| Attribute            | Type     | Meaning                                                                                                      |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `blizzard.caller`    | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
-| `blizzard.chunk.id`  | `string` | The chunk a request's route names.                                                                           |
-| `blizzard.runner.id` | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
-| `blizzard.tick.step` | `string` | The tick step a child span covers.                                                                           |
+| Attribute                   | Type     | Meaning                                                                                                      |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `blizzard.caller`           | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
+| `blizzard.chunk.id`         | `string` | The chunk a request's route names.                                                                           |
+| `blizzard.cli.command`      | `string` | The CLI command a worker ran, as a span of the scope `blizzard.cli`.                                         |
+| `blizzard.lease.id`         | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
+| `blizzard.runner.id`        | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.tick.step`        | `string` | The tick step a child span covers.                                                                           |
+| `error.type`                | `string` | The error class when the CLI's request failed.                                                               |
+| `http.request.method`       | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
+| `http.response.status_code` | `int`    | The status the daemon answered the CLI's request with.                                                       |
+| `process.exit.code`         | `int`    | The exit code of the CLI command.                                                                            |
+| `server.address`            | `string` | The host the CLI's request went to.                                                                          |
+| `server.port`               | `int`    | The port the CLI's request went to.                                                                          |
+| `url.full`                  | `string` | The CLI request's URL, without query string or fragment.                                                     |
 
 ## Checking on tracing
 
