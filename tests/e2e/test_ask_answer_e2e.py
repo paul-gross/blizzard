@@ -2,7 +2,8 @@
 
 End to end: a worker asks and parks (waiting_on_human); a human answers via
 `blizzard hub question answer` and the runner resumes the dormant session to done.
-Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree provisioned.
+Runs under both mock harnesses. Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
+provisioned.
 """
 
 from __future__ import annotations
@@ -25,7 +26,15 @@ import uvicorn
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
+from tests.e2e.fleet_traces import (
+    FleetCollector,
+    InvocationExpect,
+    StepExpect,
+    assert_invocations,
+    assert_skeleton,
+    runner_sweep,
+)
+from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -55,12 +64,12 @@ _ANSWER_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed after the human answered\\n")\n'
-    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
     "subprocess.run(\n"
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: resolve the ask and land the change"],\n'
-    "    check=True,\n"
+    "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 # build judgement (elicited on the resumed session after the commit): pass to review.
@@ -70,9 +79,7 @@ _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: clean; ready to deliver')\n"
 
 
-def _graph_yaml() -> str:
-    import yaml
-
+def _graph_yaml(harness: MockHarness) -> str:
     graph = {
         "name": "default-delivery",
         "entry": "build",
@@ -112,7 +119,7 @@ def _graph_yaml() -> str:
             },
         },
     }
-    return yaml.safe_dump(graph, sort_keys=False)
+    return harness.graph_yaml(graph)
 
 
 @contextlib.contextmanager
@@ -184,8 +191,9 @@ def _session_state_path(workspace: Path, session_id: str) -> Path:
     return workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
 
 
+@both_mock_harnesses
 def test_ask_parks_then_answer_resumes_session_to_done(
-    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """A worker asks and parks; the human's answer resumes the session and the chunk lands."""
     bin_dir = _mock_bin_dir()
@@ -222,7 +230,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         _forge(bin_dir, origins, forge_port) as forge,
         _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ask/answer", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
         issue_number = issue.json()["number"]
@@ -240,7 +248,8 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
-        with _runner_api(config):
+        with _runner_api(config), runner_sweep(config, fleet_traces) as sweep:
+            sweep.plant()
             # The worker asks and the chunk parks — derived waiting_on_human.
             status = _tick_until(config, hub, chunk_id, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
             assert status == "waiting_on_human", f"chunk did not park (last status {status!r})"
@@ -284,6 +293,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
             # The runner resumes the dormant session with the answer and lands.
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
+            sweep.drain(workers=2)
 
         # `delivered` derives from the real runner's `answer.delivered` fact on resume
         # — the one tier where that fact isn't hand-pushed.
@@ -311,6 +321,15 @@ def test_ask_parks_then_answer_resumes_session_to_done(
                     StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
                 ],
             )
+
+        # The runner's side of the same run: build's one worker spans the park and the resume, and every
+        # invocation on either node carries the harness's GenAI usage.
+        with subtests.test(msg="runner traces"):
+            fleet_traces.require()
+            runner = fleet_traces.runner_spans(roots=3, workers=2)
+            assert "parked on ask" in [s.name for s in runner], sorted(s.name for s in runner)
+            expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
+            assert_invocations(runner, {"build": expect, "review": expect})
 
     # The dormant session was resumed around the answer — its persisted state advanced and
     # recorded the resume message carrying the human's answer script (same session).

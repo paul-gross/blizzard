@@ -2,7 +2,7 @@
 
 One chunk travels ingest -> acquire -> build -> review (scripted PASS) -> deliver ->
 landed, asserted at both the bare origin (git truth) and the hub's derived ``done``
-status (fleet truth). Self-managed, zero-token, no-network, no in-process shortcuts.
+status (fleet truth), under both mock harnesses. Self-managed, zero-token, no-network, no in-process shortcuts.
 Skipped unless ``BLIZZARD_E2E=1`` and the fixture workspace layout is discoverable."""
 
 from __future__ import annotations
@@ -28,7 +28,15 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
+from tests.e2e.fleet_traces import (
+    FleetCollector,
+    InvocationExpect,
+    StepExpect,
+    assert_invocations,
+    assert_skeleton,
+    runner_sweep,
+)
+from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.support import (
     daemon_log_sink,
     free_port,
@@ -77,26 +85,27 @@ _PUSH_AND_DECLARE_SCRIPT = (
     '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout.strip()\n"
-    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True, capture_output=True)\n'
     "subprocess.run(\n"
     '    ["blizzard", "runner", "artifact", "commit",\n'
     '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
-    "    check=True,\n"
+    "    check=True, capture_output=True,\n"
     ")\n"
 )
 
 # The scripted build-node prompt: the prompt is the program, run under the mock harness
-# with the acquired env dir as cwd, so it targets `toy-api` by relative path.
+# with the acquired env dir as cwd, so it targets `toy-api` by relative path. Every child
+# process's output is captured, so the script runs under either mock harness.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
-    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
     "subprocess.run(\n"
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change from the mock harness"],\n'
-    "    check=True,\n"
+    "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 # The judgement-resume prompt: also arrives as code.
@@ -135,14 +144,12 @@ _WORK_ITEM_BUILD_SCRIPT = (
 )
 
 
-def _graph_yaml() -> str:
-    """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
+def _graph_yaml(harness: MockHarness = CLAUDE_CODE) -> str:
+    """The scripted ``default-delivery`` graph — ``build -> review -> deliver`` — its runner nodes on ``harness``.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
     pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``.
     """
-    import yaml
-
     graph = {
         "name": "default-delivery",
         "entry": "build",
@@ -191,7 +198,7 @@ def _graph_yaml() -> str:
             },
         },
     }
-    return yaml.safe_dump(graph, sort_keys=False)
+    return harness.graph_yaml(graph)
 
 
 # --------------------------------------------------------------------------- #
@@ -360,8 +367,9 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
 # The loop
 
 
+@both_mock_harnesses
 def test_acceptance_loop_one_chunk_ingest_to_landed(
-    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """One chunk travels the whole lifecycle and derives ``done``."""
     bin_dir = _mock_bin_dir()
@@ -411,7 +419,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
         # 2. Pre-mint the scripted default graph (reused by name on ingest), then file
         #    an issue on the forge and ingest its pointer -> a `ready` chunk.
-        minted = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
+        minted = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)})
         assert minted.status_code == 201, minted.text
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "land a change", "body": "the acceptance chunk"})
@@ -432,7 +440,10 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        with runner_sweep(config, fleet_traces) as sweep:
+            sweep.plant()
+            status = _drive_until_done(config, hub, chunk_id, fenced)
+            sweep.drain(workers=2)
 
         # 4a. Fleet truth — the hub's facts derive the chunk done.
         assert status == "done", f"chunk did not reach done (last status {status!r})"
@@ -455,7 +466,15 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
                 ],
             )
 
-    # 4d. Git truth — the mock harness's file is present on the bare origin's main.
+        # 4d. The runner's side of the same run: one worker per runner step, nested on its root by id alone, each
+        #    invocation carrying the harness's GenAI usage.
+        with subtests.test(msg="runner traces"):
+            fleet_traces.require()
+            runner = fleet_traces.runner_spans(roots=3, workers=2)
+            expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
+            assert_invocations(runner, {"build": expect, "review": expect})
+
+    # 4e. Git truth — the mock harness's file is present on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"
 

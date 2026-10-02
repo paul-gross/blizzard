@@ -6,11 +6,18 @@ processor and pipeline shape stay the ones ``docs/deployment/tracing.md`` docume
 before the hub (the export cursor opens at enable time, and a failed first export backs off for minutes),
 drives its chunk, then reads the file back and checks it against the published dictionary and the span spec
 (``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md``). Expectations come from the spec, never from
-captured output."""
+captured output.
+
+Runner spans ride the same collector. An in-process scenario drives the runner's real lease-trace sweep through its
+composition root (:func:`runner_sweep`); a scenario running ``runner host`` lets the host's own sweep thread export.
+Either way the runner's ``worker`` spans must hang on the hub's step roots by derived id alone
+(:func:`assert_runner_nesting`), and each ``invoke_agent`` span must carry the harness's GenAI usage
+(:func:`assert_invocations`)."""
 
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import json
 import os
 import shutil
@@ -18,15 +25,22 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import pytest
 
+from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import SpanRole, StepKey, span_id, trace_id
+from blizzard.runner.composition import build_runner_process
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.tracing import attributes as runner_attr
+from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
 from tests.repo_files import repo_root
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name, scope_of_role
@@ -42,6 +56,8 @@ _PLACEHOLDER_ENV = {
     "HOSTED_TRACES_API_KEY": "placeholder",
 }
 _ROOT_ROLES = {"step", "gate"}
+_WORKER_ROLE = "runner/worker"
+_INVOCATION_ROLE = "runner/invocation"
 
 
 def resolve_collector() -> str | None:
@@ -102,6 +118,10 @@ class ExportedSpan:
     @property
     def is_root(self) -> bool:
         return self.parent_span_id is None
+
+    @property
+    def is_runner(self) -> bool:
+        return scope_of_role(self.role) == runner_attr.INSTRUMENTATION_SCOPE
 
 
 @dataclass
@@ -186,10 +206,10 @@ def parse_export(text: str) -> list[ExportedSpan]:
 
 
 def traces_of(spans: Sequence[ExportedSpan]) -> list[StepTrace]:
-    """The step traces in the export, ordered by their root's start."""
+    """The hub's step traces in the export, ordered by their root's start; runner spans are not the hub's children."""
     roots = {s.trace_id: StepTrace(s) for s in spans if s.is_root}
     for span in spans:
-        if not span.is_root:
+        if not span.is_root and not span.is_runner:
             roots[span.trace_id].children.append(span)
     return sorted(roots.values(), key=lambda t: (t.root.start_ns, t.root.name))
 
@@ -330,6 +350,67 @@ def assert_skeleton(traces: Sequence[StepTrace], expected: Sequence[StepExpect])
 
 
 # --------------------------------------------------------------------------- #
+# Runner spans: nested on the hub's step roots, by id alone
+
+
+def assert_runner_nesting(spans: Sequence[ExportedSpan], *, workers: int) -> list[ExportedSpan]:
+    """Every runner span sits in a hub step root's trace; each ``worker`` span's parent is that root, and every
+    other runner span's parent is a ``worker`` span in the same trace. Returns the runner spans."""
+    roots = {s.trace_id: s for s in spans if s.is_root and s.role == "step"}
+    runner = [s for s in spans if s.is_runner]
+    worker_ids = {(s.trace_id, s.span_id) for s in runner if s.role == _WORKER_ROLE}
+    assert len(worker_ids) == workers, f"expected {workers} runner worker spans, saw {len(worker_ids)}"
+    for span in runner:
+        root = roots.get(span.trace_id)
+        assert root is not None, f"runner span {span.name!r}: trace {span.trace_id} is no exported step root's"
+        if span.role == _WORKER_ROLE:
+            assert span.parent_span_id == root.span_id, (
+                f"{span.name!r}: parent {span.parent_span_id} is not its step root {root.span_id} ({root.name!r})"
+            )
+        else:
+            assert (span.trace_id, span.parent_span_id) in worker_ids, (
+                f"runner span {span.name!r}: parent {span.parent_span_id} is no worker span in its trace"
+            )
+    for trace_id_, worker_id in worker_ids:
+        invocations = [s for s in runner if s.parent_span_id == worker_id and s.role == _INVOCATION_ROLE]
+        assert invocations, f"worker span {worker_id} in trace {trace_id_} carries no invoke_agent span"
+    return runner
+
+
+@dataclass(frozen=True)
+class InvocationExpect:
+    """What every ``invoke_agent`` span of one node carries: the harness that ran it, the model the mock harness
+    reports, and the model its session declares (``None`` where none is declared)."""
+
+    harness_id: str
+    response_model: str
+    request_model: str | None = None
+
+
+def assert_invocations(runner: Sequence[ExportedSpan], expect: Mapping[str, InvocationExpect]) -> None:
+    """Each ``invoke_agent`` span, keyed to ``expect`` by its node name, carries the GenAI invocation shape."""
+    invocations = [s for s in runner if s.role == _INVOCATION_ROLE]
+    nodes = {s.attributes[shared.NODE_NAME] for s in invocations}
+    assert nodes == set(expect), f"invoke_agent spans for nodes {sorted(nodes)}, expected {sorted(expect)}"
+    for span in invocations:
+        node = span.attributes[shared.NODE_NAME]
+        want = expect[node]
+        where = f"{span.name!r} (node {node}, generation {span.attributes.get(runner_attr.INVOCATION_GENERATION)})"
+        attrs = span.attributes
+        assert attrs.get(runner_attr.GEN_AI_OPERATION_NAME) == runner_attr.INVOKE_AGENT, where
+        assert attrs.get(shared.HARNESS_ID) == want.harness_id, f"{where}: harness {attrs.get(shared.HARNESS_ID)!r}"
+        assert attrs.get(shared.GEN_AI_RESPONSE_MODEL) == want.response_model, (
+            f"{where}: response model {attrs.get(shared.GEN_AI_RESPONSE_MODEL)!r}"
+        )
+        if want.request_model is not None:
+            assert attrs.get(runner_attr.GEN_AI_REQUEST_MODEL) == want.request_model, (
+                f"{where}: request model {attrs.get(runner_attr.GEN_AI_REQUEST_MODEL)!r}"
+            )
+        for tokens in (shared.GEN_AI_INPUT_TOKENS, shared.GEN_AI_OUTPUT_TOKENS):
+            assert attrs.get(tokens, 0) > 0, f"{where}: {tokens} is {attrs.get(tokens)!r}"
+
+
+# --------------------------------------------------------------------------- #
 # The running collector
 
 
@@ -345,6 +426,8 @@ class FleetCollector:
         self._log = workdir / "collector.log"
         self._proc: subprocess.Popen[str] | None = None
         self._port = 0
+        self._workers = 0
+        self._spans: list[ExportedSpan] | None = None
 
     @property
     def available(self) -> bool:
@@ -410,25 +493,51 @@ class FleetCollector:
             proc.wait()
 
     def _read(self) -> list[ExportedSpan]:
-        return parse_export(self._export.read_text()) if self._export.exists() else []
+        if not self._export.exists():
+            return []
+        try:
+            return parse_export(self._export.read_text())
+        except json.JSONDecodeError:  # a line the exporter is still writing
+            return []
+
+    @staticmethod
+    def _counts(spans: Sequence[ExportedSpan]) -> tuple[int, int]:
+        return sum(1 for s in spans if s.is_root), sum(1 for s in spans if s.is_runner and s.role == _WORKER_ROLE)
+
+    def await_workers(self, workers: int, *, drive: Callable[[], None] | None = None, timeout: float = 60.0) -> None:
+        """Expect ``workers`` runner ``worker`` spans, and wait until the file holds them, calling ``drive``
+        between reads (an in-process sweep pass). Never fails: the ``runner traces`` subtest asserts the count."""
+        if self._proc is None:
+            return
+        self._workers = workers
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if drive is not None:
+                drive()
+            if self._counts(self._read())[1] >= workers:
+                return
+            time.sleep(0.25)
 
     def spans(self, *, roots: int, exact: bool = True, timeout: float = 60.0) -> list[ExportedSpan]:
-        """Wait until ``roots`` step roots are in the file, stop the collector so the file is complete, and parse it.
+        """Wait until ``roots`` step roots, and the runner ``worker`` spans :meth:`await_workers` expects, are in the
+        file; stop the collector so the file is complete, and parse it. Later calls read the same parse.
 
         ``exact`` demands no more roots than that; a scenario whose chunk is still looping when it stops reads
         only the first ``roots`` steps (the caller's :func:`assert_skeleton` takes the matching prefix)."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if sum(1 for s in self._read() if s.is_root) >= roots:
-                break
-            time.sleep(0.25)
-        self.stop()
-        spans = self._read()
-        seen = [s.name for s in spans if s.is_root]
+        if self._spans is None:
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                seen_roots, seen_workers = self._counts(self._read())
+                if seen_roots >= roots and seen_workers >= self._workers:
+                    break
+                time.sleep(0.25)
+            self.stop()
+            self._spans = self._read()
+        seen = [s.name for s in self._spans if s.is_root]
         assert len(seen) == roots or (not exact and len(seen) > roots), (
             f"expected {roots} step roots in the collector's file, saw {len(seen)}: {seen}"
         )
-        return spans
+        return self._spans
 
     def traces(self, *, roots: int, exact: bool = True, decision_ids: Sequence[str] = ()) -> list[StepTrace]:
         """The step traces, once they have passed the shape and identity checks."""
@@ -437,6 +546,14 @@ class FleetCollector:
         traces = traces_of(spans)
         assert_identity(traces, decision_ids=decision_ids)
         return traces
+
+    def runner_spans(self, *, roots: int, workers: int, exact: bool = True) -> list[ExportedSpan]:
+        """The runner spans, once every exported span conforms, the hub roots re-derive, and the runner spans nest
+        on them."""
+        spans = self.spans(roots=roots, exact=exact)
+        assert_conforms(spans)
+        assert_identity(traces_of(spans))
+        return assert_runner_nesting(spans, workers=workers)
 
 
 @contextlib.contextmanager
@@ -448,3 +565,47 @@ def fleet_collector(workdir: Path) -> Iterator[FleetCollector]:
         yield collector
     finally:
         collector.stop()
+
+
+# --------------------------------------------------------------------------- #
+# The runner's lease-trace sweep, driven in-process
+
+
+class RunnerSweep:
+    """The runner's real :class:`LeaseTraceSweep`, built through its composition root and exporting to the
+    collector with the real OTLP exporter; inert where there is no collector.
+
+    Its first pass plants the cursor at *now* and exports nothing, so a scenario calls :meth:`plant` before its
+    first tick, then :meth:`drain` once its chunk is terminal."""
+
+    def __init__(self, sweep: LeaseTraceSweep | None, collector: FleetCollector) -> None:
+        self._sweep = sweep
+        self._collector = collector
+
+    def plant(self) -> None:
+        if self._sweep is not None:
+            self._sweep.sweep()
+
+    def drain(self, *, workers: int) -> None:
+        """Sweep until the collector holds ``workers`` runner ``worker`` spans."""
+        if self._sweep is not None:
+            self._collector.await_workers(workers, drive=self._sweep.sweep)
+
+
+@contextlib.contextmanager
+def runner_sweep(config: RunnerConfig, collector: FleetCollector) -> Iterator[RunnerSweep]:
+    """A :class:`RunnerSweep` over ``config``'s runner store, at a one-second, zero-settle cadence."""
+    if not collector.available:
+        yield RunnerSweep(None, collector)
+        return
+    environ = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
+    environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint
+    traced = dataclasses.replace(config, tracing=TracingConfig(sweep_seconds=1, settle_seconds=0))
+    # The OTLP exporter reads its endpoint from the process environment when it is built.
+    with mock.patch.dict(os.environ, environ, clear=True):
+        process = build_runner_process(traced, environ=environ)
+    try:
+        assert process.trace_sweep is not None, "the collector endpoint did not enable the runner's trace sweep"
+        yield RunnerSweep(process.trace_sweep, collector)
+    finally:
+        process.close()
