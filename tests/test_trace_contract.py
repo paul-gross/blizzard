@@ -12,8 +12,10 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, span_id, trace_id
+from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.facts import (
@@ -35,7 +37,6 @@ from blizzard.hub.domain.tracing.facts import (
     RouteReleasedRecord,
     StepFacts,
 )
-from blizzard.hub.domain.tracing.spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
 from tests import trace_fixtures as fx
@@ -279,8 +280,8 @@ def test_the_dictionary_constants_equal_the_code_constants() -> None:
         "name": attr.INSTRUMENTATION_SCOPE,
         "version": attr.INSTRUMENTATION_SCOPE_VERSION,
     }
-    assert d["schema_version"] == attr.SCHEMA_VERSION
-    assert d["genai_semconv_version"] == attr.GENAI_SEMCONV_VERSION
+    assert d["schema_version"] == shared.SCHEMA_VERSION
+    assert d["genai_semconv_version"] == shared.GENAI_SEMCONV_VERSION
     assert d["event_names"] == sorted([attr.EVENT_INVOCATION, attr.EVENT_HUB_POLL, attr.EVENT_BOUNCE])
 
 
@@ -390,5 +391,5 @@ def test_the_published_span_table_is_thedictionary() -> None:
 
 def test_versioning_names_the_trace_schema_version() -> None:
     text = _VERSIONING_DOC.read_text()
-    assert attr.TRACE_SCHEMA_VERSION in text
+    assert shared.TRACE_SCHEMA_VERSION in text
     assert re.search(r"trace contract", text, re.IGNORECASE)

@@ -288,6 +288,7 @@ class UsageStore:
                     cache_create_tokens=sample.cache_create_tokens,
                     cost_usd=cost.cost_usd,
                     reported_cost_usd=sample.cost_usd,
+                    estimated_cost_usd=cost.estimated_cost_usd,
                     cost_is_share=True,
                     recorded_at=recorded_at,
                 )
@@ -306,8 +307,7 @@ class UsageStore:
                     "cache_read_tokens": sample.cache_read_tokens,
                     "cache_create_tokens": sample.cache_create_tokens,
                     "cost_usd": cost.cost_usd,
-                    # Never written to the runner's `usage_facts` row: only this
-                    # outbound fact carries it, as computed on the sample itself.
+                    # The same value the `usage_facts` row above keeps.
                     "estimated_cost_usd": cost.estimated_cost_usd,
                 }
             )

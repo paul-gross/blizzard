@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import ClosedLeaseRecord, IWriteLeaseRecordRepository, LeaseRecord, NewLease
+from blizzard.runner.domain.leases import ClosedLeaseRecord, IWriteLeaseRecordRepository, LeaseRecord, NewLease, closure
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     Unclosed,
@@ -30,16 +30,6 @@ from blizzard.runner.store.schema import (
 )
 
 _log = get_logger("blizzard.runner.store")
-
-# The closure reason an attempt an operator's restart superseded carries —
-# read back to keep that attempt out of the node's retry budget.
-_PREEMPTED_REASON = "preempted"
-
-# `Attempt.close`'s own closure reason for the never-spawned owner-unresolvable escalation mint.
-_ESCALATION_MINT_REASON = "owner-unresolvable-mint"
-
-# `Attempt.close`'s closure reason for the no-acceptable-harness mint — `_ESCALATION_MINT_REASON`'s own shape.
-_NO_ACCEPTABLE_HARNESS_MINT_REASON = "no-acceptable-harness-mint"
 
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's
 # sibling lease cases.
@@ -114,11 +104,11 @@ class LeaseRecordStore:
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
         # A preempted attempt was superseded, not spent: counting it would carry
         # the node toward exhaustion and escalate the very chunk the operator is rescuing.
-        preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
+        preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == closure.PREEMPTED)
         # A never-spawned escalation-mint lease isn't spent either — its own closure
         # reason marks it, distinct from an ordinary exhausted-retries `escalated` closure.
         escalation_mints = select(lease_closures.c.lease_id).where(
-            lease_closures.c.reason.in_((_ESCALATION_MINT_REASON, _NO_ACCEPTABLE_HARNESS_MINT_REASON))
+            lease_closures.c.reason.in_(sorted(closure.MINT_REASONS))
         )
         stmt = (
             select(func.count())

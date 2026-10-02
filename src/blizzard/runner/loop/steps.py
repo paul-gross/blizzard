@@ -21,15 +21,13 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.domain.leases.closure import REAPED
 from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.usage import ContextSampleState
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.attempt import (
-    REAPED,
-    Attempt,
-)
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
 from blizzard.runner.loop.dormant import DormantSession

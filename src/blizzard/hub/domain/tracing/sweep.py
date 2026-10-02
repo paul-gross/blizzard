@@ -13,6 +13,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.config import TracingConfig
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import (
@@ -24,7 +25,6 @@ from blizzard.hub.domain.tracing.cursor import (
 )
 from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.tracing.repository import IWriteTraceCursor, TraceCursorRecord
-from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.tracing.window import assemble_window, oldest_unsent, read_window
 
 _log = get_logger("blizzard.hub.trace_export")

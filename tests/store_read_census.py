@@ -114,6 +114,7 @@ from blizzard.runner.domain.pause import IReadPauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.domain.takeover import IReadTakeoverRepository
+from blizzard.runner.domain.tracing.repository import IReadLeaseTraceFacts
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
@@ -121,7 +122,8 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -598,6 +600,12 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
 
 RunnerRecipe = Callable[[RunnerWorld], object]
 
+
+def _lease_trace_facts(w: RunnerWorld) -> LeaseTraceFactsStore:
+    """The trace-facts adapter over the world's engine — it has no consumer in ``build_stores``'s bundle yet."""
+    return LeaseTraceFactsStore(RunnerStoreConnections(w.engine, RunnerStoreErrorFactory(get_logger("test"))))
+
+
 #: Every reflected runner ``(Protocol, method)``, mapped to a recipe run against :func:`build_runner_world`'s world.
 RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "list_active_leases"): lambda w: w.read.lease_record.list_active_leases(),
@@ -757,6 +765,10 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadOverloadRepository, "overload_streak"): lambda w: w.read.overload.overload_streak(w.lease_2, 1),
     (IReadOverloadRepository, "open_overload_facts"): lambda w: w.read.overload.open_overload_facts(),
+    (IReadLeaseTraceFacts, "lease_trace_facts"): lambda w: _lease_trace_facts(w).lease_trace_facts(w.lease_1),
+    (IReadLeaseTraceFacts, "lease_trace_facts_for"): lambda w: _lease_trace_facts(w).lease_trace_facts_for(
+        [w.lease_1, w.lease_2]
+    ),
 }
 
 #: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.

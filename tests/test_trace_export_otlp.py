@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
 from blizzard.hub.config import TracingConfig
-from blizzard.hub.domain.tracing.spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
 from blizzard.hub.trace_export.internal.otlp import OtlpTraceExporter
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.trace_hub import trace_hub, transitioned_and_stopped

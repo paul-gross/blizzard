@@ -7,8 +7,10 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.foundation.trace_spans import SpanKind, SpanRecord, SpanStatus
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
@@ -34,7 +36,6 @@ from blizzard.hub.domain.tracing.facts import (
     RouteReleasedRecord,
     StepFacts,
 )
-from blizzard.hub.domain.tracing.spans import SpanKind, SpanRecord, SpanStatus
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.work import UsageFact, UsageTotal
 from tests import trace_fixtures as fx
@@ -92,16 +93,16 @@ def test_runner_step_root() -> None:
     assert root.parent_span_id is None
     assert root.context == DerivedContext.of(StepKey.attempt("ch_1", 1), SpanRole.STEP)
     a = root.attributes
-    assert a[attr.CHUNK_ID] == "ch_1"
-    assert a[attr.CHUNK_WORK_REFS] == ("blizzard#745",)
-    assert a[attr.NODE_NAME] == "build"
-    assert a[attr.NODE_EXECUTOR] == "runner"
-    assert a[attr.STEP_VISIT] == 1
+    assert a[shared.CHUNK_ID] == "ch_1"
+    assert a[shared.CHUNK_WORK_REFS] == ("blizzard#745",)
+    assert a[shared.NODE_NAME] == "build"
+    assert a[shared.NODE_EXECUTOR] == "runner"
+    assert a[shared.STEP_VISIT] == 1
     assert a[attr.STEP_OUTCOME] == "transitioned"
     assert a[attr.STEP_CHOICE] == "pass"
     assert a[attr.STEP_TO_NODE_NAME] == "review"
     assert a[attr.RUNNER_ID] == "r-1"
-    assert a[attr.HARNESS_ID] == "claude-code"
+    assert a[shared.HARNESS_ID] == "claude-code"
     assert a[attr.STEP_MODELS] == ("claude-x",)
     assert attr.STEP_PRECEDED_BY not in a
     assert root.links == ()
@@ -124,7 +125,7 @@ def test_first_claim_has_queue_and_claim_with_pause_excluded_from_the_wait() -> 
     assert root.attributes[attr.WAIT_QUEUE_MS] == 14000
     assert root.attributes[attr.WAIT_CLAIM_MS] == 5000
     assert attr.WAIT_QUEUE_MS not in queue.attributes
-    assert queue.attributes[attr.CHUNK_ID] == "ch_1"
+    assert queue.attributes[shared.CHUNK_ID] == "ch_1"
 
 
 def test_a_hub_first_step_has_a_queue_but_no_claim() -> None:
@@ -161,7 +162,7 @@ def test_graph_gate_resolved_has_pickup_and_pickup_ms() -> None:
     assert root.context == DerivedContext.of(StepKey.gate("ch_1", 1, "d1"), SpanRole.GATE)
     assert (pickup.name, pickup.start, pickup.end) == ("decision pickup", fx.at(40), fx.at(500))
     assert root.attributes[attr.WAIT_PICKUP_MS] == 460_000
-    assert root.attributes[attr.NODE_EXECUTOR] == "human"
+    assert root.attributes[shared.NODE_EXECUTOR] == "human"
     assert root.attributes[attr.STEP_OUTCOME] == "decided"
     assert root.attributes[attr.STEP_CHOICE] == "approve"
     assert root.attributes[attr.RUNNER_ID] == "r-1"
@@ -299,7 +300,7 @@ def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() 
     )
     root, first, second = _step(facts)
     assert root.name == "step poll"
-    assert root.attributes[attr.NODE_EXECUTOR] == "hub"
+    assert root.attributes[shared.NODE_EXECUTOR] == "hub"
     assert attr.RUNNER_ID not in root.attributes
     assert [e.name for e in root.events] == ["hub poll pending", "hub poll pending", "bounce"]
     assert root.events[-1].attributes[attr.BOUNCE_CAUSE] == "conflict"
@@ -420,7 +421,7 @@ def test_step_cost_sums_to_the_usage_fold_and_measures_stay_on_roots() -> None:
         for child in spans[1:]:
             assert not measures & set(child.attributes)
             assert attr.STEP_INPUT_TOKENS not in child.attributes
-    invocation_costs = [e.attributes.get(attr.INVOCATION_COST_USD) for e in told["ch_1/1"][0].events]
+    invocation_costs = [e.attributes.get(shared.INVOCATION_COST_USD) for e in told["ch_1/1"][0].events]
     assert invocation_costs == [0.5, 0.25, None]
 
 
@@ -428,13 +429,13 @@ def test_gen_ai_input_includes_cached_tokens_and_blizzard_input_stays_uncached()
     facts = fx.make_facts(usage=(_usage(),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
     event = _step(facts)[0].events[0]
     a = event.attributes
-    assert a[attr.GEN_AI_INPUT_TOKENS] == 100 + 1000 + 10
-    assert a[attr.GEN_AI_CACHE_READ_TOKENS] == 1000
-    assert a[attr.GEN_AI_CACHE_CREATE_TOKENS] == 10
-    assert a[attr.GEN_AI_OUTPUT_TOKENS] == 50
-    assert a[attr.INVOCATION_INPUT_TOKENS] == 100
-    assert a[attr.GEN_AI_RESPONSE_MODEL] == "claude-x"
-    assert a[attr.HARNESS_VERSION] == "2.0"
+    assert a[shared.GEN_AI_INPUT_TOKENS] == 100 + 1000 + 10
+    assert a[shared.GEN_AI_CACHE_READ_TOKENS] == 1000
+    assert a[shared.GEN_AI_CACHE_CREATE_TOKENS] == 10
+    assert a[shared.GEN_AI_OUTPUT_TOKENS] == 50
+    assert a[shared.INVOCATION_INPUT_TOKENS] == 100
+    assert a[shared.GEN_AI_RESPONSE_MODEL] == "claude-x"
+    assert a[shared.HARNESS_VERSION] == "2.0"
 
 
 def _chain(first_close: dict[str, tuple[object, ...]], **extra: object) -> StepFacts:
@@ -586,7 +587,7 @@ def test_a_move_back_onto_the_same_node_is_next_not_retry() -> None:
 def test_a_hub_node_step_names_the_hub_executor() -> None:
     facts = _hub_facts(transitions=(fx.to("g1", "build", 100, 2),))
     root = _step(facts)[0]
-    assert root.attributes[attr.NODE_EXECUTOR] == "hub"
+    assert root.attributes[shared.NODE_EXECUTOR] == "hub"
     assert attr.RUNNER_ID not in root.attributes
 
 

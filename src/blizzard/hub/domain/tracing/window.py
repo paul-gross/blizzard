@@ -10,11 +10,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.tracing.steps import NodeStep, identify_steps
 
 

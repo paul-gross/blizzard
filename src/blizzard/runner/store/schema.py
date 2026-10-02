@@ -392,6 +392,9 @@ usage_facts = Table(
     Column("cache_create_tokens", Integer, nullable=False),
     Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
     Column("reported_cost_usd", Float, nullable=True),  # the harness's own figure, verbatim, as audit
+    # The zero-cost steps' estimate, the same value the outbound fact carries; never summed into
+    # cost_usd. Nullable and un-backfilled: NULL is no estimate, or a row from before it was kept.
+    Column("estimated_cost_usd", Float, nullable=True),
     # False = a pre-reading row, whose cost_usd is the harness's figure rather than a share.
     Column("cost_is_share", Boolean, nullable=False, server_default=false()),
     Column("recorded_at", UtcDateTime, nullable=False),
