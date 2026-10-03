@@ -120,8 +120,7 @@ class DeliveryRead:
 
 @dataclass(frozen=True)
 class TraceLanding:
-    """One landed repo as a work source's note names it: the merged PR (if one is known),
-    the landed commit, and its web address (if the forge's origin is known)."""
+    """One landed repo as a source's note names it: merged PR, commit, and commit address."""
 
     repo: str
     pr_url: str | None
@@ -131,8 +130,7 @@ class TraceLanding:
 
 @dataclass(frozen=True)
 class DeliveryTrace:
-    """What landed a chunk's work, forge-neutral: the chunk, its board page (only when the hub
-    declares a public origin), and each landed repo. A source renders it in its own format."""
+    """What landed a chunk's work, forge-neutral; each source renders it in its own format."""
 
     chunk_id: str
     board_url: str | None
@@ -140,8 +138,7 @@ class DeliveryTrace:
 
     @classmethod
     def of(cls, chunk_id: str, sources: DeliverySources, *, board_url: str | None) -> DeliveryTrace | None:
-        """Projected from the delivery markers by the same fold as :meth:`DeliveryRead.of`;
-        ``None`` when no repo landed (a hand-completed chunk has nothing to name)."""
+        """Folded as :meth:`DeliveryRead.of` does; ``None`` when no repo landed."""
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
         landings = tuple(
             TraceLanding(

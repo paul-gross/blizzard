@@ -511,8 +511,7 @@ class HubConfig:
     egress: EgressConfig = field(default_factory=EgressConfig)
     #: Reverse-proxy trust set — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
-    #: The absolute ``http(s)`` origin the board is publicly reached at, trailing slash
-    #: dropped; ``None`` omits every board link the hub would hand outward.
+    #: Absolute ``http(s)`` board origin; ``None`` omits every board link.
     public_url: str | None = None
 
     @staticmethod

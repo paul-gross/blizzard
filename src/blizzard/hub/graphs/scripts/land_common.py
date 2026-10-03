@@ -216,7 +216,6 @@ class LandRun:
     token: str | None = None
     feature_title: str = ""
     chunk_id: str = ""
-    #: ``{label, reference}`` per work item, as the hub resolved them.
     work_items: tuple[dict[str, Any], ...] = ()
     chunk_url: str = ""
     #: The HTTP seam, resolved per call so :func:`forge_request` stays substitutable.
@@ -253,8 +252,7 @@ class LandRun:
 
     @staticmethod
     def _work_items(raw: str) -> tuple[dict[str, Any], ...]:
-        """:data:`_ENV_WORK_ITEMS` parsed; missing or malformed degrades to no items —
-        never a failed delivery."""
+        """Missing or malformed degrades to no items, never a failed delivery."""
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -264,9 +262,7 @@ class LandRun:
         return tuple(i for i in parsed if isinstance(i, dict) and isinstance(i.get("label"), str))
 
     def item_lines(self) -> list[str]:
-        """One line per work item: ``Refs <reference>`` when it has a forge reference,
-        else its label. Never a closing keyword and never an item title — blizzard's
-        close outbox is the only thing that closes a work item."""
+        """``Refs <reference>`` per item, else its label — never a closing keyword or title."""
         return [f"Refs {i['reference']}" if i.get("reference") else str(i["label"]) for i in self.work_items]
 
     def pr_body(self) -> str:

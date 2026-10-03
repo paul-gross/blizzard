@@ -107,8 +107,7 @@ class GitHubWorkSource:
         return f"{self._web_base}/{self._repo}/issues/{pointer.ref}"
 
     def forge_reference(self, pointer: WorkRef) -> str | None:
-        """``{owner}/{repo}#{ref}`` from the configured ``repo`` — the form GitHub itself
-        cross-links; the source ``name`` is only a config alias."""
+        """``{owner}/{repo}#{ref}`` from the configured ``repo``, not the ``name`` alias."""
         return f"{self._repo}#{pointer.ref}"
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
@@ -203,10 +202,7 @@ class GitHubWorkSource:
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
-        """Post the marker-deduped trace comment (unless ``trace`` is ``None``), then
-        ``PATCH`` the issue closed. Both are idempotent, so a retry never double-posts. A
-        404/410 on either call is the terminal :class:`WorkItemGoneError`, not the retried
-        :class:`WorkCloseError`."""
+        """Post the marker-deduped trace comment (if ``trace``), then ``PATCH`` closed; a 404/410 is gone."""
         try:
             if trace is not None:
                 self._post_trace_once(pointer, trace)
@@ -247,8 +243,7 @@ def _trace_marker(chunk_id: str) -> str:
 
 
 def _trace_comment(trace: DeliveryTrace, marker: str) -> str:
-    """One line naming each landing's PR and commit — plain references, never a closing
-    keyword, since blizzard's close outbox is the only closer."""
+    """One line naming each landing's PR and commit; never a closing keyword."""
     landed = "; ".join(
         ", ".join(
             [

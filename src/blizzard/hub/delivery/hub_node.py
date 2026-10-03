@@ -115,9 +115,7 @@ ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
 # PR/merge title resolved from the primary work item, absent when unresolved.
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
-# JSON list of {label, reference}, one per work_ref in order; reference is null off-forge.
 ENV_WORK_ITEMS = "BZ_HUB_WORK_ITEMS"
-# The chunk's public board page, absent when the hub declares no public_url.
 ENV_CHUNK_URL = "BZ_HUB_CHUNK_URL"
 # "1" if the graph declares a `git_commit`-kind `produces:`, else "0".
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
@@ -708,10 +706,7 @@ class HubNodeExecutor:
         return title or None
 
     def _resolve_work_items(self, chunk: Chunk) -> tuple[dict[str, str | None], ...]:
-        """One ``{label, reference}`` per ``work_ref`` (:data:`ENV_WORK_ITEMS`), resolved
-        from each item's source binding with no forge read. An unconfigured source, or one
-        with no forge, leaves ``reference`` ``None``; ``label`` falls back to
-        ``<source>:<ref>``."""
+        """One ``{label, reference}`` per ``work_ref``, with no forge read; ``reference`` is ``None`` off-forge."""
         items: list[dict[str, str | None]] = []
         for pointer in chunk.work_refs:
             source = self._work_sources.get(pointer.source) if self._work_sources is not None else None

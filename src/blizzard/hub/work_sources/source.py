@@ -94,8 +94,7 @@ class IWorkSource(Protocol):
         ...
 
     def forge_reference(self, pointer: WorkRef) -> str | None:
-        """The reference the forge itself cross-links for ``pointer`` (for example
-        ``owner/repo#12``), or ``None`` when this source lives on no forge."""
+        """The forge's own cross-link for ``pointer`` (``owner/repo#12``), or ``None`` off-forge."""
         ...
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
