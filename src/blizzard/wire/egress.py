@@ -1,0 +1,42 @@
+"""Fact-egress operator wire bodies — ``GET /api/egress/status``, ``POST /api/egress/reset`` and
+``POST /api/egress/backfill``."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class EgressDatasetStatus(BaseModel):
+    """One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
+    ``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits."""
+
+    name: str
+    cursor_at: str | None
+    lag_seconds: float | None
+
+
+class EgressStatusResponse(BaseModel):
+    """Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory
+    is configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any
+    dataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export
+    is not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill
+    may write."""
+
+    state: Literal["on", "off", "rejected"]
+    rejected_setting: str | None
+    rejected_value: str | None
+    directory: str | None
+    format: str | None
+    datasets: list[EgressDatasetStatus]
+    last_pass_at: str | None
+    last_pass_dataset: str | None
+    last_pass_row_count: int | None
+    last_file: str | None
+    last_error_at: str | None
+    last_error_message: str | None
+    last_error_ongoing: bool
+    free_bytes: int | None
+    min_free_bytes: int | None
+    backfill_max_window_seconds: int

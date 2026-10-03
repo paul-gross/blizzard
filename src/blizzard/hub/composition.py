@@ -62,6 +62,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
+from blizzard.hub.domain.egress.status import EgressStatusReader
 from blizzard.hub.domain.egress.sweep import EgressSweep
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.event_log import EventLogService
@@ -117,6 +118,7 @@ from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
+from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
@@ -222,6 +224,8 @@ class HubServices:
     egress_export: EgressSweep | None
     #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
     egress_unavailable: EgressUnavailable | None
+    #: The operator's read of the fact export — always composed, so status answers with the export off.
+    egress_status: EgressStatusReader
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -510,10 +514,20 @@ def build_services(
         if egress_config.directory is not None
         else None
     )
+    egress_store = EgressStore(store_connections)
+    egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
+    egress_status = EgressStatusReader(
+        config=egress_config,
+        rejected=egress_unavailable is not None,
+        egress=egress_store,
+        steps=trace_store,
+        clock=clock,
+        free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
+    )
     egress_export = (
         EgressSweep(
             steps=trace_store,
-            egress=EgressStore(store_connections),
+            egress=egress_store,
             writer=egress_writer,
             events=event_log,
             clock=clock,
@@ -713,7 +727,8 @@ def build_services(
         trace_status=trace_status,
         trace_replay=trace_replay,
         egress_export=egress_export,
-        egress_unavailable=egress_writer if isinstance(egress_writer, EgressUnavailable) else None,
+        egress_unavailable=egress_unavailable,
+        egress_status=egress_status,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

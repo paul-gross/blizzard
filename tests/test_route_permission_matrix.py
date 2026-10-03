@@ -80,6 +80,7 @@ def _reads(ids: dict[str, str]) -> list[tuple[str, str]]:
         ("GET", f"/api/graphs/{ids['graph_id']}"),
         ("GET", "/api/queue"),
         ("GET", "/api/traces/status"),
+        ("GET", "/api/egress/status"),
         ("GET", "/api/runners"),
         ("GET", "/api/runners/runner-a"),
         ("GET", "/api/decisions"),

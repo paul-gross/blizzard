@@ -10,13 +10,13 @@ import errno
 import hashlib
 import json
 import os
-import shutil
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
+from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import (
     DatasetSchema,
     EgressBatch,
@@ -147,10 +147,9 @@ class DirectoryEgressWriter:
         return f"{stem}{'-backfill' if egress_pass.backfill else ''}.{extension}"
 
     def _disk_guard(self) -> EgressFailure | None:
-        try:
-            free = shutil.disk_usage(self._root).free
-        except OSError as error:
-            return EgressFailure(EgressFailureCause.IO_ERROR, f"cannot read free space of {self._root}: {error}")
+        free = free_bytes(self._root)
+        if free is None:
+            return EgressFailure(EgressFailureCause.IO_ERROR, f"cannot read free space of {self._root}")
         required = self._settings.min_free_bytes
         if free < required:
             return EgressFailure(

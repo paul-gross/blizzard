@@ -1855,6 +1855,103 @@ export type DocketEntryView = {
 };
 
 /**
+ * EgressDatasetStatus
+ *
+ * One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
+ * ``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits.
+ */
+export type EgressDatasetStatus = {
+    /**
+     * Cursor At
+     */
+    cursor_at: string | null;
+    /**
+     * Lag Seconds
+     */
+    lag_seconds: number | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * EgressStatusResponse
+ *
+ * Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory
+ * is configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any
+ * dataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export
+ * is not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill
+ * may write.
+ */
+export type EgressStatusResponse = {
+    /**
+     * Backfill Max Window Seconds
+     */
+    backfill_max_window_seconds: number;
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressDatasetStatus>;
+    /**
+     * Directory
+     */
+    directory: string | null;
+    /**
+     * Format
+     */
+    format: string | null;
+    /**
+     * Free Bytes
+     */
+    free_bytes: number | null;
+    /**
+     * Last Error At
+     */
+    last_error_at: string | null;
+    /**
+     * Last Error Message
+     */
+    last_error_message: string | null;
+    /**
+     * Last Error Ongoing
+     */
+    last_error_ongoing: boolean;
+    /**
+     * Last File
+     */
+    last_file: string | null;
+    /**
+     * Last Pass At
+     */
+    last_pass_at: string | null;
+    /**
+     * Last Pass Dataset
+     */
+    last_pass_dataset: string | null;
+    /**
+     * Last Pass Row Count
+     */
+    last_pass_row_count: number | null;
+    /**
+     * Min Free Bytes
+     */
+    min_free_bytes: number | null;
+    /**
+     * Rejected Setting
+     */
+    rejected_setting: string | null;
+    /**
+     * Rejected Value
+     */
+    rejected_value: string | null;
+    /**
+     * State
+     */
+    state: 'on' | 'off' | 'rejected';
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -8095,6 +8192,22 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
+
+export type EgressStatusApiEgressStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/egress/status';
+};
+
+export type EgressStatusApiEgressStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressStatusResponse;
+};
+
+export type EgressStatusApiEgressStatusGetResponse = EgressStatusApiEgressStatusGetResponses[keyof EgressStatusApiEgressStatusGetResponses];
 
 export type ListEventsApiEventsGetData = {
     body?: never;

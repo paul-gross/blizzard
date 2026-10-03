@@ -2954,6 +2954,225 @@
         "title": "DocketEntryView",
         "type": "object"
       },
+      "EgressDatasetStatus": {
+        "description": "One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;\n``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits.",
+        "properties": {
+          "cursor_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor At"
+          },
+          "lag_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cursor_at",
+          "lag_seconds"
+        ],
+        "title": "EgressDatasetStatus",
+        "type": "object"
+      },
+      "EgressStatusResponse": {
+        "description": "Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory\nis configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any\ndataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export\nis not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill\nmay write.",
+        "properties": {
+          "backfill_max_window_seconds": {
+            "title": "Backfill Max Window Seconds",
+            "type": "integer"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressDatasetStatus"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directory"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Bytes"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_ongoing": {
+            "title": "Last Error Ongoing",
+            "type": "boolean"
+          },
+          "last_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last File"
+          },
+          "last_pass_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass At"
+          },
+          "last_pass_dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Dataset"
+          },
+          "last_pass_row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Row Count"
+          },
+          "min_free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Free Bytes"
+          },
+          "rejected_setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Setting"
+          },
+          "rejected_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Value"
+          },
+          "state": {
+            "enum": [
+              "on",
+              "off",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "rejected_setting",
+          "rejected_value",
+          "directory",
+          "format",
+          "datasets",
+          "last_pass_at",
+          "last_pass_dataset",
+          "last_pass_row_count",
+          "last_file",
+          "last_error_at",
+          "last_error_message",
+          "last_error_ongoing",
+          "free_bytes",
+          "min_free_bytes",
+          "backfill_max_window_seconds"
+        ],
+        "title": "EgressStatusResponse",
+        "type": "object"
+      },
       "EnvelopeArtifact": {
         "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
@@ -13830,6 +14049,28 @@
         "summary": "Resolve Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/egress/status": {
+      "get": {
+        "description": "Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the\nfree space.",
+        "operationId": "egress_status_api_egress_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Egress Status",
+        "tags": [
+          "egress"
         ]
       }
     },

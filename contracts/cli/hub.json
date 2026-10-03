@@ -1680,6 +1680,45 @@
       "path": "hub decision",
       "short_help": "Operator verbs over open gate decisions: list, resolve."
     },
+    "egress": {
+      "commands": {
+        "status": {
+          "help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and\nfile, the last error, and the free space.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub egress status",
+          "short_help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and file, the last error, and the free space."
+        }
+      },
+      "help": "Operator verbs over the fact-egress export.",
+      "params": [],
+      "path": "hub egress",
+      "short_help": "Operator verbs over the fact-egress export."
+    },
     "finding": {
       "commands": {
         "confirm-gone": {

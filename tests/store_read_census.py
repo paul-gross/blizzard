@@ -2023,6 +2023,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections).usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
+    (IReadEgress, "newest_cursor_with_files"): lambda w: _egress_store_of(
+        w.store_connections
+    ).newest_cursor_with_files(),
+    (IReadEgress, "newest_egress_failure"): lambda w: _egress_store_of(w.store_connections).newest_egress_failure(),
     (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections).newest_egress_latch(),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(
         w.store_connections, w.hub
