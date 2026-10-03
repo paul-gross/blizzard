@@ -323,7 +323,7 @@ def test_counts_by_file(tmp_path: Path) -> None:
     resp = hub.client.get("/api/analytics/counts/files", headers=_cookie(token))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["counts"] == [{"key": "src/a.py", "count": 1}]
+    assert resp.json()["counts"] == [{"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}]
 
 
 def test_counts_by_skill(tmp_path: Path) -> None:
@@ -332,7 +332,7 @@ def test_counts_by_skill(tmp_path: Path) -> None:
     resp = hub.client.get("/api/analytics/counts/skills", headers=_cookie(token))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["counts"] == [{"key": "wf-commit", "count": 1}]
+    assert resp.json()["counts"] == [{"key": "wf-commit", "count": 1, "graph_name": None, "node_name": None}]
 
 
 def test_counts_by_agent_type_is_empty_at_the_main_lane(tmp_path: Path) -> None:
@@ -373,7 +373,7 @@ def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spa
     resp = hub.client.get("/api/analytics/counts/agent-types", headers=_cookie(token))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["counts"] == [{"key": "explorer", "count": 2}]
+    assert resp.json()["counts"] == [{"key": "explorer", "count": 2, "graph_name": None, "node_name": None}]
 
 
 def test_counts_by_node(tmp_path: Path) -> None:
@@ -382,7 +382,7 @@ def test_counts_by_node(tmp_path: Path) -> None:
     resp = hub.client.get("/api/analytics/counts/nodes", headers=_cookie(token))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["counts"] == [{"key": "nd_build", "count": 3}]
+    assert resp.json()["counts"] == [{"key": "nd_build", "count": 3, "graph_name": None, "node_name": None}]
 
 
 def test_counts_by_node_honors_a_kind_filter(tmp_path: Path) -> None:
@@ -391,4 +391,4 @@ def test_counts_by_node_honors_a_kind_filter(tmp_path: Path) -> None:
     resp = hub.client.get("/api/analytics/counts/nodes", params={"kind": "file_read"}, headers=_cookie(token))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["counts"] == [{"key": "nd_build", "count": 1}]
+    assert resp.json()["counts"] == [{"key": "nd_build", "count": 1, "graph_name": None, "node_name": None}]

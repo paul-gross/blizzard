@@ -91,6 +91,23 @@ def _counts_stmt(criteria: EventQueryCriteria, *, group_col: Any, kind: str | No
     return stmt.order_by(func.count().desc(), group_col.asc())
 
 
+def _counts_by_node_stmt(criteria: EventQueryCriteria) -> Select[Any]:
+    """Counts by node id, each naming its node and graph by scalar lookups on the primary
+    keys — null where the id no longer resolves — so the names add no grouping column."""
+    t, gn, g = s.transcript_events, s.graph_nodes, s.graphs
+    graph_name = select(g.c.name).where(g.c.graph_id == gn.c.graph_id, gn.c.node_id == t.c.node_id).scalar_subquery()
+    node_name = select(gn.c.name).where(gn.c.node_id == t.c.node_id).scalar_subquery()
+    cols = (
+        t.c.node_id.label("key"),
+        graph_name.label("graph_name"),
+        node_name.label("node_name"),
+        func.count().label("occurrences"),
+    )
+    stmt = _filtered_stmt(select(*cols), criteria)
+    stmt = stmt.where(t.c.node_id.is_not(None)).group_by(t.c.node_id)
+    return stmt.order_by(func.count().desc(), t.c.node_id.asc())
+
+
 def _to_record(row: Any) -> EventRecord:
     return EventRecord(
         id=row.id,
@@ -138,7 +155,12 @@ class AnalyticsEventQueryStore:
         return self._counts(criteria, group_col=s.transcript_events.c.agent_type, kind=None)
 
     def counts_by_node(self, criteria: EventQueryCriteria) -> list[CountRow]:
-        return self._counts(criteria, group_col=s.transcript_events.c.node_id, kind=None)
+        with self._store.read("counts_by_node") as conn:
+            rows = conn.execute(_counts_by_node_stmt(criteria)).all()
+        return [
+            CountRow(key=row.key, count=row.occurrences, graph_name=row.graph_name, node_name=row.node_name)
+            for row in rows
+        ]
 
     def _counts(self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> list[CountRow]:
         with self._store.read("counts") as conn:

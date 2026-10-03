@@ -52,6 +52,7 @@ export const countsByFileApiAnalyticsCountsFilesGet = <ThrowOnError extends bool
  *
  * Occurrence counts by node id, across every kind matching the filters.
  * ``node_id`` is not offered: it would select a single group, not narrow the count.
+ * ``by_name`` folds the per-mint rows into one per ``<graph_name>/<node_name>``.
  */
 export const countsByNodeApiAnalyticsCountsNodesGet = <ThrowOnError extends boolean = false>(options?: Options<CountsByNodeApiAnalyticsCountsNodesGetData, ThrowOnError>): RequestResult<CountsByNodeApiAnalyticsCountsNodesGetResponses, CountsByNodeApiAnalyticsCountsNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsByNodeApiAnalyticsCountsNodesGetResponses, CountsByNodeApiAnalyticsCountsNodesGetErrors, ThrowOnError>({ url: '/api/analytics/counts/nodes', ...options });
 
@@ -148,7 +149,7 @@ export const streamChunkSpendApiAnalyticsSpendChunksNdjsonGet = <ThrowOnError ex
  *
  * The same rollup grouped by each usage fact's chunk's *current* graph pin — a
  * chunk that migrated attributes every usage fact it ever recorded to where it lives
- * today.
+ * today. ``by_name`` folds the per-mint rows into one per graph name.
  */
 export const spendByGraphApiAnalyticsSpendGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<SpendByGraphApiAnalyticsSpendGraphsGetData, ThrowOnError>): RequestResult<SpendByGraphApiAnalyticsSpendGraphsGetResponses, SpendByGraphApiAnalyticsSpendGraphsGetErrors, ThrowOnError> => (options?.client ?? client).get<SpendByGraphApiAnalyticsSpendGraphsGetResponses, SpendByGraphApiAnalyticsSpendGraphsGetErrors, ThrowOnError>({ url: '/api/analytics/spend/graphs', ...options });
 
@@ -156,7 +157,8 @@ export const spendByGraphApiAnalyticsSpendGraphsGet = <ThrowOnError extends bool
  * Spend By Node
  *
  * Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
- * ``GET /api/spend`` publishes.
+ * ``GET /api/spend`` publishes. ``by_name`` folds the per-mint rows into one per
+ * ``<graph_name>/<node_name>``.
  */
 export const spendByNodeApiAnalyticsSpendNodesGet = <ThrowOnError extends boolean = false>(options?: Options<SpendByNodeApiAnalyticsSpendNodesGetData, ThrowOnError>): RequestResult<SpendByNodeApiAnalyticsSpendNodesGetResponses, SpendByNodeApiAnalyticsSpendNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<SpendByNodeApiAnalyticsSpendNodesGetResponses, SpendByNodeApiAnalyticsSpendNodesGetErrors, ThrowOnError>({ url: '/api/analytics/spend/nodes', ...options });
 

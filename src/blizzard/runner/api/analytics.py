@@ -25,17 +25,20 @@ router = APIRouter(prefix="/api", tags=["runner"])
 _ANALYTICS_HUB_TIMEOUT = 15.0
 
 
-def _window_params(since: str | None, until: str | None) -> dict[str, str]:
-    return {k: v for k, v in {"since": since, "until": until}.items() if v is not None}
+def _window_params(since: str | None, until: str | None, by_name: bool = False) -> dict[str, str]:
+    params = {k: v for k, v in {"since": since, "until": until}.items() if v is not None}
+    if by_name:
+        params["by_name"] = "true"
+    return params
 
 
 def _counts(
-    lease_id: str, request: Request, suffix: str, since: str | None, until: str | None
+    lease_id: str, request: Request, suffix: str, since: str | None, until: str | None, by_name: bool = False
 ) -> AnalyticsCountsResponse:
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "analytics").get(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/counts/{suffix}",
-        params=_window_params(since, until),
+        params=_window_params(since, until, by_name),
         chunk_id=lease.chunk_id,
         timeout=_ANALYTICS_HUB_TIMEOUT,
     )
@@ -43,12 +46,12 @@ def _counts(
 
 
 def _spend(
-    lease_id: str, request: Request, suffix: str, since: str | None, until: str | None
+    lease_id: str, request: Request, suffix: str, since: str | None, until: str | None, by_name: bool = False
 ) -> AnalyticsSpendResponse:
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "analytics").get(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/spend/{suffix}",
-        params=_window_params(since, until),
+        params=_window_params(since, until, by_name),
         chunk_id=lease.chunk_id,
         timeout=_ANALYTICS_HUB_TIMEOUT,
     )
@@ -94,9 +97,10 @@ def get_analytics_counts_nodes(
     request: Request,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsCountsResponse:
     """Forward this lease's chunk's counts-by-node read to the hub over the window."""
-    return _counts(lease_id, request, "nodes", since, until)
+    return _counts(lease_id, request, "nodes", since, until, by_name)
 
 
 @router.get("/leases/{lease_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
@@ -105,9 +109,10 @@ def get_analytics_spend_nodes(
     request: Request,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """Forward this lease's chunk's spend-by-node read to the hub over the window."""
-    return _spend(lease_id, request, "nodes", since, until)
+    return _spend(lease_id, request, "nodes", since, until, by_name)
 
 
 @router.get("/leases/{lease_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
@@ -116,6 +121,7 @@ def get_analytics_spend_graphs(
     request: Request,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """Forward this lease's chunk's spend-by-graph read to the hub over the window."""
-    return _spend(lease_id, request, "graphs", since, until)
+    return _spend(lease_id, request, "graphs", since, until, by_name)

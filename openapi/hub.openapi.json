@@ -310,15 +310,37 @@
         "type": "object"
       },
       "AnalyticsCountView": {
-        "description": "One grouping key and how many events fell under it. ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
+        "description": "One grouping key and how many events fell under it. ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id. ``graph_name`` and ``node_name`` name what a node-keyed row\ncounts: null on the files, skills, and agent-types dimensions, which have no graph or\nnode, and null where the node id no longer resolves. Under ``by_name`` the row is the\nroll-up of every minted id sharing the name pair, and ``key`` is ``<graph_name>/<node_name>``.",
         "properties": {
           "count": {
             "title": "Count",
             "type": "integer"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
           }
         },
         "required": [
@@ -633,7 +655,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -662,6 +684,17 @@
             ],
             "title": "Estimated Cost Usd"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
           "input_tokens": {
             "title": "Input Tokens",
             "type": "integer"
@@ -669,6 +702,17 @@
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
           },
           "output_tokens": {
             "title": "Output Tokens",
@@ -10731,7 +10775,7 @@
     },
     "/api/analytics/counts/nodes": {
       "get": {
-        "description": "Occurrence counts by node id, across every kind matching the filters.\n``node_id`` is not offered: it would select a single group, not narrow the count.",
+        "description": "Occurrence counts by node id, across every kind matching the filters.\n``node_id`` is not offered: it would select a single group, not narrow the count.\n``by_name`` folds the per-mint rows into one per ``<graph_name>/<node_name>``.",
         "operationId": "counts_by_node_api_analytics_counts_nodes_get",
         "parameters": [
           {
@@ -10780,6 +10824,16 @@
                 }
               ],
               "title": "Subject Prefix"
+            }
+          },
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
             }
           },
           {
@@ -12241,9 +12295,19 @@
     },
     "/api/analytics/spend/graphs": {
       "get": {
-        "description": "The same rollup grouped by each usage fact's chunk's *current* graph pin \u2014 a\nchunk that migrated attributes every usage fact it ever recorded to where it lives\ntoday.",
+        "description": "The same rollup grouped by each usage fact's chunk's *current* graph pin \u2014 a\nchunk that migrated attributes every usage fact it ever recorded to where it lives\ntoday. ``by_name`` folds the per-mint rows into one per graph name.",
         "operationId": "spend_by_graph_api_analytics_spend_graphs_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
+          },
           {
             "in": "query",
             "name": "graph_id",
@@ -12341,9 +12405,19 @@
     },
     "/api/analytics/spend/nodes": {
       "get": {
-        "description": "Usage/cost rollups grouped by node \u2014 the same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes.",
+        "description": "Usage/cost rollups grouped by node \u2014 the same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes. ``by_name`` folds the per-mint rows into one per\n``<graph_name>/<node_name>``.",
         "operationId": "spend_by_node_api_analytics_spend_nodes_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
+          },
           {
             "in": "query",
             "name": "graph_id",
@@ -15142,6 +15216,16 @@
           },
           {
             "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "since",
             "required": true,
             "schema": {
@@ -15282,6 +15366,16 @@
           },
           {
             "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "since",
             "required": true,
             "schema": {
@@ -15348,6 +15442,16 @@
             "schema": {
               "title": "Chunk Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
             }
           },
           {

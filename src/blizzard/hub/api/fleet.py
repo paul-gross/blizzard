@@ -28,6 +28,8 @@ from blizzard.hub.api.analytics import (
     EventScopeFilters,
     ScopeFilters,
     counts_response,
+    named_counts,
+    named_spend,
     operational_criteria,
     spend_response,
 )
@@ -470,10 +472,13 @@ def get_chunk_analytics_counts_nodes(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_node(window.event_scope.criteria()))
+    return counts_response(
+        named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria()), by_name)
+    )
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
@@ -481,10 +486,12 @@ def get_chunk_analytics_spend_nodes(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/nodes``."""
     _routine_run_or_404(chunk_id, services)
-    return spend_response(services.operational_analytics.spend_by_node(operational_criteria(window.scope)))
+    stats = services.operational_analytics.spend_by_node(operational_criteria(window.scope))
+    return spend_response(named_spend(stats, by_name))
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
@@ -492,10 +499,12 @@ def get_chunk_analytics_spend_graphs(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """A worker's own routine-run read of ``GET /api/analytics/spend/graphs``."""
     _routine_run_or_404(chunk_id, services)
-    return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(window.scope)))
+    stats = services.operational_analytics.spend_by_graph(operational_criteria(window.scope))
+    return spend_response(named_spend(stats, by_name))
 
 
 @router.get("/scopes", response_model=list[ScopeView])

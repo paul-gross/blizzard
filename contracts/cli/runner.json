@@ -92,6 +92,18 @@
                   "required": false,
                   "secondary_opts": [],
                   "type": "datetime"
+                },
+                {
+                  "help": "Fold each node's or graph's per-mint rows into one row per name; a node's key is <graph>/<node>.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "by_name",
+                  "opts": [
+                    "--by-name"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
                 }
               ],
               "path": "runner analytics counts nodes",
@@ -162,6 +174,18 @@
                   "required": false,
                   "secondary_opts": [],
                   "type": "datetime"
+                },
+                {
+                  "help": "Fold each node's or graph's per-mint rows into one row per name; a node's key is <graph>/<node>.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "by_name",
+                  "opts": [
+                    "--by-name"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
                 }
               ],
               "path": "runner analytics spend graphs",
@@ -193,6 +217,18 @@
                   "required": false,
                   "secondary_opts": [],
                   "type": "datetime"
+                },
+                {
+                  "help": "Fold each node's or graph's per-mint rows into one row per name; a node's key is <graph>/<node>.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "by_name",
+                  "opts": [
+                    "--by-name"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
                 }
               ],
               "path": "runner analytics spend nodes",

@@ -14,6 +14,17 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Cost, Listing
 
 
+def named_key(row: dict[str, Any], key_field: str = "key") -> str:
+    """The row's key, with ``graph/node`` or ``graph`` names beside it when the hub named it —
+    unless the key already is the name path a ``by_name`` roll-up produced."""
+    key = str(row[key_field])
+    graph, node = row.get("graph_name"), row.get("node_name")
+    name = f"{graph}/{node}" if graph and node else graph or node
+    if not name or name == key:
+        return key
+    return f"{key} ({name})"
+
+
 @dataclass(frozen=True)
 class SpendRow:
     """One grouping key's spend rollup — the key column varies (``key`` for
@@ -26,7 +37,7 @@ class SpendRow:
         row = self.row
         cost = Cost.of(row).rendered
         return (
-            f"{row[self.key_field]}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
+            f"{named_key(row, self.key_field)}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
             f"cache_read={row['cache_read_tokens']} cache_create={row['cache_create_tokens']}"
         )
 
@@ -45,7 +56,7 @@ class CountsListing(Listing):
     empty = "no counts"
 
     def line(self, row: Any) -> str:
-        return f"{row['key']}: {row['count']}"
+        return f"{named_key(row)}: {row['count']}"
 
 
 class DurationsListing(Listing):

@@ -42,6 +42,8 @@ def _analytics_chunk_spec(work_ref: str) -> dict:
         "spend_nodes": [
             {
                 "key": "nd_build",
+                "graph_name": "default-delivery",
+                "node_name": "build",
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_read_tokens": 10,
@@ -96,7 +98,9 @@ def test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows(tm
                     headers=worker,
                 )
                 assert counts.status_code == 200, counts.text
-                assert counts.json()["counts"] == [{"key": "wf-commit", "count": 2}]
+                assert counts.json()["counts"] == [
+                    {"key": "wf-commit", "count": 2, "graph_name": None, "node_name": None}
+                ]
 
                 spend = runner_client.get(
                     f"/api/leases/{lease_id}/analytics/spend/nodes",
@@ -105,6 +109,15 @@ def test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows(tm
                 )
                 assert spend.status_code == 200, spend.text
                 assert spend.json()["spend"][0]["key"] == "nd_build"
+                assert spend.json()["spend"][0]["graph_name"] == "default-delivery"
+                assert spend.json()["spend"][0]["node_name"] == "build"
+
+                by_name = runner_client.get(
+                    f"/api/leases/{lease_id}/analytics/spend/nodes",
+                    params={"since": "2020-01-01T00:00:00Z", "by_name": "true"},
+                    headers=worker,
+                )
+                assert by_name.status_code == 200, by_name.text  # the mock serves its seeded rows as-is
             finally:
                 runner_client.close()
 

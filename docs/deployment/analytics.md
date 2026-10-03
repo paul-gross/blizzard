@@ -63,7 +63,8 @@ open deferral.
   parked-gate versus delayed-flush directions.
 - Per-node and per-graph groupings return one envelope with no cursor; `node_id` and `graph_id` are per-graph-version
   ids, so the envelope-size ceiling grows with every mint while the received size does not — only keys with activity are
-  emitted.
+  emitted. Each node row names its graph and node and each graph row its graph, so a reader sees what an id is without a
+  second lookup; the names are null where an id no longer resolves.
 
 ## Export costs
 
@@ -77,18 +78,26 @@ budget — so a burst of unfiltered calls can make an unrelated write wait out t
 
 ## A routine run's own read
 
-A running pass reads six of the same rollups a different way: `blizzard runner analytics counts
-{files,skills,agent-types,nodes} --since <instant> [--until <instant>]` and `analytics spend {nodes,graphs} --since
-<instant> [--until <instant>]` — the same rows the matching `blizzard hub analytics summary` dataset serves for the
-same window, gated on the chunk's own run context rather than an operator credential. `--since` is required here
-(unlike the operator's own optional one), so no worker call omits a window — but that bounds the caller, not the
-query: `transcript_events` carries no index on `occurred_at` (only `(extractor_version, id)`), so `counts/*` and
-`spend/*` still scan the full `extractor_version` partition regardless of the window's width, the same full-scan
-deferral the operator's own routes carry (Filters, above). Neither verb takes `--graph`, `--source`, or any of the
-event projection's own narrowing flags — the window is the only lever a routine run gets. A chunk that is not a
-routine run 404s, the same refusal `blizzard runner garden findings` gives. It needs no hub credential in its child
-environment either, is a pure client of the runner's local API authorized by the spawn-injected lease identity, and
-shares [openapi/runner.openapi.json](../../openapi/runner.openapi.json) as its endpoint-shape home.
+A running pass reads six of the same rollups a different way:
+`blizzard runner analytics counts
+{files,skills,agent-types,nodes} --since <instant> [--until <instant>]` and
+`analytics spend {nodes,graphs} --since
+<instant> [--until <instant>]` — the same rows the matching
+`blizzard hub analytics summary` dataset serves for the same window, gated on the chunk's own run context rather than an
+operator credential. `--since` is required here (unlike the operator's own optional one), so no worker call omits a
+window — but that bounds the caller, not the query: `transcript_events` carries no index on `occurred_at` (only
+`(extractor_version, id)`), so `counts/*` and `spend/*` still scan the full `extractor_version` partition regardless of
+the window's width, the same full-scan deferral the operator's own routes carry (Filters, above). Neither verb takes
+`--graph`, `--source`, or any of the event projection's own narrowing flags — the window is the only lever a routine run
+gets. A chunk that is not a routine run 404s, the same refusal `blizzard runner garden findings` gives. It needs no hub
+credential in its child environment either, is a pure client of the runner's local API authorized by the spawn-injected
+lease identity, and shares [openapi/runner.openapi.json](../../openapi/runner.openapi.json) as its endpoint-shape home.
+
+The node and graph verbs also take `--by-name` (the `by_name` query param, on the operator routes too). Ids split across
+mints, so one node's use is spread over a row per mint; the flag folds them into one row per name. A node's `key` is
+`<graph_name>/<node_name>`, since node names repeat across graphs, and a graph's is its `graph_name`; a row with no
+resolvable name passes through under its id. A new runner against an older hub gets per-id rows with null names, since
+the hub ignores the param; an older runner against a newer hub never sends it and drops the names.
 
 ## Errors and wire shapes
 

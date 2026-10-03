@@ -124,6 +124,22 @@ def test_until_is_carried_through_when_given(monkeypatch: pytest.MonkeyPatch, ar
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(("argv", "_path"), _VERBS[3:])
+def test_by_name_is_forwarded_as_a_query_param(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
+    calls: list[dict] = []
+
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text=_COUNTS_TEXT)
+
+    bind_stubs(monkeypatch, get=fake_get)
+    result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00", "--by-name"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["by_name"] == "true"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(("argv", "_path"), _VERBS)
 def test_since_is_required(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
     attempted = False

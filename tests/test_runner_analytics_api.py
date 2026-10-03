@@ -48,11 +48,13 @@ _HUB_SUFFIX = {
     "spend/graphs": "analytics/spend/graphs",
 }
 
-_COUNTS_BODY = {"counts": [{"key": "a.py", "count": 3}]}
+_COUNTS_BODY = {"counts": [{"key": "a.py", "count": 3, "graph_name": None, "node_name": None}]}
 _SPEND_BODY = {
     "spend": [
         {
             "key": "nd_build",
+            "graph_name": "default-delivery",
+            "node_name": "build",
             "input_tokens": 100,
             "output_tokens": 50,
             "cache_read_tokens": 10,
@@ -205,6 +207,24 @@ def test_forwards_the_window_params_and_returns_the_hub_body(tmp_path: Path, suf
         f"?since=2020-01-01T00%3A00%3A00Z&until=2030-01-01T00%3A00%3A00Z"
     ]
     assert resp.json() == body
+
+
+@pytest.mark.parametrize("suffix", ["counts/nodes", "spend/nodes", "spend/graphs"])
+def test_forwards_by_name_to_the_hub(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _body_for(suffix), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z", "by_name": "true"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/{_HUB_SUFFIX[suffix]}?since=2020-01-01T00%3A00%3A00Z&by_name=true"
+    ]
 
 
 @pytest.mark.parametrize("suffix", _ROUTES)

@@ -50,6 +50,46 @@ class SpendStats:
 
     key: str
     total: UsageTotal
+    graph_name: str | None = None
+    node_name: str | None = None
+
+
+def _sum_totals(totals: list[UsageTotal]) -> UsageTotal:
+    estimated = [t.estimated_cost_usd for t in totals if t.estimated_cost_usd is not None]
+    billed = [t.billed_cost_usd for t in totals if t.billed_cost_usd is not None]
+    return UsageTotal(
+        input_tokens=sum(t.input_tokens for t in totals),
+        output_tokens=sum(t.output_tokens for t in totals),
+        cache_read_tokens=sum(t.cache_read_tokens for t in totals),
+        cache_create_tokens=sum(t.cache_create_tokens for t in totals),
+        cost_usd=sum(t.cost_usd for t in totals),
+        cost_partial=any(t.cost_partial for t in totals),
+        estimated_cost_usd=sum(estimated) if estimated else None,
+        billed_partial=any(t.billed_partial for t in totals),
+        billed_cost_usd=sum(billed) if billed else None,
+    )
+
+
+def fold_spend_by_name(rows: list[SpendStats]) -> list[SpendStats]:
+    """Fold id-keyed spend rows minted apart into one row per name: a node row per
+    ``(graph_name, node_name)`` keyed ``<graph_name>/<node_name>``, a graph row (no
+    ``node_name``) per ``graph_name`` keyed by it. Measures sum under :class:`UsageTotal`'s
+    own contract — ``cost_partial`` ORs, ``estimated_cost_usd`` stays ``None`` unless a folded
+    row carried one. A row whose names are unresolved passes through under its id key. Key ascending."""
+    groups: dict[tuple[str | None, str | None, str], list[SpendStats]] = {}
+    for row in rows:
+        if row.graph_name is None:
+            ident: tuple[str | None, str | None, str] = (None, None, row.key)
+        elif row.node_name is None:
+            ident = (row.graph_name, None, row.graph_name)
+        else:
+            ident = (row.graph_name, row.node_name, f"{row.graph_name}/{row.node_name}")
+        groups.setdefault(ident, []).append(row)
+    out = [
+        SpendStats(key=key, total=_sum_totals([r.total for r in members]), graph_name=g, node_name=n)
+        for (g, n, key), members in groups.items()
+    ]
+    return sorted(out, key=lambda r: r.key)
 
 
 @dataclass(frozen=True)

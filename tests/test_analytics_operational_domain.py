@@ -15,8 +15,10 @@ from blizzard.hub.domain.analytics.operational import (
     MigrationMovement,
     MissingGraphFact,
     OutcomeStats,
+    SpendStats,
     StepDuration,
     TransitionMovement,
+    fold_spend_by_name,
     fold_step_durations,
     group_judged_choices,
     resolve_attempt_failures,
@@ -24,7 +26,9 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
+from blizzard.hub.domain.analytics.queries import CountRow, fold_counts_by_name
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
+from blizzard.hub.domain.work import UsageTotal
 
 pytestmark = pytest.mark.unit
 
@@ -447,4 +451,61 @@ def test_summarize_outcomes_merges_both_halves_and_never_drops_a_node_with_only_
     assert summarize_outcomes(judged, failures) == [
         OutcomeStats(node_id="nd_a", choice_counts={}, attempt_failures=2),
         OutcomeStats(node_id="nd_b", choice_counts={"pass": 1}, attempt_failures=0),
+    ]
+
+
+# --- the by-name roll-up folds -------------------------------------------------------
+
+
+def _total(tokens: int, *, cost: float = 0.0, estimated: float | None = None, partial: bool = False) -> UsageTotal:
+    return UsageTotal(
+        input_tokens=tokens,
+        output_tokens=0,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=cost,
+        cost_partial=partial,
+        estimated_cost_usd=estimated,
+    )
+
+
+def test_spend_folds_two_mints_of_one_node_and_keeps_same_named_nodes_of_other_graphs_apart() -> None:
+    rows = [
+        SpendStats("nd_1", _total(10, cost=0.1), graph_name="adv", node_name="build"),
+        SpendStats("nd_2", _total(5, cost=0.2, estimated=0.5, partial=True), graph_name="adv", node_name="build"),
+        SpendStats("nd_3", _total(7), graph_name="bas", node_name="build"),
+        SpendStats("nd_gone", _total(1)),
+    ]
+
+    folded = {r.key: r for r in fold_spend_by_name(rows)}
+
+    assert sorted(folded) == ["adv/build", "bas/build", "nd_gone"]
+    assert folded["adv/build"].total.input_tokens == 15
+    assert folded["adv/build"].total.cost_usd == pytest.approx(0.3)
+    assert folded["adv/build"].total.cost_partial is True
+    assert folded["adv/build"].total.estimated_cost_usd == 0.5
+    assert folded["bas/build"].total.estimated_cost_usd is None
+    assert folded["nd_gone"].graph_name is None
+
+
+def test_spend_folds_graph_rows_by_graph_name() -> None:
+    rows = [SpendStats("gr_1", _total(1), graph_name="adv"), SpendStats("gr_2", _total(2), graph_name="adv")]
+
+    [row] = fold_spend_by_name(rows)
+
+    assert (row.key, row.total.input_tokens, row.node_name) == ("adv", 3, None)
+
+
+def test_counts_fold_sums_and_orders_by_count_then_key() -> None:
+    rows = [
+        CountRow("nd_1", 2, "adv", "build"),
+        CountRow("nd_2", 3, "adv", "build"),
+        CountRow("nd_3", 5, "bas", "build"),
+        CountRow("nd_4", 5),
+    ]
+
+    assert [(r.key, r.count) for r in fold_counts_by_name(rows)] == [
+        ("adv/build", 5),
+        ("bas/build", 5),
+        ("nd_4", 5),
     ]

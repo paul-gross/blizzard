@@ -2,15 +2,37 @@
   "components": {
     "schemas": {
       "AnalyticsCountView": {
-        "description": "One grouping key and how many events fell under it. ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
+        "description": "One grouping key and how many events fell under it. ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id. ``graph_name`` and ``node_name`` name what a node-keyed row\ncounts: null on the files, skills, and agent-types dimensions, which have no graph or\nnode, and null where the node id no longer resolves. Under ``by_name`` the row is the\nroll-up of every minted id sharing the name pair, and ``key`` is ``<graph_name>/<node_name>``.",
         "properties": {
           "count": {
             "title": "Count",
             "type": "integer"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
           }
         },
         "required": [
@@ -55,7 +77,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -84,6 +106,17 @@
             ],
             "title": "Estimated Cost Usd"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
           "input_tokens": {
             "title": "Input Tokens",
             "type": "integer"
@@ -91,6 +124,17 @@
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
           },
           "output_tokens": {
             "title": "Output Tokens",
@@ -5973,6 +6017,16 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -6123,6 +6177,16 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -6197,6 +6261,16 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "by_name",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "By Name",
+              "type": "boolean"
             }
           }
         ],

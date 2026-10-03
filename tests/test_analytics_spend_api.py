@@ -164,6 +164,8 @@ def test_spend_by_node_rolls_up_usage(tmp_path: Path) -> None:
     assert resp.json()["spend"] == [
         {
             "key": nodes["build"],
+            "graph_name": "default-delivery",
+            "node_name": "build",
             "input_tokens": 200,
             "output_tokens": 100,
             "cache_read_tokens": 20,
@@ -185,6 +187,8 @@ def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> No
     assert resp.json()["spend"] == [
         {
             "key": graph_id,
+            "graph_name": "default-delivery",
+            "node_name": None,
             "input_tokens": 100,
             "output_tokens": 50,
             "cache_read_tokens": 10,
@@ -194,6 +198,28 @@ def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> No
             "estimated_cost_usd": None,
         }
     ]
+
+
+def test_by_name_folds_a_graph_minted_twice_into_one_row_per_name(tmp_path: Path) -> None:
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    admin = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
+    remint = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin))
+    assert remint.status_code == 201, remint.text
+    second_build = {n["name"]: n["node_id"] for n in remint.json()["nodes"]}["build"]
+    assert second_build != nodes["build"]
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    _push_usage(hub, chunk_id=chunk_id, node_id=second_build, epoch=1, seq=2, cost_usd=0.2)
+
+    split = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token)).json()["spend"]
+    folded = hub.client.get("/api/analytics/spend/nodes", params={"by_name": "true"}, headers=_cookie(token)).json()[
+        "spend"
+    ]
+
+    assert len(split) == 2
+    assert [r["key"] for r in folded] == ["default-delivery/build"]
+    assert folded[0]["input_tokens"] == 200
+    assert folded[0]["cost_usd"] == pytest.approx(0.3)
 
 
 def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path) -> None:

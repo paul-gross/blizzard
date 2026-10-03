@@ -158,12 +158,37 @@ def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Selec
     return stmt.group_by(group_col).order_by(group_col.asc())
 
 
+def _node_names(node_id: Any) -> tuple[Any, Any]:
+    """Scalar lookups of a node's graph name and its own name by primary key, correlated to
+    ``node_id`` — null where the id no longer resolves (``usage_facts.node_id`` has no foreign
+    key). Scalar subqueries, not joins, so the names add no grouping column: the ``GROUP BY``
+    stays on the node-id index with no temp B-tree."""
+    gn, g = s.graph_nodes, s.graphs
+    graph_name = select(g.c.name).where(g.c.graph_id == gn.c.graph_id, gn.c.node_id == node_id).scalar_subquery()
+    node_name = select(gn.c.name).where(gn.c.node_id == node_id).scalar_subquery()
+    return graph_name, node_name
+
+
 def _spend_by_node_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    return _spend_group_stmt(criteria, group_col=s.usage_facts.c.node_id)
+    """Each node row names the node and the graph that node belongs to."""
+    graph_name, node_name = _node_names(s.usage_facts.c.node_id)
+    stmt = select(
+        s.usage_facts.c.node_id.label("key"),
+        graph_name.label("graph_name"),
+        node_name.label("node_name"),
+        *usage_aggregate_columns(),
+    )
+    stmt = _spend_filtered_stmt(stmt, criteria)
+    return stmt.group_by(s.usage_facts.c.node_id).order_by(s.usage_facts.c.node_id.asc())
 
 
 def _spend_by_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    return _spend_group_stmt(criteria, group_col=s.chunks.c.graph_id)
+    """Each graph row names the chunk's *current* pin; null where the pin no longer resolves."""
+    c, g = s.chunks, s.graphs
+    graph_name = select(g.c.name).where(g.c.graph_id == c.c.graph_id).scalar_subquery()
+    stmt = select(c.c.graph_id.label("key"), graph_name.label("graph_name"), *usage_aggregate_columns())
+    stmt = _spend_filtered_stmt(stmt, criteria)
+    return stmt.group_by(c.c.graph_id).order_by(c.c.graph_id.asc())
 
 
 def _spend_by_chunk_stmt(criteria: OperationalCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
@@ -178,6 +203,7 @@ def _spend_by_chunk_stmt(criteria: OperationalCriteria, *, cursor: str | None, l
 
 
 def _to_spend_stats(row: Any) -> SpendStats:
+    names = row._mapping
     total = UsageTotal.of_grouped_sums(
         input_tokens=row.input_tokens,
         output_tokens=row.output_tokens,
@@ -190,7 +216,7 @@ def _to_spend_stats(row: Any) -> SpendStats:
         null_cost_rows=row.null_cost_rows,
         billed_rows=row.billed_rows,
     )
-    return SpendStats(key=row.key, total=total)
+    return SpendStats(key=row.key, total=total, graph_name=names.get("graph_name"), node_name=names.get("node_name"))
 
 
 def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
