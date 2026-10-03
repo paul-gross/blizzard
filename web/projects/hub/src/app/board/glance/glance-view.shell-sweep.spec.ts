@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { GlanceView, type Vitals } from './glance-view';
 
 const VITALS: Vitals = {
-  needsYou: 1,
+  needsYou: 2,
   running: 1,
   runnersUpLabel: '7/257',
   live: true,
@@ -39,6 +39,7 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('vitals', VITALS);
     fixture.componentRef.setInput('needsYou', [
       { chunkId: 'ch_needs', shortId: 'ch_needs', runnerId: 'runner-with-a-long-name', tone: 'needs', pillLabel: 'needs human', sub: 'Review the delivery.' },
+      { chunkId: 'ch_gate', shortId: 'ch_gate', runnerId: 'runner-with-a-long-name', tone: 'waiting', pillLabel: 'gate', sub: 'approve-a-very-long-gate-node-name-that-must-wrap-inside-the-panel' },
     ]);
     fixture.componentRef.setInput('needsYouState', 'ready');
     fixture.componentRef.setInput('inMotion', [
@@ -79,6 +80,10 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
             `${width}px: ${panels[index].getAttribute('data-testid')} is not below the preceding section`,
           ).toBeGreaterThan(panels[index - 1].getBoundingClientRect().top);
         }
+        const gateRow = root.querySelector<HTMLElement>('[data-testid="needs-you-row"][data-chunk="ch_gate"]');
+        expect(gateRow?.textContent, `${width}px: the gate row is absent`).toContain('gate');
+        const needsYou = panels[0].getBoundingClientRect();
+        expect(gateRow!.getBoundingClientRect().right, `${width}px: the gate row overflows its section`).toBeLessThanOrEqual(needsYou.right);
         const glance = root.querySelector<HTMLElement>('[data-testid="glance-board"]')!;
         expect(
           glance.scrollWidth,

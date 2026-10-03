@@ -69,6 +69,10 @@ export class BoardShell {
    * the selection highlight so the board says which one is open. */
   readonly selectedChunkId = input<string | null>(null);
 
+  /** Every chunk id with an open decision — the container's join over the
+   * fleet-wide decisions read, forwarded to every {@link BoardColumn}. */
+  readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
+
   /** Emitted with a chunk id when a backlog card's Promote is clicked. */
   readonly promote = output<string>();
 

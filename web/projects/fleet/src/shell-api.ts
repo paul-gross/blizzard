@@ -21,6 +21,7 @@ export {
   hubAuthProvidersKey,
   hubBoardChunksKey,
   hubChunkCountsKey,
+  hubDecisionsKey,
   hubFleetSpendKey,
   hubHealthKey,
   hubMeKey,
@@ -32,6 +33,7 @@ export {
   fleetSpendApiSpendGet,
   healthApiHealthGet,
   listChunksApiChunksGet,
+  listDecisionsApiDecisionsGet,
   listOpenQuestionsApiQuestionsGet,
   listProvidersApiAuthProvidersGet,
   logoutApiAuthLogoutPost,
@@ -40,6 +42,7 @@ export {
 export type {
   ChunkCountsView,
   ChunkSummary,
+  DecisionView,
   FleetSpendView,
   MeResponse,
   ProviderSummary,

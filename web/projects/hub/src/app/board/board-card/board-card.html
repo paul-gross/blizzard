@@ -34,6 +34,9 @@
       @if (!isDoneLane(card().status)) {
         <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
       }
+      @if (gated()) {
+        <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
+      }
       <!-- The blocked marking reads beside the status, in the status's own
            engraved style. Non-link pinned by `board-card.spec.ts`'s "references the
            prerequisite rather than reaching it…" case. -->

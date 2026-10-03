@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey } from '../query-keys';
+import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
 import { FleetLiveUpdates, INVALIDATION_COALESCE_WINDOW_MS } from './fleet-live';
 
@@ -188,6 +188,24 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'events']);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
   });
+
+  it.each(['decision-opened', 'decision-resolved'])(
+    'invalidates the fleet-wide open-decision list, the fleet list, and that chunk on %s',
+    (type) => {
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.emitNamed(type, JSON.stringify({ chunk_id: 'ch_gate', decision_id: 'dc_1' }), '1');
+      vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+      const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+      expect(keys).toContainEqual(hubDecisionsKey);
+      expect(keys).toContainEqual(['hub', 'chunks']);
+      expect(keys).toContainEqual(['hub', 'chunk', 'ch_gate']);
+    },
+  );
 
   it('re-reads a chunk on a chunk-changed frame whose status did not move (issue #165)', () => {
     // The client half of the delivery trail's live refresh. `answer.delivered` moves no

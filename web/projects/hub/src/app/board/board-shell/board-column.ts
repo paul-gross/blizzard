@@ -62,6 +62,9 @@ export class BoardColumn {
   /** The chunk whose detail fills the dock, or null — its card carries the highlight. */
   readonly selectedChunkId = input<string | null>(null);
 
+  /** Every chunk id with an open decision — each such card carries the `gate` marker. */
+  readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
+
   /** Whether this lane carries reordering — set for READY and BACKLOG alike:
    * both lists rank independently (`bzh:ranking-is-per-list`) and both are
    * operator-reshapeable. */

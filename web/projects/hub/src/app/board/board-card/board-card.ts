@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, compactRef, formatCost, hasCostFigure, FleetWhen } from 'fleet';
+import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, compactRef, formatCost, hasCostFigure, FleetWhen, KitBadge } from 'fleet';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -66,7 +66,7 @@ export interface BoardCard {
 @Component({
   selector: 'app-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen],
+  imports: [FleetWhen, KitBadge],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })
@@ -80,6 +80,10 @@ export class BoardCardComponent {
   /** Whether the container considers this card the current selection — its
    * card carries the selection highlight so the board says which one is open. */
   readonly selected = input(false);
+
+  /** Whether the chunk has an open decision awaiting a person — the card then
+   * carries the `gate` marker. */
+  readonly gated = input(false);
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`).
    * Withholds the Promote control when `false`; `null`/pending resolves
