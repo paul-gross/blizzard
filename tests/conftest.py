@@ -82,6 +82,25 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+# What switches operator tracing on: a configured OTLP endpoint, absent a worker's own trace context.
+_OPERATOR_TRACING_ENV = (
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_HEADERS",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+    "OTEL_SDK_DISABLED",
+    "OTEL_TRACES_EXPORTER",
+    "BLIZZARD_TRACEPARENT",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_operator_tracing_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset the OTLP and trace-context vars so a developer's shell never switches operator tracing on."""
+    for name in _OPERATOR_TRACING_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
 def pytest_configure() -> None:
     """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent."""
     os.environ.update(

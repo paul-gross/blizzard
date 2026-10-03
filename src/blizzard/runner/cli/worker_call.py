@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import click
 import httpx
 
+from blizzard.cli.operator_trace import exit_code_of
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -49,15 +50,6 @@ class Problem:
             return ""
         detail = body.get("detail") if isinstance(body, dict) else None
         return str(detail) if detail else ""
-
-
-def _exit_code(exc: BaseException) -> int:
-    """The process exit code a leaf's exception ends in, as click's ``main`` would turn it."""
-    if isinstance(exc, (click.exceptions.Exit, click.ClickException)):
-        return exc.exit_code
-    if isinstance(exc, SystemExit):
-        return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
-    return 1
 
 
 # The seam a test replaces to hand the session a client over a canned transport.
@@ -148,12 +140,13 @@ class WorkerSession:
         released = True
         if span is not None:
             from blizzard.foundation import cli_spans
+            from blizzard.foundation.otlp_destination import TRACES_PATH
 
             span.finish(exit_code)
             token = self._environ.get(ENV_LEASE_TOKEN)
             released = cli_spans.send(
                 client,
-                self._environ.get(ENV_RUNNER_URL, ""),
+                f"{self._environ.get(ENV_RUNNER_URL, '').rstrip('/')}{TRACES_PATH}",
                 span,
                 headers={LEASE_TOKEN_HEADER: token} if token else {},
                 environ=self._environ,
@@ -167,7 +160,7 @@ class WorkerSession:
         try:
             return invoke()
         except BaseException as exc:
-            code = _exit_code(exc)
+            code = exit_code_of(exc)
             raise
         finally:
             self.finish(code)

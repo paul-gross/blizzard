@@ -44,6 +44,20 @@ def endpoint_origin(raw: str) -> str:
     return f"{parts.scheme.lower()}://{shown}" + (f":{port}" if port is not None else "")
 
 
+def configured_endpoint(environ: Mapping[str, str]) -> str:
+    """The endpoint as configured — the traces-specific variable overriding the general one, as
+    the SDK resolves it — or ``""``."""
+    return environ.get(ENV_TRACES_ENDPOINT, "").strip() or environ.get(ENV_ENDPOINT, "").strip()
+
+
+def export_switched_off(environ: Mapping[str, str]) -> bool:
+    """Whether the environment turns trace export off outright: no exporter, or no SDK."""
+    return (
+        environ.get(ENV_TRACES_EXPORTER, "").strip().lower() == "none"
+        or environ.get(ENV_SDK_DISABLED, "").strip().lower() == "true"
+    )
+
+
 @dataclass(frozen=True)
 class TracingSettings:
     """Whether fleet tracing runs: ``enabled``, ``disabled``, or ``rejected`` — configured
@@ -60,15 +74,10 @@ class TracingSettings:
         def read(name: str) -> str:
             return environ.get(name, "").strip()
 
-        # The traces-specific variable overrides the general one, as the SDK resolves it.
-        raw_endpoint = read(ENV_TRACES_ENDPOINT) or read(ENV_ENDPOINT)
-        if not raw_endpoint:
+        raw_endpoint = configured_endpoint(environ)
+        if not raw_endpoint or export_switched_off(environ):
             return cls("disabled")
         endpoint = endpoint_origin(raw_endpoint)
-        if read(ENV_TRACES_EXPORTER).lower() == "none":
-            return cls("disabled")
-        if read(ENV_SDK_DISABLED).lower() == "true":
-            return cls("disabled")
         for name in (ENV_TRACES_PROTOCOL, ENV_PROTOCOL):
             protocol = read(name)
             if protocol:

@@ -137,11 +137,11 @@ where the `blizzard.invocation.*` counts do not.
 The hub's spans are emitted under the instrumentation scope `blizzard.hub.fleet_spans` and a runner's under
 `blizzard.runner.runner_spans`, both at version `1`. The resource carries:
 
-| Attribute                       | Type     | Meaning                                                                                                                   |
-| ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `service.name`                  | `string` | The service name; `blizzard-hub` or `blizzard-runner` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one. |
-| `service.version`               | `string` | The running hub's or runner's version.                                                                                    |
-| `blizzard.trace.schema_version` | `string` | The version of this contract.                                                                                             |
+| Attribute                       | Type     | Meaning                                                                                                                                                            |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `service.name`                  | `string` | The service name; `blizzard-hub` or `blizzard-runner` (`blizzard-cli` for an operator command) unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one. |
+| `service.version`               | `string` | The running hub's or runner's version.                                                                                                                             |
+| `blizzard.trace.schema_version` | `string` | The version of this contract.                                                                                                                                      |
 
 `blizzard.trace.schema_version` is `1`. A breaking change to the shape raises it together with the scope version; a
 backend that keys on either can tell shapes apart.
@@ -327,13 +327,41 @@ names in `env_passthrough` are always withheld.
 - **`TRACEPARENT`.** Most SDKs do not read it on their own; a program joins the step's trace only if it is configured
   to.
 
+### Operator command spans
+
+A `blizzard hub` or `blizzard runner` command an operator runs can be traced to the OTLP endpoint the operator
+configures, with no daemon in between.
+
+- **When it is on.** Only when an OTLP endpoint is set, `OTEL_SDK_DISABLED` is not `true` and `OTEL_TRACES_EXPORTER` is
+  not `none`. A worker's own environment never takes this path: a process that carries `BLIZZARD_TRACEPARENT` or
+  `BLIZZARD_RUNNER_URL` records only the [worker span](#worker-spans), if any. `host` in either group, a bare
+  `blizzard hub` or `blizzard runner`, and `hub record-marker` are never traced.
+- **What it records.** Each command is one root span with a trace of its own, always sampled, named for the command,
+  such as `hub chunk list` or `runner status`, whichever alias ran it. It carries `blizzard.cli.command` and
+  `process.exit.code`, and an error status for a non-zero exit. It never records an argument or option value, and no
+  `blizzard.caller`.
+- **Where it goes.** `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is used as given; otherwise `OTEL_EXPORTER_OTLP_ENDPOINT` with
+  `/v1/traces` appended. The headers come from `OTEL_EXPORTER_OTLP_TRACES_HEADERS`, otherwise
+  `OTEL_EXPORTER_OTLP_HEADERS`, as comma-separated `key=value` pairs with percent-decoded values.
+- **JSON only.** The span is sent as OTLP/JSON, so `OTEL_EXPORTER_OTLP_PROTOCOL` is not consulted. A backend that
+  accepts only protobuf needs a collector in front;
+  [`packaging/otel-collector/collector.yaml`](../../packaging/otel-collector/collector.yaml) is one, and a local
+  collector is the recommended receiver.
+- **The send.** It happens once, as the command ends, and takes at most 500 ms in total, whatever the outcome. A failed
+  send is silent and never changes the command's output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr.
+- **Linking to the hub.** The span's `traceparent` goes on the command's requests to the hub and to a local runner,
+  never on a call to a third-party provider. The hub continues it only for an authenticated operator, under
+  [Continuing an incoming trace](#platform-spans); under `auth.mode = none` the hub's span starts a new root.
+- **Names.** `service.name` is `blizzard-cli` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one. No
+  other resource attribute is sent.
+
 ### Platform attributes
 
 | Attribute                         | Type     | Meaning                                                                                                      |
 | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
 | `blizzard.caller`                 | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
 | `blizzard.chunk.id`               | `string` | The chunk a request's route names.                                                                           |
-| `blizzard.cli.command`            | `string` | The CLI command a worker ran, as a span of the scope `blizzard.cli`.                                         |
+| `blizzard.cli.command`            | `string` | The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`.                          |
 | `blizzard.hub.run_step.exit_code` | `int`    | The exit code of a hub node's `run:` step.                                                                   |
 | `blizzard.hub.run_step.name`      | `string` | A hub node's `run:` step's authored name, never its command line; absent when the step authors none.         |
 | `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |

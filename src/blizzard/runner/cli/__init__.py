@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import click
 
-from blizzard.cli.lazy_group import LazyGroup
+from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.runner.cli.worker_call import WorkerSession
 
 _CLI = "blizzard.runner.cli"
@@ -43,16 +43,17 @@ _COMMANDS = {
 }
 
 
-class _RunnerGroup(LazyGroup):
+class _RunnerGroup(OperatorGroup):
     """The root of a runner command: it owns the process's :class:`WorkerSession`, so the one
     HTTP client and the command's span are finished — and the span sent — as the command ends,
-    before click reports any error."""
+    before click reports any error. An operator's command is traced by the :class:`OperatorGroup`
+    beneath it; the two never both open a span, since a worker's environment is never an operator's."""
 
     def invoke(self, ctx: click.Context) -> object:
         return WorkerSession.begin(ctx).run(lambda: super(_RunnerGroup, self).invoke(ctx))
 
 
-@click.group(cls=_RunnerGroup, lazy=_COMMANDS, invoke_without_command=True)
+@click.group(cls=_RunnerGroup, lazy=_COMMANDS, trace_root="runner", invoke_without_command=True)
 @click.pass_context
 def runner(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard runner."""

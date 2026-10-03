@@ -1294,6 +1294,12 @@
    "over_cap": 0,
    "total": 29
   },
+  "blizzard/cli/operator_trace.py": {
+   "comments": 3,
+   "docstrings": 21,
+   "over_cap": 0,
+   "total": 182
+  },
   "blizzard/cli/param_rank.py": {
    "comments": 1,
    "docstrings": 5,
@@ -1338,9 +1344,9 @@
   },
   "blizzard/foundation/cli_spans.py": {
    "comments": 1,
-   "docstrings": 16,
+   "docstrings": 18,
    "over_cap": 0,
-   "total": 180
+   "total": 214
   },
   "blizzard/foundation/clock.py": {
    "comments": 0,
@@ -1419,6 +1425,12 @@
    "docstrings": 4,
    "over_cap": 0,
    "total": 35
+  },
+  "blizzard/foundation/otlp_destination.py": {
+   "comments": 0,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 53
   },
   "blizzard/foundation/platform_tracing/__init__.py": {
    "comments": 0,
@@ -1631,10 +1643,10 @@
    "total": 67
   },
   "blizzard/foundation/trace_export/settings.py": {
-   "comments": 4,
-   "docstrings": 12,
+   "comments": 3,
+   "docstrings": 15,
    "over_cap": 0,
-   "total": 88
+   "total": 97
   },
   "blizzard/foundation/trace_ids.py": {
    "comments": 1,
@@ -2076,9 +2088,9 @@
   },
   "blizzard/hub/cli/__init__.py": {
    "comments": 5,
-   "docstrings": 3,
+   "docstrings": 4,
    "over_cap": 1,
-   "total": 67
+   "total": 54
   },
   "blizzard/hub/cli/analytics.py": {
    "comments": 13,
@@ -2106,9 +2118,9 @@
   },
   "blizzard/hub/cli/context.py": {
    "comments": 3,
-   "docstrings": 27,
+   "docstrings": 28,
    "over_cap": 0,
-   "total": 249
+   "total": 252
   },
   "blizzard/hub/cli/decision.py": {
    "comments": 0,
@@ -4308,9 +4320,9 @@
   },
   "blizzard/runner/cli/__init__.py": {
    "comments": 0,
-   "docstrings": 7,
+   "docstrings": 8,
    "over_cap": 0,
-   "total": 62
+   "total": 63
   },
   "blizzard/runner/cli/analytics.py": {
    "comments": 1,
@@ -4334,7 +4346,7 @@
    "comments": 3,
    "docstrings": 11,
    "over_cap": 1,
-   "total": 102
+   "total": 109
   },
   "blizzard/runner/cli/env.py": {
    "comments": 2,
@@ -4410,9 +4422,9 @@
   },
   "blizzard/runner/cli/worker_call.py": {
    "comments": 6,
-   "docstrings": 32,
+   "docstrings": 31,
    "over_cap": 1,
-   "total": 275
+   "total": 268
   },
   "blizzard/runner/composition.py": {
    "comments": 6,
@@ -6373,10 +6385,10 @@
    "total": 0
   },
   "conftest.py": {
-   "comments": 7,
-   "docstrings": 26,
+   "comments": 8,
+   "docstrings": 27,
    "over_cap": 2,
-   "total": 139
+   "total": 158
   },
   "crash/__init__.py": {
    "comments": 0,
@@ -7411,10 +7423,10 @@
    "total": 349
   },
   "test_cli_analytics_summary_component.py": {
-   "comments": 9,
+   "comments": 8,
    "docstrings": 5,
    "over_cap": 1,
-   "total": 138
+   "total": 142
   },
   "test_cli_context.py": {
    "comments": 8,
@@ -8383,10 +8395,10 @@
    "total": 288
   },
   "test_hub_platform_tracing.py": {
-   "comments": 4,
-   "docstrings": 1,
+   "comments": 5,
+   "docstrings": 3,
    "over_cap": 0,
-   "total": 330
+   "total": 378
   },
   "test_hub_proxy_retry.py": {
    "comments": 6,
@@ -8540,9 +8552,9 @@
   },
   "test_layering.py": {
    "comments": 17,
-   "docstrings": 66,
+   "docstrings": 69,
    "over_cap": 7,
-   "total": 746
+   "total": 770
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -8639,6 +8651,12 @@
    "docstrings": 6,
    "over_cap": 0,
    "total": 38
+  },
+  "test_operator_cli_spans.py": {
+   "comments": 1,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 280
   },
   "test_order_dependent_facts_reads.py": {
    "comments": 0,

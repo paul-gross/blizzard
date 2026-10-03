@@ -3,27 +3,37 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from click.testing import CliRunner
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from blizzard import __version__
+from blizzard.auth_core import Role
+from blizzard.cli import operator_trace
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE, HubConfig
+from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.sessions.internal.session_file import SessionFile
+from blizzard.hub.config import AUTH_MODE_OAUTH, RUNNER_AUTH_ENFORCE, AuthConfig, HubConfig
 from blizzard.hub.domain.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from tests.support import seed_user
 
 pytestmark = pytest.mark.component
 
@@ -328,3 +338,41 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     assert [dict(span.attributes or {}) for span in second] == [{RUN_STEP_EXIT_CODE: 0}]
     assert "polled" not in repr([dict(s.attributes or {}) for s in spans if s.name == RUN_STEP_SPAN])
     assert not [s for s in spans if "exec" in s.name and s.name != RUN_STEP_SPAN]
+
+
+def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authenticated_operator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI's root span and the hub's server span share one trace, the hub's the child — through
+    ``CliContext`` over the app's own transport, with an operator session under a real auth mode."""
+    exporter = InMemorySpanExporter()
+    config = replace(_config(tmp_path), auth=AuthConfig(mode=AUTH_MODE_OAUTH))
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    posted: list[httpx.Request] = []
+    cli_exporter = httpx.Client(transport=httpx.MockTransport(lambda r: posted.append(r) or httpx.Response(200)))
+    with TestClient(app) as client:
+        harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
+        session = app.state.services.auth.mint_session(
+            seed_user(harness, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # type: ignore[arg-type]
+        )[0]
+        SessionFile.of().save("http://testserver", session)
+        monkeypatch.setattr(
+            httpx,
+            "get",
+            lambda url, *, headers=None, params=None, timeout=None: client.get(
+                url.removeprefix("http://testserver"), headers=headers, params=params
+            ),
+        )
+        monkeypatch.setattr(operator_trace, "client_factory", lambda: cli_exporter)
+        result = CliRunner().invoke(
+            hub_group,
+            ["chunk", "list"],
+            env={"BZ_HUB_URL": "http://testserver", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.local:4318"},
+        )
+    assert result.exit_code == 0, result.output
+    [post] = posted
+    cli_span = json.loads(post.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+    server = _server_span(_spans(handle, exporter), "GET /api/chunks")
+    assert f"{server.context.trace_id:032x}" == cli_span["traceId"]
+    assert server.parent is not None and f"{server.parent.span_id:016x}" == cli_span["spanId"]

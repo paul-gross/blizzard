@@ -1,4 +1,4 @@
-"""The span a worker CLI command records, and how it is sent — stdlib only.
+"""The span a CLI command records, and how it is sent — stdlib only.
 
 A command is a short-lived process, so this module imports neither ``httpx`` nor
 ``opentelemetry``: the span is a plain record, encoded by hand as OTLP/JSON, and posted through a
@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from blizzard.foundation.trace_ids import DerivedContext, format_traceparent
+from blizzard.foundation.trace_ids import SAMPLED, DerivedContext, format_traceparent
 
 SCOPE_NAME = "blizzard.cli"
 SCOPE_VERSION = "1"
@@ -29,10 +29,10 @@ ATTR_CHUNK_ID = "blizzard.chunk.id"
 
 SERVICE_NAME = "blizzard-cli"
 
-TRACES_PATH = "/v1/traces"
 ENV_TRACE_DEBUG = "BLIZZARD_TRACE_DEBUG"
-# The whole send — connect, write and read — may take no longer than this.
+# The whole send — connect, write, read — takes no longer: a worker's runner is local, an operator's collector is not.
 SEND_CAP_SECONDS = 0.1
+OPERATOR_SEND_CAP_SECONDS = 0.5
 
 _KIND_INTERNAL = 1
 _STATUS_ERROR = 2
@@ -65,17 +65,25 @@ def _random_span_id() -> int:
     return secrets.randbits(64) or 1
 
 
+def _random_trace_id() -> int:
+    return secrets.randbits(128) or 1
+
+
 @dataclass
 class CliSpan:
-    """One worker command's span: a child of the step's context, closed with the exit code."""
+    """One command's span, closed with the exit code: a child of a worker step's context, or — for
+    an operator command — a root with a trace of its own."""
 
-    parent: DerivedContext
+    trace_id: int
+    parent_span_id: int | None
     span_id: int
     command: str
     chunk_id: str
     lease_id: str
+    service_name: str
     clock: Clock
     start_ns: int
+    flags: int = SAMPLED
     end_ns: int | None = None
     exit_code: int = 0
 
@@ -91,12 +99,37 @@ class CliSpan:
         new_span_id: Callable[[], int] = _random_span_id,
     ) -> CliSpan:
         clock = clock or Clock()
-        return cls(parent, new_span_id(), command, chunk_id, lease_id, clock, clock.now_ns())
+        return cls(
+            parent.trace_id,
+            parent.span_id,
+            new_span_id(),
+            command,
+            chunk_id,
+            lease_id,
+            SERVICE_NAME,
+            clock,
+            clock.now_ns(),
+            parent.trace_flags,
+        )
+
+    @classmethod
+    def root(
+        cls,
+        command: str,
+        *,
+        service_name: str = SERVICE_NAME,
+        clock: Clock | None = None,
+        new_id: Callable[[], int] = _random_trace_id,
+        new_span_id: Callable[[], int] = _random_span_id,
+    ) -> CliSpan:
+        """A fresh, always-sampled trace with this span as its root."""
+        clock = clock or Clock()
+        return cls(new_id(), None, new_span_id(), command, "", "", service_name, clock, clock.now_ns())
 
     @property
     def traceparent(self) -> str:
-        """The header that makes the runner's server span this span's child."""
-        return format_traceparent(self.parent.trace_id, self.span_id, self.parent.trace_flags)
+        """The header that makes the receiving server span this span's child."""
+        return format_traceparent(self.trace_id, self.span_id, self.flags)
 
     def finish(self, exit_code: int) -> None:
         self.exit_code = exit_code
@@ -113,22 +146,23 @@ class CliSpan:
         encoded = [_string(key, value) for key, value in attributes.items()]
         encoded.append({"key": ATTR_EXIT_CODE, "value": {"intValue": str(self.exit_code)}})
         span: dict[str, Any] = {
-            "traceId": f"{self.parent.trace_id:032x}",
+            "traceId": f"{self.trace_id:032x}",
             "spanId": f"{self.span_id:016x}",
-            "parentSpanId": f"{self.parent.span_id:016x}",
             "name": self.command,
             "kind": _KIND_INTERNAL,
             "startTimeUnixNano": str(self.start_ns),
             "endTimeUnixNano": str(self.end_ns if self.end_ns is not None else self.start_ns),
             "attributes": encoded,
-            "flags": self.parent.trace_flags,
+            "flags": self.flags,
         }
+        if self.parent_span_id is not None:
+            span["parentSpanId"] = f"{self.parent_span_id:016x}"
         if self.exit_code != 0:
             span["status"] = {"code": _STATUS_ERROR}
         return {
             "resourceSpans": [
                 {
-                    "resource": {"attributes": [_string("service.name", SERVICE_NAME)]},
+                    "resource": {"attributes": [_string("service.name", self.service_name)]},
                     "scopeSpans": [{"scope": {"name": SCOPE_NAME, "version": SCOPE_VERSION}, "spans": [span]}],
                 }
             ]
@@ -141,14 +175,14 @@ def _string(key: str, value: str) -> dict[str, Any]:
 
 def send(
     client: Poster,
-    runner_url: str,
+    url: str,
     span: CliSpan,
     *,
     headers: Mapping[str, str],
     cap: float = SEND_CAP_SECONDS,
     environ: Mapping[str, str] | None = None,
 ) -> bool:
-    """Post the span to the runner, abandoning the daemon-thread post ``cap`` seconds in — a total
+    """Post the span to ``url``, abandoning the daemon-thread post ``cap`` seconds in — a total
     deadline. Failures are swallowed and reach stderr only under ``BLIZZARD_TRACE_DEBUG``.
     Returns whether the post finished, so the caller knows the client is free to close."""
     environ = os.environ if environ is None else environ
@@ -158,14 +192,14 @@ def send(
         try:
             body = json.dumps(span.payload(), separators=(",", ":")).encode("utf-8")
             response = client.post(
-                f"{runner_url.rstrip('/')}{TRACES_PATH}",
+                url,
                 content=body,
                 headers={"Content-Type": "application/json", **headers},
                 timeout=cap,
             )
             status = getattr(response, "status_code", 200)
             if isinstance(status, int) and status >= 400:
-                failure.append(f"the runner answered {status}")
+                failure.append(f"the receiver answered {status}")
         except Exception as exc:
             failure.append(f"{type(exc).__name__}: {exc}")
 

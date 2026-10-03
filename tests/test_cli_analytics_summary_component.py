@@ -11,6 +11,7 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+import click
 import httpx
 import pytest
 from click.testing import CliRunner, Result
@@ -69,9 +70,12 @@ def test_the_applicability_table_matches_the_openapi_declared_params() -> None:
 
 
 def test_the_dataset_choice_list_matches_the_table() -> None:
-    summary_command = hub_group.commands["analytics"].commands["summary"]  # type: ignore[attr-defined]
+    analytics = hub_group.get_command(click.Context(hub_group), "analytics")
+    assert isinstance(analytics, click.Group)
+    summary_command = analytics.commands["summary"]
     dataset_param = next(p for p in summary_command.params if p.name == "dataset")
 
+    assert isinstance(dataset_param.type, click.Choice)
     assert set(dataset_param.type.choices) == set(_DATASETS)
 
 
