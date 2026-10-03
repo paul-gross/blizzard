@@ -14,7 +14,7 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
@@ -218,12 +218,14 @@ class InterruptedClaims:
         # One read before the loop, not one `active_lease_for_chunk` per chunk
         # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.
         active_chunk_ids = {lease.chunk_id for lease in self.ctx.stores.lease_record.list_active_leases()}
-        for chunk_id in self.ctx.stores.environments.live_tenure_chunk_ids():
+        # Likewise one read for every held binding, grouped by chunk, not one per held chunk.
+        bindings_by_chunk = group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
+        for chunk_id, bindings in bindings_by_chunk.items():
             if chunk_id not in active_chunk_ids:
-                self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending, braked=braked)
+                self._reconcile_one(chunk_id, bindings, requeued=chunk_id in requeue_pending, braked=braked)
             # else a live worker holds it — REAP/ADVANCE own it
 
-    def _reconcile_one(self, chunk_id: str, *, requeued: bool, braked: bool) -> None:
+    def _reconcile_one(self, chunk_id: str, bindings: list[EnvBindingRecord], *, requeued: bool, braked: bool) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
@@ -244,9 +246,6 @@ class InterruptedClaims:
         if view.decision is not None:
             # A resolved gate keeps its route live, so it looks exactly like an interrupted
             # claim; without this guard the adopt branch would bump the epoch under the human.
-            return
-        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
-        if not bindings:
             return
         if view.status == ChunkStatus.RUNNING and ours:
             self._adopt(chunk_id, view.latest_epoch)  # route ours — just spawn the current node
