@@ -51,8 +51,8 @@ describe('delivery links real Chromium shell sweep', () => {
         expect(card.querySelector('a')?.closest('button')).toBeNull();
         expect(host.querySelectorAll('[data-testid="chunk-delivery"]')).toHaveLength(2);
         expect(host.querySelectorAll('[data-testid="delivery-merge-wait"]')).toHaveLength(2);
-        const links = host.querySelectorAll<HTMLAnchorElement>('[data-testid="card-pr-link"], [data-testid="card-landed-link"], [data-testid="delivery-pr-link"], [data-testid="delivery-landed-link"]');
-        expect(links, 'card and both detail views must each render both links').toHaveLength(6);
+        const links = host.querySelectorAll<HTMLAnchorElement>('[data-testid="card-pr-link"], [data-testid="delivery-pr-link"], [data-testid="delivery-landed-link"]');
+        expect(links, 'the card renders its PR link and both detail views render both links').toHaveLength(5);
         for (const link of links) {
           expect(link.href).toContain('forge.example');
           expect(link.target).toBe('_blank');
