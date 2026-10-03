@@ -1,15 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import {
-  asyncState,
-  FleetFindingList,
-  KitBackBar,
-  KitSelect,
-  KitPanel,
-  type FindingListRowVm,
-  type KitAsyncStateValue,
-  ViewportService,
-} from 'fleet';
+import { asyncState, KitBackBar, KitSelect, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { FleetFindingList, type FindingListRowVm } from './finding-list';
 
 import { injectChildRouteParam } from '../route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';

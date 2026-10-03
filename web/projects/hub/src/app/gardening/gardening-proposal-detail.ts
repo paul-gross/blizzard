@@ -1,38 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import {
-  asyncState,
-  FleetProposalPanel,
-  hasPermission,
-  injectHubFindingsQuery,
-  injectHubGardenProposalsQuery,
-  injectHubWorkItemQuery,
-  injectMeQuery,
-  injectPendingMutationVariables,
-  injectConfirmGoneFindingsMutation,
-  injectNotAFindingFindingsMutation,
-  injectResolveFindingsMutation,
-  injectWontFixFindingsMutation,
-  compactRef,
-  confirmGoneFindingsMutationKey,
-  notAFindingFindingsMutationKey,
-  resolveFindingsMutationKey,
-  wontFixFindingsMutationKey,
-  type FindingExitVars,
-  errorMessage,
-  type FindingView,
-  type GardenProposalClosureView,
-  type GardenProposalView,
-  type KitAsyncStateValue,
-  type ProposalClosureVm,
-  type ProposalEvidenceRowVm,
-  type ProposalEvidenceTriage,
-  type ProposalEvidenceVerb,
-  type ProposalOriginVm,
-  type ProposalPanelVm,
-  type ProposalWorkItemVm,
-} from 'fleet';
+import { asyncState, injectPendingMutationVariables, compactRef, errorMessage, type FindingView, type GardenProposalClosureView, type GardenProposalView, type KitAsyncStateValue } from 'fleet';
+import { FleetProposalPanel, type ProposalClosureVm, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalOriginVm, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { injectHubFindingsQuery } from './finding.query';
+import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { injectHubWorkItemQuery } from './work-item.query';
+import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectResolveFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from './finding.mutations';
+import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, resolveFindingsMutationKey, wontFixFindingsMutationKey } from '../mutation-keys';
 import { map } from 'rxjs';
 
 import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';

@@ -1,15 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import {
-  errorMessage,
-  hasPermission,
-  injectMeQuery,
-  injectPendingMutationVariables,
-  injectRunnerPauseMutation,
-  injectRunnerRows,
-  runnerPauseMutationKey,
-  type RunnerPauseVars,
-  type RunnerRow,
-} from 'fleet';
+import { errorMessage, injectPendingMutationVariables } from 'fleet';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
+import { injectRunnerRows, type RunnerRow } from './runner-rows';
+import { runnerPauseMutationKey } from '../mutation-keys';
 
 import { FleetView } from './fleet-view';
 

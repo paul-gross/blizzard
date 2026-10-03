@@ -65,8 +65,8 @@ describe('GraphsPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graphs-page-placeholder"]')).toBeTruthy();
-    expect(el.querySelector('fleet-graph-detail')).toBeNull();
-    expect(el.querySelector('fleet-graph-explorer')).toBeTruthy();
+    expect(el.querySelector('app-graph-detail')).toBeNull();
+    expect(el.querySelector('app-graph-explorer')).toBeTruthy();
   });
 
   it('mounts the detail for the graphId in the route param, keeping the list mounted too', async () => {
@@ -74,9 +74,9 @@ describe('GraphsPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graphs-page-placeholder"]')).toBeNull();
-    expect(el.querySelector('fleet-graph-detail')).toBeTruthy();
+    expect(el.querySelector('app-graph-detail')).toBeTruthy();
     // Master/detail, not a route swap — the list stays alongside the detail.
-    expect(el.querySelector('fleet-graph-explorer')).toBeTruthy();
+    expect(el.querySelector('app-graph-explorer')).toBeTruthy();
   });
 
   it('re-selects the detail when the param changes without remounting the page', async () => {
@@ -88,13 +88,13 @@ describe('GraphsPage', () => {
 
     expect(fixture.componentInstance).toBe(pageInstance);
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('fleet-graph-detail')).toBeTruthy();
+    expect(el.querySelector('app-graph-detail')).toBeTruthy();
   });
 
   it('navigates to /graphs/:graphId when the explorer emits a selection', async () => {
     const { fixture, navigate } = await mount(null);
 
-    const explorer = fixture.debugElement.query(By.css('fleet-graph-explorer'));
+    const explorer = fixture.debugElement.query(By.css('app-graph-explorer'));
     explorer.componentInstance.selectGraph.emit('gr_build_v1');
     await fixture.whenStable();
 

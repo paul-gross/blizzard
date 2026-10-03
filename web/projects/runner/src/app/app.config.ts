@@ -1,7 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { provideSessionRecovery } from 'local-panel';
+import { provideSessionRecovery } from './status/session-recovery.provider';
 
 import { routes } from './app.routes';
 

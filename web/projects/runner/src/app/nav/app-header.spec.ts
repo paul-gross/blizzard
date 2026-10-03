@@ -4,7 +4,8 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi, type SseStatus } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { LocalIdentity, RunnerLiveUpdates } from 'local-panel';
+import { LocalIdentity } from '../identity/app-identity';
+import { RunnerLiveUpdates } from '../live/runner-live-updates';
 import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
@@ -273,16 +274,16 @@ describe('AppHeader', () => {
     it('keeps every trailing control at a full-width header', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(at(el, 'local-pause-control', 1400)).toBe(false);
-      expect(at(el, 'local-identity', 1400)).toBe(false);
+      expect(at(el, 'app-pause-control', 1400)).toBe(false);
+      expect(at(el, 'app-identity', 1400)).toBe(false);
       expect(at(el, '[data-testid="local-panel-menu"]', 1400)).toBe(false);
     });
 
     it('gives up the pause control and identity at the narrow tier, never the profile menu', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(at(el, 'local-pause-control', 390)).toBe(true);
-      expect(at(el, 'local-identity', 390)).toBe(true);
+      expect(at(el, 'app-pause-control', 390)).toBe(true);
+      expect(at(el, 'app-identity', 390)).toBe(true);
       // The one that must survive: it is the only way back to mobile from a
       // forced-desktop phone on this shell.
       expect(at(el, '[data-testid="local-panel-menu"]', 390)).toBe(false);
@@ -291,17 +292,17 @@ describe('AppHeader', () => {
     it('steers the cluster\'s shrink into the username, never into the menu', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(getComputedStyle(el.querySelector<HTMLElement>('local-identity')!).minWidth).toBe('0px');
+      expect(getComputedStyle(el.querySelector<HTMLElement>('app-identity')!).minWidth).toBe('0px');
       expect(getComputedStyle(el.querySelector<HTMLElement>('.menu')!).flexShrink).toBe('0');
-      expect(getComputedStyle(el.querySelector<HTMLElement>('local-pause-control')!).flexShrink).toBe('0');
+      expect(getComputedStyle(el.querySelector<HTMLElement>('app-pause-control')!).flexShrink).toBe('0');
     });
 
     it('rides the same named container the header declares, not a viewport media query', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
       expect(getComputedStyle(el.querySelector('.mc-header')!).containerName).toBe('board-header');
-      expect(at(el, 'local-pause-control', 700)).toBe(false);
-      expect(at(el, 'local-pause-control', 699)).toBe(true);
+      expect(at(el, 'app-pause-control', 700)).toBe(false);
+      expect(at(el, 'app-pause-control', 699)).toBe(true);
     });
   });
 });

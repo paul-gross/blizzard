@@ -31,7 +31,7 @@ export interface SidechainOpenEvent {
 
 /**
  * The shared, presentational turn list — one component both the
- * runner's local panel (`local-panel/src/lib/transcript-panel.ts`) and the hub's chunk
+ * runner's chunk page and the hub's chunk
  * Transcripts tab render, over the structural {@link TranscriptTurn} shape. Injects
  * nothing and owns no query; a container passes `turns` and this component only ever
  * renders what it is given (`bzh:frontend-container-presentational`).

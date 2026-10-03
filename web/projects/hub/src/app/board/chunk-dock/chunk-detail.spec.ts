@@ -1,0 +1,771 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
+
+import { type ChunkDetail as ChunkDetailModel, hubClient } from 'fleet';
+import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { ChunkDetail } from './chunk-detail';
+
+const ROUTED_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_routed',
+  graph_id: 'gr_1',
+  status: 'running',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: [] },
+};
+
+const GATE_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_gate',
+  graph_id: 'gr_1',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_gate',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  decision: {
+    decision_id: 'de_42',
+    chunk_id: 'ch_gate',
+    node_id: 'nd_gate',
+    node_name: 'approve-gate',
+    epoch: 1,
+    submitted_at: '2026-07-13T00:00:01Z',
+    choices: [
+      { name: 'approve', description: 'Ship it.' },
+      { name: 'reject', description: 'Send it back.' },
+    ],
+    transitioned: false,
+    docket: [
+      {
+        proposal_id: 'wip_01',
+        node_name: 'build',
+        kind: 'create',
+        payload: { kind: 'create', title: 'fix it', body: 'do it', stated_priority: 'normal' },
+      },
+    ],
+  },
+};
+
+// A chunk carrying an open pause fact while its derived status reads waiting_on_human —
+// the overlap PAUSED's position below the human-gated states creates.
+const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
+  ...GATE_DETAIL,
+  chunk_id: 'ch_paused',
+  pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
+  decision: undefined,
+};
+
+// A chunk parked on an open question — the answer-race surface.
+const ASK_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_ask',
+  graph_id: 'gr_1',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  questions: [
+    {
+      question_id: 'qn_77',
+      chunk_id: 'ch_ask',
+      question: 'Which API style?',
+      options: [],
+      epoch: 1,
+      runner_id: 'rn_01',
+      asked_at: '2026-07-13T00:00:01Z',
+      answered: false,
+    },
+  ],
+};
+
+// The same chunk after somebody else's answer won the CAS — what the re-read returns.
+const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
+  ...ASK_DETAIL,
+  status: 'running',
+  questions: [
+    { ...ASK_DETAIL.questions![0], answered: true, answer: 'rest', answered_by: 'alice', delivered: false },
+  ],
+};
+
+// A not_ready chunk — the one window the graph edit is open.
+const NOT_READY_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_ready',
+  graph_id: 'gr_default',
+  status: 'not_ready',
+  current_node_id: null,
+  latest_epoch: null,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+};
+
+// An unacquired chunk Delete reaches — distinct from
+// NOT_READY_DETAIL so the graph-edit and delete specs don't share a fixture
+// (and so a test can tell their client calls apart by chunk id).
+const DELETABLE_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_deletable',
+  graph_id: 'gr_default',
+  status: 'not_ready',
+  current_node_id: null,
+  latest_epoch: null,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+};
+
+async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
+  await fixture.whenStable();
+  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')!.click();
+  await fixture.whenStable();
+}
+
+/** Detach, Complete, and Delete live in the header's `⋯` overflow menu, whose panel
+ * the CDK renders into an overlay attached to `document.body`, not the fixture's own
+ * element (`kit-menu.spec.ts`'s own convention) — opens the trigger first, then clicks
+ * the named item there. The confirm dialog that follows stays in the header's own
+ * template (outside the menu's `<ng-template>`), so {@link confirmAction} still queries
+ * the fixture. */
+async function clickMenuAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>, testid: string): Promise<void> {
+  const el = fixture.nativeElement as HTMLElement;
+  el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+  await fixture.whenStable();
+  document.body.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.click();
+  await fixture.whenStable();
+}
+
+describe('ChunkDetail container', () => {
+  let stub: RequestClientStub;
+  // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
+  // closure below reads it live, so a test can set it after the fixture is mounted.
+  let detachResponse: unknown = {};
+  // The same, for the pause/resume verbs.
+  let pauseResponse: unknown = {};
+  // The same, for the complete verb.
+  let completeResponse: unknown = {};
+  // The same, for the delete verb.
+  let deleteResponse: unknown = {};
+  // The same, for the graph edit — it collapses onto the one
+  // `PATCH /api/chunks/{id}` call, so one variable drives it.
+  let editPatchResponse: unknown = {};
+  // The same, for the answer verb — 201 winner vs. 409 loser.
+  let answerResponse: unknown = {};
+  // The same, for the resolve-decision verb — defaults to a canned success body below.
+  let resolveResponse: unknown | null = null;
+  // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
+  // post-answer re-read return the settled row the way the live hub would.
+  let askAnswered = false;
+
+  beforeEach(async () => {
+    detachResponse = {};
+    pauseResponse = {};
+    completeResponse = {};
+    deleteResponse = {};
+    editPatchResponse = {};
+    answerResponse = {};
+    resolveResponse = null;
+    askAnswered = false;
+    // The generated client's transport is stubbed so we can assert the exact call the button fires.
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_deletable') return DELETABLE_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_missing') return stubError(404, { detail: 'unknown chunk' });
+      if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
+      if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
+        return pauseResponse;
+      }
+      if (method === 'PATCH' && path === '/api/chunks/ch_ready') return editPatchResponse;
+      if (method === 'GET' && path.endsWith('/work-items')) {
+        return {
+          items: [
+            {
+              source: 'widget',
+              ref: '42',
+              label: 'widget#42',
+              web_url: 'https://github.com/acme/widget/issues/42',
+              fetched_at: '2026-07-15T00:00:00Z',
+              body: 'the widget flake reproduces under load',
+              comments: ['seen it too'],
+              error: null,
+            },
+          ],
+        };
+      }
+      if (path === '/api/decisions/de_42/resolutions') {
+        return (
+          resolveResponse ?? { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' }
+        );
+      }
+      if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
+      if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
+      if (method === 'DELETE' && path === '/api/chunks/ch_deletable') return deleteResponse;
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [ChunkDetail],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it('holds an empty rest state — not the detail panel — while no chunk is selected (issue #21)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    // chunkId defaults to null: the dock stays mounted but empty.
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('app-chunk-detail-panel')).toBeNull();
+    const rest = el.querySelector('[data-testid="chunk-detail-empty"]');
+    expect(rest?.textContent).toContain('SELECT');
+  });
+
+  it('renders an error state, not an endless LOADING…, when the detail read fails', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_missing');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chunk-detail-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-detail-loading"]')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-panel')).toBeNull();
+  });
+
+  it('fires the resolve-decision client call when a gate choice button is clicked', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')];
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['approve', 'reject']);
+
+    buttons[0].click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ choice: 'approve', struck: [] });
+  });
+
+  it('forwards the docket’s toggled proposal ids to the resolve-decision client call', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLInputElement>('[data-testid="docket-strike"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ choice: 'approve', struck: ['wip_01'] });
+  });
+
+  it('surfaces a resolve-decision failure rather than swallowing it', async () => {
+    resolveResponse = stubError(409, { detail: 'decision de_42 already resolved' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/decisions/de_42/resolutions', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already resolved');
+  });
+
+  it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    // It went through the real pass-through route (bzh:generated-client), no hand-written fetch.
+    expect(stub.forRoute('/api/chunks/ch_gate/work-items', 'GET')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
+    expect(el.querySelector('[data-testid="issue-message"]')?.textContent).toContain('seen it too');
+  });
+
+  // --- Detach ---------------------------------------------
+
+  it('fires the detach client call for a routed chunk once the operator confirms', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/detach', 'POST')).toHaveLength(1);
+  });
+
+  it('surfaces the 409 "no live route" response rather than swallowing it', async () => {
+    detachResponse = stubError(409, { detail: 'chunk ch_routed has no live route' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/detach', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('has no live route');
+  });
+
+  it('clears a stale detach error when a different chunk is opened', async () => {
+    detachResponse = stubError(409, { detail: 'chunk ch_routed has no live route' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    let el = fixture.nativeElement as HTMLElement;
+
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
+
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
+  });
+
+  // --- Complete -------------------------------------------
+
+  it('fires the complete client call for a chunk once the operator confirms', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+
+    await clickMenuAction(fixture, 'complete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
+  });
+
+  it('surfaces a complete failure rather than swallowing it', async () => {
+    completeResponse = stubError(404, { detail: 'unknown chunk ch_routed' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    await clickMenuAction(fixture, 'complete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
+  });
+
+  // --- Delete ------------------------------------------
+
+  it('fires the delete client call for an unacquired chunk once the operator confirms', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    await settle(fixture);
+
+    await clickMenuAction(fixture, 'delete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+  });
+
+  it('dismisses the dock on a successful delete, rather than sitting on the now-gone chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    let dismissed = false;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    await settle(fixture);
+
+    await clickMenuAction(fixture, 'delete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(dismissed).toBe(true);
+  });
+
+  it('surfaces a delete failure rather than swallowing it, and does not dismiss', async () => {
+    deleteResponse = stubError(409, { detail: 'chunk ch_deletable is already acquired' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    let dismissed = false;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    await clickMenuAction(fixture, 'delete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already acquired');
+    expect(dismissed).toBe(false);
+  });
+
+  // --- Answering a question, and losing the race for it ---------
+
+  /** Type an answer into the dock and submit it. */
+  async function answerFrom(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<HTMLElement> {
+    const el = fixture.nativeElement as HTMLElement;
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    input.value = 'graphql';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settle(fixture);
+    return el;
+  }
+
+  it('renders the winner’s name and answer as an outcome when the answer race is lost', async () => {
+    // The hub's first-write-wins 409 body is the *winning row*, not a `{detail}` error —
+    // folding it through errorMessage() showed the loser a generic failure instead of the
+    // one thing worth saying: who answered, and what they said.
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    askAnswered = true; // the race was lost, so the re-read now sees alice's answer
+
+    const el = await answerFrom(fixture);
+
+    const outcome = el.querySelector('[data-testid="action-outcome"]');
+    expect(outcome?.textContent).toContain('alice');
+    expect(outcome?.textContent).toContain('rest');
+    // An outcome, not a failure: the error notice stays empty.
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
+    // And the losing attempt still re-read the chunk, so the question now renders
+    // answered with its trail rather than sitting on the stale open row.
+    expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
+    expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');
+  });
+
+  it('surfaces a genuine answer failure on the error channel, not the outcome one', async () => {
+    answerResponse = stubError(404, { detail: 'unknown question qn_77' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+
+    const el = await answerFrom(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+  });
+
+  it('clears a stale answer outcome when a different chunk is opened', async () => {
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    let el = await answerFrom(fixture);
+    expect(el.querySelector('[data-testid="action-outcome"]')).not.toBeNull();
+
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+  });
+
+  it('clears a stale answer outcome when any other dock action fires', async () => {
+    // Otherwise a later action's failure renders the red notice *beside* the leftover
+    // cyan "alice answered first", which reads as though the two are about each other.
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    pauseResponse = stubError(409, { detail: 'chunk is already paused' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    const el = await answerFrom(fixture);
+    expect(el.querySelector('[data-testid="action-outcome"]')).not.toBeNull();
+
+    // A sibling action on the same chunk — fired through its handler, since the dock's
+    // pause control is not rendered for a waiting_on_human chunk.
+    (fixture.componentInstance as unknown as { onPause(id: string): void }).onPause('ch_routed');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already paused');
+  });
+
+  // --- Pause / Resume --------------------------------------------
+
+  it('fires the pause client call for a running chunk once the operator confirms', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/chunks/ch_routed/pause', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ by: 'operator' });
+  });
+
+  it('fires the resume client call for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
+    // The overlap, end to end through the generated client: the dock reads the pause
+    // fact off ChunkDetail, so it offers Resume for a chunk whose status hides the pause.
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_paused');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('waiting_on_human');
+    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_paused/resume', 'POST')).toHaveLength(1);
+  });
+
+  it('surfaces a 409 refusal from pause in the shared notice rather than swallowing it', async () => {
+    pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
+  });
+
+  // --- Pending status override (`bzh:frontend-pending-override`) -------------
+  //
+  // Complete and Pause are the two controls whose outcome is predictable from the
+  // mutation's own variables (`domain/work/statuses.md`'s precedence, confirmed against
+  // `src/blizzard/hub/domain/work.py`/`pause.py`/`detach.py`/`delete.py`) — Resume and
+  // Detach are not, so they render no override at all, only Part A's disabled-and-pending.
+  //
+  // Every "held pending" assertion below spies on `queryClient.invalidateQueries` and
+  // returns a promise it controls rather than letting the stub's fetch settle on its
+  // own — a mutation stays `isPending()` true only until its own invalidations resolve
+  // (`bzh:frontend-mutation-settles-on-refresh`), so holding that promise open is what
+  // keeps the window a real assertion can land in, the same idiom
+  // `runner-panel.spec.ts`'s own pending-scope spec uses.
+
+  it('renders the paused override while pending on a chunk below the human-gated states, reverting to the real status on rejection', async () => {
+    pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
+    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in
+    // (`runner-panel.spec.ts`'s own idiom for the same reason).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
+  });
+
+  it('renders no status override while Pause is pending on a chunk already waiting_on_human/needs_human — the human-gated status wins', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // Part A alone: disabled and pending, no rendered status change.
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('renders the done override while Complete is pending, reverting to the real status on rejection', async () => {
+    completeResponse = stubError(404, { detail: 'unknown chunk ch_routed' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    await clickMenuAction(fixture, 'complete-chunk');
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('done');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
+  });
+
+  it('renders no status override while Resume is pending — the pause overlay hides what status it would revert to', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_paused');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // Part A alone: disabled and pending, no rendered status change.
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('renders no status override while Detach is pending — the outcome depends on facts detach never touches', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // No rendered status change while detach is pending…
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    // …only Part A's existing disabled state, reopening the menu the CDK closed on
+    // trigger (`kit-menu-item.ts`) to read it back off the item itself. A bare
+    // macrotask tick + `detectChanges()` stands in for `whenStable()` here, the same
+    // idiom the pending window above already leans on — the held `invalidateQueries`
+    // promise leaves the fixture never truly stable.
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  // --- Graph edit (the model edit beside it retired with `Chunk.model`)
+  // -------------------------------------------------------------
+
+  it('fires the graph edit client call for a not_ready chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
+    input.value = 'gr_alt';
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/chunks/ch_ready', 'PATCH');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ graph_id: 'gr_alt' });
+  });
+
+  it('offers no graph edit input for a chunk that has left not_ready', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
+  });
+
+  it('surfaces a 409 refusal from the graph edit rather than swallowing it', async () => {
+    editPatchResponse = stubError(409, { detail: 'chunk ch_ready is already ready' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
+    input.value = 'gr_alt';
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already ready');
+  });
+});

@@ -1,35 +1,19 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import {
-  BoardShell,
-  type BoardReposition,
-  type ChunkSummary,
-  ChunkDetail,
-  ActivityPanel,
-  QuestionsPanel,
-  RunnerPanel,
-  asyncState,
-  chunkDeleteMutationKey,
-  errorMessage,
-  hasPermission,
-  injectChunkUrlSelection,
-  type KitAsyncStateValue,
-  type DeleteVars,
-  injectHubBacklogQuery,
-  injectHubBoardChunksQuery,
-  injectHubChunkCountsQuery,
-  injectHubChunkDetailQuery,
-  injectHubQueueQuery,
-  injectMeQuery,
-  injectPendingMutationVariables,
-  injectPromoteChunkMutation,
-  injectRepositionBacklogMutation,
-  injectRepositionQueueMutation,
-  promoteChunkMutationKey,
-  type PromoteVars,
-  type RepositionVars,
-  repositionBacklogMutationKey,
-  repositionQueueMutationKey,
-} from 'fleet';
+import { BoardShell } from './board-shell/board-shell';
+import { type BoardReposition } from './board-shell/board-column';
+import { type ChunkSummary, asyncState, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
+import { ChunkDetail } from './chunk-dock/chunk-detail';
+import { ActivityPanel } from './activity/activity-panel';
+import { QuestionsPanel } from './questions/questions-panel';
+import { RunnerPanel } from '../fleet/runner-panel';
+import { chunkDeleteMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../mutation-keys';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { type DeleteVars } from './chunks/delete.mutations';
+import { injectHubBacklogQuery, injectHubQueueQuery } from './queue/queue.query';
+import { injectHubBoardChunksQuery } from './chunks/chunks.query';
+import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
+import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
+import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 
 /**
  * A pending reposition's requested placement, replayed over a copy of `order` — `move.chunkId`

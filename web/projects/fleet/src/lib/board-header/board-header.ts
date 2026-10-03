@@ -60,7 +60,7 @@ interface SpendCellView {
  * query container is **named**, so a consumer writes
  * `@container board-header (max-width: …)` against it in its own styles, where
  * view encapsulation reaches the nodes it declared, and it pins `flex` on those
- * same nodes to steer where the cluster's shrink lands. `local-panel-layout.ts`
+ * same nodes to steer where the cluster's shrink lands. `app-panel-layout.ts`
  * is the worked example — a truncating username, a menu that never gives way.
  */
 @Component({

@@ -11,7 +11,7 @@
     }
   }
   @case ('lobby') {
-    <fleet-pending-lobby [me]="me()" (logout)="onLogout()" />
+    <app-pending-lobby [me]="me()" (logout)="onLogout()" />
   }
   @case ('ready') {
     <fleet-app-shell>

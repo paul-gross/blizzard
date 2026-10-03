@@ -181,7 +181,7 @@ describe('GardeningRunsPage', () => {
       routeOverride: (method, path) => (method === 'GET' && path === '/api/runs' ? stubError(500, {}) : undefined),
     });
 
-    const list = fixture.debugElement.query(By.css('fleet-run-list'));
+    const list = fixture.debugElement.query(By.css('app-run-list'));
     expect(list.componentInstance.state()).toBe('error');
     expect(el.textContent).toContain('UNAVAILABLE');
   });

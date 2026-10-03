@@ -1,15 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import {
-  asyncStateOf,
-  errorMessage,
-  injectHubRoutineBaselinesQuery,
-  injectHubRoutineScopesQuery,
-  injectHubScopesQuery,
-  injectRunRoutineMutation,
-  type RoutineRunResponse,
-  type ScopeView,
-} from 'fleet';
+import { asyncStateOf, errorMessage, type RoutineRunResponse, type ScopeView } from 'fleet';
+import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
+import { injectHubRoutineScopesQuery } from './routines.query';
+import { injectHubScopesQuery } from './scopes.query';
+import { injectRunRoutineMutation } from './routine-run.mutations';
 
 import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dialog-view';
 

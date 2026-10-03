@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { KitPanel } from 'fleet';
-import { FactLog } from 'local-panel';
+import { FactLog } from './fact-log';
 
 /**
  * The `/events` route — the local fact log at full width.

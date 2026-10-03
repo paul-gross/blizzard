@@ -17,7 +17,7 @@ import { DemoDirector } from './demo-director';
  * The stand-ins render exactly the two handles the director steers by —
  * `detail-id` inside `chunk-detail`, and `artifacts-tab-artifact-key` inside
  * `artifacts-tab-artifact` — because that identity check is the contract
- * between this class and the real board (`board-page.ts`, `chunk-artifacts-tab.ts`).
+ * between this class and the real board (`board-page.ts`, `fleet`'s `chunk-page.html`).
  * A stand-in keeps this spec about the *tour* — which chunk, which route, which
  * artifact, in what order — rather than about the board's own rendering, which
  * has its own specs. Intervals are milliseconds here; the shape of the cycle is

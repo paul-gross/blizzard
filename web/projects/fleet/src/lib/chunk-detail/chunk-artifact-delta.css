@@ -19,7 +19,7 @@
   flex: 1;
   min-height: 0;
 }
-/* `garden/run-delta.css`'s own `.rd-ref` reference-link color, matched here so a
+/* the hub's `gardening/run-delta.css`'s own `.rd-ref` reference-link color, matched here so a
    finding id reads the same whether it is seen through the gardening tabs or
    through this raw-artifact reading of the same data — this component links
    nowhere (an artifact predates the finding-set delivery this id might not have

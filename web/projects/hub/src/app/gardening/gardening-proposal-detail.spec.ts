@@ -177,19 +177,19 @@ describe('GardeningProposalDetail', () => {
 
   it('sets panelVm().hasFindings true for a proposal that cites findings', async () => {
     const { fixture } = await render([WAITING_A, NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_1');
-    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    const panel = fixture.debugElement.query(By.css('app-proposal-panel'));
     expect(panel.componentInstance.vm()?.hasFindings).toBe(true);
   });
 
   it('sets panelVm().hasFindings false for a proposal citing none, off its own citation count, not the live evidence read', async () => {
     const { fixture } = await render([WAITING_A, NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
-    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    const panel = fixture.debugElement.query(By.css('app-proposal-panel'));
     expect(panel.componentInstance.vm()?.hasFindings).toBe(false);
   });
 
   it('resolves evidenceState to empty, not loading, for a proposal citing none', async () => {
     const { fixture } = await render([NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
-    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    const panel = fixture.debugElement.query(By.css('app-proposal-panel'));
     expect(panel.componentInstance.evidenceState()).toBe('empty');
   });
 

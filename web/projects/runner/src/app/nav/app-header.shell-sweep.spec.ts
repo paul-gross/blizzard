@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
-import { RunnerLiveUpdates } from 'local-panel';
+import { RunnerLiveUpdates } from '../live/runner-live-updates';
 import { page } from 'vitest/browser';
 
 import { AppHeader } from './app-header';

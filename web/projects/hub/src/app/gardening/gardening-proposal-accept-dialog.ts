@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { errorMessage, injectAcceptGardenProposalMutation } from 'fleet';
+import { errorMessage } from 'fleet';
+import { injectAcceptGardenProposalMutation } from './garden-proposal.mutations';
 
 import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gardening-proposal-accept-dialog-view';
 

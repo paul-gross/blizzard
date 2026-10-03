@@ -6,7 +6,7 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
 
 /**
  * The async-state triad — the loading/error/empty status line
- * every read-backed panel duplicated (`local-panel`'s byte-for-byte `.status`
+ * every read-backed panel duplicated (the runner panel's byte-for-byte `.status`
  * block), plus a `'ready'` state that projects the caller's populated content
  * instead. Presentational: it renders whichever state it is handed and reads
  * no query itself.

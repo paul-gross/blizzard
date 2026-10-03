@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitTextInput, type FindingTriageVerb } from 'fleet';
+import { KitButton, KitDialog, KitTextInput } from 'fleet';
+import { type FindingTriageVerb } from './finding-list';
 
 /** What the view asks the container to submit — `supersededBy` rides only when
  * the dialog's fixed {@link GardeningFindingTriageDialogView.verb} is

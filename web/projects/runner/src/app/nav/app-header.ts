@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
-import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl, RunnerLiveUpdates } from 'local-panel';
+import { injectRunnerDashboardQuery } from '../status/status.query';
+import { LocalIdentity } from '../identity/app-identity';
+import { LocalPauseControl } from '../machine/app-pause-control';
+import { RunnerLiveUpdates } from '../live/runner-live-updates';
 
 /**
  * The runner's desktop app header — the shared 48px
@@ -16,7 +19,7 @@ import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl, RunnerLiv
  * A small container, not a presentational component: it injects
  * {@link injectRunnerDashboardQuery} itself for {@link connection} and
  * {@link headerStats} — moved here verbatim from `LocalPanel`
- * (`local-panel/src/lib/local-panel.ts`), which no longer needs either now
+ * (`runner/src/app/board/app-panel.ts`), which no longer needs either now
  * that it renders no header of its own. TanStack dedupes query-key
  * injections, so this component injecting the same dashboard query
  * `LocalPanel` (and several of its rails) also injects costs no extra

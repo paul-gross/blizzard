@@ -1,0 +1,54 @@
+import { chunkDetailKey } from 'fleet';
+
+/**
+ * The TanStack Query keys the local panel reads under, in one place — mirrors
+ * `fleet`'s `hub`-namespaced `query-keys.ts` (the fleet/local split: local
+ * pages own their own keys). Every key is namespaced under `runner` so it can
+ * never collide with a `hub`-namespaced key from the shared `fleet` library.
+ */
+export const runnerLeasesKey = ['runner', 'leases'] as const;
+
+/**
+ * `GET /api/dashboard` — the panel's seven status reads composed into one response:
+ * `runner` (identity, capacities, hub connectivity, last tick),
+ * `environments`, `asks`, `escalations`, `takeovers`, `facts`, and `fleet_summary`.
+ * One key for every rail this panel polls, so TanStack dedupes the N components
+ * that inject it into the single shared `GET /api/dashboard` request — the same
+ * dedupe `app-info.ts` and `app-panel-mobile.ts` already relied on for their
+ * one shared `GET /api/runner` read, now extended to all seven sections.
+ */
+export const runnerDashboardKey = ['runner', 'dashboard'] as const;
+
+/** `GET /api/auth/session` — whether the surface is gated, and the signed-in
+ * hub username, behind the panel's username/logout control. */
+export const runnerSessionKey = ['runner', 'session'] as const;
+
+/**
+ * One chunk's pass-through work items (issue title + labels), keyed by chunk id.
+ * Deliberately its own key — never invalidated or refetched by the leases poll
+ * (the severable title enrichment) — so a distinct `chunk_id` here can
+ * never collide with `hub`-namespaced `chunk-work-items` reads in `fleet`.
+ */
+export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
+  return ['runner', 'chunk', chunkId, 'work-items'];
+}
+
+/**
+ * One lease's transcript read, keyed by lease id — switching the
+ * selected row is a distinct cache entry, never invalidated by the leases poll.
+ */
+export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
+  return ['runner', 'lease', leaseId, 'transcript'];
+}
+
+/**
+ * One chunk's full detail aggregate — the chunk-detail dock's
+ * header, pass-through-forwarded to the hub (`ChunkDetail.pause` is the only
+ * way this panel learns a chunk is paused). Its own key, keyed by chunk id,
+ * distinct from the severable {@link runnerChunkWorkItemsKey} title read and
+ * from `hub`-namespaced `chunk` reads in `fleet`. Defined once by `fleet`'s
+ * {@link chunkDetailKey}, since the shared chunk page and this dock read the same entry.
+ */
+export function runnerChunkDetailKey(chunkId: string): readonly unknown[] {
+  return chunkDetailKey('runner', chunkId);
+}

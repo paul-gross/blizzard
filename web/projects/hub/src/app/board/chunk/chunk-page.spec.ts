@@ -3,16 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { stubError } from 'fleet/testing';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { ChunkPage, hubClient, ViewportService } from 'fleet';
+import { stubError, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
-import { ChunkPage } from './chunk-page';
+import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 
 /**
- * The chunk detail page (`/board/chunk/:chunkId`, its General and Artifacts
- * tabs) and its deeper single-artifact page. Driven through a real router
+ * The shared chunk detail page (`fleet`'s `ChunkPage`, `/board/chunk/:chunkId`) mounted
+ * with the hub's daemon and operator-action port ({@link HUB_CHUNK_PAGE_PROVIDERS}), and
+ * the hub's deeper single-artifact page. Driven through a real router
  * (`RouterTestingHarness`) rather than a stubbed `ActivatedRoute`: the page
  * reads its own route params *and* query params (the tab selection) *and*
  * renders `routerLink`s, so the route table and the URL round trip are part
@@ -81,7 +81,7 @@ class BoardStub {}
 
 const ROUTES = [
   { path: 'board', component: BoardStub },
-  { path: 'board/chunk/:chunkId', component: ChunkPage },
+  { path: 'board/chunk/:chunkId', component: ChunkPage, providers: HUB_CHUNK_PAGE_PROVIDERS },
   { path: 'board/chunk/:chunkId/artifact/:artifactKey', component: ArtifactPage },
 ];
 
@@ -195,13 +195,13 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
     // Artifacts render as links here, never the desktop dock's inline bodies.
-    expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-artifacts')).toBeNull();
   });
 
   it("mounts none of the dock's destructive or structural actions", async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('fleet-chunk-detail-header')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-header')).toBeNull();
     for (const testid of [
       'pause-chunk',
       'resume-chunk',

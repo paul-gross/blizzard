@@ -1,9 +1,9 @@
 <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
-  <local-pause-control header-trailing />
+  <app-pause-control header-trailing />
   <!-- Display-only: this shell's logout is the menu item below, so it does
        not vanish with the header cell at the narrow tier, and all three of
        the app's profile menus carry the same two items. -->
-  <local-identity #identity header-trailing variant="label" />
+  <app-identity #identity header-trailing variant="label" />
   <fleet-kit-menu
     header-trailing
     class="menu"

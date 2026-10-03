@@ -1,7 +1,8 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { provideAuthInterceptor, provideViewportRenavigation } from 'fleet/shell';
+import { provideAuthInterceptor } from './auth/auth.interceptor';
+import { provideViewportRenavigation } from 'fleet/shell';
 
 import { routes } from './app.routes';
 

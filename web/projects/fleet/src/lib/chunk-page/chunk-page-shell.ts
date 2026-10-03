@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 /**
- * The shared chunk-detail-page shell — the chrome the hub's `ChunkPage` and
- * the runner's `ChunkDetailPage` each hand-rolled a slightly different copy
- * of, which is exactly how they drifted (the hub's back bar ran flush to the
+ * The shared chunk-detail-page shell — the chrome `ChunkPage` lays its regions into,
+ * once per-app page copies each hand-rolled a slightly different version of it,
+ * which is exactly how they drifted (the hub's back bar ran flush to the
  * screen edge with a bare tab strip below it; the runner's carried its own
  * `padding`/`gap` around the same regions, reading as a border of dead space
  * the hub never had). One shell, five projection slots fixed in this DOM

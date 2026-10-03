@@ -1,18 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import {
-  asyncState,
-  FleetFindingPanel,
-  hasPermission,
-  injectHubFindingQuery,
-  injectMeQuery,
-  type FindingDetailView,
-  type FindingPanelTriageVerb,
-  type FindingPanelVm,
-  type FindingTriageVerb,
-  type KitAsyncStateValue,
-} from 'fleet';
+import { asyncState, type FindingDetailView, type KitAsyncStateValue } from 'fleet';
+import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { injectHubFindingQuery } from './finding.query';
+import { type FindingTriageVerb } from './finding-list';
 import { map } from 'rxjs';
 
 import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, FleetRunDelta, injectHubRunDeltaQuery, type KitAsyncStateValue, type RunDeltaVm } from 'fleet';
+import { asyncState, type KitAsyncStateValue } from 'fleet';
+import { FleetRunDelta, type RunDeltaVm } from './run-delta';
+import { injectHubRunDeltaQuery } from './garden-runs.query';
 import { map } from 'rxjs';
 
 import { GardeningRunsState } from './gardening-runs-state';

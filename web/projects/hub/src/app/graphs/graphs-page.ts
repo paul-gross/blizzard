@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { GraphDetail, GraphExplorer } from 'fleet';
+import { GraphDetail } from './graph-detail';
+import { GraphExplorer } from './graph-explorer';
 import { map } from 'rxjs';
 
 /**

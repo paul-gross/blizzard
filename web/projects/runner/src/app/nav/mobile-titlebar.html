@@ -9,7 +9,7 @@
          so its signal is still unresolved when CdkMenu picks the initially
          focused item, and a Log out that appears a tick later is one the
          keyboard has already skipped past. -->
-    <local-identity #identity variant="label" />
+    <app-identity #identity variant="label" />
     @if (signedIn()) {
       <fleet-kit-menu-item testid="local-panel-mobile-logout" (triggered)="identity.logout()">
         Log out

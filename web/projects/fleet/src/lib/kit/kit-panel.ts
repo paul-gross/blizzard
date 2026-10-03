@@ -37,7 +37,7 @@ export class KitPanelHeader {}
  *
  * Two CSS custom-property hooks (`--kit-panel-bg`, `--kit-panel-header-bg`)
  * let a consumer whose panel chrome uses a different background — `fleet`'s
- * gradient panel vs. `local-panel`'s flat one — override it from outside
+ * gradient panel vs. the runner panel's flat one — override it from outside
  * without forking this component; custom properties cascade through view
  * encapsulation, so a parent's own styles can set them on `<fleet-kit-panel>`.
  *

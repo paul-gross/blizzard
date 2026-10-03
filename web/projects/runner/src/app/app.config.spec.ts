@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { runnerApi, runnerClient } from 'fleet';
 import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
-import { SessionRecovery } from 'local-panel';
+import { SessionRecovery } from './status/session-recovery';
 import { vi } from 'vitest';
 
 import { appConfig } from './app.config';

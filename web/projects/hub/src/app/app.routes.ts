@@ -31,10 +31,14 @@ export const routes: Routes = [
   // artifact. Deliberately **unguarded** — desktop reads a chunk in the board's
   // own dock and never links here, but a shared URL opened on a laptop still
   // resolves to a usable page rather than a no-route-matched dead end.
-  { path: 'board/chunk/:chunkId', loadComponent: () => import('./board/chunk/chunk-page').then((m) => m.ChunkPage) },
   {
     path: 'board/chunk/:chunkId/artifact/:artifactKey',
     loadComponent: () => import('./board/chunk/artifact-page').then((m) => m.ArtifactPage),
+  },
+  // The shared chunk page, with the hub's daemon provided on its own child route.
+  {
+    path: 'board/chunk/:chunkId',
+    loadChildren: () => import('./board/chunk/chunk-page.routes').then((m) => m.CHUNK_PAGE_ROUTES),
   },
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },

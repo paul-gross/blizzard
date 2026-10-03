@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { LocalPanel } from 'local-panel';
+import { LocalPanel } from './app-panel';
 
 /**
  * The `/board` route — today's machine-local panel, unchanged

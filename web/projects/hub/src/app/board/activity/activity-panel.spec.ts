@@ -1,0 +1,259 @@
+import { type WritableSignal, provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+
+import { type ActivityView, hubClient, FleetLiveUpdates, type LoggedEvent, type SseStatus } from 'fleet';
+import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { ActivityPanel } from './activity-panel';
+
+describe('ActivityPanel', () => {
+  let log: WritableSignal<readonly LoggedEvent[]>;
+  let status: WritableSignal<SseStatus>;
+  let authFailed: WritableSignal<boolean>;
+  let stub: RequestClientStub;
+
+  const render = async (activity: readonly ActivityView[] = []) => {
+    log = signal<readonly LoggedEvent[]>([]);
+    status = signal<SseStatus>('open');
+    authFailed = signal(false);
+    // A stub live-update spine exposing just what the panel reads.
+    const fakeLive = {
+      log: () => log(),
+      status: () => status(),
+      authFailed: () => authFailed(),
+    } as unknown as FleetLiveUpdates;
+    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/activity' ? { activity } : {}));
+    await TestBed.configureTestingModule({
+      imports: [ActivityPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: FleetLiveUpdates, useValue: fakeLive },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ActivityPanel);
+    await settle(fixture);
+    return fixture;
+  };
+
+  afterEach(() => stub?.restore());
+
+  it('shows an empty state once the backfill read resolves with nothing and no live frame has arrived', async () => {
+    const fixture = await render([]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeTruthy();
+  });
+
+  it('renders a loading state while the backfill read is still in flight, not empty (AC)', async () => {
+    const fakeLive = {
+      log: () => [] as readonly LoggedEvent[],
+      status: () => 'open' as SseStatus,
+      authFailed: () => false,
+    } as unknown as FleetLiveUpdates;
+    stub = stubRequestClient(hubClient, () => ({ activity: [] }));
+    await TestBed.configureTestingModule({
+      imports: [ActivityPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: FleetLiveUpdates, useValue: fakeLive },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ActivityPanel);
+    // A single, un-awaited detectChanges: the query has mounted but its microtask
+    // fetch has not yet resolved, so this is the "first in-flight fetch" instant the
+    // AC cares about — it must read as loading, never empty.
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeNull();
+
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="activity-loading"]')).toBeNull();
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeTruthy();
+  });
+
+  it('shows an error state on a terminal auth failure even though the backfill read succeeded', async () => {
+    const fixture = await render([]);
+    authFailed.set(true);
+    status.set('closed');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-error"]')).toBeTruthy();
+  });
+
+  it('renders the backfilled feed on load, before any live frame arrives', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-old → ready');
+  });
+
+  it('dedupes a backfilled row against a live frame naming the same key, preferring the live copy', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', status: 'queued' },
+    ]);
+    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', status: 'running', key: 'k1' }, at: 5_000, key: 'k1' }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-alp → running');
+  });
+
+  it('renders a claim from its cause rather than the last transition, across live and reload-equivalent backfill', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'route_created:1', at: '2020-01-01T00:00:01Z', chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one' },
+      { type: 'chunk-changed', key: 'transitions:1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', cause: 'node-completed' },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
+      .toEqual(['C-alp claimed', 'C-alp']);
+    log.set([
+      { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one', status: 'running', prev_node: 'build', node: 'verify', key: 'route_created:1' }, at: Date.parse('2020-01-01T00:00:01Z'), key: 'route_created:1' },
+      { seq: 2, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'node-completed', status: 'running', prev_node: 'build', node: 'verify', key: 'transitions:1' }, at: Date.parse('2020-01-01T00:00:00Z'), key: 'transitions:1' },
+    ]);
+    fixture.detectChanges();
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(2);
+    expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
+      .toEqual(['C-alp claimed', 'C-alp build → running → verify']);
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('runner-one');
+  });
+
+  it('never collides two keyless live frames with each other (a hub older than Phase 2 stamps no key)', async () => {
+    const fixture = await render([]);
+    log.set([
+      { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_old', status: 'ready' }, at: 1_000 },
+      { seq: 2, type: 'chunk-changed', data: { chunk_id: 'ch_new', status: 'running' }, at: 5_000 },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(2);
+  });
+
+  it('orders the merged feed newest-first across backfill and live', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
+    ]);
+    // A live frame's `at` is a ms-epoch instant (`Date.now()` at record time), so it must
+    // be a realistic, recent instant to sort after the 2020 backfill row — not a small
+    // offset-from-epoch number, which reads as 1970 and would sort *before* it.
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: { chunk_id: 'ch_new', status: 'running', key: 'k-new' },
+        at: Date.parse('2026-07-20T00:00:00Z'),
+        key: 'k-new',
+      },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const messages = [...el.querySelectorAll('[data-testid="activity-message"]')].map((n) => n.textContent?.trim());
+    expect(messages).toEqual(['C-new → running', 'C-old → ready']);
+  });
+
+  it('renders a backfilled row missing status with no placeholder dash', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', prev_node: 'review', node: 'build' },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
+  });
+
+  // --- Delete's actor -------------------------------------
+
+  it('renders a deleted-cause backfill row with its actor as line 2, in place of a runner', async () => {
+    const fixture = await render([
+      {
+        type: 'chunk-changed',
+        key: 'k-del',
+        at: '2020-01-01T00:00:00Z',
+        chunk_id: 'ch_del',
+        status: 'not_ready',
+        cause: 'deleted',
+        by: 'operator',
+      },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
+  it('renders a deleted-cause frame from the live tee, watched in real time, with its actor as line 2', async () => {
+    const fixture = await render([]);
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: { chunk_id: 'ch_del', status: 'not_ready', cause: 'deleted', by: 'operator', key: 'k-del-live' },
+        at: 5_000,
+        key: 'k-del-live',
+      },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
+  it('still renders the deleting actor from the live frame alone once it dedupes a same-key backfill row', async () => {
+    const fixture = await render([
+      {
+        type: 'chunk-changed',
+        key: 'k-del-both',
+        at: '2020-01-01T00:00:00Z',
+        chunk_id: 'ch_del',
+        status: 'not_ready',
+        cause: 'deleted',
+        by: 'operator',
+      },
+    ]);
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: { chunk_id: 'ch_del', status: 'not_ready', cause: 'deleted', by: 'operator', key: 'k-del-both' },
+        at: 5_000,
+        key: 'k-del-both',
+      },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Exactly one row (the live copy wins the dedup), and it still carries the actor —
+    // proving the live ChunkChanged.by wiring alone, not just the backfill's, renders it.
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
+  it('renders a runner-changed frame from the live tee as what actually changed', async () => {
+    const fixture = await render([]);
+    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'paused', by: 'operator' }, at: 0 }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('runner runner-local paused by operator');
+  });
+
+  it('renders a runner-changed frame of an unrecognized kind as its raw kind, keeping the row', async () => {
+    const fixture = await render([]);
+    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'quarantined', by: 'operator' }, at: 0 }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('runner runner-local quarantined by operator');
+  });
+});

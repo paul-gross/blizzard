@@ -11,7 +11,7 @@ import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, Viewp
  * uses for the board route).
  *
  * A thin wrapper around the shared {@link FleetMobileTitlebar} —
- * the runner's `local-panel-mobile.ts` mounts the same fleet component. This
+ * the runner's `app-panel-mobile.ts` mounts the same fleet component. This
  * layer only supplies the hub's own live signal (`FleetLiveUpdates`, the same
  * connection state the desktop titlebar's own "Hub" cell derives from) and the
  * shell menu's panel — the appearance switcher (item 5), now the CDK-menu

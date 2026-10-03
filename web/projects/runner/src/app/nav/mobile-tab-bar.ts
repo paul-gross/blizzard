@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet';
-import { injectRunnerDashboardQuery } from 'local-panel';
+import { injectRunnerDashboardQuery } from '../status/status.query';
 
 /**
  * The runner's mobile bottom tab bar — rendered at the app root,
@@ -12,7 +12,7 @@ import { injectRunnerDashboardQuery } from 'local-panel';
  * hub's. `Board` and `Events` are wired to a route (`routerLink`/
  * `routerLinkActive`) now that the runner app has real routing — before this
  * phase this bar's one entry (`Machine`) was `active`-only, this shell's sole
- * always-current screen (`local-panel.ts`'s own former doc comment). `Asks`
+ * always-current screen (`app-panel.ts`'s own former doc comment). `Asks`
  * and `Transcripts` carry no screen of their own yet, so they render dimmed
  * and inert, the same "not yet" treatment the hub gives its own unbuilt tabs.
  * `Asks` still carries the same open-count badge the panel's own container

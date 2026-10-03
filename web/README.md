@@ -1,14 +1,16 @@
 # blizzard frontend (`web/`)
 
-The Angular workspace for blizzard's two web apps. One workspace, two thin application entrypoints, two shared
-libraries:
+The Angular workspace for blizzard's two web apps. One workspace, two application entrypoints, one shared
+library:
 
 | Project       | Kind    | What it is                                                                                                                                                                    |
 | ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hub`         | app     | The mission-control board app. Renders the shared board shell; served by `blizzard hub host`.                                                                                 |
-| `runner`      | app     | The machine-local panel app. Served by `blizzard runner host`.                                                                                                                |
+| `runner`      | app     | The machine-local panel app. Its panel, chunk list, dock, and status feature folders live here. Served by `blizzard runner host`.                                             |
 | `fleet`       | library | Shared fleet layer: the design tokens, the mission-control board shell, the hand-rolled SSE transport, the health read, and the generated API clients. Composed by both apps. |
-| `local-panel` | library | The runner-only local-panel shell, added on top of `fleet` by the runner app.                                                                                                 |
+
+Placement is by who serves the code: `fleet` holds only what both apps reach, and app-local code (pages, queries,
+components together) lives in its own app. The structural gate's placement sweep enforces it.
 
 Both apps build as **client-rendered SPAs** (no SSR, no Node at runtime) whose output is embedded in the one wheel under
 `src/blizzard/static/{hub,runner}` and served by the daemons alongside `/api`. Change detection is **zoneless** from day
@@ -23,7 +25,7 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 | ------------------------- | --------------------------------- | ------------------------------------------------------------------------------- |
 | install                   | `npm ci`                          | Install pinned dependencies.                                                    |
 | `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                        |
-| `npm run test`            | `ng test …`                       | The vitest unit/component tier, all four projects.                              |
+| `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                              |
 | `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed. |
 | `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                |
 

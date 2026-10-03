@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
-import { LocalIdentity } from 'local-panel';
+import { LocalIdentity } from '../identity/app-identity';
 import { vi } from 'vitest';
 
 import { MobileTitlebar } from './mobile-titlebar';

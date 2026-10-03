@@ -51,7 +51,7 @@ import runnerTakeoverChangedGolden from '../../../../../../contracts/sse/runner/
 
 /**
  * The SSE frame shape contract — the board half of the hub scope, and
- * the runner scope `local-panel` will consume.
+ * the runner scope the runner app consumes.
  * `contracts/sse/` is the single description of every frame kind's wire shape, one
  * self-contained scope per daemon; this spec and the Python suite at
  * `tests/test_sse_contract.py` read the same physical files. Moving a golden reddens

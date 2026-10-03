@@ -1,0 +1,15 @@
+<fleet-chunk-node-history-tab
+  [detail]="detail()"
+  [selectedKey]="selectedKey()"
+  [graphLinkBase]="graphLinkBase()"
+  [drilldown]="drilldown()"
+  [stepArtifacts]="stepArtifacts()"
+  [indexState]="indexState()"
+  [isForbidden]="isForbidden()"
+  [segmentState]="segmentState()"
+  [segmentData]="segmentQuery.data()"
+  [continuedFrom]="continuedFrom()"
+  [continuesIn]="continuesIn()"
+  (pickStep)="pickStep.emit($event)"
+  (pickSegment)="onPickSegment($event)"
+/>

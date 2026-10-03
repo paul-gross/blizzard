@@ -1,15 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import {
-  errorMessage,
-  injectConfirmGoneFindingsMutation,
-  injectNotAFindingFindingsMutation,
-  injectReopenFindingsMutation,
-  injectResolveFindingsMutation,
-  injectSupersedeFindingsMutation,
-  injectWontFixFindingsMutation,
-  type FindingExitVars,
-  type FindingTriageVerb,
-} from 'fleet';
+import { errorMessage } from 'fleet';
+import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectReopenFindingsMutation, injectResolveFindingsMutation, injectSupersedeFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from './finding.mutations';
+import { type FindingTriageVerb } from './finding-list';
 
 import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dialog-view';
 

@@ -49,7 +49,7 @@
   box-sizing: border-box;
   padding: 3px 8px;
   border-bottom: 1px solid var(--line);
-  /* Reserved transparent, same as `.art-item` (`chunk-artifacts-tab.css`) —
+  /* Reserved transparent, same as `.art-item` (`chunk-artifacts-panel.css`) —
      `.selected` below only ever recolors this edge, never adds it, so
      selecting a row never shifts the row's own width. The row's own
      horizontal padding (not `:host`'s, see above) is what lets this edge
@@ -62,7 +62,7 @@
 }
 /* Hover is a background step alone — no border of its own. The left-edge
    accent is reserved for `.selected` (below), the same split
-   `chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` already draws.
+   `chunk-artifacts-panel.css`'s `.art-item`/`.art-item.active` already draws.
    Scoped to `.keyed` (a row carrying a real join key, drawn whether it
    emits or links — `chunk-timeline.ts`'s own `activatable` doc) so a row that
    does nothing draws nothing. */

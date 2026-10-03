@@ -9,7 +9,7 @@ import { vi } from 'vitest';
 import { EventsPage } from './events-page';
 
 /**
- * Exercises `EventsPage`'s composition of `fleet-events-panel` and its
+ * Exercises `EventsPage`'s composition of `app-events-panel` and its
  * `selectChunk` wiring. The hub client's transport is stubbed to answer every
  * read `404`, so `EventsPanel` settles into its own error state — enough to
  * prove the page mounts it and forwards its output, without duplicating
@@ -46,13 +46,13 @@ describe('EventsPage', () => {
     const { fixture } = await mount();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-events-panel')).toBeTruthy();
+    expect(el.querySelector('app-events-panel')).toBeTruthy();
   });
 
   it('deep-links the emitted chunk onto the board, selected (issue #162)', async () => {
     const { fixture, navigate } = await mount();
 
-    const panel = fixture.debugElement.query(By.css('fleet-events-panel'));
+    const panel = fixture.debugElement.query(By.css('app-events-panel'));
     panel.componentInstance.selectChunk.emit('ch_live');
     await fixture.whenStable();
 

@@ -12,7 +12,7 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
  * (`chunk-facts.css`, set on {@link ChunkFacts}'s `:host`) — a real-Chromium
  * geometry check jsdom cannot make: it never actually lays out a CSS grid, so
  * `web:unit-test` cannot see the facts table's value column drift from the
- * usage table's. Follows `design/hover-tint.shell-sweep.spec.ts`'s own pattern
+ * usage table's. Follows the hub's `board/hover-tint.shell-sweep.spec.ts`'s own pattern
  * (real layout claim, `getBoundingClientRect`) rather than a computed-style one.
  *
  * Mounts the two tables exactly as `chunk-detail-panel.html` composes them —

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { EventsPanel } from 'fleet';
+import { EventsPanel } from './events-panel';
 
 /**
  * The `/events` route — the board's Events tab: the hub's

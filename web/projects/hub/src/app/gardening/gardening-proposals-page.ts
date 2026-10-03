@@ -1,24 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import {
-  acceptGardenProposalMutationKey,
-  asyncState,
-  FleetProposalList,
-  type GardenProposalAcceptVars,
-  type GardenProposalPassVars,
-  injectHubGardenProposalsQuery,
-  injectPendingMutationVariables,
-  isGardenProposalWaiting,
-  KitBackBar,
-  KitChips,
-  KitSelect,
-  passGardenProposalMutationKey,
-  type GardenProposalView,
-  type KitAsyncStateValue,
-  type KitChipOption,
-  type ProposalListRowVm,
-  ViewportService,
-} from 'fleet';
+import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../mutation-keys';
+import { asyncState, injectPendingMutationVariables, KitBackBar, KitChips, KitSelect, type GardenProposalView, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
+import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
+import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
+import { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './garden-proposals.query';
 
 import { injectChildRouteParam, injectQueryFilters } from '../route-state';
 

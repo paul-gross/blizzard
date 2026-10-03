@@ -1,0 +1,112 @@
+<fleet-kit-master-detail
+  data-testid="chunk-node-history-tab"
+  paneId="node-history"
+  testidPrefix="node-history"
+  backLabel="Node history"
+  listCaption="Timeline"
+  [drilldown]="drilldown()"
+  [hasSelection]="hasSelection()"
+  (back)="pickStep.emit(null)"
+>
+  <fleet-chunk-detail-timeline-selection
+    kit-master-detail-list
+    [detail]="detail()"
+    [selectedKey]="selectedKey()"
+    [graphLinkBase]="graphLinkBase()"
+    (pickStep)="pickStep.emit($event)"
+  />
+  <ng-container kit-master-detail-detail>
+    @if (selectedKey() === null) {
+      <fleet-kit-async-state
+        state="empty"
+        placement="inline"
+        emptyText="Select a step above."
+        emptyTestid="node-history-select-hint"
+      />
+    } @else {
+      <fleet-kit-accordion-section
+        sectionId="node-history-transcript"
+        [expanded]="transcriptsExpanded()"
+        (expandedChange)="transcriptsExpanded.set($event)"
+      >
+        <span accordionHeader>Transcript</span>
+        <div class="nh-transcript-body">
+          @if (isForbidden()) {
+            <fleet-kit-async-state
+              state="empty"
+              placement="inline"
+              tone="accent"
+              emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+              emptyTestid="node-history-transcript-forbidden"
+            />
+          } @else if (indexState() === 'loading') {
+            <fleet-kit-async-state
+              state="loading"
+              placement="inline"
+              loadingText="LOADING…"
+              loadingTestid="node-history-transcript-loading"
+            />
+          } @else if (indexState() === 'error') {
+            <fleet-kit-async-state
+              state="error"
+              placement="inline"
+              errorText="TRANSCRIPT UNAVAILABLE"
+              errorTestid="node-history-transcript-error"
+            />
+          } @else if (segmentState() === 'empty') {
+            <fleet-kit-async-state
+              state="empty"
+              placement="inline"
+              emptyText="NO TRANSCRIPT FOR THIS STEP"
+              emptyTestid="node-history-transcript-empty"
+            />
+          } @else if (segmentState() === 'loading') {
+            <fleet-kit-async-state
+              state="loading"
+              placement="inline"
+              loadingText="LOADING…"
+              loadingTestid="node-history-transcript-loading"
+            />
+          } @else if (segmentState() === 'error') {
+            <fleet-kit-async-state
+              state="error"
+              placement="inline"
+              errorText="TRANSCRIPT UNAVAILABLE"
+              errorTestid="node-history-transcript-error"
+            />
+          } @else {
+            <fleet-transcript-segment-view
+              [turns]="mergedTurns()"
+              [truncated]="segmentData()?.truncated ?? false"
+              [continuedFrom]="continuedFrom()"
+              [continuesIn]="continuesIn()"
+              (pickSegment)="pickSegment.emit($event)"
+              data-testid="node-history-transcript-body"
+            />
+          }
+        </div>
+      </fleet-kit-accordion-section>
+      <fleet-kit-accordion-section
+        sectionId="node-history-artifacts"
+        [expanded]="artifactsExpanded()"
+        (expandedChange)="artifactsExpanded.set($event)"
+      >
+        <span accordionHeader>Artifacts</span>
+        <div class="nh-artifacts-body">
+          @if (stepArtifacts().length === 0) {
+            <fleet-kit-async-state
+              state="empty"
+              placement="inline"
+              emptyText="No artifacts for this step."
+              emptyTestid="node-history-artifacts-empty"
+            />
+          } @else {
+            @for (art of stepArtifacts(); track art.key) {
+              <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+            }
+          }
+        </div>
+      </fleet-kit-accordion-section>
+    }
+  </ng-container>
+</fleet-kit-master-detail>

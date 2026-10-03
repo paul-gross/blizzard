@@ -1,27 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import {
-  asyncState,
-  errorMessage,
-  FleetScopePanel,
-  hasPermission,
-  injectEditScopeMutation,
-  injectHubRoutinesQuery,
-  injectHubScopeRoutinesQuery,
-  injectHubScopesQuery,
-  injectMeQuery,
-  injectPendingMutationVariables,
-  injectScopeLifecycleMutation,
-  scopeLifecycleMutationKey,
-  type KitAsyncStateValue,
-  type RelatedRoutineVm,
-  type RoutineView,
-  type ScopeDescriptionEditEvent,
-  type ScopeLifecycleVars,
-  type ScopePanelVm,
-  type ScopeView,
-} from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, type KitAsyncStateValue, type RoutineView, type ScopeView } from 'fleet';
+import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { injectEditScopeMutation } from './scope-edit.mutations';
+import { injectHubRoutinesQuery } from './routines.query';
+import { injectHubScopeRoutinesQuery, injectHubScopesQuery } from './scopes.query';
+import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-lifecycle.mutations';
+import { scopeLifecycleMutationKey } from '../mutation-keys';
+import { type ScopeDescriptionEditEvent } from './scope-list';
 import { map } from 'rxjs';
 
 /**

@@ -16,7 +16,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
  * The chunk detail page's Transcripts tab (moved into `fleet` by
  * runner-node-grouped-transcripts so both the hub and runner apps mount the same
  * component) — a nav of node-history steps, each holding its segments, beside a
- * lazily-fetched segment viewer. Mirrors `ChunkArtifactsTab`'s nav-beside-viewer shape
+ * lazily-fetched segment viewer. Mirrors `ChunkArtifactsPanel`'s nav-beside-viewer shape
  * and, like it, is presentational (`bzh:frontend-container-presentational`):
  * the two reads behind this tab (the index on open, one segment's turns only once
  * opened) arrive as resolved-state inputs — nothing about a chunk's transcripts is in `detail()`'s own payload

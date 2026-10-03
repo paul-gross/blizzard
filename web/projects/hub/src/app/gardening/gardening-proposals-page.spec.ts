@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZoneles
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, injectAcceptGardenProposalMutation, injectPassGardenProposalMutation, type MeResponse, ViewportService } from 'fleet';
+import { hubClient, type MeResponse, ViewportService } from 'fleet';
+import { injectAcceptGardenProposalMutation, injectPassGardenProposalMutation } from './garden-proposal.mutations';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 

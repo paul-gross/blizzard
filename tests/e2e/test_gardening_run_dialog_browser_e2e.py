@@ -127,7 +127,7 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
                 assert chunk_id and chunk_id.startswith("ch_"), f"confirmation named no real chunk id: {chunk_id!r}"
                 board_link = page.get_by_test_id("run-confirmation-board-link")
                 expect(board_link).to_have_attribute("href", f"/board/chunk/{chunk_id}")
-                expect(dialog.locator("fleet-board, [data-testid='board']")).to_have_count(0)
+                expect(dialog.locator("app-board-shell, [data-testid='board']")).to_have_count(0)
 
                 # The run really landed against the related scope the operator picked —
                 # a live hub read, not merely a rendered claim.

@@ -406,7 +406,7 @@ describe('BoardHeader', () => {
       // would then push its own menu off the clipped right edge no matter how
       // narrow the header got — a hard breakpoint cannot cover a width that
       // depends on the data. Shrinkable here, with each projected control
-      // deciding for itself whether it gives way (`local-panel-layout.ts`).
+      // deciding for itself whether it gives way (`app-panel-layout.ts`).
       expect(getComputedStyle(trailing).minWidth).toBe('0px');
       expect(getComputedStyle(trailing).flexShrink).toBe('1');
     });

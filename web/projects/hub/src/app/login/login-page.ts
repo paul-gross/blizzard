@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { KitAsyncState, LoginButtons, consumeReturnUrl, injectAuthProvidersQuery, safeAuthorizeReturnTo } from 'fleet';
+import { KitAsyncState } from 'fleet';
+import { LoginButtons } from '../auth/login-buttons';
+import { consumeReturnUrl, safeAuthorizeReturnTo } from '../auth/auth-redirect';
+import { injectAuthProvidersQuery } from '../auth/providers.query';
 
 /** `localStorage` key the last provider signed in with is remembered under —
  * pinned by `login-page.spec.ts`'s "writes the last-used provider to

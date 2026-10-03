@@ -20,7 +20,7 @@ These are decisions, not accidents:
 - **A consumer ignores unknown fields.** A payload field neither side's golden declares is not itself a break.
 - **A consumer ignores unknown `event:` kinds**, proven at the transport level (`SseService`) for both scopes. The hub
   scope's own registered consumer, the board's `FleetLiveUpdates` frame dispatch, additionally returns `[]` for an
-  unregistered event type rather than erroring; the runner scope's own consumer lands in `local-panel`.
+  unregistered event type rather than erroring; the runner scope's own consumer lives in the `runner` app.
 - **Absent is not the same as null, and both are load-bearing.** An optional field is omitted from the payload when it
   does not apply; the hub's `event-logged` and the runner's `fact-changed` each carry a `chunk_id` that is deliberately
   emitted as a present `null` (a runner-scoped hub event, or a runner-wide fact with no chunk) rather than omitted. A

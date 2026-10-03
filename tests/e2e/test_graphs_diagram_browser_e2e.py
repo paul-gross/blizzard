@@ -1,6 +1,6 @@
 """Graph-explorer diagram browser e2e — the `test_graphs_diagram_browser_e2e` scenario of the standing e2e smoke.
 
-A real Chromium (Playwright) over the served board asserts the ``<fleet-graph-diagram>``
+A real Chromium (Playwright) over the served board asserts the ``<app-graph-diagram>``
 SVG DAG renders against the built bundle from real minted data — the one surface no unit
 test reaches, since dagre layout needs a real canvas text-measurer. Also covers the
 fallback path. No runner or forge traffic. Needs the built bundle (``mise run web-build``)."""
