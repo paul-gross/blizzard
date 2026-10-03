@@ -23,7 +23,7 @@ import uvicorn
 
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import HubConfig, WorkSourceConfig
+from blizzard.hub.config import EgressConfig, HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
@@ -319,12 +319,14 @@ def _hub(
     collector: FleetCollector | None = None,
     platform_spans: bool = False,
     settle_seconds: int = 0,
+    egress: EgressConfig | None = None,
+    rehost: bool = False,
 ) -> Iterator[httpx.Client]:
-    """A hub daemon over ``hub_dir``. Traced (exporting to ``collector``, sweeping every second, settling for
-    ``settle_seconds``)
-    when a usable collector is given — with platform spans on at a zero root sample ratio when
-    ``platform_spans``, so only spans parented on a sampled context export; otherwise every inherited ``OTEL_*`` is stripped so a developer's own
-    endpoint never receives e2e spans."""
+    """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
+    instead of initializing it; ``egress`` replaces the ``[egress]`` block. Traced (exporting to ``collector``,
+    sweeping every second, settling for ``settle_seconds``) when a usable collector is given — with platform spans
+    on at a zero root sample ratio when ``platform_spans``, so only spans parented on a sampled context export;
+    otherwise every inherited ``OTEL_*`` is stripped so a developer's own endpoint never receives e2e spans."""
     export_to = collector if collector is not None and collector.available else None
     env = {
         **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
@@ -336,7 +338,8 @@ def _hub(
         **(extra_env or {}),
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
-    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    if not rehost:
+        subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     # Declare the one work source every scenario ingests against; `annotate` opts it into
     # the forge-status label sweep.
     write_work_sources(
@@ -357,6 +360,7 @@ def _hub(
         or route_token_mode is not None
         or produces_mode is not None
         or annotation_interval_seconds is not None
+        or egress is not None
     ):
         # Flags read once, at `host` startup: set before the
         # daemon starts, not mutable afterward.
@@ -368,6 +372,8 @@ def _hub(
             overrides["produces_mode"] = produces_mode
         if annotation_interval_seconds is not None:
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
+        if egress is not None:
+            overrides["egress"] = egress
         if export_to:
             overrides["tracing"] = TracingConfig(
                 sweep_seconds=1, settle_seconds=settle_seconds, platform=platform_spans, platform_sample_ratio=0.0
