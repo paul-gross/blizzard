@@ -94,7 +94,8 @@ def status(directory: str, runner_url: str | None) -> None:
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
-    click.echo(f"  {brake_state}")
+    reason = f" — {pause['local_reason']}" if pause.get("local_reason") else ""
+    click.echo(f"  {brake_state}{reason}")
     cap = view["capacities"]
     click.echo(f"  capacity: {cap['used']}/{cap['max_agents']} used, {cap['free']} free")
     hub = view["hub"]
@@ -128,6 +129,8 @@ def status(directory: str, runner_url: str | None) -> None:
         click.echo(
             f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{SessionLabel(esc).text}"
         )
+        if esc.get("wrapped_takeover_command"):
+            click.echo(f"    takeover: {esc['wrapped_takeover_command']}")
         click.echo(f"    resume: {esc['resume_command']}")
 
     takeovers = takeovers_resp.json().get("items", [])
@@ -206,6 +209,15 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
 @click.argument("chunk_id")
 @click.option("--force", is_flag=True, default=False, help="Supersede a live worker attempt instead of refusing.")
 @click.option(
+    "--end",
+    "end",
+    is_flag=True,
+    default=False,
+    help="End the chunk's open takeover instead of starting a session — the recovery for a stranded one. "
+    "The loop may then touch the chunk's session again, and `runner requeue` is no longer refused for a takeover. "
+    "Reports nothing open, exiting 0, when none is.",
+)
+@click.option(
     "--dir",
     "directory",
     default=DEFAULT_DIR,
@@ -219,12 +231,17 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
-def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None) -> None:
+def takeover(chunk_id: str, force: bool, end: bool, directory: str, runner_url: str | None) -> None:
     """Take over a parked chunk: exec the interactive resume command in this terminal. The
     takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
     session while it is open; the lease token travels only in the response body and the exec, never
     printed. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session
     still closes the takeover."""
+    if end and force:
+        raise click.UsageError("--end and --force are mutually exclusive: --end starts no session")
+    if end:
+        _end_open_takeover(chunk_id, directory, runner_url)
+        return
     with RunnerDaemon.reach("takeover", directory, runner_url) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/takeovers", json_body={"force": force})
         if resp.status_code == 409:
@@ -241,6 +258,22 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
             daemon.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
     if exit_code != 0:
         raise SystemExit(exit_code)
+
+
+def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None) -> None:
+    """Close the chunk's open takeover through the runner's own API; idempotent when none is open."""
+    with RunnerDaemon.reach("takeover", directory, runner_url) as daemon:
+        open_for_chunk = [t for t in daemon.get("/api/takeovers").json().get("items", []) if t["chunk_id"] == chunk_id]
+        if not open_for_chunk:
+            click.echo(f"no open takeover for chunk {chunk_id}")
+            return
+        takeover_id = open_for_chunk[0]["takeover_id"]
+        resp = daemon.send("patch", f"/api/chunks/{chunk_id}/takeovers/{takeover_id}")
+        if resp.status_code == 404:
+            click.echo(f"takeover {takeover_id} on chunk {chunk_id} was already ended elsewhere")
+            return
+        resp.raise_for_status()
+    click.echo(f"ended takeover {takeover_id} on chunk {chunk_id}")
 
 
 @click.command()

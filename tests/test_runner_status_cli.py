@@ -192,6 +192,10 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     # The literal takeover command, carrying the parked session's own configuration
     # rather than whatever a fresh resolution would produce now.
     assert "resume: cd /ws/e2 && claude --resume sess-b --model opus --effort high" in out
+    # The wrapped verb leads the raw string, composed from the chunk id and the runner dir alone.
+    assert f"takeover: blizzard runner takeover ch_2 --dir {root}" in out
+    assert out.index("takeover: blizzard runner takeover ch_2") < out.index("resume: cd /ws/e2")
+    assert "BLIZZARD_LEASE_TOKEN" not in out
     assert "session=code (opus, high)" in out  # which lineage parked, not just its id
     assert "open takeovers (1):" in out
     assert "chunk ch_3" in out and "takeover=tko_1" in out
@@ -308,3 +312,25 @@ def test_status_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output
+
+
+@pytest.mark.component
+def test_status_prints_the_local_pause_reason_on_the_brake_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _store(root).record_local_pause(
+        "runner-local",
+        paused=True,
+        at=_NOW,
+        by="usage-limit",
+        report_kind="runner.locally_paused",
+        report_payload="{}",
+        reason="usage limit: claude_code",
+    )
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "paused [local] — usage limit: claude_code" in result.output

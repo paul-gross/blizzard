@@ -42,10 +42,19 @@ daemon-spawned-worker concern. The takeover ends when you exit — the CLI PATCH
 the chunk reaches a terminal status; the end-PATCH is idempotent, so a session stopped from the board mid-takeover exits
 cleanly.
 
+## A stranded takeover
+
+A client that dies mid-session (a dropped SSH connection) can leave its takeover open, and `blizzard runner requeue` is
+refused while one is. End it with `blizzard runner takeover <chunk> --end`: it finds the chunk's open takeover, closes
+it, and starts no session. After that the loop may touch the chunk's session again, and requeue is no longer refused for
+a takeover. With nothing open it says so and exits 0, so it is safe to repeat. `--end` and `--force` are mutually
+exclusive. `blizzard runner status` lists every open takeover.
+
 ## The verb versus the raw resume string
 
 For a runner-composed escalation the takeover verb, not the escalation record's raw resume string, is the supported way
-in; `blizzard runner status` prints the raw string deliberately unchanged. The raw string resumes the transcript with
+in; `blizzard runner status` prints the wrapped verb as a `takeover:` line above the raw `resume:` string, and the runner
+panel's chunk dock shows it as the primary command with a Copy button. The raw string resumes the transcript with
 neither the permission mode nor the identity env: it runs at the harness's interactive permission default, and its
 `blizzard runner` verbs cannot reach the runner — read and edit only. The board renders the wrapped verb as the primary
 copyable command; the raw string is demoted to a collapsed unwrapped-fallback disclosure, present only when the

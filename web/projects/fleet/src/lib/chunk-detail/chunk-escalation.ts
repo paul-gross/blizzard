@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import type { ChunkDetail, ChunkEscalationView } from '../api/hub';
+import { createCopyFlash } from '../clipboard';
 import { KitButton } from '../kit/kit-button';
 
 /**
@@ -30,8 +31,9 @@ export class ChunkEscalation {
   /** The chunk aggregate to render the open escalation of, if any. */
   readonly detail = input.required<ChunkDetail>();
 
-  /** Transient "Copied" state for the takeover-command copy button. */
-  protected readonly copied = signal(false);
+  /** The takeover-command copy button's clipboard action and transient "Copied" state. */
+  private readonly copyFlash = createCopyFlash();
+  protected readonly copied = this.copyFlash.copied;
 
   /** The chunk's open escalation, if it currently needs a human takeover. */
   protected readonly escalation = computed<ChunkEscalationView | null>(() => this.detail().escalation ?? null);
@@ -58,11 +60,6 @@ export class ChunkEscalation {
 
   /** Copy the primary takeover command to the clipboard, flashing "Copied" when it lands. */
   protected copyTakeover(command: string): void {
-    const clipboard = globalThis.navigator?.clipboard;
-    if (!clipboard) return;
-    void clipboard.writeText(command).then(() => {
-      this.copied.set(true);
-      setTimeout(() => this.copied.set(false), 1500);
-    });
+    this.copyFlash.copy(command);
   }
 }

@@ -35,7 +35,7 @@ With no daemon running, client verbs report that rather than reading the store b
 the store only through the daemon that owns it. The writing offline maintenance verbs — `migrate`, `tick`,
 `transcript backfill` and `reship` ([transcripts.md](./transcripts.md)) — open the store directly and run with the
 daemon stopped, enforced by their own refusal; the read-only `prompt status`, `diff`, and `install` open it for one
-query and need no refusal, the single-writer constraint binding writers only.
+query and need no refusal, the single-writer constraint binding writers only. `prompt clear` is the one `prompt` verb that is a client verb: it writes the store, so it goes through the daemon.
 
 ## The web panel and its stream
 

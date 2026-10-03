@@ -60,7 +60,8 @@ spawn sites suppressed, no retries consumed, live workers left to finish — rec
 pause's reason. The ceiling raises no escalation — runner-scoped, it has no one chunk to park. It does not auto-unpause
 when the rolling window later drops the spend back under it: clearing the brake is always an explicit operator act —
 `blizzard runner start`, or the runner panel's Resume — exactly as for a hand-issued pause. `GET /api/runners` and
-`blizzard hub status` surface the ceiling reason on a paused runner, so it reads differently from a manual pause.
+`blizzard hub status` surface the ceiling reason on a paused runner, and `blizzard runner status` prints it on its brake
+line, so it reads differently from a manual pause.
 
 `chunk_cap_usd` is checked between attempts, never by killing a live worker: when a chunk's total cost reaches it, the
 runner parks the chunk `needs_human` at the next step boundary with an escalation naming the cap, the spend, and the

@@ -34,4 +34,16 @@ describe('LocalAsksView', () => {
 
     expect(el.querySelectorAll('[data-testid="ask-row"]')).toHaveLength(2);
   });
+
+  it('names the real answer verb and shows each row’s question id as visible text', async () => {
+    const { el } = await render([
+      { questionId: 'qn_01ABC', chunkRef: 'C-1', askedFor: '30s', question: 'A?' },
+      { questionId: 'qn_01DEF', chunkRef: 'C-2', askedFor: '1m', question: 'B?' },
+    ]);
+
+    const routes = Array.from(el.querySelectorAll('.route')).map((r) => r.textContent?.replace(/\s+/g, ' ').trim());
+    expect(routes[0]).toContain('blizzard hub question answer qn_01ABC <answer>');
+    expect(routes[1]).toContain('blizzard hub question answer qn_01DEF <answer>');
+    expect(el.textContent).not.toContain('blizzard hub answer');
+  });
 });

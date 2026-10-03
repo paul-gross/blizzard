@@ -111,4 +111,40 @@ describe('MachineDetailView', () => {
 
     expect(el.querySelector('[data-testid="detail-resume-harness"]')).toBeNull();
   });
+
+  describe('the wrapped takeover command', () => {
+    const escalation = (wrapped?: string | null): runnerApi.EscalationView => ({
+      chunk_id: LEASE.chunk_id,
+      lease_id: LEASE.lease_id,
+      node_id: LEASE.node_id,
+      epoch: LEASE.epoch,
+      closed_at: '2026-07-16T11:00:00.000Z',
+      resume_command: 'cd /ws/beta && claude --resume sess-new',
+      wrapped_takeover_command: wrapped,
+    });
+
+    it('is primary with a copy control, and the raw string moves to the fallback', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      const wrapped = 'blizzard runner takeover ch_1 --dir /opt/runner';
+      const { el } = await render({ lease: LEASE, escalation: escalation(wrapped) });
+
+      expect(el.querySelector('[data-testid="detail-takeover-command"]')?.textContent).toBe(wrapped);
+      expect(el.querySelector('[data-testid="detail-resume-fallback"]')?.textContent).toContain('claude --resume sess-new');
+      const copy = el.querySelector('[data-testid="copy-takeover"]') as HTMLElement;
+      expect(copy.textContent?.trim()).toBe('Copy');
+      copy.click();
+      await vi.waitFor(() => expect(copy.textContent?.trim()).toBe('Copied'));
+      expect(writeText).toHaveBeenCalledWith(wrapped);
+      vi.unstubAllGlobals();
+    });
+
+    it('falls back to the raw resume command when none is composed', async () => {
+      const { el } = await render({ lease: LEASE, escalation: escalation(null) });
+
+      expect(el.querySelector('[data-testid="detail-takeover-command"]')).toBeNull();
+      expect(el.querySelector('[data-testid="copy-takeover"]')).toBeNull();
+      expect(el.querySelector('[data-testid="detail-resume-command"]')?.textContent).toContain('claude --resume sess-new');
+    });
+  });
 });

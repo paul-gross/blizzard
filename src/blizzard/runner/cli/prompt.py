@@ -6,6 +6,8 @@ from pathlib import Path
 
 import click
 
+from blizzard.runner.cli.control import ENV_LOCAL_API_URL
+from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import read_stores
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
@@ -86,7 +88,7 @@ def prompt_install(name: str, directory: str, force: bool) -> None:
     _repoint_config(config.root, file_path=str(destination))
     click.echo(f"installed sample {name} to {destination} and set workspace_prompt_file")
     if _stored_override(config) is not None:
-        click.echo("a store override stands and wins over this file — clear it first: DELETE /api/workspace-prompt")
+        click.echo("a store override stands and wins over this file — clear it first: `blizzard runner prompt clear`")
         return
     click.echo("restart the runner to apply it — the prompt file is read once at `host` startup")
 
@@ -128,10 +130,29 @@ def prompt_status(directory: str) -> None:
     resolved, source = _effective_prompt(config)
     _echo_prompt_status(source, resolved)
     if source == _OVERRIDE_SOURCE:
-        click.echo("the override wins over every config knob until it is cleared: DELETE /api/workspace-prompt")
+        click.echo("the override wins over every config knob until it is cleared: `blizzard runner prompt clear`")
         return
     if source != "none" and not resolved.strip():
         raise click.ClickException(f"{source} is configured but the workspace prompt resolves to nothing")
+
+
+@prompt_group.command("clear")
+@_PROMPT_DIR_OPTION
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+def prompt_clear(directory: str, runner_url: str | None) -> None:
+    """Drop the store override so the configured workspace prompt resolves again.
+
+    The one `prompt` verb that needs the running runner: the override lives in the runner's store,
+    which only the daemon writes. Takes effect on subsequent spawns."""
+    with RunnerDaemon.reach("prompt clear", directory, runner_url) as daemon:
+        daemon.send("delete", "/api/workspace-prompt").raise_for_status()
+    click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")
 
 
 def _echo_prompt_status(source: str, prompt: str) -> None:

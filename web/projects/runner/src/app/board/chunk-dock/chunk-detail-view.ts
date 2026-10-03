@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
-import { harnessName, KitAsyncState, KitBadge, type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { createCopyFlash, harnessName, KitAsyncState, KitBadge, KitButton, type KitFact, KitFactList, type runnerApi } from 'fleet';
 
 import { HeartbeatFreshness } from '../../machine/heartbeat-freshness';
 
@@ -13,18 +13,22 @@ import { HeartbeatFreshness } from '../../machine/heartbeat-freshness';
 @Component({
   selector: 'app-machine-detail-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitAsyncState, KitBadge, KitFactList],
+  imports: [HeartbeatFreshness, KitAsyncState, KitBadge, KitButton, KitFactList],
   templateUrl: './chunk-detail-view.html',
   styleUrl: './chunk-detail-view.css',
 })
 export class MachineDetailView {
   protected readonly harnessName = harnessName;
 
+  private readonly copyFlash = createCopyFlash();
+  protected readonly copied = this.copyFlash.copied;
+
   /** The chunk's newest attempt, or `null` when nothing is selected — the rest
    * state renders in its place. */
   readonly lease = input<runnerApi.LeaseView | null>(null);
 
-  /** The open escalation for this chunk, when there is one — carries the resume command. */
+  /** The open escalation for this chunk, when there is one — carries the wrapped takeover
+   * command (primary when present) and the raw resume command (the fallback). */
   readonly escalation = input<runnerApi.EscalationView | null>(null);
 
   /** {@link lease}'s compact ref. */
@@ -50,5 +54,10 @@ export class MachineDetailView {
       { label: 'workdir', template: workdirValue },
       { label: 'heartbeat', template: heartbeatValue },
     ];
+  }
+
+  /** Copy a takeover command, flashing "Copied" when it lands. */
+  protected copy(command: string): void {
+    this.copyFlash.copy(command);
   }
 }
