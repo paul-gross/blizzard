@@ -318,6 +318,9 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
     # The projected escalation carries a negative synthetic id.
     projected = next(e for e in feed if e.kind == "needs-human")
     assert projected.id < 0
+    # It names its chunk and, naming no runner, carries `runner_id=None` rather than `""`.
+    assert projected.chunk_id == "ch_z"
+    assert projected.runner_id is None
 
 
 def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
