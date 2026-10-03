@@ -177,8 +177,10 @@ def test_of_grouped_sums_estimate_is_none_when_no_row_contributed() -> None:
         estimated_rows=0,
         both_null_rows=0,
         null_cost_rows=0,
+        billed_rows=0,
     )
     assert total.estimated_cost_usd is None
+    assert total.billed_cost_usd is None
     assert total.cost_partial is False
     assert total.billed_partial is False
 
@@ -194,10 +196,54 @@ def test_of_grouped_sums_flags_partial_only_from_both_null_rows() -> None:
         estimated_rows=1,
         both_null_rows=0,
         null_cost_rows=1,
+        billed_rows=0,
     )
     assert total.estimated_cost_usd == pytest.approx(0.03)
     assert total.cost_partial is False
     assert total.billed_partial is True
+
+
+def _fact(cost: float | None, estimated: float | None = None) -> UsageFact:
+    return UsageFact(
+        node_id="n",
+        epoch=1,
+        kind="spawn",
+        model="m",
+        input_tokens=1,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=cost,
+        recorded_at=datetime(2026, 1, 1, tzinfo=UTC),
+        estimated_cost_usd=estimated,
+    )
+
+
+def test_billed_cost_is_null_for_an_empty_or_all_unbilled_set_and_a_sum_otherwise() -> None:
+    assert UsageTotal.of([]).billed_cost_usd is None
+    assert UsageTotal.of([_fact(None), _fact(None, 0.25)]).billed_cost_usd is None
+    assert UsageTotal.of([_fact(None), _fact(0.5), _fact(0.0)]).billed_cost_usd == pytest.approx(0.5)
+    assert UsageTotal.of([_fact(0.0)]).billed_cost_usd == 0.0
+
+
+def _grouped(cost_usd_sum: float, billed_rows: int) -> UsageTotal:
+    return UsageTotal.of_grouped_sums(
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd_sum=cost_usd_sum,
+        estimated_cost_usd_sum=0.0,
+        estimated_rows=0,
+        both_null_rows=0,
+        null_cost_rows=0,
+        billed_rows=billed_rows,
+    )
+
+
+def test_of_grouped_sums_billed_cost_follows_the_billed_row_count() -> None:
+    assert _grouped(0.0, 0).billed_cost_usd is None
+    assert _grouped(0.5, 2).billed_cost_usd == 0.5
 
 
 def test_stale_epoch_usage_row_is_still_summed() -> None:

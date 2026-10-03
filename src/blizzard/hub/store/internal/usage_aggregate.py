@@ -1,4 +1,4 @@
-"""The usage/cost aggregate fold's one prose home (`bzh:one-prose-home`) — the nine
+"""The usage/cost aggregate fold's one prose home (`bzh:one-prose-home`) — the ten
 labeled columns, shared by the chunk-usage seam (``chunk_usage_store.py``) and the
 analytics seam (``analytics_operational_store.py``)."""
 
@@ -25,4 +25,5 @@ def usage_aggregate_columns() -> tuple[ColumnElement[Any], ...]:
         func.count(u.c.estimated_cost_usd).label("estimated_rows"),
         both_null_rows.label("both_null_rows"),
         (func.count() - func.count(u.c.cost_usd)).label("null_cost_rows"),
+        func.count(u.c.cost_usd).label("billed_rows"),
     )

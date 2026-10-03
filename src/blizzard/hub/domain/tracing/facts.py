@@ -211,3 +211,5 @@ class StepFacts:
     usage: tuple[UsageFact, ...] = ()
     #: Source-native work-ref tokens (``acme#42``), rendered by the hydrator's configured binding.
     work_refs: tuple[str, ...] = ()
+    #: The distinct work sources behind ``work_refs``, in ref order — read from the rows, never parsed from labels.
+    work_sources: tuple[str, ...] = ()

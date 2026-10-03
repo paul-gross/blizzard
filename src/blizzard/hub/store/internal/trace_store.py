@@ -185,6 +185,7 @@ class TraceStore:
                 prerequisites_met=tuple(met[chunk_id]),
                 usage=tuple(_usage(r) for r in usage[chunk_id]),
                 work_refs=self._rendered(work_refs[chunk_id]),
+                work_sources=self._sources(work_refs[chunk_id]),
             )
             for chunk_id, pin in pins.items()
         }
@@ -192,6 +193,11 @@ class TraceStore:
     def _rendered(self, rows: list) -> tuple[str, ...]:  # type: ignore[type-arg]
         labels = (self._label(WorkRef(source=r.source, ref=r.ref)) for r in rows)
         return tuple(label for label in labels if label is not None)
+
+    def _sources(self, rows: list) -> tuple[str, ...]:  # type: ignore[type-arg]
+        """The distinct sources of the rows :meth:`_rendered` keeps, in ref order."""
+        kept = (r.source for r in rows if self._label(WorkRef(source=r.source, ref=r.ref)) is not None)
+        return tuple(dict.fromkeys(kept))
 
     @staticmethod
     def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[DecisionResolutionRecord]]:

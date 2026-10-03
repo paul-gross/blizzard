@@ -74,6 +74,7 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
     assert identify_steps(hydrated[stopped]) == identify_steps(expected_stopped)
     assert [s.close.outcome for s in identify_steps(hydrated[stopped]) if s.close] == [StepOutcome.RELEASED]
     assert hydrated[moved].work_refs == ("default#1",)
+    assert hydrated[moved].work_sources == ("default",)
     assert set(hydrated[moved].graphs) == {graph.graph_id}
 
 

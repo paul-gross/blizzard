@@ -1165,18 +1165,22 @@ class UsageTotal:
     cost_partial: bool
     estimated_cost_usd: float | None = None
     billed_partial: bool = False
+    #: The billed sum, kept apart from ``cost_usd`` (``0.0`` when no row was billed) — ``None`` when no row carried one.
+    billed_cost_usd: float | None = None
 
     @classmethod
     def of(cls, rows: list[UsageFact]) -> UsageTotal:
         """Sum ``rows`` into one total — one chunk's own facts, or an arbitrary set
         (the fleet spend-since window)."""
         estimated_rows = [u.estimated_cost_usd for u in rows if u.estimated_cost_usd is not None]
+        billed_rows = [u.cost_usd for u in rows if u.cost_usd is not None]
         return cls(
             input_tokens=sum(u.input_tokens for u in rows),
             output_tokens=sum(u.output_tokens for u in rows),
             cache_read_tokens=sum(u.cache_read_tokens for u in rows),
             cache_create_tokens=sum(u.cache_create_tokens for u in rows),
-            cost_usd=sum(u.cost_usd for u in rows if u.cost_usd is not None),
+            cost_usd=sum(billed_rows),
+            billed_cost_usd=sum(billed_rows) if billed_rows else None,
             estimated_cost_usd=sum(estimated_rows) if estimated_rows else None,
             cost_partial=any(u.cost_usd is None and u.estimated_cost_usd is None for u in rows),
             billed_partial=any(u.cost_usd is None for u in rows),
@@ -1195,17 +1199,19 @@ class UsageTotal:
         estimated_rows: int,
         both_null_rows: int,
         null_cost_rows: int,
+        billed_rows: int,
     ) -> UsageTotal:
         """Build from sums a caller already grouped in SQL, applying this same contract
         rather than a second, independent one: ``cost_usd_sum``/``estimated_cost_usd_sum``
         are the caller's own skip-null sums; the ``*_rows`` counts carry an estimate, neither
-        amount, and no billed amount respectively."""
+        amount, and no billed amount respectively, and ``billed_rows`` counts those carrying one."""
         return cls(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
             cost_usd=cost_usd_sum,
+            billed_cost_usd=cost_usd_sum if billed_rows > 0 else None,
             estimated_cost_usd=estimated_cost_usd_sum if estimated_rows > 0 else None,
             cost_partial=both_null_rows > 0,
             billed_partial=null_cost_rows > 0,

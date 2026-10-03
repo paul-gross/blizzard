@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
 
 import pytest
 
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.foundation.trace_spans import SpanKind, SpanRecord, SpanStatus
-from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.facts import (
@@ -37,7 +34,7 @@ from blizzard.hub.domain.tracing.facts import (
     StepFacts,
 )
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
-from blizzard.hub.domain.work import UsageFact, UsageTotal
+from blizzard.hub.domain.work import UsageTotal
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit
@@ -59,29 +56,10 @@ def _by_name(spans: tuple[SpanRecord, ...]) -> dict[str, SpanRecord]:
     return {s.name: s for s in spans}
 
 
-def _usage(epoch: int = 1, at: int = 12, **kw: Any) -> UsageFact:
-    fields: dict[str, Any] = {
-        "node_id": "g1-build",
-        "epoch": epoch,
-        "kind": "spawn",
-        "model": "claude-x",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 1000,
-        "cache_create_tokens": 10,
-        "cost_usd": 0.5,
-        "recorded_at": fx.at(at),
-        "harness_id": "claude-code",
-        "harness_version": "2.0",
-    }
-    fields.update(kw)
-    return UsageFact(**fields)
-
-
 def test_runner_step_root() -> None:
     facts = fx.make_facts(
         work_refs=("blizzard#745",),
-        usage=(_usage(at=14),),
+        usage=(fx.usage(at_seconds=14),),
         transitions=(fx.to("g1", "review", 30, 1, choice_name="pass"),),
         **fx.runner_epoch(1, 10),
     )
@@ -153,7 +131,7 @@ def test_graph_gate_resolved_has_pickup_and_pickup_ms() -> None:
         decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
         decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
         transitions=(fx.to("g1", "build", 500, 2, decision_id="d1", choice_name="approve"),),
-        usage=(_usage(),),
+        usage=(fx.usage(),),
         **fx.runner_epoch(1, 10),
     )
     root, pickup = _step(facts, 1)
@@ -267,23 +245,8 @@ def test_pause_runs_to_its_lift_or_the_step_end() -> None:
     assert root.attributes[attr.WAIT_PAUSE_MS] == 8000
 
 
-def _hub_graph(graph_id: str = "g1") -> Graph:
-    base = fx.graph(graph_id, "build", "poll")
-    nodes = [n if n.name != "poll" else Node(**{**n.__dict__, "executor": Executor.HUB}) for n in base.nodes]
-    return Graph(**{**base.__dict__, "nodes": nodes})
-
-
-def _hub_facts(**extra: object) -> StepFacts:
-    return StepFacts(
-        chunk_id="ch_1",
-        graphs={"g1": _hub_graph(), "g2": fx.G2},
-        pin_graph_id="g1",
-        **fx.merge({"transitions": (fx.to("g1", "poll", 5, 1),)}, fx.runner_epoch(2, 90, runner=None), extra),
-    )
-
-
 def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() -> None:
-    facts = _hub_facts(
+    facts = fx.hub_facts(
         hub_polls=(
             HubPollRecord("h1", "g1-poll", 1, fx.at(20)),
             HubPollRecord("h2", "g1-poll", 1, fx.at(40)),
@@ -310,20 +273,22 @@ def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() 
 
 
 def test_a_hub_step_exited_in_the_write_that_minted_its_lease_still_stands_on_its_node() -> None:
-    facts = _hub_facts(transitions=(fx.to("g1", "build", 90, 2),))
+    facts = fx.hub_facts(transitions=(fx.to("g1", "build", 90, 2),))
     (root,) = _step(facts)
     assert root.name == "step poll"
     assert (root.start, root.end) == (fx.at(5), fx.at(90))
 
 
 def test_events_after_the_step_end_are_clamped_to_it() -> None:
-    facts = fx.make_facts(usage=(_usage(at=99),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
+    facts = fx.make_facts(
+        usage=(fx.usage(at_seconds=99),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10)
+    )
     (root,) = _step(facts)
     assert root.events[0].time == fx.at(30)
 
 
 def test_escalation_at_the_bounce_cap_is_an_error_root() -> None:
-    facts = _hub_facts(
+    facts = fx.hub_facts(
         bounces=(BounceRecord(2, "checks", fx.at(95)),),
         escalations=(EscalationRecord(2, fx.at(96)),),
     )
@@ -344,7 +309,7 @@ def test_migration_and_migration_landing_on_a_hub_node() -> None:
     assert root.attributes[attr.STEP_CHOICE] == "upgrade"
     landed = StepFacts(
         chunk_id="ch_1",
-        graphs={"g1": fx.G1, "g2": _hub_graph("g2")},
+        graphs={"g1": fx.G1, "g2": fx.hub_graph("g2")},
         pin_graph_id="g1",
         migrations=(MigrationRecord(1, fx.at(30), "g1", "g2", landed_node_id="g2-poll"),),
         **fx.runner_epoch(1, 10),
@@ -395,10 +360,10 @@ def test_a_restart_closes_the_decision_and_labels_the_next_step() -> None:
 
 def test_step_cost_sums_to_the_usage_fold_and_measures_stay_on_roots() -> None:
     rows = (
-        _usage(epoch=1, at=11, cost_usd=0.5),
-        _usage(epoch=1, at=12, cost_usd=None, estimated_cost_usd=0.25),
-        _usage(epoch=1, at=13, cost_usd=None),
-        _usage(epoch=2, at=60, cost_usd=1.0, estimated_cost_usd=0.5),
+        fx.usage(epoch=1, at_seconds=11, cost_usd=0.5),
+        fx.usage(epoch=1, at_seconds=12, cost_usd=None, estimated_cost_usd=0.25),
+        fx.usage(epoch=1, at_seconds=13, cost_usd=None),
+        fx.usage(epoch=2, at_seconds=60, cost_usd=1.0, estimated_cost_usd=0.5),
     )
     facts = fx.make_facts(
         usage=rows,
@@ -426,7 +391,7 @@ def test_step_cost_sums_to_the_usage_fold_and_measures_stay_on_roots() -> None:
 
 
 def test_gen_ai_input_includes_cached_tokens_and_blizzard_input_stays_uncached() -> None:
-    facts = fx.make_facts(usage=(_usage(),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
+    facts = fx.make_facts(usage=(fx.usage(),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
     event = _step(facts)[0].events[0]
     a = event.attributes
     assert a[shared.GEN_AI_INPUT_TOKENS] == 100 + 1000 + 10
@@ -529,7 +494,7 @@ def test_planted_content_never_leaves_and_every_key_is_declared() -> None:
         graphs={"g1": planted, "g2": fx.G2},
         pin_graph_id="g1",
         work_refs=("blizzard#1",),
-        usage=(_usage(),),
+        usage=(fx.usage(),),
         questions=(QuestionRecord("q1", 1, fx.at(15), fx.at(16)),),
         decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
         decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
@@ -585,7 +550,7 @@ def test_a_move_back_onto_the_same_node_is_next_not_retry() -> None:
 
 
 def test_a_hub_node_step_names_the_hub_executor() -> None:
-    facts = _hub_facts(transitions=(fx.to("g1", "build", 100, 2),))
+    facts = fx.hub_facts(transitions=(fx.to("g1", "build", 100, 2),))
     root = _step(facts)[0]
     assert root.attributes[shared.NODE_EXECUTOR] == "hub"
     assert attr.RUNNER_ID not in root.attributes

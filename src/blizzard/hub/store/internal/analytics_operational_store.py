@@ -188,6 +188,7 @@ def _to_spend_stats(row: Any) -> SpendStats:
         estimated_rows=row.estimated_rows,
         both_null_rows=row.both_null_rows,
         null_cost_rows=row.null_cost_rows,
+        billed_rows=row.billed_rows,
     )
     return SpendStats(key=row.key, total=total)
 
