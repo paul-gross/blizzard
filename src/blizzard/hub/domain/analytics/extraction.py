@@ -17,7 +17,7 @@ from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_REA
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched.
-EXTRACTOR_VERSION = "blizzard-analytics/4"
+EXTRACTOR_VERSION = "blizzard-analytics/5"
 
 
 @dataclass(frozen=True)

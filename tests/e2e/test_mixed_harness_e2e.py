@@ -135,12 +135,14 @@ _SESSION_MODEL = ["mock-provider/opencode-mixed-review"]
 
 #: Proven-dialect tool calls (mirrors `tests/service/test_mixed_harness_dispatch_service.py`'s
 #: `_CLAUDE_SKILL_BUILD_SCRIPT`/`_OPENCODE_TASK_BUILD_SCRIPT`): the
-#: OpenCode analytics dialect proves only `agent-spawn`, never an invented read/skill
-#: mapping — so `opencode-review`'s own tool call is a `task`, never a `Skill`.
+#: OpenCode analytics dialect's own tool names (`task`, `subagent_type`) — so
+#: `opencode-review`'s own tool call is a `task`, never a `Skill`.
 _BUILD_SKILL_NAME = "wf-mixed-review"
 _REVIEW_AGENT_TYPE = "mixed-harness-reviewer"
 _BUILD_TOOL_CALL = f"tool_call('Skill', {{'skill': {_BUILD_SKILL_NAME!r}}}, output='ran the commit skill')\n"
-_REVIEW_TOOL_CALL = f"tool_call('task', {{'agent': {_REVIEW_AGENT_TYPE!r}}}, output='spawned a review sub-agent')\n"
+_REVIEW_TOOL_CALL = (
+    f"tool_call('task', {{'subagent_type': {_REVIEW_AGENT_TYPE!r}}}, output='spawned a review sub-agent')\n"
+)
 
 _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 

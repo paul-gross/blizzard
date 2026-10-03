@@ -1,8 +1,9 @@
 """This registration guard: every tool name a dialect registers for a kind must
-actually occur in that dialect's own pinned compatibility corpus — the one test
+actually occur in a live capture of that dialect's harness — the one test
 in the analytics-extraction lane that reads
 ``src/blizzard/runner/harness/contracts/opencode/<version>/`` directly, where the corpus
-files are the subject, not an in-file builder."""
+files are the subject, not an in-file builder. A fixture its version's manifest marks
+``source: synthetic`` is hand-authored, so it proves nothing and is excluded."""
 
 from __future__ import annotations
 
@@ -20,10 +21,24 @@ pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
-#: Every dialect with a pinned compatibility corpus — Claude Code has none.
+#: Every dialect with pinned captures — Claude Code has none. A dialect's captures are the
+#: admitted corpus plus every live supplement, one directory per recorded version.
 _CORPUS_DIRS: dict[str, Path] = {
-    "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode" / "1.18.25",
+    "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode",
 }
+
+
+def _synthetic_fixtures(version_dir: Path) -> set[str]:
+    """File names its version's manifest marks ``source: synthetic``; none without a manifest."""
+    manifest = version_dir / "manifest.json"
+    if not manifest.is_file():
+        return set()
+    fixtures = json.loads(manifest.read_text()).get("fixtures", [])
+    return {
+        str(Path(fixture["path"]).name)
+        for fixture in fixtures
+        if isinstance(fixture, dict) and fixture.get("source") == "synthetic" and "path" in fixture
+    }
 
 
 def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
@@ -46,8 +61,11 @@ def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
             for item in node:
                 _walk(item)
 
-    for path in corpus_dir.glob("*.json"):
-        _walk(json.loads(path.read_text()))
+    for version_dir in sorted(p for p in corpus_dir.iterdir() if p.is_dir()):
+        synthetic = _synthetic_fixtures(version_dir)
+        for path in version_dir.glob("*.json"):
+            if path.name != "manifest.json" and path.name not in synthetic:
+                _walk(json.loads(path.read_text()))
     return inputs
 
 

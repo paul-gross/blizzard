@@ -28,9 +28,12 @@ _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="Agent", argument_key="subagent_type"),
 }
 
-#: OpenCode's spawn entry only — fixture-proven; read/skill have no proven tool name yet.
+#: OpenCode's recognition parameters — each proven against the live captures under
+#: ``runner/harness/contracts/opencode/`` by the corpus guard, never authored.
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
-    KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="agent"),
+    KIND_FILE_READ: DialectEntry(tool_name="read", argument_key="filePath"),
+    KIND_SKILL_INVOCATION: DialectEntry(tool_name="skill", argument_key="name"),
+    KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="subagent_type"),
 }
 
 #: Every registered dialect, keyed by the segment's own exact normalizer_version.

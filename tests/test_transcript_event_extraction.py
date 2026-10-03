@@ -235,7 +235,7 @@ def test_an_unknown_dialect_derives_zero_events() -> None:
 
 
 def test_a_future_opencode_version_derives_zero_events() -> None:
-    turns = [_tool_turn(0, "task", {"agent": "explorer"})]
+    turns = [_tool_turn(0, "task", {"subagent_type": "explorer"})]
 
     events = extract_events(turns, normalizer_version="opencode-export/2")
 
@@ -243,7 +243,7 @@ def test_a_future_opencode_version_derives_zero_events() -> None:
 
 
 def test_a_malformed_normalizer_version_derives_zero_events() -> None:
-    turns = [_tool_turn(0, "task", {"agent": "explorer"})]
+    turns = [_tool_turn(0, "task", {"subagent_type": "explorer"})]
 
     events = extract_events(turns, normalizer_version="not-a-real-dialect")
 
@@ -257,8 +257,8 @@ _OPENCODE = "opencode-export/1"
 
 def test_opencode_task_call_mints_an_agent_spawn_event() -> None:
     """OpenCode's own child-agent-spawn tool is ``task``, its argument key
-    ``agent`` (fixture-proven against ``contracts/opencode/1.18.25/child_session.json``)."""
-    turns = [_tool_turn(0, "task", {"agent": "explorer", "prompt": "find X"})]
+    ``subagent_type`` (proven against the live ``contracts/opencode/1.18.33/`` capture)."""
+    turns = [_tool_turn(0, "task", {"subagent_type": "explorer", "prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
 
@@ -269,7 +269,7 @@ def test_opencode_task_call_mints_an_agent_spawn_event() -> None:
     assert events[0].tool == "task"
 
 
-def test_opencode_task_call_with_no_agent_key_mints_no_event() -> None:
+def test_opencode_task_call_with_no_subagent_type_mints_no_event() -> None:
     turns = [_tool_turn(0, "task", {"prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
@@ -277,25 +277,47 @@ def test_opencode_task_call_with_no_agent_key_mints_no_event() -> None:
     assert events == []
 
 
-def test_opencode_has_no_file_read_or_skill_recognition_yet() -> None:
-    """The read and skill rows are a deliberate, visible hole — no fixture-proven
-    tool name exists for either yet, so OpenCode registers spawn only."""
-    turns = [
-        _tool_turn(0, "read", {"filePath": "a.py"}),
-        _tool_turn(1, "skill", {"name": "wf-commit"}),
-    ]
+def test_opencode_read_call_mints_a_file_read_event() -> None:
+    """OpenCode's read tool is ``read``, its path key ``filePath`` (proven against the live
+    ``contracts/opencode/1.18.33/`` capture)."""
+    turns = [_tool_turn(0, "read", {"filePath": "/w/a.py", "offset": 1})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
 
-    assert events == []
+    assert len(events) == 1
+    assert events[0].kind == KIND_FILE_READ
+    assert events[0].subject == "/w/a.py"
+    assert events[0].tool == "read"
+
+
+def test_opencode_skill_call_mints_a_skill_invocation_event() -> None:
+    """OpenCode's skill tool is ``skill``, its name key ``name`` (proven against the live
+    ``contracts/opencode/1.18.33/`` capture)."""
+    turns = [_tool_turn(0, "skill", {"name": "wf-commit"})]
+
+    events = extract_events(turns, normalizer_version=_OPENCODE)
+
+    assert len(events) == 1
+    assert events[0].kind == KIND_SKILL_INVOCATION
+    assert events[0].subject == "wf-commit"
+    assert events[0].tool == "skill"
+
+
+def test_opencode_does_not_recognize_claude_code_tool_names() -> None:
+    turns = [
+        _tool_turn(0, "Read", {"file_path": "a.py"}),
+        _tool_turn(1, "Skill", {"skill": "wf-commit"}),
+    ]
+
+    assert extract_events(turns, normalizer_version=_OPENCODE) == []
 
 
 def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> None:
-    nested_spawn = _tool_turn(0, "task", {"agent": "coder", "prompt": "implement"})
+    nested_spawn = _tool_turn(0, "task", {"subagent_type": "coder", "prompt": "implement"})
     outer_spawn = _tool_turn(
         0,
         "task",
-        {"agent": "explorer", "prompt": "find X"},
+        {"subagent_type": "explorer", "prompt": "find X"},
         sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
     )
 
@@ -315,7 +337,7 @@ def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> No
 def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> None:
     """An unlinked OpenCode sidechain keeps its own agent type — the child's own,
     never an ancestor's — and produces no fabricated parent spawn event."""
-    inner = _tool_turn(0, "task", {"agent": "coder", "prompt": "implement"})
+    inner = _tool_turn(0, "task", {"subagent_type": "coder", "prompt": "implement"})
     outer = _tool_turn(
         0,
         "bash",
