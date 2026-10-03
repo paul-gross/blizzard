@@ -69,6 +69,16 @@ from blizzard.hub.domain.work import (
     WorkItemRecord,
     WorkRef,
 )
+from blizzard.hub.egress.writer import (
+    EgressBatch,
+    EgressFailure,
+    EgressPass,
+    FilesWritten,
+    IEgressWriter,
+    ManifestCommitted,
+    PlacedFile,
+    validate_batch,
+)
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
@@ -1167,3 +1177,48 @@ def offending_index_scans(
             if table is not None:
                 offenders.append((table, row))
     return offenders
+
+
+class InMemoryEgressWriter:
+    """An in-process :class:`IEgressWriter` — holds placed batches and manifests, runs the shared row validation.
+
+    ``fail`` set makes every write and commit return that failure."""
+
+    def __init__(self) -> None:
+        self.batches: list[EgressBatch] = []
+        self.manifests: list[tuple[EgressPass, tuple[PlacedFile, ...]]] = []
+        self.fail: EgressFailure | None = None
+
+    def write(self, batch: EgressBatch) -> FilesWritten | EgressFailure:
+        if self.fail is not None:
+            return self.fail
+        if (invalid := validate_batch(batch)) is not None:
+            return invalid
+        self.batches.append(batch)
+        if not batch.rows:
+            return FilesWritten(())
+        schema = batch.schema
+        return FilesWritten(
+            (
+                PlacedFile(
+                    path=f"{schema.name}/v{schema.major_version}/date={batch.partition}/{len(self.batches)}",
+                    dataset=schema.name,
+                    version=schema.major_version,
+                    partition=batch.partition,
+                    rows=len(batch.rows),
+                    first_position=batch.rows[0].position,
+                    last_position=batch.rows[-1].position,
+                    sha256="0" * 64,
+                ),
+            )
+        )
+
+    def commit_pass(self, egress_pass: EgressPass, placed: Sequence[PlacedFile]) -> ManifestCommitted | EgressFailure:
+        if self.fail is not None:
+            return self.fail
+        self.manifests.append((egress_pass, tuple(placed)))
+        return ManifestCommitted(f"_manifests/{len(self.manifests)}.json")
+
+
+def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
+    return x
