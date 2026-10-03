@@ -56,6 +56,11 @@ def test_key_of_a_closed_step_uses_its_closing_fact_time() -> None:
     assert CursorKey.of(step) == CursorKey(fx.at(30), "ch_1", 1, "")
 
 
+def test_key_of_a_decision_step_keeps_its_decision_id() -> None:
+    step = next(step for step in identify_steps(fx.scenarios()["gate-resolved-late-pickup"]) if step.decision_id)
+    assert CursorKey.of(step) == CursorKey(fx.at(500), "ch_1", 1, "d1")
+
+
 def test_key_of_an_open_step_is_refused() -> None:
     (step,) = identify_steps(fx.make_facts(**fx.runner_epoch(1, 10)))
     with pytest.raises(ValueError):
@@ -163,6 +168,25 @@ def test_window_takes_the_limit_in_key_order_and_positions_at_the_last_told() ->
     window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), None, 2)
     assert _ids(window) == ["ch_b", "ch_a"]
     assert window.position == CursorKey(fx.at(5), "ch_a", 1)
+
+
+def test_window_over_limit_with_a_frontier_stops_at_the_third_told_key() -> None:
+    facts = [
+        _chunk("ch_d", closes_at=7),
+        _chunk("ch_c", closes_at=5),
+        _chunk("ch_a", closes_at=3),
+        _chunk("ch_b", closes_at=5),
+    ]
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3)
+    assert _ids(window) == ["ch_a", "ch_b", "ch_c"]
+    assert window.position == CursorKey(fx.at(5), "ch_c", 1)
+
+
+def test_window_at_exact_limit_with_a_frontier_advances_to_the_frontier() -> None:
+    facts = [_chunk("ch_c", closes_at=5), _chunk("ch_a", closes_at=3), _chunk("ch_b", closes_at=5)]
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3)
+    assert _ids(window) == ["ch_a", "ch_b", "ch_c"]
+    assert window.position == CursorKey.opening(fx.at(8))
 
 
 def test_window_holds_back_steps_at_or_past_the_frontier_and_may_pass_to_it() -> None:

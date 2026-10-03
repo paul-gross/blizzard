@@ -2081,6 +2081,24 @@ def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -
         HubConfig.load(root)
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "minimum", "bound"),
+    [
+        ("sweep_seconds", 1, "positive"),
+        ("settle_seconds", 0, "non-negative"),
+        ("batch_limit", 1, "positive"),
+        ("max_lag_seconds", 1, "positive"),
+        ("replay_max_window", 1, "positive"),
+    ],
+)
+def test_tracing_integer_knobs_enforce_their_individual_minima(key: str, minimum: int, bound: str) -> None:
+    assert getattr(TracingConfig.of({key: minimum}, HubConfigError), key) == minimum
+    with pytest.raises(HubConfigError) as error:
+        TracingConfig.of({key: minimum - 1}, HubConfigError)
+    assert str(error.value) == f"tracing.{key} must be {bound}, got {minimum - 1!r}"
+
+
 def _hub_egress_root(tmp_path: Path, table: str = "") -> Path:
     root = tmp_path / "hub"
     root.mkdir()
