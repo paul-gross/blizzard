@@ -342,8 +342,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default_at_claim_time(
 _CLAUDE_SKILL_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
-    # agent_spawn's Claude Code sibling kind (proven, `dialects.py`'s own
-    # `_CLAUDE_CODE_JSONL_2`) — never a read/skill mapping invented for OpenCode.
+    # skill_invocation through Claude Code's own dialect (`dialects.py`'s `_CLAUDE_CODE_JSONL_2`).
     "tool_call('Skill', {'skill': 'wf-commit'}, output='ran the commit skill')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
@@ -368,9 +367,8 @@ _CLAUDE_SKILL_BUILD_SCRIPT = (
 _OPENCODE_TASK_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
-    # agent_spawn — the ONE proven OpenCode dialect entry (`dialects.py`'s own
-    # `_OPENCODE_EXPORT_1`) — no read/skill mapping invented here.
-    "tool_call('task', {'agent': 'reviewer'}, output='spawned a sub-agent')\n"
+    # agent_spawn through OpenCode's own dialect (`dialects.py`'s `_OPENCODE_EXPORT_1`).
+    "tool_call('task', {'subagent_type': 'reviewer'}, output='spawned a sub-agent')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
     'subprocess.run(["git", "-C", repo, "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",'

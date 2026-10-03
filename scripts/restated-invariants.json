@@ -392,12 +392,6 @@
           "reason": "Restates the admitted range's current bounds while describing the compaction-tail-marker gap."
         },
         {
-          "file": "../blizzard-context/verification/blizzard/gaps.md",
-          "symbol": "opencodes-analytics-dialect-has-no-proven-readskill-tool-name-mapping",
-          "role": "allowed",
-          "reason": "Restates the admitted range's current bounds while describing the read/skill dialect gap."
-        },
-        {
           "file": "../blizzard-context/verification/blizzard/manual.md",
           "symbol": "blizzardmanual-opencode-compatibility",
           "role": "allowed",
