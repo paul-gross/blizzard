@@ -3,7 +3,7 @@
 Authenticated by the worker's lease token alone: the request carries no lease id, so the lease is found by the
 token's hash. Every span is untrusted — :func:`~blizzard.runner.domain.tracing.receiver.admit` decides what is
 kept and rewrites it — and what is kept joins the runner's own platform pipeline. Contract:
-``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md`` §Out of the worker."""
+``blizzard-product:/delivered/tracing/platform-spans/spec/nesting.md`` §Out of the worker."""
 
 from __future__ import annotations
 

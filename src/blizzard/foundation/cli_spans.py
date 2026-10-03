@@ -2,7 +2,7 @@
 
 A command is a short-lived process, so this module imports neither ``httpx`` nor
 ``opentelemetry``: the span is a plain record, encoded by hand as OTLP/JSON, and posted through a
-client the caller hands in. Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/instrumentation.md``
+client the caller hands in. Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md``
 §The CLI never pays for it."""
 
 from __future__ import annotations

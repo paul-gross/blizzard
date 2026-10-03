@@ -2,7 +2,7 @@
 stdlib only, so a short-lived command resolves it without the SDK.
 
 Only the destination is read: the CLI always sends JSON, so ``OTEL_EXPORTER_OTLP_PROTOCOL`` is not
-consulted (``blizzard-product:/plans/tracing/platform-spans/spec/instrumentation.md`` §Configuration)."""
+consulted (``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Configuration)."""
 
 from __future__ import annotations
 

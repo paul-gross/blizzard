@@ -1,6 +1,6 @@
 """The input bundle for step identification — the tracing-shaped slice of a chunk's facts.
 
-Declares only the columns the span contract reads (``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md``),
+Declares only the columns the span contract reads (``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md``),
 so the aggregate behind every hot-path read stays untouched; hydrating this bundle is the store's job."""
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """The hub's ``run:`` step span names, kept out of the fleet-span dictionary's declared set.
 
-Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/instrumentation.md`` §Attributes."""
+Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Attributes."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """Where a chunk stood at an instant — a pure fold of its movement facts.
 
 Transitions, migrations and restarts are folded; the chunk's current pin is a mutable value and is
-read only for a chunk that never moved (``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md``
+read only for a chunk that never moved (``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md``
 §Where a step stood). Visits and positions compare node *names*, resolved against the graph each
 movement fact names, because node ids are minted per graph version."""
 

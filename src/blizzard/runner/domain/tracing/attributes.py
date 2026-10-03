@@ -1,7 +1,6 @@
-"""The runner's own trace attribute names, event and span names, and instrumentation scope; names the hub also
-emits live in ``blizzard.foundation.trace_attributes``.
-
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/spans.md`` §Attributes, §Span events, §GenAI conventions.
+"""The runner's own trace attribute names, event and span names, and instrumentation scope, per
+``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md`` §Attributes, §Span events, §GenAI conventions.
+Names the hub also emits live in ``blizzard.foundation.trace_attributes``.
 """
 
 from __future__ import annotations

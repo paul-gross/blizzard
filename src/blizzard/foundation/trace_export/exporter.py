@@ -1,6 +1,6 @@
 """The trace export seam — where finished span records leave a daemon.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §Building spans. The
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §Building spans. The
 domain hands :class:`SpanRecord` batches across; only the binding knows OpenTelemetry."""
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """The trace attribute names both daemons emit, and the GenAI usage mapping they share — the single home.
 
 Daemon-only names, instrumentation scopes and service defaults stay in each daemon's own attribute module.
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Attributes and §GenAI usage."""
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Attributes and §GenAI usage."""
 
 from __future__ import annotations
 

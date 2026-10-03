@@ -1,7 +1,7 @@
 """The hub's own trace attribute names, scope and service default; names the runner also emits live in
 ``blizzard.foundation.trace_attributes``.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Attributes and §GenAI usage."""
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Attributes and §GenAI usage."""
 
 from __future__ import annotations
 
