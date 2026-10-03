@@ -25,6 +25,7 @@ from blizzard.runner.domain.leases.closure import REAPED
 from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.usage import ContextSampleState
+from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
@@ -669,16 +670,23 @@ class ContextSample(Step):
             # One bulk read for the whole active set (`bzh:bulk-reconstitution`); each
             # lease below filters "due" itself from its own already-fetched state.
             states = ctx.stores.usage.context_sample_states([lease.lease_id for lease in leases])
+            bindings_by_chunk = group_bindings_by_chunk(ctx.stores.environments.held_bindings())
         except Exception as exc:  # this step is not last in the tick — see ExternalUsageSample
             _log.warning("context sample step failed", detail=str(exc))
             return
         for lease in leases:
             try:
-                self._sample(lease, warn_tokens, states.get(lease.lease_id))
+                self._sample(lease, warn_tokens, states.get(lease.lease_id), bindings_by_chunk.get(lease.chunk_id, []))
             except Exception as exc:  # one lease's read must not end the sweep
                 _log.warning("context sample failed", lease_id=lease.lease_id, detail=str(exc))
 
-    def _sample(self, lease: LeaseRecord, warn_tokens: int, state: ContextSampleState | None) -> None:
+    def _sample(
+        self,
+        lease: LeaseRecord,
+        warn_tokens: int,
+        state: ContextSampleState | None,
+        bindings: list[EnvBindingRecord],
+    ) -> None:
         ctx = self.ctx
         session = lease.session
         if session is None or not ctx.transcripts_wired:
@@ -702,7 +710,7 @@ class ContextSample(Step):
                 detail=str(exc),
             )
             return
-        tokens = source.context_tokens(session.session_id, spawn_cwd=self._spawn_cwd(lease))
+        tokens = source.context_tokens(session.session_id, spawn_cwd=self._spawn_cwd(bindings))
         # Only the FIRST crossing reports: the warning is a state change, not a level, and a
         # lease past the line samples on for the curve without re-reporting every minute.
         crossing = (
@@ -747,11 +755,10 @@ class ContextSample(Step):
             },
         }
 
-    def _spawn_cwd(self, lease: LeaseRecord) -> str | None:
+    def _spawn_cwd(self, bindings: list[EnvBindingRecord]) -> str | None:
         """The lease's worktree, the transcript locator's multi-match tie-break — never its key.
 
         Resolved exactly as the transcript pump resolves it, so both lanes read the same file."""
-        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
 
 

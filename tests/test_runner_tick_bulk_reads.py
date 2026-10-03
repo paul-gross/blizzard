@@ -253,9 +253,10 @@ def test_backing_off_facts_statement_count_is_flat_across_1_and_10_open_facts(tm
 # --- the tick itself ----------------------------------------------------------------------
 
 
-def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime) -> None:
-    """One active, spawned, beating, bound, already-sampled lease — nothing about it is
-    due for any per-tick action, so a flat tick issues the same statements regardless of i."""
+def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime, sampled_at: datetime) -> None:
+    """One active, spawned, beating, bound lease, sampled at ``sampled_at`` — sampled at ``at``
+    nothing about it is due for any per-tick action, so a flat tick issues the same
+    statements regardless of i."""
     lease_id, chunk_id, session_id = f"lease_{i}", f"ch_{i}", f"sess-{i}"
     session = SessionReference(CLAUDE_CODE_HARNESS_ID, session_id)
     store.record_lease(
@@ -275,14 +276,21 @@ def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: dateti
     store.record_heartbeat(lease_id=lease_id, beat_at=at)
     store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=at)
     store.record_context_sample(
-        lease_id=lease_id, chunk_id=chunk_id, context_tokens=100, sampled_at=at, session=session
+        lease_id=lease_id, chunk_id=chunk_id, context_tokens=100, sampled_at=sampled_at, session=session
     )
 
 
-def _tick_statement_count(tmp_path: Path, n: int, *, ship: bool = False) -> int:
+def _tick_statement_count(
+    tmp_path: Path, n: int, *, ship: bool = False, due: bool = False, held_without_lease: int = 0
+) -> int:
+    """One full tick's statement count over ``n`` leases. ``due`` backdates every lease's last
+    sample past the interval; ``held_without_lease`` adds live-tenure bindings no lease holds."""
     store, engine = _store(tmp_path)
     for i in range(n):
-        _seed_steady_state_lease(store, i, at=_NOW)
+        sampled_at = _NOW - timedelta(hours=1) if due else _NOW
+        _seed_steady_state_lease(store, i, at=_NOW, sampled_at=sampled_at)
+    for j in range(held_without_lease):
+        store.record_binding(chunk_id=f"ch_held_{j}", environment_id=f"eh{j}", workdir=f"/ws/eh{j}", bound_at=_NOW)
     # Every session is unscripted (`FakeTranscriptSource.turns_since` reads that as
     # `available=False`), so turning shipping on still ships nothing this tick — the pump
     # runs its own bulk reads but writes nothing, keeping the count flat either way.
@@ -323,6 +331,24 @@ def test_a_full_tick_is_still_flat_at_n1_and_n10_with_transcript_shipping_on(tmp
     bulk reads must not turn the tick's flat statement count back into a per-lease slope."""
     one = _tick_statement_count(tmp_path / "n1", 1, ship=True)
     ten = _tick_statement_count(tmp_path / "n10", 10, ship=True)
+
+    assert one == ten
+
+
+def test_a_full_tick_adds_one_statement_per_lease_when_every_lease_is_due_for_a_sample(tmp_path: Path) -> None:
+    """The sample INSERT is legitimately per lease; the binding read that locates its transcript
+    must not be a second one."""
+    one = _tick_statement_count(tmp_path / "n1", 1, due=True)
+    ten = _tick_statement_count(tmp_path / "n10", 10, due=True)
+
+    assert ten - one == 9
+
+
+def test_a_full_tick_is_flat_across_1_and_10_held_chunks_with_no_lease(tmp_path: Path) -> None:
+    """A chunk parked at a hub node keeps its binding with no lease; reconciling it must not
+    read bindings once per held chunk."""
+    one = _tick_statement_count(tmp_path / "h1", 1, held_without_lease=1)
+    ten = _tick_statement_count(tmp_path / "h10", 1, held_without_lease=10)
 
     assert one == ten
 
