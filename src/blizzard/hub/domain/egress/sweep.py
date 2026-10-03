@@ -7,6 +7,8 @@ placed, so a crash anywhere before the cursor row re-writes the same rows on the
 
 from __future__ import annotations
 
+# The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta

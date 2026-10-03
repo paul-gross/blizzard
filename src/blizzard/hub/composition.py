@@ -417,12 +417,11 @@ def _work_ref_label(work_sources: IWorkSourceRegistry) -> WorkRefLabel:
     return label
 
 
-def _backfill_writers(config: EgressConfig) -> Callable[[], IEgressWriter]:
+def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> Callable[[], IEgressWriter]:
     """A fresh writer per backfill, each with a newly minted process token. The export's own writer was built from
     these same settings, so a backfill's writer can fail to build only if that one did not."""
     directory = config.directory
     assert directory is not None  # composed only once the export itself is on
-    settings = EgressWriterSettings(config.max_rows_per_file, config.min_free_bytes)
 
     def writer() -> IEgressWriter:
         built = build_egress_writer(config.format, directory, settings, mint_process_token())
@@ -525,11 +524,12 @@ def build_services(
         replay_max_window=trace_config.replay_max_window,
     )
     egress_config = egress or EgressConfig()
+    egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
             egress_config.format,
             egress_config.directory,
-            EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes),
+            egress_writer_settings,
             mint_process_token(),
         )
         if egress_config.directory is not None
@@ -572,7 +572,7 @@ def build_services(
         egress=egress_store,
         clock=clock,
         config=egress_config,
-        writers=_backfill_writers(egress_config) if egress_export is not None else None,
+        writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,

@@ -1364,7 +1364,7 @@
    "comments": 2,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 71
+   "total": 73
   },
   "blizzard/foundation/events/__init__.py": {
    "comments": 0,
@@ -1756,6 +1756,12 @@
    "over_cap": 0,
    "total": 22
   },
+  "blizzard/hub/api/egress.py": {
+   "comments": 0,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 112
+  },
   "blizzard/hub/api/events.py": {
    "comments": 3,
    "docstrings": 20,
@@ -1910,7 +1916,7 @@
    "comments": 25,
    "docstrings": 54,
    "over_cap": 3,
-   "total": 505
+   "total": 507
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -2090,7 +2096,7 @@
    "comments": 5,
    "docstrings": 4,
    "over_cap": 1,
-   "total": 54
+   "total": 55
   },
   "blizzard/hub/cli/analytics.py": {
    "comments": 13,
@@ -2127,6 +2133,12 @@
    "docstrings": 7,
    "over_cap": 0,
    "total": 56
+  },
+  "blizzard/hub/cli/egress.py": {
+   "comments": 1,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 110
   },
   "blizzard/hub/cli/finding.py": {
    "comments": 0,
@@ -2255,10 +2267,10 @@
    "total": 131
   },
   "blizzard/hub/composition.py": {
-   "comments": 102,
-   "docstrings": 18,
+   "comments": 106,
+   "docstrings": 20,
    "over_cap": 23,
-   "total": 800
+   "total": 855
   },
   "blizzard/hub/config.py": {
    "comments": 52,
@@ -2554,11 +2566,29 @@
    "over_cap": 0,
    "total": 0
   },
+  "blizzard/hub/domain/egress/assembly.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 69
+  },
+  "blizzard/hub/domain/egress/backfill.py": {
+   "comments": 7,
+   "docstrings": 15,
+   "over_cap": 1,
+   "total": 195
+  },
   "blizzard/hub/domain/egress/repository.py": {
    "comments": 0,
-   "docstrings": 11,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 55
+   "total": 71
+  },
+  "blizzard/hub/domain/egress/reset.py": {
+   "comments": 3,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 108
   },
   "blizzard/hub/domain/egress/rows.py": {
    "comments": 0,
@@ -2572,11 +2602,17 @@
    "over_cap": 0,
    "total": 139
   },
+  "blizzard/hub/domain/egress/status.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 151
+  },
   "blizzard/hub/domain/egress/sweep.py": {
-   "comments": 13,
+   "comments": 15,
    "docstrings": 10,
    "over_cap": 0,
-   "total": 311
+   "total": 285
   },
   "blizzard/hub/domain/eligibility.py": {
    "comments": 1,
@@ -2978,7 +3014,7 @@
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 219
+   "total": 218
   },
   "blizzard/hub/egress/internal/ndjson.py": {
    "comments": 0,
@@ -2991,6 +3027,12 @@
    "docstrings": 3,
    "over_cap": 0,
    "total": 60
+  },
+  "blizzard/hub/egress/space.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 16
   },
   "blizzard/hub/egress/writer.py": {
    "comments": 0,
@@ -3233,10 +3275,10 @@
    "total": 117
   },
   "blizzard/hub/store/internal/egress_store.py": {
-   "comments": 1,
-   "docstrings": 6,
+   "comments": 2,
+   "docstrings": 8,
    "over_cap": 0,
-   "total": 108
+   "total": 147
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 6,
@@ -6280,6 +6322,12 @@
    "over_cap": 3,
    "total": 108
   },
+  "blizzard/wire/egress.py": {
+   "comments": 0,
+   "docstrings": 19,
+   "over_cap": 1,
+   "total": 95
+  },
   "blizzard/wire/envelope.py": {
    "comments": 29,
    "docstrings": 18,
@@ -6730,7 +6778,7 @@
    "comments": 1,
    "docstrings": 13,
    "over_cap": 1,
-   "total": 77
+   "total": 78
   },
   "journey/__init__.py": {
    "comments": 0,
@@ -7012,7 +7060,7 @@
    "comments": 44,
    "docstrings": 31,
    "over_cap": 0,
-   "total": 2047
+   "total": 2051
   },
   "store_scan_allowlist.py": {
    "comments": 23,
@@ -7812,11 +7860,23 @@
    "over_cap": 2,
    "total": 738
   },
+  "test_egress_backfill.py": {
+   "comments": 3,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 220
+  },
   "test_egress_files.py": {
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
    "total": 273
+  },
+  "test_egress_reset.py": {
+   "comments": 2,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 170
   },
   "test_egress_rows.py": {
    "comments": 5,
@@ -7829,6 +7889,12 @@
    "docstrings": 1,
    "over_cap": 0,
    "total": 148
+  },
+  "test_egress_status.py": {
+   "comments": 3,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 124
   },
   "test_egress_sweep.py": {
    "comments": 15,
@@ -9121,16 +9187,16 @@
    "total": 385
   },
   "test_route_classification.py": {
-   "comments": 66,
+   "comments": 69,
    "docstrings": 36,
    "over_cap": 3,
-   "total": 407
+   "total": 413
   },
   "test_route_permission_matrix.py": {
-   "comments": 13,
+   "comments": 15,
    "docstrings": 15,
    "over_cap": 0,
-   "total": 165
+   "total": 176
   },
   "test_route_seq_concurrency.py": {
    "comments": 8,

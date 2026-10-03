@@ -6,6 +6,8 @@ cursor when it starts and appends the advanced one when it ends, so a row append
 
 from __future__ import annotations
 
+# The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
