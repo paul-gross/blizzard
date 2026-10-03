@@ -145,3 +145,19 @@ def test_chunk_group_is_listed_in_top_level_help() -> None:
 
     assert result.exit_code == 0, result.output
     assert re.search(r"^  chunk\s", result.output, re.MULTILINE)
+
+
+@pytest.mark.unit
+def test_chunk_asks_gets_the_lease_scoped_asks_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+        calls.append((url, headers))
+        return _FakeResponse(text="[]")
+
+    bind_stubs(monkeypatch, get=fake_get)
+    result = CliRunner().invoke(runner_group, ["chunk", "asks"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("http://127.0.0.1:8431/api/leases/lease_9/asks", {"X-Blizzard-Lease-Token": "the-lease-token"})]
+    assert result.output.strip() == "[]"

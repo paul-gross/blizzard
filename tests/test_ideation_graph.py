@@ -126,7 +126,7 @@ def test_ideation_survey_undeclared_axis_uses_ask_not_a_bail_out_candidate() -> 
     no `to: escalate` target — reaches the reserved terminal directly."""
     prompt = _doc().node("survey").prompt  # type: ignore[union-attr]
     assert "blizzard runner ask" in prompt  # type: ignore[operator]
-    assert "blizzard runner chunk history" in prompt  # type: ignore[operator]
+    assert "blizzard runner chunk asks" in prompt  # type: ignore[operator]
 
 
 def test_ideation_reconcile_reads_proposals_not_findings() -> None:

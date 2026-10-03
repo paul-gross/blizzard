@@ -475,6 +475,92 @@
         "title": "CapacitiesView",
         "type": "object"
       },
+      "ChunkAskView": {
+        "description": "One question asked on a chunk, open or answered. ``node`` is the asking node's name,\nfalling back to its raw id when the payload names no node by that id.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answered": {
+            "default": false,
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "answered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered At"
+          },
+          "answered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered By"
+          },
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "epoch",
+          "question",
+          "asked_at"
+        ],
+        "title": "ChunkAskView",
+        "type": "object"
+      },
       "ChunkDetail": {
         "description": "The whole chunk aggregate: transition history, inline artifact\nstore, and the open escalation.",
         "properties": {
@@ -6290,6 +6376,51 @@
       }
     },
     "/api/leases/{lease_id}/asks": {
+      "get": {
+        "description": "Every question asked on the worker's own chunk, oldest-first \u2014 open, answered, and\nrestart-superseded alike. An answer a person gave binds every later session on the chunk.",
+        "operationId": "get_chunk_asks_api_leases__lease_id__asks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChunkAskView"
+                  },
+                  "title": "Response Get Chunk Asks Api Leases  Lease Id  Asks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Asks",
+        "tags": [
+          "runner"
+        ]
+      },
       "post": {
         "description": "Record a worker's ask against its lease, minting the question id.\n\nToken-authorized like every other worker verb: activeness alone would admit\nan open takeover's closed reference lease too, so the presented token is the only\ncredential that actually gates this route.",
         "operationId": "record_ask_api_leases__lease_id__asks_post",

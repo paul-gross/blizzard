@@ -14,9 +14,9 @@ what to record every run (Measurement).
 
 ## When the axis is undeclared
 
-No route to a registry, and a route to one that just does not declare your axis, are the same gap. Before treating it
-as final: read `blizzard runner chunk history` for a prior `ask` on this same axis that is already answered — if one
-exists, re-check the registry once; an answered ask ordinarily means someone has just updated it.
+No route to a registry, and a route to one that just does not declare your axis, are the same gap. Before treating it as
+final: read `blizzard runner chunk asks` for a prior `ask` on this same axis that is already answered — if one exists,
+re-check the registry once; an answered ask ordinarily means someone has just updated it.
 
 Still undeclared, and no prior ask on record: ask now, `blizzard runner ask` naming the axis and asking that its entry
 be added (or that its absence be confirmed deliberate), and let the answer arrive before you continue.
@@ -37,8 +37,8 @@ Record instances, not themes: one candidate is one gap a person could act on, at
 Evaluates names as the unit of judgement, at the place it concerns. A candidate is `ref` (stable only within this
 submission), `class` (a stable, reusable kind of gap, spelled the same way run after run — reconcile matches by it),
 `locus`, and `summary` (what is missing and why it matters, in enough words that reconcile and propose can judge it
-without re-deriving your reasoning). Point at something concrete: without a place in the stated intent to cite, you
-have a preference, not a candidate, and it stays out of the list.
+without re-deriving your reasoning). Point at something concrete: without a place in the stated intent to cite, you have
+a preference, not a candidate, and it stays out of the list.
 
 Record the measurement your axis's registry entry declares whether or not you found anything, always as a string. State
 it for what this run delivers if no later node corrects it — zero proposals — since on the `empty` and `nothing-new`
