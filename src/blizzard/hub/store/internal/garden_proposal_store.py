@@ -28,6 +28,7 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalOrigin,
     GardenProposalPage,
     IWriteGardenProposalRepository,
+    RoutineProposalState,
 )
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
@@ -224,15 +225,24 @@ class GardenProposalStore:
         next_cursor = _encode_proposal_cursor(proposals[-1]) if len(rows) > limit else None
         return GardenProposalPage(proposals=proposals, next_cursor=next_cursor)
 
-    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+    def list_for_routine(
+        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+    ) -> list[GardenProposal]:
         """`list_all`'s routine-narrowed sibling — newest first, the same
         `created_at`/`proposal_id` tie-break."""
+        stmt = select(garden_proposals).where(garden_proposals.c.routine_name == routine_name)
+        closure_exists = (
+            select(garden_proposal_closures.c.id)
+            .where(garden_proposal_closures.c.proposal_id == garden_proposals.c.proposal_id)
+            .exists()
+        )
+        if state is RoutineProposalState.OPEN:
+            stmt = stmt.where(~closure_exists)
+        elif state is RoutineProposalState.CLOSED:
+            stmt = stmt.where(closure_exists)
+        stmt = stmt.order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc())
         with self._store.read("list_for_routine") as conn:
-            rows = conn.execute(
-                select(garden_proposals)
-                .where(garden_proposals.c.routine_name == routine_name)
-                .order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc())
-            ).all()
+            rows = conn.execute(stmt).all()
             findings = self._findings_for(conn, [row.proposal_id for row in rows])
             return [self._of(row, findings[row.proposal_id]) for row in rows]
 

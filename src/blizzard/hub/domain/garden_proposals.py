@@ -97,6 +97,14 @@ class GardenProposalOrigin(StrEnum):
     OPERATOR = "operator"
 
 
+class RoutineProposalState(StrEnum):
+    """Select open, closed, or all of a routine's garden proposals."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    ALL = "all"
+
+
 @dataclass(frozen=True)
 class GardenProposal:
     proposal_id: str
@@ -159,12 +167,15 @@ class IReadGardenProposalRepository(Protocol):
         window."""
         ...
 
-    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+    def list_for_routine(
+        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+    ) -> list[GardenProposal]:
         """Every proposal `routine_name` has raised, newest first — `list_all`'s
         routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
         proposal carries no scope column, so unlike a finding bucket this is never
         narrowed further. Includes an `operator`-origin proposal that names
-        `routine_name`."""
+        `routine_name`. ``OPEN``/``CLOSED`` select closure state before hydrating
+        proposal bodies and linked findings; ``ALL`` reads the full history."""
         ...
 
     def counts_by_class(
@@ -362,17 +373,6 @@ class GardenProposalAuthoring:
         return finding_ids
 
 
-class RoutineProposalState(StrEnum):
-    """Which of a routine's garden proposals `RoutineGardenProposalReader.list_for_routine`
-    returns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns
-    only closed ones with their closure, `ALL` returns every proposal with its closure
-    when one exists."""
-
-    OPEN = "open"
-    CLOSED = "closed"
-    ALL = "all"
-
-
 class RoutineGardenProposalReader:
     """A routine's garden proposals, filtered by `RoutineProposalState` and paired with
     each one's closure — `list_for_routine`'s own composed reader. Open means still
@@ -387,10 +387,12 @@ class RoutineGardenProposalReader:
     def list_for_routine(
         self, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN
     ) -> list[tuple[GardenProposal, GardenProposalClosure | None]]:
-        proposals = self._proposals.list_for_routine(routine_name)
-        closures = self._closures.get_many([p.proposal_id for p in proposals])
+        # Reconciliation needs every open proposal, without an arbitrary limit.
+        # Closed/all are explicit history reads for comparing previously declined ideas.
+        proposals = self._proposals.list_for_routine(routine_name, state=state)
         if state is RoutineProposalState.OPEN:
-            return [(p, None) for p in proposals if p.proposal_id not in closures]
+            return [(p, None) for p in proposals]
+        closures = self._closures.get_many([p.proposal_id for p in proposals])
         if state is RoutineProposalState.CLOSED:
             return [(p, closures[p.proposal_id]) for p in proposals if p.proposal_id in closures]
         return [(p, closures.get(p.proposal_id)) for p in proposals]

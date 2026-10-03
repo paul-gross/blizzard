@@ -531,8 +531,17 @@ def test_detach_a_closed_proposal_the_store_alone_detects_still_raises_already_c
 class _FakeReadGardenProposalRepo:
     by_routine: dict[str, list[GardenProposal]] = field(default_factory=dict)
 
-    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
-        return self.by_routine.get(routine_name, [])
+    closed_ids: set[str] = field(default_factory=set)
+
+    def list_for_routine(
+        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+    ) -> list[GardenProposal]:
+        proposals = self.by_routine.get(routine_name, [])
+        if state is RoutineProposalState.OPEN:
+            return [p for p in proposals if p.proposal_id not in self.closed_ids]
+        if state is RoutineProposalState.CLOSED:
+            return [p for p in proposals if p.proposal_id in self.closed_ids]
+        return proposals
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -571,7 +580,9 @@ def _closure(proposal_id: str) -> GardenProposalClosure:
 
 
 def test_open_reader_excludes_a_proposal_already_carrying_a_closure() -> None:
-    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]})
+    proposals = _FakeReadGardenProposalRepo(
+        by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]}, closed_ids={"gprop_2"}
+    )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
@@ -600,7 +611,7 @@ def test_open_reader_is_empty_for_a_routine_with_no_proposals() -> None:
 
 def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closure() -> None:
     proposals = _FakeReadGardenProposalRepo(
-        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
+        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}, closed_ids={"gprop_closed"}
     )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
@@ -615,7 +626,7 @@ def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closur
 
 def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_exists() -> None:
     proposals = _FakeReadGardenProposalRepo(
-        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
+        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}, closed_ids={"gprop_closed"}
     )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
@@ -629,7 +640,9 @@ def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_e
 
 
 def test_list_for_routine_defaults_to_open() -> None:
-    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]})
+    proposals = _FakeReadGardenProposalRepo(
+        by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]}, closed_ids={"gprop_2"}
+    )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 

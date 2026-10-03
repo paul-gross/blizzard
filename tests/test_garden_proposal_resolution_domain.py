@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalCounts,
     GardenProposalOrigin,
     GardenProposalPage,
+    RoutineProposalState,
 )
 from blizzard.hub.domain.work import Chunk, WorkRef
 
@@ -118,7 +119,9 @@ class _FakeProposals:
     def list_all(self) -> list[GardenProposal]:
         raise NotImplementedError
 
-    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+    def list_for_routine(
+        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+    ) -> list[GardenProposal]:
         raise NotImplementedError
 
     def list_page(

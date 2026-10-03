@@ -71,12 +71,14 @@ def _other_list(list_: QueueList) -> QueueList:
     return QueueList.NOT_READY if list_ is QueueList.READY else QueueList.READY
 
 
-def _blocked_markings(services: HubServices, statuses: Mapping[str, ChunkStatus]) -> dict[str, list[str]]:
-    """Every currently-blocked dependent's unmet prerequisites. ``statuses`` is the caller's
-    live map (``bzh:live-set-read``), so standing edges are read only for its pre-claim
-    dependents, and a prerequisite it lacks — finished, so excluded — is resolved by id
-    rather than read as unmet (``bzh:bulk-reconstitution``)."""
-    pre_claim = [chunk_id for chunk_id, status_ in statuses.items() if status_ in PRE_CLAIM_STATUSES]
+def _blocked_markings(
+    services: HubServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
+) -> dict[str, list[str]]:
+    """Mark only the displayed dependents (or the whole live order for peeks and writes).
+    The live status map still resolves on-page and off-page prerequisites; a finished
+    prerequisite absent from it is resolved by id (``bzh:bulk-reconstitution``)."""
+    candidates = dependent_ids if dependent_ids is not None else statuses
+    pre_claim = [chunk_id for chunk_id in candidates if statuses[chunk_id] in PRE_CLAIM_STATUSES]
     edges = services.chunks.dependencies.standing_edges_for_dependents(pre_claim)
     absent = sorted({e.prerequisite_chunk_id for e in edges} - statuses.keys())
     resolved = {chunk_id: facts.status() for chunk_id, facts in services.chunks.facts.status_facts_for(absent).items()}
@@ -259,7 +261,7 @@ def get_queue(
         page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    return _page_view(page, _blocked_markings(services, statuses))
+    return _page_view(page, _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]))
 
 
 @router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
@@ -353,7 +355,9 @@ def get_backlog(
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    return _backlog_page_view(page, _blocked_markings(services, statuses))
+    return _backlog_page_view(
+        page, _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries])
+    )
 
 
 @router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
