@@ -969,7 +969,7 @@ class RunnerConfig:
             "# worker-stdout/<lease_id>.<generation>.{stdout,stderr}.\n"
             "[worker_stdout]\n"
             f"retention_days = {self.worker_stdout_retention_days}\n"
-            + "".join(self.tracing.to_toml(unit="closed leases"))
+            + "".join(self.tracing.to_toml(unit="closed leases", receiver=True))
             + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"

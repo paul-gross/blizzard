@@ -356,6 +356,14 @@ names in `env_passthrough` are always withheld.
 - **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
   `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's step are kept, the runner
   stamps caller, chunk and lease, and every cap and the redacting export apply. The CLI's own spans are unchanged.
+- **Naming a program's spans.** The `[tracing.worker_program_services]` table, empty by default, maps an instrumentation
+  scope name to the `service.name` its kept spans leave with, for example `winter_cli = "winter-blizzard"`. A scope not
+  listed stays `blizzard-worker-program`, and the CLI scope `blizzard.cli` stays `blizzard-cli`. The sender's own
+  resource is never read. The runner refuses to start on an empty scope or name, a `blizzard.cli` key, a non-string
+  name, or a name that is `blizzard-hub`, `blizzard-runner` or `blizzard-cli`. The table has no effect without
+  `worker_programs = true`, and none on the hub, which has no receiver. A bad entry is a config-load failure and the
+  runner does not start, unlike the OpenTelemetry environment settings, which are reported and leave the runner running
+  with tracing off.
 - **Risk.** Blizzard cannot control what a third-party program puts in its spans; one may record request bodies or query
   parameters. Turn this on only for programs you trust with that.
 - **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports to the runner as

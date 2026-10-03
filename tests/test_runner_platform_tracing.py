@@ -124,13 +124,14 @@ def _app(  # type: ignore[no-untyped-def]
     counter: ReceiverCounter | None = None,
     limiter: SpanRateLimiter | None = None,
     worker_programs: bool = False,
+    services: dict[str, str] | None = None,
 ):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         hub_url="http://hub.local:8421",
-        tracing=TracingConfig(worker_programs=worker_programs),
+        tracing=TracingConfig(worker_programs=worker_programs, worker_program_services=services or {}),
     )
 
     def hub(request: httpx.Request) -> httpx.Response:
@@ -435,6 +436,31 @@ def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_ano
     assert span.resource.attributes["service.name"] == "blizzard-worker-program"
     assert dict(span.attributes or {})["db.system"] == "sqlite"
     assert dict(span.attributes or {})["blizzard.lease.id"] == "lease_1"
+
+
+def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    app = _app(tmp_path, handle, [], worker_programs=True, services={"winter_cli": "winter-blizzard"})
+    scopes = ("winter_cli", "some.library", "blizzard.cli")
+    document = _export(_own_trace(), scope=scopes[0])
+    document["resourceSpans"][0]["scopeSpans"] += [  # type: ignore[index]
+        _export(_own_trace(), scope=scope)["resourceSpans"][0]["scopeSpans"][0]  # type: ignore[index]
+        for scope in scopes[1:]
+    ]
+    with TestClient(app) as client:
+        assert "partialSuccess" not in _post_json(client, document).json()
+    names = {
+        (span.instrumentation_scope.name if span.instrumentation_scope else ""): span.resource.attributes[
+            "service.name"
+        ]
+        for span in _finished(handle, exporter)
+    }
+    assert names == {
+        "winter_cli": "winter-blizzard",
+        "some.library": "blizzard-worker-program",
+        "blizzard.cli": "blizzard-cli",
+    }
 
 
 def test_winters_command_span_lands_in_the_step_and_another_chunks_is_dropped(tmp_path: Path) -> None:
