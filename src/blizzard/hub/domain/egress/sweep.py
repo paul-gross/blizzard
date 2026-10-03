@@ -7,8 +7,10 @@ placed, so a crash anywhere before the cursor row re-writes the same rows on the
 
 from __future__ import annotations
 
+# The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
+import threading
 from collections import defaultdict
-from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -17,27 +19,21 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_export.cursor import backoff_delay
 from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, runner_step, step_partition
 from blizzard.hub.domain.egress.repository import EgressCursorRecord, IWriteEgressCursor, UsagePosition
-from blizzard.hub.domain.egress.rows import invocation_row, step_row
 from blizzard.hub.domain.egress.schema import (
     INVOCATIONS_SCHEMA,
     STEPS_SCHEMA,
-    invocation_egress_row,
-    partition_of,
-    step_egress_row,
 )
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.tracing.steps import NodeStep, StepKind, identify_steps
-from blizzard.hub.domain.tracing.summary import summarize_step
 from blizzard.hub.domain.tracing.window import read_window
 from blizzard.hub.egress.writer import (
     DatasetSchema,
     EgressBatch,
     EgressFailure,
-    EgressFailureCause,
     EgressPass,
     EgressRow,
     IEgressWriter,
@@ -75,6 +71,7 @@ class EgressSweep:
         events: EventLogService,
         clock: IClock,
         config: EgressConfig,
+        pass_lock: threading.Lock | None = None,
     ) -> None:
         self._steps = steps
         self._egress = egress
@@ -89,8 +86,18 @@ class EgressSweep:
         self._failing = False
         self._failures = 0
         self._next_due: datetime | None = None
+        self._pass_lock = pass_lock or threading.Lock()
 
     def sweep(self) -> None:
+        """One pass, or none: while an operator's reset holds the pass lock the tick is skipped, not queued."""
+        if not self._pass_lock.acquire(blocking=False):
+            return
+        try:
+            self._pass()
+        finally:
+            self._pass_lock.release()
+
+    def _pass(self) -> None:
         now = self._clock.now()
         if self._next_due is not None and now < self._next_due:
             return
@@ -142,17 +149,17 @@ class EgressSweep:
         facts: dict[str, StepFacts] = {closed.step.key.chunk_id: closed.facts for closed in window.closed_steps()}
         batch: dict[str, tuple[CursorKey, EgressRow]] = {}
         for closed in window.closed_steps():
-            self._add_step(batch, facts[closed.step.key.chunk_id], closed.step, closed.key, now)
+            add_step(batch, facts[closed.step.key.chunk_id], closed.step, closed.key, now)
         late = [row for row in usage if row.chunk_id not in facts]
         facts.update(self._steps.step_facts_for(sorted({row.chunk_id for row in late})))
         for row in usage:
             chunk = facts.get(row.chunk_id)
-            step = _runner_step(chunk, row.fact.epoch) if chunk is not None else None
+            step = runner_step(chunk, row.fact.epoch) if chunk is not None else None
             if chunk is None or step is None or step.close is None:
                 continue
             key = CursorKey.of(step)
             if key <= window.position:
-                self._add_step(batch, chunk, step, key, now)
+                add_step(batch, chunk, step, key, now)
         position = usage[-1] if usage else None
         advanced = EgressCursorRecord(
             STEPS_SCHEMA.name,
@@ -162,26 +169,12 @@ class EgressSweep:
             (),
             now,
         )
-        rows = [(partition_of(_ended_at(row)), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
+        rows = [(step_partition(row), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
         if rows:
             return self._write(STEPS_SCHEMA, rows, egress_pass, advanced)
         if advanced.step != cursor.step or advanced.usage != cursor.usage:
             self._egress.append_cursor(advanced)
         return False
-
-    def _add_step(
-        self,
-        batch: dict[str, tuple[CursorKey, EgressRow]],
-        facts: StepFacts,
-        step: NodeStep,
-        key: CursorKey,
-        now: datetime,
-    ) -> None:
-        text = step.key.text()
-        if text in batch:
-            return
-        summary = summarize_step(facts, step, identify_steps(facts))
-        batch[text] = (key, step_egress_row(step_row(summary, now), key))
 
     # --- invocations --------------------------------------------------------------------
 
@@ -195,11 +188,11 @@ class EgressSweep:
         rows: _Rows = []
         for row in usage:
             chunk = facts.get(row.chunk_id)
-            if chunk is None or _runner_step(chunk, row.fact.epoch) is None:
+            entry = invocation_entry(chunk, row, egress_pass.started_at) if chunk is not None else None
+            if entry is None:
                 _log.warning("usage has no runner step; not exported", usage_id=row.usage_id, chunk_id=row.chunk_id)
                 continue
-            invocation = invocation_row(chunk, row, egress_pass.started_at)
-            rows.append((partition_of(invocation.recorded_at), invocation_egress_row(invocation)))
+            rows.append(entry)
         last = usage[-1]
         advanced = EgressCursorRecord(
             INVOCATIONS_SCHEMA.name,
@@ -225,7 +218,7 @@ class EgressSweep:
             by_partition[partition].append(row)
         placed: list[PlacedFile] = []
         for partition in sorted(by_partition):
-            written = _guarded(
+            written = guarded(
                 lambda partition=partition: self._writer.write(  # type: ignore[misc]
                     EgressBatch(schema, partition, egress_pass, by_partition[partition])
                 )
@@ -234,7 +227,7 @@ class EgressSweep:
                 return written
             placed.extend(written.files)
         _CP_EGRESS_AFTER_WRITE_BEFORE_COMMIT.reached()
-        committed = _guarded(lambda: self._writer.commit_pass(egress_pass, placed))
+        committed = guarded(lambda: self._writer.commit_pass(egress_pass, placed))
         if isinstance(committed, EgressFailure):
             return committed
         _CP_EGRESS_AFTER_COMMIT_BEFORE_CURSOR.reached()
@@ -287,25 +280,6 @@ class EgressSweep:
             detail=detail,
             at=self._clock.now(),
         )
-
-
-def _runner_step(facts: StepFacts, epoch: int) -> NodeStep | None:
-    return next((s for s in identify_steps(facts) if s.kind is StepKind.RUNNER and s.epoch == epoch), None)
-
-
-def _ended_at(row: EgressRow) -> datetime:
-    value = row.values["ended_at"]
-    assert isinstance(value, datetime)
-    return value
-
-
-def _guarded[T](call: Callable[[], T | EgressFailure]) -> T | EgressFailure:
-    """A writer that raises instead of returning a failure is an I/O failure like any other."""
-    try:
-        return call()
-    except Exception as error:
-        _log.exception("egress writer raised")
-        return EgressFailure(EgressFailureCause.IO_ERROR, f"{type(error).__name__}: {error}")
 
 
 __all__ = ["EgressSweep"]

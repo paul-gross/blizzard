@@ -28,6 +28,7 @@ EventLogKind = Literal[
     "egress-write-failed",
     "egress-write-recovered",
     "egress-config-rejected",
+    "egress-cursor-reset",
 ]
 
 #: The closed severity vocabulary; every wire severity field narrows against it.
@@ -55,6 +56,7 @@ EVENT_LOG_SEVERITY: Mapping[EventLogKind, EventLogSeverity] = {
     "egress-write-failed": "warning",
     "egress-write-recovered": "info",
     "egress-config-rejected": "warning",
+    "egress-cursor-reset": "info",
 }
 
 _EVENT_LOG_KINDS = frozenset(get_args(EventLogKind))

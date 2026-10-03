@@ -37,9 +37,25 @@ class EgressCursorRecord:
     recorded_at: datetime
 
 
+@dataclass(frozen=True)
+class EgressFailureRecord:
+    """The newest ``egress-write-failed`` event: when it was recorded and what it said."""
+
+    at: datetime
+    message: str
+
+
 class IReadEgress(Protocol):
     def newest_cursor(self, dataset: str) -> EgressCursorRecord | None:
         """The newest ``egress_cursor`` row of ``dataset`` — its position — or ``None`` before its first pass."""
+        ...
+
+    def newest_cursor_with_files(self) -> EgressCursorRecord | None:
+        """The newest ``egress_cursor`` row of any dataset that placed files, or ``None`` before the first write."""
+        ...
+
+    def newest_egress_failure(self) -> EgressFailureRecord | None:
+        """The newest ``egress-write-failed`` event, or ``None`` when the export has never failed."""
         ...
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[UsageRow]:

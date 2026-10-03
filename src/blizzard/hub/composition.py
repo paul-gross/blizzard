@@ -12,7 +12,7 @@ import tempfile
 # Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,6 +62,9 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
+from blizzard.hub.domain.egress.backfill import EgressBackfill
+from blizzard.hub.domain.egress.reset import EgressReset
+from blizzard.hub.domain.egress.status import EgressStatusReader
 from blizzard.hub.domain.egress.sweep import EgressSweep
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.event_log import EventLogService
@@ -117,7 +120,8 @@ from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
-from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
+from blizzard.hub.egress.space import free_bytes
+from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
@@ -222,6 +226,12 @@ class HubServices:
     egress_export: EgressSweep | None
     #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
     egress_unavailable: EgressUnavailable | None
+    #: The operator's read of the fact export — always composed, so status answers with the export off.
+    egress_status: EgressStatusReader
+    #: Moves a dataset's cursor — always composed; it refuses while the export is off.
+    egress_reset: EgressReset
+    #: Writes a past window — always composed; it refuses while the export is off.
+    egress_backfill: EgressBackfill
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -407,6 +417,20 @@ def _work_ref_label(work_sources: IWorkSourceRegistry) -> WorkRefLabel:
     return label
 
 
+def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> Callable[[], IEgressWriter]:
+    """A fresh writer per backfill, each with a newly minted process token. The export's own writer was built from
+    these same settings, so a backfill's writer can fail to build only if that one did not."""
+    directory = config.directory
+    assert directory is not None  # composed only once the export itself is on
+
+    def writer() -> IEgressWriter:
+        built = build_egress_writer(config.format, directory, settings, mint_process_token())
+        assert not isinstance(built, EgressUnavailable)
+        return built
+
+    return writer
+
+
 def build_services(
     core: HubCore,
     *,
@@ -500,27 +524,55 @@ def build_services(
         replay_max_window=trace_config.replay_max_window,
     )
     egress_config = egress or EgressConfig()
+    egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
             egress_config.format,
             egress_config.directory,
-            EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes),
+            egress_writer_settings,
             mint_process_token(),
         )
         if egress_config.directory is not None
         else None
     )
+    egress_store = EgressStore(store_connections)
+    egress_pass_lock = threading.Lock()
+    egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
+    egress_status = EgressStatusReader(
+        config=egress_config,
+        rejected=egress_unavailable is not None,
+        egress=egress_store,
+        steps=trace_store,
+        clock=clock,
+        free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
+    )
     egress_export = (
         EgressSweep(
             steps=trace_store,
-            egress=EgressStore(store_connections),
+            egress=egress_store,
             writer=egress_writer,
             events=event_log,
             clock=clock,
             config=egress_config,
+            pass_lock=egress_pass_lock,
         )
         if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
         else None
+    )
+    egress_reset = EgressReset(
+        egress=egress_store,
+        events=event_log,
+        clock=clock,
+        config=egress_config,
+        active=egress_export is not None,
+        pass_lock=egress_pass_lock,
+    )
+    egress_backfill = EgressBackfill(
+        steps=trace_store,
+        egress=egress_store,
+        clock=clock,
+        config=egress_config,
+        writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -713,7 +765,10 @@ def build_services(
         trace_status=trace_status,
         trace_replay=trace_replay,
         egress_export=egress_export,
-        egress_unavailable=egress_writer if isinstance(egress_writer, EgressUnavailable) else None,
+        egress_unavailable=egress_unavailable,
+        egress_status=egress_status,
+        egress_reset=egress_reset,
+        egress_backfill=egress_backfill,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

@@ -43,6 +43,7 @@ from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
+from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import router as fleet_router
@@ -320,6 +321,7 @@ def create_app(
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
     app.include_router(traces_router)
+    app.include_router(egress_router)
     app.include_router(work_sources_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
