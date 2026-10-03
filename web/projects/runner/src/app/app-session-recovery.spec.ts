@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
 import { settle, stubError, stubRequestClient } from 'fleet/testing';
-import { SessionRecovery } from 'local-panel';
+import { SessionRecovery } from './status/session-recovery';
 import { vi } from 'vitest';
 
 import { App } from './app';
@@ -25,7 +25,7 @@ class FakeEventSource {
 }
 
 /** Registers a fresh `SessionRecovery`'s interceptor, spying its navigation so no
- * case actually leaves jsdom — see `local-panel`'s own `session-recovery.spec.ts`
+ * case actually leaves jsdom — see `status/session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
 async function setUp(route: (method: string, path: string) => unknown) {
   const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
@@ -70,7 +70,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
     sessionStorage.clear();
   });
 
-  it('renders local-panel through an upstream 401 whose session resolves a username', async () => {
+  it('renders app-panel through an upstream 401 whose session resolves a username', async () => {
     const { restore: r } = await setUp((_method, path) =>
       path === '/api/auth/session' ? { auth_enabled: true, username: 'alice' } : stubError(401, { detail: 'upstream' }),
     );
@@ -82,11 +82,11 @@ describe('runner App session-recovery fork (issue #312)', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('local-panel')).toBeTruthy();
+    expect(el.querySelector('app-panel')).toBeTruthy();
     expect(el.querySelector('[data-testid="session-recovery"]')).toBeNull();
   });
 
-  it('renders the recovery view instead of local-panel once the seam sets recovering', async () => {
+  it('renders the recovery view instead of app-panel once the seam sets recovering', async () => {
     const { recovery, restore: r } = await setUp((_method, path) =>
       path === '/api/auth/session' ? { auth_enabled: true, username: null } : stubError(401, { detail: 'no session' }),
     );
@@ -104,7 +104,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="session-recovery"]')).toBeTruthy();
-    expect(el.querySelector('local-panel')).toBeNull();
+    expect(el.querySelector('app-panel')).toBeNull();
   });
 
   it('re-attempts the bounce when the recovery view is retried', async () => {

@@ -1,0 +1,7 @@
+<app-chunk-card-view
+  [lease]="lease()"
+  [status]="status()"
+  [selected]="selected()"
+  [linkedItems]="linkedItems()"
+  (selectChunk)="selectChunk.emit($event)"
+/>

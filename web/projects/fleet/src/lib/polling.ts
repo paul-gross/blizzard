@@ -15,7 +15,7 @@ export const LIVE_COVERED_POLL_BACKSTOP_MS = 45_000;
  * in intent, but not in value: the runner panel
  * panel is a single machine-local operator surface, not a shared board — so the
  * floor here is deliberately coarser than 45s. 1 minute: `leases.query.ts` feeds
- * `local-heartbeat-freshness`'s own decay curve, which anchors its resolution at this
+ * `app-heartbeat-freshness`'s own decay curve, which anchors its resolution at this
  * interval — a slower backstop would widen the window that curve
  * renders 100% instead of a real drain, without changing what it is actually able to
  * resolve (the elapsed-time-derived state a heartbeat *is* rides no event at all,

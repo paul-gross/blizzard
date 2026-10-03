@@ -1,0 +1,13 @@
+<div class="wrap" data-testid="local-info">
+  <fleet-kit-async-state [state]="triadState()" loadingText="LOADING…" errorText="RUNNER STATUS UNAVAILABLE">
+    @if (view(); as v) {
+      <app-info-view
+        [view]="v"
+        [fleet]="fleet()"
+        [fleetStale]="fleetStale()"
+        [lastFlushLabel]="lastFlushLabel()"
+        [lastTickLabel]="lastTickLabel()"
+      />
+    }
+  </fleet-kit-async-state>
+</div>

@@ -6,7 +6,7 @@ import type { RunnerRow } from './runner-rows';
 import { FleetView } from './fleet-view';
 
 /** The design tokens are a global stylesheet loaded via each app's build `styles`,
- * never by a standalone component test (`design/hover-tint.shell-sweep.spec.ts`'s own
+ * never by a standalone component test (`board/hover-tint.shell-sweep.spec.ts`'s own
  * precedent) — read the sheet's real text server-side and inject it as a `<style>`
  * element, so the aging/stale `var(--amber)`/`var(--red)` colours this file's own
  * tier-colour assertions actually resolve. */

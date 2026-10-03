@@ -28,7 +28,7 @@ describe('runner App', () => {
   beforeEach(async () => {
     // The shell mounts `LocalPanel`, which now polls `GET /api/leases` —
     // stub a minimal empty response so this shell-level test stays independent of
-    // the local panel's own query behavior (covered by `local-panel`'s own specs).
+    // the local panel's own query behavior (covered by the board panel's own specs).
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ items: [] }), {
         status: 200,
@@ -54,7 +54,7 @@ describe('runner App', () => {
     globalThis.fetch = previousFetch;
   });
 
-  it('redirects the empty path to /board and renders the local-panel shell through the routed tab strip (issue #313)', async () => {
+  it('redirects the empty path to /board and renders the app-panel shell through the routed tab strip (issue #313)', async () => {
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/');
@@ -63,7 +63,7 @@ describe('runner App', () => {
 
     expect(router.url).toBe('/board');
     expect(el.querySelector('[data-testid="app-nav"]')).toBeTruthy();
-    expect(el.querySelector('local-panel')).toBeTruthy();
+    expect(el.querySelector('app-panel')).toBeTruthy();
     expect(el.querySelector('[data-testid="local-panel"]')).toBeTruthy();
   });
 
@@ -81,7 +81,7 @@ describe('runner App', () => {
 
     expect(resolved).toBe(true);
     expect(router.url).toBe('/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9&attempt=lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
-    expect((fixture.nativeElement as HTMLElement).querySelector('local-panel')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-panel')).toBeTruthy();
   });
 
   it('resolves /events to the full-width fact log, without mounting the board first', async () => {
@@ -93,7 +93,7 @@ describe('runner App', () => {
 
     expect(resolved).toBe(true);
     expect(el.querySelector('[data-testid="fact-log"]')).toBeTruthy();
-    expect(el.querySelector('local-panel')).toBeNull();
+    expect(el.querySelector('app-panel')).toBeNull();
   });
 
   describe('the app-root header/nav/content order (issue #325)', () => {

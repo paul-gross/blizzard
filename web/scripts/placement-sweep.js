@@ -5,8 +5,7 @@
  *
  * The placement unit is each direct child of `fleet/src/lib/`, a feature folder or a
  * top-level module. `fleet` holds only what both apps reach, so a unit must be reached by
- * the non-spec code of **both** `hub` and `runner`; runner reach follows through
- * `local-panel` while that library exists. The sweep fails naming the unit and the single
+ * the non-spec code of **both** `hub` and `runner`. The sweep fails naming the unit and the single
  * app that reaches it, or naming no app when the unit is dead. It also fails any `fleet`
  * file that imports from an app project — `fleet` never depends on its consumers.
  *
@@ -34,11 +33,8 @@ const APPS = [
   { name: 'runner', roots: ['projects/runner/src'] },
 ];
 
-/** Libraries an app reaches into; a file reached here is followed on that app's behalf. */
-const APP_LIBRARIES = ['projects/local-panel/src'];
-
 /** Projects a `fleet` file must never import from. */
-const APP_PROJECTS = ['projects/hub', 'projects/runner', 'projects/local-panel'];
+const APP_PROJECTS = ['projects/hub', 'projects/runner'];
 
 const FLEET_LIB = 'projects/fleet/src/lib';
 
@@ -51,16 +47,6 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  *   those modules, which are units of their own, never on the barrel.
  */
 const PLACEMENT_EXEMPT_UNITS = ['testing', 'format'];
-
-/**
- * Measured findings awaiting their move, so the gate stays green while the migration lands
- * across phases. Each later phase deletes the entries it resolves; an entry the sweep no
- * longer finds is stale and fails the gate, so this list can only shrink, and the migrated
- * tree carries none of it.
- *
- * @type {readonly { unit: string, reach: readonly string[] }[]}
- */
-const PLACEMENT_PENDING_MIGRATION = [];
 
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join('/');
@@ -107,7 +93,6 @@ function createProgram(root, rootNames, memory) {
       fleet: ['./projects/fleet/src/public-api.ts'],
       'fleet/shell': ['./projects/fleet/src/shell-api.ts'],
       'fleet/testing': ['./projects/fleet/src/lib/testing/public-api.ts'],
-      'local-panel': ['./projects/local-panel/src/public-api.ts'],
     },
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.Preserve,
@@ -247,7 +232,6 @@ function sweepPlacement({ root, memory = null }) {
     if (unit !== null && !isSpec(file)) units.add(unit);
   }
 
-  const libraries = APP_LIBRARIES.map(abs);
   for (const app of APPS) {
     const appRoots = app.roots.map(abs);
     const queue = files.filter((f) => !isSpec(f) && appRoots.some((r) => isUnder(f, r)));
@@ -259,9 +243,8 @@ function sweepPlacement({ root, memory = null }) {
       for (const reached of declarationFilesImportedBy(checker, sf)) {
         if (seen.has(reached) || isSpec(reached)) continue;
         const inFleet = isUnder(reached, fleetLib);
-        const inLibrary = libraries.some((l) => isUnder(reached, l));
         const inOwnApp = appRoots.some((r) => isUnder(reached, r));
-        if (!inFleet && !inLibrary && !inOwnApp) continue;
+        if (!inFleet && !inOwnApp) continue;
         seen.add(reached);
         queue.push(reached);
         const unit = unitOf(reached, fleetLib);
@@ -343,31 +326,21 @@ function assertPlacementDetectorWorks() {
 }
 
 /**
- * The sweep over the real tree, with pending-migration entries suppressed.
+ * The sweep over the real tree.
  *
- * @param {{ pending?: readonly { unit: string, reach: readonly string[] }[] }} [opts]
  * @returns {string[]} violation lines, empty when clean
  */
-function placementViolations({ pending = PLACEMENT_PENDING_MIGRATION } = {}) {
+function placementViolations() {
   const { units, appImports } = sweepPlacement({ root: ROOT });
   /** @type {string[]} */
   const lines = [];
-  const key = (/** @type {{ unit: string, reach: readonly string[] }} */ f) => `${f.unit}:${f.reach.join(',')}`;
-  const pendingKeys = new Set(pending.map(key));
-  const foundKeys = new Set(units.map(key));
 
   for (const f of units) {
-    if (pendingKeys.has(key(f))) continue;
     lines.push(
       f.reach.length === 0
         ? `  fleet/src/lib/${f.unit}: reached by no app (dead)`
         : `  fleet/src/lib/${f.unit}: reached only by ${f.reach.join(', ')}`,
     );
-  }
-  for (const p of pending) {
-    if (!foundKeys.has(key(p))) {
-      lines.push(`  PLACEMENT_PENDING_MIGRATION entry \`${p.unit}\` is stale — the sweep no longer finds it; delete it`);
-    }
   }
   for (const i of appImports) lines.push(`  ${i.file}: imports app code from ${i.target}`);
   return lines;

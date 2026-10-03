@@ -1,0 +1,11 @@
+<div class="wrap" data-testid="fact-log">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="FACT LOG UNAVAILABLE"
+    emptyText="NO FACTS RECORDED YET"
+    emptyTestid="facts-empty"
+  >
+    <app-fact-log-view [facts]="facts()" />
+  </fleet-kit-async-state>
+</div>

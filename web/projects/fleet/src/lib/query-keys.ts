@@ -227,7 +227,7 @@ export function chunkWorkItemsKey(plane: TranscriptPlane, chunkId: string | null
  * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
  * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as
  * the chunk's steps progress. The runner plane carries no equivalent event yet — no
- * `RunnerEventType` names a transcript change (`local-panel/runner-live-updates.ts`'s own
+ * `RunnerEventType` names a transcript change (`runner/src/app/live/runner-live-updates.ts`'s own
  * registry is exhaustive over the six it does have) — so a runner operator watching a
  * live chunk needs a manual reload to see new segments; this key's placement positions
  * it to pick up a future runner event, it does not itself close today's gap. */

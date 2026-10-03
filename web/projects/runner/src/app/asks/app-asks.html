@@ -1,0 +1,11 @@
+<div class="wrap" data-testid="local-asks">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="ASKS UNAVAILABLE"
+    emptyText="NO OPEN ASKS ON THIS MACHINE"
+    emptyTestid="asks-empty"
+  >
+    <app-asks-view [rows]="rows()" />
+  </fleet-kit-async-state>
+</div>

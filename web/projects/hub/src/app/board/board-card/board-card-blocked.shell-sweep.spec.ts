@@ -39,7 +39,7 @@ const BASE: BoardCard = {
 };
 
 // 800 (wider than any real board column) and 390/320 (the phone pair
-// `local-panel-mobile.shell-sweep.spec.ts` already sweeps) — not a board column's own
+// `app-panel-mobile.shell-sweep.spec.ts` already sweeps) — not a board column's own
 // narrower fractional share of either.
 const WIDTHS = [800, 390, 320];
 

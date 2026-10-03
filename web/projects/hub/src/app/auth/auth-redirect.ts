@@ -15,7 +15,7 @@ const RETURN_URL_KEY = 'fleet.auth.return-to';
  * seam both the hub's 401 interceptor (`auth.interceptor.ts`) and the SSE auth-failure
  * channel (`../sse/fleet-live.ts`) route through, so "an unauthenticated hub response
  * means log in again" is decided in exactly one place *for the hub app* — the runner
- * webapp makes the same decision independently, for its own surface, in `local-panel`'s
+ * webapp makes the same decision independently, for its own surface, in the runner app's
  * `session-recovery.ts`. */
 export function redirectToLogin(router: Router): void {
   const current = router.url;

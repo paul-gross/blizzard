@@ -70,7 +70,7 @@ export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number>
 /**
  * Every chunk status folded onto the shared {@link Tone} vocabulary —
  * the fleet-side half of "one status-to-tone mapping consumed by both libraries";
- * `local-panel`'s `deriveMachineChunkStatus` (`chunk-status.ts`) is the other half,
+ * the runner's `deriveMachineChunkStatus` (`runner/src/app/board/chunk-list/chunk-status.ts`) is the other half,
  * folding the runner's own lease-state derivation onto the same `Tone` union rather
  * than inventing a second one. Grouped by the same lane intent as {@link STATUS_LANE}:
  * live work reads `running`, human-waiting reads `waiting`, a blocking escalation

@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { RunnerLiveUpdates, SessionRecovery, SessionRecoveryView } from 'local-panel';
+import { RunnerLiveUpdates } from './live/runner-live-updates';
+import { SessionRecovery } from './status/session-recovery';
+import { SessionRecoveryView } from './status/session-recovery-view';
 
 import { AppShell, ViewportService } from 'fleet';
 import { AppHeader } from './nav/app-header';
@@ -9,9 +11,9 @@ import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
 
 /**
- * The runner local-panel app — a thin entrypoint that renders the routed
+ * The runner app — a thin entrypoint that renders the routed
  * panel shell. It composes the shared fleet library (design tokens, and the
- * fleet views as they arrive) plus the runner-only local-panel library.
+ * fleet views as they arrive) plus the runner's own board feature folders.
  *
  * The app header — {@link AppHeader} (desktop) or {@link MobileTitlebar}
  * (mobile) — is app-root chrome now, persisting across `/board`,
@@ -34,7 +36,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * is a separate, narrower concern this fork does not replace.
  *
  * Session-aware fork, mirroring the hub shell's own auth fork in
- * spirit though not in shape — `local-panel.ts` is already at the `max-lines`
+ * spirit though not in shape — `app-panel.ts` is already at the `max-lines`
  * cap, so the fork sits here instead: {@link SessionRecovery.recovering} renders
  * {@link SessionRecoveryView} in place of the routed shell for the one condition
  * where there is no session left to render it against (a bounce already

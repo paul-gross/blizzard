@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
-import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, signedInUsername } from 'local-panel';
+import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerSessionQuery, signedInUsername } from '../identity/auth.query';
+import { LocalIdentity } from '../identity/app-identity';
 
 /**
  * The runner's mobile titlebar sits at the app root (`../app.ts`),
@@ -19,7 +21,7 @@ import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, si
  *
  * TanStack dedupes query-key injections, so this
  * component injecting the same dashboard/session queries `LocalPanel`'s other
- * rails (and `local-info`) also inject costs no extra network request.
+ * rails (and `app-info`) also inject costs no extra network request.
  */
 @Component({
   selector: 'app-mobile-titlebar',
@@ -28,14 +30,14 @@ import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, si
   templateUrl: './mobile-titlebar.html',
 })
 export class MobileTitlebar {
-  /** The titlebar's own severable read (`local-info.ts`'s own instance dedupes
+  /** The titlebar's own severable read (`app-info.ts`'s own instance dedupes
    * on the same query key, so this is not a second poll) — `runner.hub.reachable`
-   * off `GET /api/dashboard`, the same fact `local-info`'s "link" cell renders. */
+   * off `GET /api/dashboard`, the same fact `app-info`'s "link" cell renders. */
   private readonly dashboardQuery = injectRunnerDashboardQuery();
 
   /** Whether the hub link is reachable — the titlebar's `live` dot. A
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
-   * throw mid-render — the same guard `local-info.ts`'s own `view` takes. */
+   * throw mid-render — the same guard `app-info.ts`'s own `view` takes. */
   protected readonly hubReachable = computed(() => this.dashboardQuery.data()?.runner?.hub?.reachable ?? false);
 
   private readonly sessionQuery = injectRunnerSessionQuery();

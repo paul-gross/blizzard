@@ -8,7 +8,7 @@ import { KitMenu } from '../kit';
  * `../../../docs/designs/mobile/core-flows.html`) — the brand mark + wordmark,
  * a live dot, and a buried `⋮` overflow menu, shared by both mobile shells:
  * the hub's app-root fork (`hub/src/app/nav/mobile-titlebar.ts`, a thin
- * wrapper around this) and the runner's `local-panel-mobile.ts`. Presentational
+ * wrapper around this) and the runner's `app-panel-mobile.ts`. Presentational
  * only — the `live` boolean and the menu's panel are each consumer's own
  * concern (the hub derives liveness from `FleetLiveUpdates`, the runner from
  * its own hub-reachability read); this component owns only the chrome both

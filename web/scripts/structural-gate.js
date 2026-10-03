@@ -537,12 +537,12 @@ const ON_MUTATE = /\bonMutate\s*:/g;
  * A site that should keep `onMutate` — a reasoned exemption per entry, the
  * `REAL_TIMER_EXEMPT_FILES` idiom:
  *
- * - `local-panel/src/lib/auth.query.ts`'s `injectRunnerLogoutMutation` uses `onMutate`
+ * - `runner/src/app/identity/auth.query.ts`'s `injectRunnerLogoutMutation` uses `onMutate`
  *   only to flip a local in-flight signal (`logoutInFlightSignal.set(true)`) — no
  *   `setQueryData`, no snapshot/rollback of query data, so it's not the cache-write
  *   pattern this sweep forbids.
  */
-const NO_CACHE_WRITE_EXEMPT_FILES = [path.join('local-panel', 'src', 'lib', 'auth.query.ts')];
+const NO_CACHE_WRITE_EXEMPT_FILES = [path.join('runner', 'src', 'app', 'identity', 'auth.query.ts')];
 
 /** The lines of `source` (any non-spec `.ts` file at `rel`) writing the cache, honoring
  * `NO_CACHE_WRITE_EXEMPT_FILES`. `setQueryData` is checked everywhere a mutation hook is

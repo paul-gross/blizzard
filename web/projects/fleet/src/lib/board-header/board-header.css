@@ -118,7 +118,7 @@
  * to its max-content, so a long username would push the whole cluster, menu
  * included, past the clipped right edge. A zero min-width removes that floor;
  * each projected control then decides for itself whether it gives way (see
- * local-panel-layout.ts, where the identity truncates and the menu is pinned
+ * app-panel-layout.ts, where the identity truncates and the menu is pinned
  * flex: none).
  */
 .trailing {

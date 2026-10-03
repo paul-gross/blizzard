@@ -4,7 +4,7 @@ import type { Tone } from './tone';
 
 /** The `Tone` → color ladder — the hub board's derived-status scheme. Exported
  * as {@link toneColor} so a consumer that needs the bare color (not a badge) —
- * the runner's chunk cards' lane-colored left edge, `local-panel/chunk-row.ts`
+ * the runner's chunk cards' lane-colored left edge, `runner/src/app/board/chunk-list/chunk-row.ts`
  * — derives from this one ladder instead of re-typing its own (`bzh:frontend-formatters`). */
 const TONE_COLOR: Record<Tone, string> = {
   running: 'var(--amber)',

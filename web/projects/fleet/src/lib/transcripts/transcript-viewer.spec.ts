@@ -393,7 +393,7 @@ describe('TranscriptViewer', () => {
   });
 
   describe('turn timestamps render in browser-local time (issue #136, review:F8)', () => {
-    // Re-homed from `local-panel/transcript-panel.spec.ts` when `turnClockInfo`/
+    // Re-homed from the runner's former transcript panel spec when `turnClockInfo`/
     // `turnAbsolute` moved here — pin both the zone and "now" so the
     // local-day boundary is deterministic.
     beforeEach(() => {

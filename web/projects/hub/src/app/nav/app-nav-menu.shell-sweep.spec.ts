@@ -16,7 +16,7 @@ import { AppNavMenu } from './app-nav-menu';
  * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
  * `npm run shell-sweep` (`web/scripts/shell-sweep.js`), which drives both this
  * file and the runner shell's counterpart
- * (`local-panel/src/lib/shell-sweep.shell-sweep.spec.ts`).
+ * (`runner/src/app/nav/app-nav.shell-sweep.spec.ts`).
  *
  * The hub shell projects only {@link AppNavMenu} into `BoardHeader`'s
  * `[header-trailing]` slot — no username, no other content-dependent width —

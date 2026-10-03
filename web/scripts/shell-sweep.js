@@ -44,7 +44,7 @@
  *     `LocalPanelLayout` by issue #325), swept over width × signed-in
  *     username length — the axis issue #163's actual defect lived on: same
  *     profile-menu-drift proof.
- *   - projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts —
+ *   - projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts —
  *     the runner's mobile chunk list (`LocalPanelMobile` → `ChunkCard`,
  *     issue #176): a five-work-item chunk card's per-line
  *     `-webkit-line-clamp: 2` lines genuinely stack (distinct
@@ -55,13 +55,7 @@
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
  *     horizontal overflow, at the board right rail's ~390px width.
- *   - projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts —
- *     the transcript panel's two new blizzard#249 states, reachable from the
- *     mobile chunk-detail screen (`data-testid="detail-transcript"`): the
- *     archived badge + truncation banner render with no horizontal overflow,
- *     and the hub-unreachable degrade banner wraps rather than pushing past
- *     the viewport under `nowrap`.
- *   - projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts —
+ *   - projects/runner/src/app/status/session-recovery-view.shell-sweep.spec.ts —
  *     the runner's session-recovery surface (blizzard#312), which replaces the
  *     whole panel while a bounce could not be silently completed: the
  *     headline, detail copy, and retry control hold their layout with no
@@ -69,7 +63,7 @@
  *   - projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts — the runner
  *     shell's own top tab strip (issue #313, `AppNav`): the Board/Events
  *     labels never force the strip to overflow its own width.
- *   - projects/runner/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts —
+ *   - projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts —
  *     the shared chunk page through the runner's own route: each of its four
  *     tabs — General, Node history, Artifacts, Transcripts — genuinely stacks its own
  *     sections with no horizontal overflow at phone widths, including the
@@ -198,7 +192,7 @@
  *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
  *     800px and at 390/320px. A second case per width opens the trigger's menu and
  *     sweeps its own panel items (Detach, Complete, Delete) on-viewport.
- *   - projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts — the
+ *   - projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts — the
  *     machine detail dock's own header: a real pointer hover on Pause/Resume opens
  *     the wired `KitTooltip` naming the claiming runner, and the header's two
  *     clusters never overflow with a long chunk id and runner name live at once, at
@@ -233,7 +227,7 @@
  *     two node-history steps recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges beside their usage figures with no horizontal
  *     overflow at 390px.
- *   - projects/local-panel/src/lib/chunk-detail-view-provenance.shell-sweep.spec.ts — the
+ *   - projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts — the
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
  */
@@ -248,21 +242,20 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-header.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/fleet/runner-view.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/fleet/runner-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-info-view.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/machine/app-info-view.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/status/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
-  { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/gardening/routine-panel.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/gardening/scope-panel.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/gardening/garden-runs.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/gardening/finding-fact-timeline.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/routine-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/scope-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/garden-runs.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
@@ -272,24 +265,24 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/gardening/gardening-findings-triage.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/chunk-detail-view-provenance.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.
