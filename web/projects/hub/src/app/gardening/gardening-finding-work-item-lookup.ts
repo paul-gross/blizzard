@@ -1,11 +1,8 @@
 import { computed } from '@angular/core';
-import {
-  injectHubGardenProposalsQuery,
-  injectHubWorkItemsQuery,
-  type ProposalWorkItemVm,
-  type WorkItemPointer,
-  type WorkItemView,
-} from 'fleet';
+import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { injectHubWorkItemsQuery, type WorkItemPointer } from './work-item.query';
+import { type ProposalWorkItemVm } from './proposal-panel';
+import { type WorkItemView } from 'fleet';
 
 /** A finding id's own resolved work item, or `null` while no accepted-and-minted
  * proposal names it. */

@@ -4,8 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { ChunkPage, hubClient, ViewportService } from 'fleet';
-import { stubError } from 'fleet/testing';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { stubError, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
@@ -196,13 +195,13 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
     // Artifacts render as links here, never the desktop dock's inline bodies.
-    expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-artifacts')).toBeNull();
   });
 
   it("mounts none of the dock's destructive or structural actions", async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('fleet-chunk-detail-header')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-header')).toBeNull();
     for (const testid of [
       'pause-chunk',
       'resume-chunk',

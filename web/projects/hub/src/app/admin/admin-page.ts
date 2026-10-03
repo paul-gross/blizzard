@@ -1,5 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { UsersTable, asyncState, injectAssignRoleMutation, injectMeQuery, injectUsersQuery, KitAsyncState } from 'fleet';
+import { UsersTable } from './users-table';
+import { asyncState, KitAsyncState } from 'fleet';
+import { injectAssignRoleMutation } from './assign-role.mutation';
+import { injectMeQuery } from '../auth/me.query';
+import { injectUsersQuery } from './users.query';
 
 /**
  * The `/admin` route — the real admin page replacing #93's stub: a

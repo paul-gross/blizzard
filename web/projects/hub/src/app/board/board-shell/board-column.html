@@ -1,0 +1,49 @@
+<div class="b-col-head">
+  <span class="col-lbl">{{ column().label }}</span>
+  <span class="n">
+    <!-- A live lane with occupants announces itself: a flashing square
+         ahead of the count — amber for work in flight or parked on a
+         human, red for an escalation. Quiet (empty) lanes show none. -->
+    @if (cards().length > 0 && blink(); as tone) {
+      <fleet-kit-beacon data-testid="lane-blink" [attr.data-blink]="tone" [active]="true" [tone]="tone" />
+    }
+    @if (count() !== null) {
+      {{ count() }}
+    }
+  </span>
+</div>
+<!-- The drag-and-drop drop list is only *armed* when the identity actually holds
+     queue:reorder — a read-only board must not offer a drag it would then
+     refuse, not merely hide a button. A guest on a reorderable lane
+     falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
+@if (reorderControls() && canReorder()) {
+  <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">
+    @for (card of cards(); track card.chunkId) {
+      <div class="q-card" cdkDrag>
+        <span class="reorder-grip" data-testid="board-reorder-grip" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </span>
+        <app-board-card
+          class="reorder-armed"
+          [card]="card"
+          [selected]="card.chunkId === selectedChunkId()"
+          [canControl]="canControl()"
+          (selectChunk)="selectChunk.emit($event)"
+          (promote)="promote.emit($event)"
+        />
+      </div>
+    }
+  </div>
+} @else {
+  <div class="b-col-body">
+    @for (card of cards(); track card.chunkId) {
+      <app-board-card
+        [card]="card"
+        [selected]="card.chunkId === selectedChunkId()"
+        [canControl]="canControl()"
+        (selectChunk)="selectChunk.emit($event)"
+        (promote)="promote.emit($event)"
+      />
+    }
+  </div>
+}

@@ -63,7 +63,7 @@ describe('AdminPage', () => {
     const fixture = await mount(ME_ADMIN, USERS);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-users-table')).toBeTruthy();
+    expect(el.querySelector('app-users-table')).toBeTruthy();
     expect(el.querySelectorAll('[data-testid="users-table-row"]')).toHaveLength(2);
   });
 

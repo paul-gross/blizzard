@@ -1,5 +1,3 @@
-export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-detail-panel';
-export { ChunkDetail } from './chunk-detail';
 export { pauseCopy, resumeCopy } from './chunk-action-copy';
 // The dock's presentational siblings a second shell re-stacks — the hub's chunk
 // detail page composes exactly these, in one column instead of three. Which siblings
@@ -7,8 +5,8 @@ export { pauseCopy, resumeCopy } from './chunk-action-copy';
 export { ChunkArtifactBody } from './chunk-artifact-body';
 export { sortArtifacts } from './sort-artifacts';
 export { filterArtifactsByStep } from './filter-artifacts-by-step';
-export { ChunkArtifacts } from './chunk-artifacts';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
+export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';

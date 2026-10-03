@@ -1,4 +1,4 @@
-<fleet-routine-panel
+<app-routine-panel
   [vm]="panelVm()"
   [state]="panelState()"
   [canEdit]="canEdit()"
@@ -10,7 +10,7 @@
 />
 
 @if (panelVm(); as panel) {
-  <fleet-routine-proposal-counts [rows]="proposalCountsRows()" [state]="proposalCountsState()" />
+  <app-routine-proposal-counts [rows]="proposalCountsRows()" [state]="proposalCountsState()" />
 }
 
 @if (runningRoutine(); as routine) {

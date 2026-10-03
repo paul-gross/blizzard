@@ -1,7 +1,7 @@
 <div class="layout">
-  <fleet-graph-explorer class="explorer" [selectedGraphId]="graphId()" (selectGraph)="select($event)" />
+  <app-graph-explorer class="explorer" [selectedGraphId]="graphId()" (selectGraph)="select($event)" />
   @if (graphId(); as id) {
-    <fleet-graph-detail class="detail" [graphId]="id" />
+    <app-graph-detail class="detail" [graphId]="id" />
   } @else {
     <div class="placeholder" data-testid="graphs-page-placeholder">
       <p>Select a graph to view its structure.</p>

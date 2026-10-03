@@ -6,7 +6,9 @@ import { By } from '@angular/platform-browser';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardShell, compactRef, hubClient, hubQueueKey, injectDeleteChunkMutation } from 'fleet';
+import { BoardShell } from './board-shell/board-shell';
+import { compactRef, hubClient, hubQueueKey } from 'fleet';
+import { injectDeleteChunkMutation } from './chunks/delete.mutations';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
@@ -202,7 +204,7 @@ describe('BoardPage', () => {
   it('renders the shared fleet board shell and the operator controls', async () => {
     const { el } = await open();
 
-    expect(el.querySelector('fleet-board-shell')).toBeTruthy();
+    expect(el.querySelector('app-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
     // The one rail composes beside the board: runners, asks, activity feed. The
     // titlebar itself lives at the app root now.
@@ -218,7 +220,7 @@ describe('BoardPage', () => {
     // rail is gone with the queue panel it held.
     const columns = el.querySelectorAll('.main > .col');
     expect(columns.length).toBe(2);
-    expect(el.querySelector('fleet-board-shell')?.closest('.col')).toBe(columns[0]);
+    expect(el.querySelector('app-board-shell')?.closest('.col')).toBe(columns[0]);
     expect(el.querySelector('[data-testid="runner-panel"]')?.closest('.col')).toBe(columns[1]);
     expect(el.querySelector('fleet-queue-panel')).toBeNull();
     expect(el.querySelector('[data-testid="queue-panel"]')).toBeNull();
@@ -228,8 +230,8 @@ describe('BoardPage', () => {
     const { el } = await open();
 
     const rail = el.querySelector('[data-testid="runner-panel"]')?.closest('.col');
-    const activity = el.querySelector('fleet-activity-panel')!;
-    const questions = el.querySelector('fleet-questions-panel')!;
+    const activity = el.querySelector('app-activity-panel')!;
+    const questions = el.querySelector('app-questions-panel')!;
     expect(activity.closest('.col')).toBe(rail);
     // Below the asks, not above them: runners → asks → activity.
     expect(questions.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -247,7 +249,7 @@ describe('BoardPage', () => {
   it('routes a ready reposition with a null top anchor to the queue endpoint', async () => {
     const { harness } = await open();
 
-    const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+    const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
     shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
     await settle(harness.fixture);
 
@@ -276,7 +278,7 @@ describe('BoardPage', () => {
     it("routes a backlog reposition to its own endpoint, not the queue's", async () => {
       const { harness } = await open();
 
-      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
       shell.reposition.emit({ chunkId: BACKLOG_NEXT, afterChunkId: BACKLOG, list: 'notready' });
       await settle(harness.fixture);
 
@@ -499,7 +501,7 @@ describe('BoardPage', () => {
         return hubRoutes()(method, path);
       });
       const { el, harness } = await open();
-      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
 
       shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -520,7 +522,7 @@ describe('BoardPage', () => {
         new Promise<void>((resolve) => (resolveInvalidate = resolve)),
       );
 
-      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
       shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
       await new Promise((resolve) => setTimeout(resolve, 0));
       harness.fixture.detectChanges();
@@ -543,7 +545,7 @@ describe('BoardPage', () => {
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
         () => new Promise<void>((resolve) => refreshResolvers.push(resolve)),
       );
-      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
 
       shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -588,7 +590,7 @@ describe('BoardPage', () => {
       });
       const { el, harness } = await open();
 
-      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
       shell.reposition.emit({ chunkId: BACKLOG_NEXT, afterChunkId: null, list: 'notready' });
       await settle(harness.fixture);
 
@@ -602,18 +604,18 @@ describe('BoardPage', () => {
 
     // Nothing selected: the dock is already mounted, stacked under the board inside
     // the centre column, and holds a rest state prompting the operator to pick a chunk.
-    const dockBefore = el.querySelector('fleet-chunk-detail.dock');
+    const dockBefore = el.querySelector('app-chunk-detail.dock');
     expect(dockBefore).toBeTruthy();
-    expect(dockBefore?.closest('.col')).toBe(el.querySelector('fleet-board-shell')?.closest('.col'));
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
+    expect(dockBefore?.closest('.col')).toBe(el.querySelector('app-board-shell')?.closest('.col'));
+    expect(el.querySelector('app-chunk-detail-panel')).toBeNull();
     expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
 
     // Selecting a card fills the SAME dock element — the layout gains no node, so the
     // board columns cannot resize or shift.
     await openCard(harness, RUNNING);
 
-    expect(el.querySelector('fleet-chunk-detail.dock')).toBe(dockBefore);
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
+    expect(el.querySelector('app-chunk-detail.dock')).toBe(dockBefore);
+    expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
   });
 
   it('opens a chunk from an ask in the right rail (MVP criterion 7)', async () => {
@@ -621,11 +623,11 @@ describe('BoardPage', () => {
 
     // An ask names a chunk nobody has selected; activating it fills the same dock the
     // board cards fill, which is where the answer is given.
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
-    harness.fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit(ASKED);
+    expect(el.querySelector('app-chunk-detail-panel')).toBeNull();
+    harness.fixture.debugElement.query(By.css('app-questions-panel')).componentInstance.selectChunk.emit(ASKED);
     await settle(harness.fixture);
 
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
+    expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
   });
 
   describe('the URL drives selection (issue #162)', () => {
@@ -633,7 +635,7 @@ describe('BoardPage', () => {
       const { el } = await open(`/board?chunk=${RUNNING}`);
 
       // The dock is open on the URL's chunk straight away, and its card reads as selected…
-      expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
+      expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
       expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
       expect(card(el, ASKED).classList.contains('selected')).toBe(false);
       // …and hydration is a pure read: nothing rewrote the URL.
@@ -647,14 +649,14 @@ describe('BoardPage', () => {
 
       expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}`);
       // A query-param navigation, not a route swap: the same page is still mounted.
-      expect(el.querySelector('fleet-board-shell')).toBeTruthy();
+      expect(el.querySelector('app-board-shell')).toBeTruthy();
       expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
     });
 
     it('writes the same param when an ask in the right rail opens its chunk', async () => {
       const { el, harness } = await open();
 
-      harness.fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit(ASKED);
+      harness.fixture.debugElement.query(By.css('app-questions-panel')).componentInstance.selectChunk.emit(ASKED);
       await settle(harness.fixture);
 
       expect(TestBed.inject(Router).url).toBe(`/board?chunk=${ASKED}`);
@@ -664,7 +666,7 @@ describe('BoardPage', () => {
     it('clears the param when the dock is dismissed', async () => {
       const { el, harness } = await open(`/board?chunk=${RUNNING}`);
 
-      harness.fixture.debugElement.query(By.css('fleet-chunk-detail')).componentInstance.dismiss.emit();
+      harness.fixture.debugElement.query(By.css('app-chunk-detail')).componentInstance.dismiss.emit();
       await settle(harness.fixture);
 
       expect(TestBed.inject(Router).url).toBe('/board');

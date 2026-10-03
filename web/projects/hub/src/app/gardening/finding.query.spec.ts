@@ -1,0 +1,263 @@
+import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+
+import { hubClient } from 'fleet';
+import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { injectHubFindingQuery, injectHubFindingsBucketQuery, injectHubFindingsQuery } from './finding.query';
+
+@Component({
+  selector: 'app-test-findings-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestFindingsQueryHost {
+  readonly findingIds = signal<readonly string[]>([]);
+  readonly query = injectHubFindingsQuery(() => this.findingIds());
+}
+
+/** A fetch stub capturing each request's full URL (query string included) —
+ * `fleet-spend.query.spec.ts`'s own local helper, since the shared `stubRequestClient`
+ * drops the query string and this spec needs it to prove `include_gone` rides the
+ * request. */
+function stubFetchCapturingUrl(body: unknown): { urls: string[]; restore: () => void } {
+  const urls: string[] = [];
+  const previousFetch = globalThis.fetch;
+  const fakeFetch = async (input: Request): Promise<Response> => {
+    urls.push(input.url);
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+  return {
+    urls,
+    restore: () => hubClient.setConfig({ baseUrl: '', fetch: previousFetch }),
+  };
+}
+
+@Component({
+  selector: 'app-test-findings-bucket-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestFindingsBucketQueryHost {
+  readonly routine = signal<string | null>(null);
+  readonly scope = signal<string | null>(null);
+  readonly query = injectHubFindingsBucketQuery(
+    () => this.routine(),
+    () => this.scope(),
+  );
+}
+
+describe('injectHubFindingsQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('reads every id independently, live, and joins the results', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/findings/fin_1') {
+        return {
+          finding_id: 'fin_1',
+          routine_name: 'comments',
+          scope_slug: 'blizzard',
+          class: 'stale-docstring',
+          locus: 'src/a.py:1',
+          summary: 'a',
+          state: 'live',
+          live: true,
+          observed_count: 1,
+          last_seen_at: '2026-01-01T00:00:00Z',
+        };
+      }
+      if (method === 'GET' && path === '/api/findings/fin_2') {
+        return {
+          finding_id: 'fin_2',
+          routine_name: 'comments',
+          scope_slug: 'blizzard',
+          class: 'stale-docstring',
+          locus: 'src/b.py:9',
+          summary: 'b',
+          state: 'live',
+          live: true,
+          observed_count: 1,
+          last_seen_at: '2026-01-01T00:00:00Z',
+        };
+      }
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsQueryHost);
+    fixture.componentInstance.findingIds.set(['fin_1', 'fin_2']);
+    await settle(fixture);
+
+    const data = fixture.componentInstance.query.data();
+    expect(data?.map((f) => f.finding_id).sort()).toEqual(['fin_1', 'fin_2']);
+    expect(stub.forRoute('/api/findings/fin_1', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/findings/fin_2', 'GET')).toHaveLength(1);
+  });
+
+  it("drops a failed id's row rather than failing the whole join", async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/findings/fin_1') {
+        return {
+          finding_id: 'fin_1',
+          routine_name: 'comments',
+          scope_slug: 'blizzard',
+          class: 'stale-docstring',
+          locus: 'src/a.py:1',
+          summary: 'a',
+          state: 'live',
+          live: true,
+          observed_count: 1,
+          last_seen_at: '2026-01-01T00:00:00Z',
+        };
+      }
+      if (method === 'GET' && path === '/api/findings/fin_2') return stubError(404, { detail: 'not found' });
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsQueryHost);
+    fixture.componentInstance.findingIds.set(['fin_1', 'fin_2']);
+    await settle(fixture);
+
+    const data = fixture.componentInstance.query.data();
+    expect(data?.map((f) => f.finding_id)).toEqual(['fin_1']);
+    expect(fixture.componentInstance.query.isError()).toBe(false);
+  });
+
+  it('stays disabled for an empty id list', async () => {
+    stub = stubRequestClient(hubClient, () => ({}));
+    TestBed.configureTestingModule({
+      imports: [TestFindingsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.isPending()).toBe(true);
+    expect(stub.forRoute('/api/findings/fin_1', 'GET')).toHaveLength(0);
+  });
+});
+
+@Component({
+  selector: 'app-test-finding-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestFindingQueryHost {
+  readonly findingId = signal<string | null>(null);
+  readonly query = injectHubFindingQuery(() => this.findingId());
+}
+
+describe('injectHubFindingQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  /** The same failed read the fan-out drops as a missing row reaches the one-finding
+   * reader as an error, even with the fan-out already cached over that id. */
+  it('surfaces a failed single-finding read as an error, even beside a fan-out over the same id', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/findings/fin_2') return stubError(404, { detail: 'not found' });
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsQueryHost, TestFindingQueryHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    });
+    const fanOut = TestBed.createComponent(TestFindingsQueryHost);
+    fanOut.componentInstance.findingIds.set(['fin_2']);
+    await settle(fanOut);
+    expect(fanOut.componentInstance.query.data()).toEqual([]);
+
+    const single = TestBed.createComponent(TestFindingQueryHost);
+    single.componentInstance.findingId.set('fin_2');
+    await settle(single);
+
+    expect(single.componentInstance.query.isError()).toBe(true);
+    expect(single.componentInstance.query.data()).toBeUndefined();
+  });
+});
+
+describe('injectHubFindingsBucketQuery', () => {
+  let stub: { urls: string[]; restore: () => void };
+  afterEach(() => stub?.restore());
+
+  it('fires immediately with both routine and scope null — a null half is a meaningful "all", not a pending precondition', async () => {
+    stub = stubFetchCapturingUrl({ findings: [], next_cursor: null });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsBucketQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.isPending()).toBe(false);
+    expect(stub.urls).toHaveLength(1);
+    const url = new URL(stub.urls[0]);
+    expect(url.pathname).toBe('/api/findings');
+    // Omitted entirely rather than sent through as the literal string "null".
+    expect(url.searchParams.has('routine')).toBe(false);
+    expect(url.searchParams.has('scope')).toBe(false);
+    expect(url.searchParams.get('include_gone')).toBe('true');
+  });
+
+  it('reads the bucket off GET /api/findings?routine=&scope=&include_gone=true', async () => {
+    stub = stubFetchCapturingUrl({
+      findings: [
+        {
+          finding_id: 'fin_1',
+          routine_name: 'comments',
+          scope_slug: 'blizzard',
+          class: 'stale-docstring',
+          locus: 'src/a.py:1',
+          summary: 'a',
+          state: 'live',
+          live: true,
+          observed_count: 1,
+          last_seen_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+      next_cursor: null,
+    });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsBucketQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
+    fixture.componentInstance.routine.set('comments');
+    fixture.componentInstance.scope.set('blizzard');
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()?.map((f) => f.finding_id)).toEqual(['fin_1']);
+    expect(stub.urls).toHaveLength(1);
+    const url = new URL(stub.urls[0]);
+    expect(url.pathname).toBe('/api/findings');
+    expect(url.searchParams.get('routine')).toBe('comments');
+    expect(url.searchParams.get('scope')).toBe('blizzard');
+    expect(url.searchParams.get('include_gone')).toBe('true');
+  });
+
+  it('omits scope alone when only routine is named — every scope under that one routine', async () => {
+    stub = stubFetchCapturingUrl({ findings: [], next_cursor: null });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsBucketQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
+    fixture.componentInstance.routine.set('comments');
+    await settle(fixture);
+
+    expect(stub.urls).toHaveLength(1);
+    const url = new URL(stub.urls[0]);
+    expect(url.searchParams.get('routine')).toBe('comments');
+    expect(url.searchParams.has('scope')).toBe(false);
+  });
+});

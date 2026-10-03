@@ -60,25 +60,7 @@ const PLACEMENT_EXEMPT_UNITS = ['testing', 'format'];
  *
  * @type {readonly { unit: string, reach: readonly string[] }[]}
  */
-const PLACEMENT_PENDING_MIGRATION = [
-  { unit: 'activity', reach: ['hub'] },
-  { unit: 'admin', reach: ['hub'] },
-  { unit: 'auth', reach: ['hub'] },
-  { unit: 'board-card', reach: ['hub'] },
-  { unit: 'board-shell', reach: ['hub'] },
-  { unit: 'chunk-blocked', reach: [] },
-  { unit: 'chunks', reach: ['hub'] },
-  { unit: 'events', reach: ['hub'] },
-  { unit: 'fleet-spend', reach: ['hub'] },
-  { unit: 'garden', reach: ['hub'] },
-  { unit: 'graphs', reach: ['hub'] },
-  { unit: 'health', reach: ['hub'] },
-  { unit: 'mutation-keys.ts', reach: ['hub'] },
-  { unit: 'paginated-read.ts', reach: ['hub'] },
-  { unit: 'questions', reach: ['hub'] },
-  { unit: 'queue', reach: ['hub'] },
-  { unit: 'runners', reach: ['hub'] },
-];
+const PLACEMENT_PENDING_MIGRATION = [];
 
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join('/');

@@ -1,7 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type FindingTriageVerb } from 'fleet';
+import { hubClient } from 'fleet';
+import { type FindingTriageVerb } from './finding-list';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';

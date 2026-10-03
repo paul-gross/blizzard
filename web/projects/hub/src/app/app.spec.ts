@@ -13,7 +13,7 @@ import {
   type MeResponse,
   type ProviderSummary,
 } from 'fleet';
-import { provideAuthInterceptor } from 'fleet/shell';
+import { provideAuthInterceptor } from './auth/auth.interceptor';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 

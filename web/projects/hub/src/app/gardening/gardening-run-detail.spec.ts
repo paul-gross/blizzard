@@ -100,7 +100,7 @@ describe('GardeningRunDetail', () => {
     return { fixture };
   }
 
-  it("shows fleet-run-delta's own empty state when nothing is selected", async () => {
+  it("shows app-run-delta's own empty state when nothing is selected", async () => {
     const { fixture } = await mount(null);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -145,7 +145,7 @@ describe('GardeningRunDetail', () => {
         method === 'GET' && path === '/api/runs/ch_missing' ? stubError(404, { detail: 'unknown run' }) : undefined,
     });
 
-    const delta = fixture.debugElement.query(By.css('fleet-run-delta'));
+    const delta = fixture.debugElement.query(By.css('app-run-delta'));
     expect(delta.componentInstance.state()).toBe('error');
   });
 });

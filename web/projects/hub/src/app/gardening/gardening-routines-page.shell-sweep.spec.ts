@@ -359,7 +359,7 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       // enough for header + clipped body to exactly fill.
       const left = leftHost.querySelector<HTMLElement>(':scope > .p-body') ?? leftHost;
       // `.gr-right` wraps the routed detail child, which is `display: contents`
-      // (`gardening-detail-host.css`) so `fleet-routine-panel` and its three
+      // (`gardening-detail-host.css`) so `app-routine-panel` and its three
       // stacked `<fleet-kit-panel>`s (Routine, Activity, Strategy) sit in this
       // column directly. Unlike the
       // left column, those panels do *not* shrink to share the column's bound:

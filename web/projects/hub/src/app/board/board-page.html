@@ -1,6 +1,6 @@
 <main class="main">
   <div class="col col-center">
-    <fleet-board-shell
+    <app-board-shell
       class="board"
       [chunks]="boardChunks()"
       [counts]="counts()"
@@ -17,7 +17,7 @@
     @if (actionError(); as err) {
       <p class="notice action-notice" data-testid="board-action-error" role="alert">{{ err }}</p>
     }
-    <fleet-chunk-detail
+    <app-chunk-detail
       class="dock"
       [chunkId]="selected()"
       [graphLinkBase]="['/graphs']"
@@ -25,8 +25,8 @@
     />
   </div>
   <div class="col rail-right">
-    <fleet-runner-panel />
-    <fleet-questions-panel (selectChunk)="select($event)" />
-    <fleet-activity-panel class="rail-activity" />
+    <app-runner-panel />
+    <app-questions-panel (selectChunk)="select($event)" />
+    <app-activity-panel class="rail-activity" />
   </div>
 </main>

@@ -186,8 +186,8 @@ const KIT_DIR_SEGMENT = path.join('fleet', 'src', 'lib', 'kit') + path.sep;
  *   loading/error/empty.
  */
 const KIT_FLOOR_EXEMPT_SITES = [
-  { file: path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-detail.css'), class: 'rest' },
-  { file: path.join('fleet', 'src', 'lib', 'graphs', 'graph-diagram-detail.css'), class: 'hint' },
+  { file: path.join('hub', 'src', 'app', 'board', 'chunk-dock', 'chunk-detail.css'), class: 'rest' },
+  { file: path.join('hub', 'src', 'app', 'graphs', 'graph-diagram-detail.css'), class: 'hint' },
 ];
 
 /**

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
-import type { RunnerRow } from 'fleet';
+import type { RunnerRow } from './runner-rows';
 
 import { FleetView } from './fleet-view';
 

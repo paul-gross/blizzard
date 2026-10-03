@@ -1,16 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import {
-  asyncState,
-  FleetScopeList,
-  injectHubScopesQuery,
-  KitPanel,
-  KitBackBar,
-  type KitAsyncStateValue,
-  type ScopeRowVm,
-  type ScopeView,
-  ViewportService,
-} from 'fleet';
+import { asyncState, KitPanel, KitBackBar, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
+import { FleetScopeList, type ScopeRowVm } from './scope-list';
+import { injectHubScopesQuery } from './scopes.query';
 
 import { injectChildRouteParam } from '../route-state';
 

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import { type runnerApi, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader } from 'fleet';
 
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader } from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { MachineDetail } from './chunk-detail';

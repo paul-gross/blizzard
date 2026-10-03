@@ -18,30 +18,15 @@
 export * from './lib/kit';
 export * from './lib/app-shell';
 export * from './lib/chunk-page';
-export * from './lib/auth';
-export * from './lib/admin';
 export * from './lib/design';
 export * from './lib/format';
 export * from './lib/when-display';
 export * from './lib/now-signal';
-export * from './lib/board-card';
 export * from './lib/board-header';
-export * from './lib/board-shell';
-export * from './lib/chunk-blocked';
 export * from './lib/chunk-detail';
 export * from './lib/chunk-artifacts-panel';
 export * from './lib/chunk-issue-list';
-export * from './lib/activity';
-export * from './lib/events';
-export * from './lib/queue';
-export * from './lib/runners';
-export * from './lib/questions';
-export * from './lib/graphs';
-export * from './lib/garden';
 export * from './lib/sse';
-export * from './lib/health';
-export * from './lib/fleet-spend';
-export * from './lib/chunks';
 export * from './lib/mutation-pending';
 export * from './lib/transcripts';
 export * from './lib/url-selection';
@@ -64,28 +49,37 @@ export {
   chunkTranscriptsKey,
   chunkTranscriptSegmentKey,
   type TranscriptPlane,
+  hubActivityKey,
+  hubAuthProvidersKey,
+  hubBoardChunksKey,
+  hubChunkCountsKey,
+  hubEventsKey,
+  hubFindingKey,
+  hubFindingPrefixKey,
+  hubFindingsBucketKey,
+  hubFindingsBucketPrefixKey,
+  hubFindingsKey,
+  hubFleetSpendKey,
+  hubGardenProposalKey,
+  hubMeKey,
+  hubRoutineBaselinesKey,
+  hubRoutineProposalCountsKey,
+  hubRoutineProposalCountsPrefixKey,
+  hubRoutineScopesKey,
+  hubRoutineSweepsKey,
+  hubRoutineTrendKey,
+  hubRoutinesKey,
+  hubRunDeltaKey,
+  hubRunsKey,
+  hubScopeRoutinesKey,
+  hubScopesKey,
+  hubUsersKey,
+  hubWorkItemKey,
+  hubWorkItemsKey,
 } from './lib/query-keys';
 export * from './lib/query-state';
 export { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/polling';
 export { NOT_PAUSABLE } from './lib/chunk-pausable';
-export {
-  promoteChunkMutationKey,
-  repositionQueueMutationKey,
-  repositionBacklogMutationKey,
-  runnerPauseMutationKey,
-  chunkDeleteMutationKey,
-  resolveFindingsMutationKey,
-  confirmGoneFindingsMutationKey,
-  wontFixFindingsMutationKey,
-  notAFindingFindingsMutationKey,
-  supersedeFindingsMutationKey,
-  reopenFindingsMutationKey,
-  acceptGardenProposalMutationKey,
-  passGardenProposalMutationKey,
-  scopeLifecycleMutationKey,
-  routineLifecycleMutationKey,
-  answerQuestionMutationKey,
-} from './lib/mutation-keys';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';
@@ -100,3 +94,10 @@ export * as runnerApi from './lib/api/runner';
 export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
+export type { HubEventPayload } from './lib/sse/fleet-live';
+export { formatClockTime, formatRefreshedAgo } from './lib/when';
+export { completeCopy, deleteCopy, detachCopy } from './lib/chunk-detail/chunk-action-copy';
+export { ChunkDelivery } from './lib/chunk-detail/chunk-delivery';
+export type { ActivityView, AnswerResult, BacklogPeekEntry, BacklogPeekResponse, ChunkCountsView, ChunkStatus, ChunkSummary, DecisionResolutionResponse, EventView, ExternalSubscriptionUsageWindowView, FindingDetailView, FindingFactView, FindingView, FleetSpendView, GardenProposalAcceptResponse, GardenProposalClosureView, GardenProposalCountsView, GardenProposalView, GardenSweepsView, GraphChoiceView, GraphNodeView, GraphSessionView, GraphSummaryView, GraphView, LandedRepoView, MeResponse, PauseView, PrView, ProviderSummary, QuestionView, QueuePeekEntry, QueuePeekResponse, RouteView, RoutineBaselineView, RoutineRunResponse, RoutineView, RunDeltaView, RunRowView, RunnerCapability, RunnerView, ScopeView, TrendView, UserView, WorkItemView, WorkRefView } from './lib/api/hub';
+export { acceptGardenProposalApiGardenProposalsProposalIdAcceptPost, answerQuestionApiQuestionsQuestionIdAnswersPost, assignRoleApiUsersUserIdRolePost, chunkCountsApiChunkCountsGet, completeChunkApiChunksChunkIdCompletePost, confirmGoneFindingsApiFindingsConfirmGonePost, deleteChunkApiChunksChunkIdDelete, detachChunkApiChunksChunkIdDetachPost, editScopeApiScopesSlugPatch, enableGraphApiGraphsGraphIdEnablePost, enableRoutineApiRoutinesRoutineIdEnablePost, enableScopeApiScopesSlugEnablePost, fleetSpendApiSpendGet, getBacklogApiBacklogGet, getFindingApiFindingsFindingIdGet, getGraphApiGraphsGraphIdGet, getQueueApiQueueGet, getWorkItemApiWorkSourcesSourceItemsRefGet, healthApiHealthGet, listActivityApiActivityGet, listChunksApiChunksGet, listEventsApiEventsGet, listFindingsApiFindingsGet, listGardenProposalsApiGardenProposalsGet, listGraphsApiGraphsGet, listOpenQuestionsApiQuestionsGet, listProvidersApiAuthProvidersGet, listRoutineScopesApiRoutinesRoutineIdScopesGet, listRoutinesApiRoutinesGet, listRunnersApiRunnersGet, listRunsApiRunsGet, listScopeRoutinesApiScopesSlugRoutinesGet, listScopesApiScopesGet, listUsersApiUsersGet, logoutApiAuthLogoutPost, meApiMeGet, notAFindingFindingsApiFindingsNotAFindingPost, passGardenProposalApiGardenProposalsProposalIdPassPost, patchChunkApiChunksChunkIdPatch, pauseChunkApiChunksChunkIdPausePost, pauseRunnerApiRunnersRunnerIdPausePost, promoteChunkApiChunksChunkIdPromotePost, reopenFindingsApiFindingsReopenPost, repositionBacklogApiBacklogPositionPost, repositionQueueApiQueuePositionPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, resolveFindingsApiFindingsResolvePost, resumeChunkApiChunksChunkIdResumePost, resumeRunnerApiRunnersRunnerIdResumePost, retireGraphApiGraphsGraphIdRetirePost, retireRoutineApiRoutinesRoutineIdRetirePost, retireScopeApiScopesSlugRetirePost, routineBaselinesApiRoutinesRoutineIdBaselinesGet, routineProposalCountsApiRoutinesProposalCountsGet, routineSweepsApiRoutinesRoutineIdSweepsGet, routineTrendApiRoutinesTrendGet, runDeltaApiRunsChunkIdGet, runRoutineApiRoutinesRoutineIdRunPost, supersedeFindingsApiFindingsSupersedePost, wontFixFindingsApiFindingsWontFixPost } from './lib/api/hub';
+export type { ChunkDetail } from './lib/api/hub';

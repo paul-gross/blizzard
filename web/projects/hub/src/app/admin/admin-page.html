@@ -8,7 +8,7 @@
   @if (assignRoleError(); as message) {
     <p class="assign-role-error" data-testid="admin-page-assign-role-error">{{ message }}</p>
   }
-  <fleet-users-table
+  <app-users-table
     [users]="usersQuery.data() ?? []"
     [currentUserId]="currentUserId()"
     [isSuperuser]="isSuperuser()"

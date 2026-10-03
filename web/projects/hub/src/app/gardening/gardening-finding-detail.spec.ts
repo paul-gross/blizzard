@@ -166,7 +166,7 @@ describe('GardeningFindingDetail', () => {
     // The URL names a finding, so an empty state here would be a lie: it reads as
     // "select a finding" while one is selected and simply could not be read. The
     // single-finding read exists to keep the two distinguishable.
-    const panel = fixture.debugElement.query(By.css('fleet-finding-panel'));
+    const panel = fixture.debugElement.query(By.css('app-finding-panel'));
     expect(panel.componentInstance.state()).toBe('error');
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-finding-panel-empty"]')).toBeNull();
   });
@@ -177,7 +177,7 @@ describe('GardeningFindingDetail', () => {
         method === 'GET' && path === '/api/findings/fnd_10' ? stubError(500, { detail: 'boom' }) : undefined,
     });
 
-    const panel = fixture.debugElement.query(By.css('fleet-finding-panel'));
+    const panel = fixture.debugElement.query(By.css('app-finding-panel'));
     expect(panel.componentInstance.state()).toBe('error');
   });
 
@@ -220,7 +220,7 @@ describe('GardeningFindingDetail', () => {
       });
       const el = fixture.nativeElement as HTMLElement;
 
-      const panel = fixture.debugElement.query(By.css('fleet-finding-panel'));
+      const panel = fixture.debugElement.query(By.css('app-finding-panel'));
       panel.componentInstance.triage.emit('resolve');
       await settle(fixture);
 
@@ -254,7 +254,7 @@ describe('GardeningFindingDetail', () => {
       });
       const el = fixture.nativeElement as HTMLElement;
 
-      const panel = fixture.debugElement.query(By.css('fleet-finding-panel'));
+      const panel = fixture.debugElement.query(By.css('app-finding-panel'));
       panel.componentInstance.triage.emit('resolve');
       await settle(fixture);
       expect(el.querySelector('[data-testid="gardening-finding-triage-dialog"]')).toBeTruthy();

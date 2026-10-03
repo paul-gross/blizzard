@@ -1,18 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import {
-  asyncState,
-  FleetRoutineList,
-  injectHubGraphsQuery,
-  injectHubRoutinesQuery,
-  KitBackBar,
-  KitPanel,
-  type GraphSummaryView,
-  type KitAsyncStateValue,
-  type RoutineListRowVm,
-  type RoutineView,
-  ViewportService,
-} from 'fleet';
+import { asyncState, KitBackBar, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
+import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
+import { injectHubGraphsQuery } from '../graphs/graphs.query';
+import { injectHubRoutinesQuery } from './routines.query';
 
 import { injectChildRouteParam } from '../route-state';
 import { isRoutineBlocked } from './gardening-effective-graph';

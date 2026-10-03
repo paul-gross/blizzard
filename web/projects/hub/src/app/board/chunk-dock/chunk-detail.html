@@ -1,0 +1,40 @@
+@if (chunkId() === null) {
+  <p class="rest" data-testid="chunk-detail-empty">SELECT A CHUNK TO SEE ITS HISTORY &amp; ARTIFACTS</p>
+} @else {
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="LOADING…"
+    loadingTestid="chunk-detail-loading"
+    errorText="FAILED TO LOAD CHUNK"
+    errorTestid="chunk-detail-error"
+  >
+    @if (detail(); as d) {
+      <app-chunk-detail-panel
+        [detail]="d"
+        [workItems]="workItems()"
+        [actionError]="actionError()"
+        [actionOutcome]="actionOutcome()"
+        [canControl]="canControl()"
+        [canAnswer]="canAnswer()"
+        [canResolve]="canResolve()"
+        [graphLinkBase]="graphLinkBase()"
+        [pausePending]="pausePending()"
+        [detachPending]="detachPending()"
+        [completePending]="completePending()"
+        [deletePending]="deletePending()"
+        [resolvePending]="resolvePending()"
+        [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
+        [renderedStatus]="renderedStatus(d)"
+        (dismiss)="dismiss.emit()"
+        (answerQuestion)="onAnswer($event)"
+        (resolveDecision)="onResolve($event)"
+        (detach)="onDetach($event)"
+        (pauseChunk)="onPause($event)"
+        (resumeChunk)="onResume($event)"
+        (complete)="onComplete($event)"
+        (delete)="onDelete($event)"
+        (editGraph)="onEditGraph($event)"
+      />
+    }
+  </fleet-kit-async-state>
+}

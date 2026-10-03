@@ -1,0 +1,179 @@
+import { inject } from '@angular/core';
+import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+
+import { confirmGoneFindingsApiFindingsConfirmGonePost, notAFindingFindingsApiFindingsNotAFindingPost, reopenFindingsApiFindingsReopenPost, resolveFindingsApiFindingsResolvePost, supersedeFindingsApiFindingsSupersedePost, wontFixFindingsApiFindingsWontFixPost, type FindingView, hubFindingPrefixKey, hubFindingsBucketPrefixKey, hubFindingsKey } from 'fleet';
+import {
+  confirmGoneFindingsMutationKey,
+  notAFindingFindingsMutationKey,
+  reopenFindingsMutationKey,
+  resolveFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  wontFixFindingsMutationKey,
+} from '../mutation-keys';
+
+/** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
+ * `reopen` take; mirrors `FindingExitRequest` (`src/blizzard/wire/finding.py`). */
+export interface FindingExitVars {
+  readonly findingIds: readonly string[];
+  readonly note: string;
+}
+
+/** `POST /api/findings/supersede` — {@link FindingExitVars} plus the absorbing
+ * finding, `FindingSupersedeRequest`'s own shape. */
+export interface FindingSupersedeVars extends FindingExitVars {
+  readonly supersededBy: string;
+}
+
+/** Every surface that caches a finding's own record — the triage bucket
+ * ({@link hubFindingsBucketPrefixKey}) and the docket detail's evidence table
+ * ({@link hubFindingsKey}, which caches the same findings under its own by-id key,
+ * `finding.query.ts`'s own `injectHubFindingsQuery`) — invalidated together on every
+ * exit/reopen so neither is left showing a finding's stale state. Findings carry no
+ * SSE event of their own (`hubGardenProposalsKey`'s own standing), so this is direct
+ * invalidation only, `garden-proposal.mutations.ts`'s own shape. A mutation doesn't
+ * know which routine/scope is currently selected, so it invalidates the bucket's bare
+ * key prefix rather than one selection's own key (`hubFindingsBucketPrefixKey`'s own
+ * doc comment); it likewise invalidates `hubFindingsKey`'s bare prefix rather than one
+ * proposal's own id list, since it doesn't know which ids the currently-open docket
+ * detail is reading either. The detail pane's single-finding read
+ * ({@link hubFindingPrefixKey}) is a third cache of the same record and goes with
+ * them — triaging a finding from its own pane is the commonest way to change one,
+ * and leaving that key alone would leave the pane you acted in showing the state you
+ * just left behind. */
+function invalidateFindingCaches(queryClient: QueryClient): Promise<unknown> {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: hubFindingsBucketPrefixKey }),
+    queryClient.invalidateQueries({ queryKey: hubFindingsKey([]) }),
+    queryClient.invalidateQueries({ queryKey: hubFindingPrefixKey }),
+  ]);
+}
+
+/**
+ * Records that the work answering a finding landed — `POST /api/findings/resolve`.
+ * 404 for an unknown id, 422 for a blank note. A hand resolution names no garden
+ * proposal — that attribution is delivery-triggered.
+ * {@link invalidateFindingCaches}'s own direct-invalidation shape.
+ */
+export function injectResolveFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: resolveFindingsMutationKey,
+    mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
+      const { data, error } = await resolveFindingsApiFindingsResolvePost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}
+
+/**
+ * Confirms by hand that every named finding no longer reproduces — `POST
+ * /api/findings/confirm-gone`. 404 for an unknown id, 422 for a blank note.
+ * {@link invalidateFindingCaches}'s own direct-invalidation shape.
+ */
+export function injectConfirmGoneFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: confirmGoneFindingsMutationKey,
+    mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
+      const { data, error } = await confirmGoneFindingsApiFindingsConfirmGonePost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}
+
+/**
+ * Withdraws every named finding as won't-fix — the ground hasn't moved, a person has
+ * decided it doesn't merit standing regardless — `POST /api/findings/wont-fix`. 404
+ * for an unknown id, 422 for a blank note. {@link invalidateFindingCaches}'s own
+ * direct-invalidation shape.
+ */
+export function injectWontFixFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: wontFixFindingsMutationKey,
+    mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
+      const { data, error } = await wontFixFindingsApiFindingsWontFixPost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}
+
+/**
+ * Withdraws every named finding as not a finding at all — `POST
+ * /api/findings/not-a-finding`. 404 for an unknown id, 422 for a blank note.
+ * {@link invalidateFindingCaches}'s own direct-invalidation shape.
+ */
+export function injectNotAFindingFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: notAFindingFindingsMutationKey,
+    mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
+      const { data, error } = await notAFindingFindingsApiFindingsNotAFindingPost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}
+
+/**
+ * Withdraws every named finding as superseded by `supersededBy` — `POST
+ * /api/findings/supersede`. 404 for an unknown id in either the named findings or
+ * `supersededBy`, 422 for a blank note, a self-superseding id, or a `supersededBy`
+ * that isn't itself live (`FindingSupersedeRequest`'s own shape).
+ * {@link invalidateFindingCaches}'s own direct-invalidation shape.
+ */
+export function injectSupersedeFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: supersedeFindingsMutationKey,
+    mutationFn: async (vars: FindingSupersedeVars): Promise<FindingView[]> => {
+      const { data, error } = await supersedeFindingsApiFindingsSupersedePost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note, superseded_by: vars.supersededBy },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}
+
+/**
+ * Reopens every named finding, undoing whichever exit or `gone` fact was newest —
+ * `POST /api/findings/reopen`. 404 for an unknown id, 422 for a blank note.
+ * {@link invalidateFindingCaches}'s own direct-invalidation shape.
+ */
+export function injectReopenFindingsMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: reopenFindingsMutationKey,
+    mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
+      const { data, error } = await reopenFindingsApiFindingsReopenPost({
+        body: { finding_ids: [...vars.findingIds], note: vars.note },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSettled: () => invalidateFindingCaches(queryClient),
+  }));
+}

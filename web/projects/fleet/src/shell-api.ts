@@ -8,22 +8,40 @@ export { AppShell } from './lib/app-shell/app-shell';
 export { BoardHeader } from './lib/board-header/board-header';
 export { FleetLiveUpdates } from './lib/sse/fleet-live';
 
-export { PendingLobby } from './lib/auth/pending-lobby';
-export { hasPermission, injectMeQuery } from './lib/auth/me.query';
-export { injectAuthProvidersQuery } from './lib/auth/providers.query';
-export { injectLogoutMutation } from './lib/auth/logout.mutation';
-export { redirectToLogin } from './lib/auth/auth-redirect';
-export { provideAuthInterceptor } from './lib/auth/auth.interceptor';
-
 export { ViewportService } from './lib/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/viewport/matches-mobile-viewport';
 export { provideViewportRenavigation } from './lib/viewport/viewport-renavigation';
 
-export { injectHubBoardChunksQuery } from './lib/chunks/chunks.query';
-export { injectHubChunkCountsQuery } from './lib/chunks/chunk-counts.query';
-export { injectHubFleetSpendQuery } from './lib/fleet-spend/fleet-spend.query';
-export { injectHubHealthQuery } from './lib/health/health.query';
-export { injectHubQuestionsQuery } from './lib/questions/questions.query';
-
 export { KitTab, KitTabStrip } from './lib/kit/kit-tab';
 export { MobileTabBar, type MobileTabItem } from './lib/mobile-chrome/mobile-tab-bar';
+
+export { KitButton } from './lib/kit/kit-button';
+export { LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/polling';
+export {
+  hubAuthProvidersKey,
+  hubBoardChunksKey,
+  hubChunkCountsKey,
+  hubFleetSpendKey,
+  hubHealthKey,
+  hubMeKey,
+  hubQuestionsKey,
+} from './lib/query-keys';
+export { client as hubClient } from './lib/api/hub/client.gen';
+export {
+  chunkCountsApiChunkCountsGet,
+  fleetSpendApiSpendGet,
+  healthApiHealthGet,
+  listChunksApiChunksGet,
+  listOpenQuestionsApiQuestionsGet,
+  listProvidersApiAuthProvidersGet,
+  logoutApiAuthLogoutPost,
+  meApiMeGet,
+} from './lib/api/hub/sdk.gen';
+export type {
+  ChunkCountsView,
+  ChunkSummary,
+  FleetSpendView,
+  MeResponse,
+  ProviderSummary,
+  QuestionView,
+} from './lib/api/hub/types.gen';

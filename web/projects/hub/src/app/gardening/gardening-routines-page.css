@@ -45,7 +45,7 @@
  * its content.
  *
  * `.gr-right` wraps the routed detail child, which is `display: contents`
- * (`gardening-detail-host.css`) so `fleet-routine-panel` and its stacked
+ * (`gardening-detail-host.css`) so `app-routine-panel` and its stacked
  * `<fleet-kit-panel>`s sit here directly. Those panels size to their own
  * content and do not shrink to share this column's height, so `.gr-right`'s
  * `overflow-y: auto` above is the one real scroller for all of them — a long Activity or Strategy

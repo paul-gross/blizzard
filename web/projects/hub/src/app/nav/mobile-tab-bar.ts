@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { injectHubQuestionsQuery, MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/shell';
+import { injectHubQuestionsQuery } from '../board/questions/questions.query';
+import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/shell';
 
 /**
  * The hub's mobile bottom tab bar (mock screen C's `.tabbar`,

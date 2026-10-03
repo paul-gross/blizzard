@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { injectHubGardenProposalsQuery, isGardenProposalWaiting, KitCountBadge, KitTab, KitTabStrip } from 'fleet';
+import { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './garden-proposals.query';
+import { KitCountBadge, KitTab, KitTabStrip } from 'fleet';
 
 /**
  * The `/gardening` route — a top-level tab beside the board, not a

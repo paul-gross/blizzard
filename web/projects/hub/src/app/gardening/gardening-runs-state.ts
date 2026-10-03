@@ -1,12 +1,8 @@
 import { computed, Injectable, type Signal } from '@angular/core';
-import {
-  asyncState,
-  defaultRoutineWindow,
-  injectHubRunsQuery,
-  type KitAsyncStateValue,
-  type RunListCountsVm,
-  type RunListRowVm,
-} from 'fleet';
+import { asyncState, type KitAsyncStateValue } from 'fleet';
+import { defaultRoutineWindow } from './routine-window';
+import { injectHubRunsQuery } from './garden-runs.query';
+import { type RunListCountsVm, type RunListRowVm } from './run-list';
 
 /** A run's counts triple, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */

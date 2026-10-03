@@ -1,21 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import {
-  KitAsyncState,
-  KitBadge,
-  KitButton,
-  KitChip,
-  KitPanel,
-  KitSlotBar,
-  STATUS_TONE,
-  SubscriptionPaceGroup,
-  formatSeenAgo,
-  localPauseHint,
-  runnerToggleHint,
-  type ChunkStatus,
-  type KitAsyncStateValue,
-  type RunnerRow,
-  type Tone,
-} from 'fleet';
+import { KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, STATUS_TONE, formatSeenAgo, type ChunkStatus, type KitAsyncStateValue, type Tone } from 'fleet';
+import { SubscriptionPaceGroup } from './subscription-pace-group';
+import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows';
 
 /**
  * The mobile Fleet screen's presentational half: a phone-width, full-width

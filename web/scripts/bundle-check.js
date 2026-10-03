@@ -19,9 +19,9 @@
  *
  * Fails when a source file reachable that eagerly is one esbuild cannot drop from the
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
- * failure mode this check exists to catch): the fleet `chunk-detail/`, `garden/`,
- * `graphs/`, or `transcripts/` sub-barrels, `@dagrejs/*`, or `@angular/cdk`'s
- * `menu`/`overlay`/`listbox` bundles.
+ * failure mode this check exists to catch): the fleet `chunk-detail/` or `transcripts/`
+ * sub-barrels, the hub's `gardening/`, `graphs/`, or `board/chunk-dock/` folders,
+ * `@dagrejs/*`, or `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles.
  *
  * Run from `web/`: `npm run bundle-check` (`node scripts/bundle-check.js`).
  */
@@ -35,11 +35,12 @@ const ROOT = path.resolve(__dirname, '..');
 const HUB_MAIN = 'projects/hub/src/main.ts';
 
 /** Forbidden initial-chunk module patterns, each a predicate over a metafile-relative path
- * (forward slashes, no leading `./`, e.g. `projects/fleet/src/lib/garden/garden-page.ts`). */
+ * (forward slashes, no leading `./`, e.g. `projects/hub/src/app/gardening/garden-page.ts`). */
 const FORBIDDEN = [
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk-detail/') },
-  { name: 'fleet garden/', test: (f) => f.startsWith('projects/fleet/src/lib/garden/') },
-  { name: 'fleet graphs/', test: (f) => f.startsWith('projects/fleet/src/lib/graphs/') },
+  { name: 'hub chunk-dock/', test: (f) => f.startsWith('projects/hub/src/app/board/chunk-dock/') },
+  { name: 'hub gardening/', test: (f) => f.startsWith('projects/hub/src/app/gardening/') },
+  { name: 'hub graphs/', test: (f) => f.startsWith('projects/hub/src/app/graphs/') },
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
   { name: '@dagrejs/*', test: (f) => f.startsWith('node_modules/@dagrejs/') },
   {
@@ -55,10 +56,10 @@ const REPORT_AREAS = [
   { name: '@angular/cdk', test: (f) => f.startsWith('node_modules/@angular/cdk/') },
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk-detail/') },
   { name: '@angular/router', test: (f) => f.startsWith('node_modules/@angular/router/') },
-  { name: 'fleet garden/', test: (f) => f.startsWith('projects/fleet/src/lib/garden/') },
+  { name: 'hub gardening/', test: (f) => f.startsWith('projects/hub/src/app/gardening/') },
   { name: 'fleet kit/', test: (f) => f.startsWith('projects/fleet/src/lib/kit/') },
   { name: 'fleet api/', test: (f) => f.startsWith('projects/fleet/src/lib/api/') },
-  { name: 'fleet graphs/', test: (f) => f.startsWith('projects/fleet/src/lib/graphs/') },
+  { name: 'hub graphs/', test: (f) => f.startsWith('projects/hub/src/app/graphs/') },
   { name: '@tanstack/query-core', test: (f) => f.includes('@tanstack/query-core') },
   { name: '@dagrejs/dagre + graphlib', test: (f) => f.startsWith('node_modules/@dagrejs/') || f.startsWith('node_modules/graphlib/') },
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
@@ -158,14 +159,14 @@ function assertBundleCompositionDetectorWorks() {
       'projects/hub/src/app/app.ts': {
         bytes: 10,
         imports: [
-          { path: 'projects/fleet/src/lib/garden/garden-page.ts', kind: 'import-statement' }, // must-catch
+          { path: 'projects/hub/src/app/gardening/garden-page.ts', kind: 'import-statement' }, // must-catch
           { path: 'projects/fleet/src/lib/kit/kit-button.ts', kind: 'import-statement' }, // must-pass: not forbidden
-          { path: 'projects/fleet/src/lib/graphs/graph-page.ts', kind: 'dynamic-import' }, // must-pass: lazy, not eager
+          { path: 'projects/hub/src/app/graphs/graph-page.ts', kind: 'dynamic-import' }, // must-pass: lazy, not eager
         ],
       },
-      'projects/fleet/src/lib/garden/garden-page.ts': { bytes: 20, imports: [] },
+      'projects/hub/src/app/gardening/garden-page.ts': { bytes: 20, imports: [] },
       'projects/fleet/src/lib/kit/kit-button.ts': { bytes: 5, imports: [] },
-      'projects/fleet/src/lib/graphs/graph-page.ts': { bytes: 20, imports: [] },
+      'projects/hub/src/app/graphs/graph-page.ts': { bytes: 20, imports: [] },
     },
   };
 
@@ -173,16 +174,16 @@ function assertBundleCompositionDetectorWorks() {
   const violations = findViolations(visited, parent);
   const files = violations.map((v) => v.file);
 
-  if (!files.includes('projects/fleet/src/lib/garden/garden-page.ts')) {
+  if (!files.includes('projects/hub/src/app/gardening/garden-page.ts')) {
     throw new Error(`bundle-composition detector missed an eager forbidden import (found: ${JSON.stringify(files)})`);
   }
-  if (files.includes('projects/fleet/src/lib/graphs/graph-page.ts')) {
+  if (files.includes('projects/hub/src/app/graphs/graph-page.ts')) {
     throw new Error('bundle-composition detector false-positived on a module reached only through a dynamic import');
   }
   if (files.includes('projects/fleet/src/lib/kit/kit-button.ts')) {
     throw new Error('bundle-composition detector false-positived on a non-forbidden fleet module');
   }
-  const hit = violations.find((v) => v.file === 'projects/fleet/src/lib/garden/garden-page.ts');
+  const hit = violations.find((v) => v.file === 'projects/hub/src/app/gardening/garden-page.ts');
   if (hit?.importer !== 'projects/hub/src/app/app.ts') {
     throw new Error(`bundle-composition detector attributed the wrong importer: ${hit?.importer}`);
   }

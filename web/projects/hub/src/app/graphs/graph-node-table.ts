@@ -1,0 +1,34 @@
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+
+import { type GraphNodeView, KitBadge } from 'fleet';
+import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
+
+/**
+ * The graph detail's node table (executor, session, judged-by, retries,
+ * checks, produces). Presentational
+ * only: `nodes`/`entryNodeId` are plain inputs, no query/mutation injection
+ * (`bzh:frontend-container-presentational`).
+ *
+ * The entry marker is `fleet-kit-badge`'s `soft` pill (`bzh:frontend-kit-floor`),
+ * the same variant the graph explorer's effective/superseded pills use, so the two
+ * graph surfaces share one pill vocabulary. Its tone is chosen for the color the
+ * marker already carried — `waiting` is the ladder's `--amber-hi`, the badge's own
+ * previous border and text color — not for `Tone`'s documented meaning, exactly as
+ * `graph-explorer-list.ts`'s `LIFECYCLE_TONE` picks its three.
+ */
+@Component({
+  selector: 'app-graph-node-table',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitBadge],
+  templateUrl: './graph-node-table.html',
+  styleUrl: './graph-node-table.css',
+})
+export class GraphNodeTable {
+  readonly nodes = input.required<readonly GraphNodeView[]>();
+  readonly entryNodeId = input.required<string>();
+
+  protected readonly retriesLabel = retriesLabel;
+  protected readonly listOrDash = listOrDash;
+  protected readonly producesNames = producesNames;
+  protected readonly sessionLabel = sessionLabel;
+}

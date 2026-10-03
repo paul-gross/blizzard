@@ -51,7 +51,7 @@
  *     `getBoundingClientRect().top`s) with no horizontal overflow, at the
  *     narrow phone widths this component — unlike `ChunkRow` — is actually
  *     reached at, beneath the persistent mobile bottom tab bar.
- *   - projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/fleet/runner-view.shell-sweep.spec.ts — the
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
  *     horizontal overflow, at the board right rail's ~390px width.
@@ -75,7 +75,7 @@
  *     sections with no horizontal overflow at phone widths, including the
  *     General tab's `@media (min-width: 720px)` two-column grid collapse and
  *     a long unbroken artifact key on the Artifacts tab.
- *   - projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts — the
  *     shared `--tint-hover`/`--tint-selected` wash on board-card,
  *     chunk-timeline, and chunk-artifacts rows: a computed-style claim, not a
  *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
@@ -86,22 +86,22 @@
  *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
  *     at the same horizontal position under a long runner identity that wraps
  *     — a real CSS grid layout claim jsdom cannot make.
- *   - projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts — the
  *     graphs container/presentational split's `GraphDetailLifecycle`: its
  *     error line and entry line genuinely stack with the real gap `:host`'s
  *     flex column has to reproduce now that they moved out from under
  *     `.body`'s own flex column — a real CSS layout claim jsdom cannot make.
- *   - projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/gardening/routine-panel.shell-sweep.spec.ts — the
  *     gardening routine panel: the record, related-scopes, strategy, trend,
  *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
  *     with no horizontal overflow, and the last-swept table's own long
  *     revision hashes wrap inside their column rather than widening it.
- *   - projects/fleet/src/lib/garden/scope-panel.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/gardening/scope-panel.shell-sweep.spec.ts — the
  *     gardening scope panel: the description, lifecycle controls, and
  *     related-routines list genuinely stack at 1280/390/320px with no
  *     horizontal overflow, and a routine name long enough to wrap stays
  *     inside the list rather than widening the panel.
- *   - projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/gardening/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
  *     genuinely different computed background/border-left color from a
@@ -113,7 +113,7 @@
  *     scroll, and `FleetScopePanel`'s description editor holds the row's
  *     remaining width beside its actions — rather than a second sweep file of
  *     their own, which leaves `ng test fleet` hanging after a green suite.
- *   - projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts —
+ *   - projects/hub/src/app/gardening/finding-fact-timeline.shell-sweep.spec.ts —
  *     the finding detail panel's fact timeline (blizzard#487), mounted through
  *     the composed `FleetFindingPanel` rather than standalone: a genuinely
  *     unbroken long note wraps inside its row rather than forcing the row wider
@@ -159,7 +159,7 @@
  *     options, the decline reason field genuinely renders below them once
  *     chosen, and the footer's Cancel/Accept sit side by side with neither
  *     overflowing the panel, at phone and desktop widths.
- *   - projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts —
+ *   - projects/hub/src/app/gardening/gardening-findings-triage.shell-sweep.spec.ts —
  *     the findings triage list (`FleetFindingList`): with
  *     every row selected through the real select-all checkbox, the bulk bar's own
  *     buttons genuinely stay inside the viewport and never overlap each other or the
@@ -183,17 +183,17 @@
  *     leading "All" option, genuinely fit with no horizontal overflow, and a row
  *     from a bucket mixing routines and scopes genuinely renders both its own
  *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
- *   - projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts —
+ *   - projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts —
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
  *     800px and at 390/320px.
- *   - projects/fleet/src/lib/board-card/board-card-cost.shell-sweep.spec.ts — a
+ *   - projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts — a
  *     done-lane card's completion stamp, billed cost, and estimate stay side by side on
  *     one line without overflowing the card, at 800px and at 390/320px.
- *   - projects/fleet/src/lib/board-shell/board-column.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
- *   - projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts — the
  *     dock header's action row with every in-flow control live at once (Pause, the
  *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
  *     800px and at 390/320px. A second case per width opens the trigger's menu and
@@ -208,11 +208,11 @@
  *     height-capped page: each genuinely bounds itself at the cap and scrolls its own
  *     overflow rather than growing to its content — a flex/`min-height: 0` chain four
  *     components deep that jsdom parses and never resolves.
- *   - projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts — the
  *     explorer's two row levels once rebuilt on `KitSelectRow`, their content now
  *     projected into another component's button: a long graph name, its version count,
  *     and its right-anchored short id stay inside the list's own edge at 520/390/320px.
- *   - projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts — the
  *     session declaration table's six columns (the Harnesses column sitting between
  *     Model and Effort): all six genuinely sit side by side with no column overlap
  *     or table overflow, at 800px, graph detail's own width.
@@ -249,20 +249,20 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-header.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/fleet/runner-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-info-view.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/scope-panel.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/gardening/routine-panel.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/gardening/scope-panel.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/gardening/garden-runs.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/gardening/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
@@ -272,19 +272,19 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/gardening/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-cost.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/board-shell/board-column.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-delivery.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },

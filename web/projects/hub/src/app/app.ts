@@ -2,21 +2,15 @@ import { ChangeDetectionStrategy, Component, Injector, afterRenderEffect, comput
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import {
-  AppShell,
-  BoardHeader,
-  FleetLiveUpdates,
-  PendingLobby,
-  ViewportService,
-  hasPermission,
-  injectAuthProvidersQuery,
-  injectHubChunkCountsQuery,
-  injectHubFleetSpendQuery,
-  injectHubHealthQuery,
-  injectLogoutMutation,
-  injectMeQuery,
-  redirectToLogin,
-} from 'fleet/shell';
+import { AppShell, BoardHeader, FleetLiveUpdates, ViewportService } from 'fleet/shell';
+import { PendingLobby } from './auth/pending-lobby';
+import { hasPermission, injectMeQuery } from './auth/me.query';
+import { injectAuthProvidersQuery } from './auth/providers.query';
+import { injectHubChunkCountsQuery } from './board/chunks/chunk-counts.query';
+import { injectHubFleetSpendQuery } from './board/fleet-spend/fleet-spend.query';
+import { injectHubHealthQuery } from './board/health/health.query';
+import { injectLogoutMutation } from './auth/logout.mutation';
+import { redirectToLogin } from './auth/auth-redirect';
 
 import { readDemoConfig } from './demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from './local-day';

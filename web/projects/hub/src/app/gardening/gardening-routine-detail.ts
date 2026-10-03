@@ -1,35 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import {
-  asyncState,
-  defaultRoutineWindow,
-  errorMessage,
-  FleetRoutinePanel,
-  FleetRoutineProposalCounts,
-  hasPermission,
-  injectHubGraphQuery,
-  injectHubGraphsQuery,
-  injectHubRoutineProposalCountsQuery,
-  injectHubRoutineScopesQuery,
-  injectHubRoutineSweepsQuery,
-  injectHubRoutineTrendQuery,
-  injectHubRoutinesQuery,
-  injectMeQuery,
-  injectPendingMutationVariables,
-  injectRoutineLifecycleMutation,
-  routineLifecycleMutationKey,
-  type GraphSummaryView,
-  type KitAsyncStateValue,
-  type LastSweptRowVm,
-  type MeasurementReadingVm,
-  type ProposalCountsRowVm,
-  type RelatedScopeVm,
-  type RoutineLifecycleVars,
-  type RoutinePanelVm,
-  type RoutineView,
-  type StrategyStepVm,
-} from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
+import { defaultRoutineWindow } from './routine-window';
+import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
+import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { injectHubGraphQuery, injectHubGraphsQuery } from '../graphs/graphs.query';
+import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from './routines.query';
+import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './routine-lifecycle.mutations';
+import { routineLifecycleMutationKey } from '../mutation-keys';
 import { map } from 'rxjs';
 
 import { effectiveGraphByName, isRoutineBlocked } from './gardening-effective-graph';
