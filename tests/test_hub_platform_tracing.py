@@ -198,6 +198,26 @@ def test_a_registered_runner_bearer_continues_an_incoming_trace(tmp_path: Path) 
     assert not gate_lookups, "the gate's own lookups opened root spans"
 
 
+def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+        token = _enrolled_token(client, "runner-a")
+        registry = client.app.state.services.registry  # type: ignore[attr-defined]
+        resolutions: list[str] = []
+        original = registry.registration_for_token_hash
+
+        def counting(token_hash: str):  # type: ignore[no-untyped-def]
+            resolutions.append(token_hash)
+            return original(token_hash)
+
+        registry.registration_for_token_hash = counting
+        response = client.get("/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", **_TRACEPARENT})
+    assert response.status_code == 200
+    assert len(resolutions) == 1
+
+
 @pytest.mark.parametrize("credential", ["anonymous", "unknown", "revoked"])
 def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, credential: str) -> None:
     exporter = InMemorySpanExporter()
