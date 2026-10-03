@@ -17,6 +17,7 @@ from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import insert_promote_rows, row_exists
+from blizzard.hub.store.internal.newest_fact import newest_fact_select
 
 
 class ChunkQueueStore:
@@ -33,11 +34,14 @@ class ChunkQueueStore:
         with self._store.read("queue_positions") as conn:
             for batch in id_batches(chunk_ids):
                 rows = conn.execute(
-                    select(s.queue_positions.c.chunk_id, s.queue_positions.c.position, s.queue_positions.c.id)
-                    .where(s.queue_positions.c.chunk_id.in_(batch))
-                    .order_by(s.queue_positions.c.id)
+                    newest_fact_select(
+                        s.queue_positions,
+                        s.queue_positions.c.chunk_id,
+                        batch,
+                        s.queue_positions.c.chunk_id,
+                        s.queue_positions.c.position,
+                    )
                 ).all()
-                # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
                 result.update((r.chunk_id, float(r.position)) for r in rows)
         return result
 
