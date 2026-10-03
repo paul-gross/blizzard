@@ -54,6 +54,7 @@ owns what that assumption still costs.
 | [`deployment/control-verbs.md`](./deployment/control-verbs.md)       | You are stopping, re-aiming, or settling work: `chunk pause`/`restart`/`stop`/`done`, `detach`, and the two unrelated senses of "pause a runner"                                                                              |
 | [`deployment/spend.md`](./deployment/spend.md)                       | You are bounding what an unattended fleet costs, or reading a figure it recorded: the per-chunk cap, the rolling runner ceiling, how a harness's reported cost becomes one invocation's, and the subscription rate-limit read |
 | [`deployment/recovery.md`](./deployment/recovery.md)                 | You need to know what survives a `kill -9` or a reboot, and how to prove it on your own machine                                                                                                                               |
+| [`deployment/egress.md`](./deployment/egress.md)                     | You are exporting the fleet's steps and invocations to files for a warehouse or DuckDB: turning it on, the data dictionary, loading whole passes, the newest-copy view, backfill and reset                                    |
 
 ### Diagnostics
 

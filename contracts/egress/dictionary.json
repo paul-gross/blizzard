@@ -1,0 +1,452 @@
+{
+  "datasets": [
+    {
+      "name": "steps",
+      "major_version": 1,
+      "identity": "step_key",
+      "partition": "ended_at",
+      "columns": [
+        {
+          "name": "step_key",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The row's identity: chunk_id/epoch, or chunk_id/epoch/gate/decision_id for a gate step"
+        },
+        {
+          "name": "trace_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The step's derived trace id, as 32 hex characters, so a row joins to its trace"
+        },
+        {
+          "name": "step_kind",
+          "type": "string",
+          "nullable": false,
+          "meaning": "runner, hub or gate",
+          "values": {
+            "closed": true,
+            "list": [
+              "runner",
+              "hub",
+              "gate"
+            ]
+          }
+        },
+        {
+          "name": "chunk_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The chunk"
+        },
+        {
+          "name": "work_refs",
+          "type": "list<string>",
+          "nullable": false,
+          "meaning": "Its work items as source-native tokens; empty when it has none"
+        },
+        {
+          "name": "sources",
+          "type": "list<string>",
+          "nullable": false,
+          "meaning": "The distinct work sources of those items"
+        },
+        {
+          "name": "graph_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph the step stood in"
+        },
+        {
+          "name": "graph_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph's name"
+        },
+        {
+          "name": "node_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node"
+        },
+        {
+          "name": "node_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node's name"
+        },
+        {
+          "name": "epoch",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "The epoch"
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "A gate step's decision; null otherwise"
+        },
+        {
+          "name": "visit",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Which arrival at this node this is, counting from 1"
+        },
+        {
+          "name": "runner_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The runner that held a runner step; null for hub and gate steps"
+        },
+        {
+          "name": "harness_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The harness of the step's last invocation"
+        },
+        {
+          "name": "models",
+          "type": "list<string>",
+          "nullable": false,
+          "meaning": "Distinct models across its invocations"
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When the step started"
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When the step ended; a gate ends at resolved_at when resolved"
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When the closing fact was recorded; equal to ended_at except for a resolved gate"
+        },
+        {
+          "name": "duration_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "ended_at minus started_at"
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "nullable": false,
+          "meaning": "How the step ended",
+          "values": {
+            "closed": true,
+            "list": [
+              "transitioned",
+              "gated",
+              "migrated",
+              "escalated",
+              "released",
+              "stopped",
+              "completed",
+              "superseded",
+              "decided",
+              "restarted"
+            ]
+          }
+        },
+        {
+          "name": "choice",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The resolved choice, when there is one"
+        },
+        {
+          "name": "to_node_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "Where it led: a node name, done, or graph:<name>"
+        },
+        {
+          "name": "preceded_by",
+          "type": "string",
+          "nullable": true,
+          "meaning": "restart, requeue or released-claim",
+          "values": {
+            "closed": true,
+            "list": [
+              "restart",
+              "requeue",
+              "released-claim"
+            ]
+          }
+        },
+        {
+          "name": "bounce_cause",
+          "type": "string",
+          "nullable": true,
+          "meaning": "conflict, checks, master-moved, poll-timeout, or a choice",
+          "values": {
+            "closed": false,
+            "list": [
+              "conflict",
+              "checks",
+              "master-moved",
+              "poll-timeout"
+            ]
+          }
+        },
+        {
+          "name": "asks",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Asks raised in the step"
+        },
+        {
+          "name": "asks_unanswered",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "How many asks were never answered"
+        },
+        {
+          "name": "wait_queue_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Queue wait, summed"
+        },
+        {
+          "name": "wait_claim_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Claim wait, summed"
+        },
+        {
+          "name": "wait_ask_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Ask wait, summed"
+        },
+        {
+          "name": "wait_pause_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Pause wait, summed"
+        },
+        {
+          "name": "wait_pickup_ms",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Decision pickup wait, summed"
+        },
+        {
+          "name": "invocations",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "How many invocations rows belong to the step"
+        },
+        {
+          "name": "input_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Summed across its invocations, with blizzard's uncached input count"
+        },
+        {
+          "name": "output_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Summed across its invocations"
+        },
+        {
+          "name": "cache_read_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Summed across its invocations"
+        },
+        {
+          "name": "cache_create_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Summed across its invocations"
+        },
+        {
+          "name": "cost_billed_usd",
+          "type": "money",
+          "nullable": true,
+          "meaning": "The harness-billed cost, summed; null when no invocation carried one"
+        },
+        {
+          "name": "cost_estimated_usd",
+          "type": "money",
+          "nullable": true,
+          "meaning": "The estimated cost, summed; null when no invocation carried one"
+        },
+        {
+          "name": "cost_partial",
+          "type": "bool",
+          "nullable": false,
+          "meaning": "Some invocation carried neither a billed nor an estimated cost"
+        },
+        {
+          "name": "billed_partial",
+          "type": "bool",
+          "nullable": false,
+          "meaning": "Some invocation carried no billed cost"
+        },
+        {
+          "name": "exported_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When this copy of the row was written"
+        }
+      ]
+    },
+    {
+      "name": "invocations",
+      "major_version": 1,
+      "identity": "usage_id",
+      "partition": "recorded_at",
+      "columns": [
+        {
+          "name": "usage_id",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "The row's identity: the usage_facts id"
+        },
+        {
+          "name": "step_key",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The runner step it belongs to, by chunk and epoch"
+        },
+        {
+          "name": "trace_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The step's derived trace id, as 32 hex characters"
+        },
+        {
+          "name": "chunk_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The chunk"
+        },
+        {
+          "name": "epoch",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "The epoch"
+        },
+        {
+          "name": "graph_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph its step stood in"
+        },
+        {
+          "name": "graph_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph's name"
+        },
+        {
+          "name": "node_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node"
+        },
+        {
+          "name": "node_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node's name"
+        },
+        {
+          "name": "runner_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The runner that reported it"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "nullable": false,
+          "meaning": "spawn, resume or judge; a nudge reads resume",
+          "values": {
+            "closed": false,
+            "list": [
+              "spawn",
+              "resume",
+              "judge"
+            ]
+          }
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "nullable": false,
+          "meaning": "As reported"
+        },
+        {
+          "name": "harness_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As reported"
+        },
+        {
+          "name": "harness_version",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As reported"
+        },
+        {
+          "name": "input_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "As reported"
+        },
+        {
+          "name": "output_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "As reported"
+        },
+        {
+          "name": "cache_read_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "As reported"
+        },
+        {
+          "name": "cache_create_tokens",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "As reported"
+        },
+        {
+          "name": "cost_billed_usd",
+          "type": "money",
+          "nullable": true,
+          "meaning": "As reported; null when absent"
+        },
+        {
+          "name": "cost_estimated_usd",
+          "type": "money",
+          "nullable": true,
+          "meaning": "As reported; null when absent"
+        },
+        {
+          "name": "recorded_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When the hub received it"
+        },
+        {
+          "name": "exported_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When this copy of the row was written"
+        }
+      ]
+    }
+  ]
+}

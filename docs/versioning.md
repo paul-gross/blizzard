@@ -12,13 +12,14 @@ project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump m
 | Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                               |
 | Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                              |
 | Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                  |
+| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                      |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
 `tests/test_store_migrations.py::test_migrate_up_and_down`.
 
-Adding an optional config key, a new route, a new event type, a new trace attribute or span, or a migration that walks
-back cleanly is not breaking.
+Adding an optional config key, a new route, a new event type, a new trace attribute or span, a new nullable egress
+column, a new value of an enumerated egress column, or a migration that walks back cleanly is not breaking.
 
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.
@@ -36,6 +37,21 @@ trace change raises `blizzard.trace.schema_version` and the instrumentation scop
 tell shapes apart without reading the release notes. [`docs/deployment/tracing.md`](./deployment/tracing.md) describes
 the shape for operators. A raised schema version comes with an upgrade note; schema 2's is
 [Upgrading from trace schema 1](./deployment/tracing.md#upgrading-from-trace-schema-1).
+
+## The egress contract
+
+[`contracts/egress/`](../contracts/egress/README.md) pins the shape of the `steps` and `invocations` datasets the hub
+exports: `dictionary.json` is the authored contract, and `golden/` and `_schema/` are generated from it.
+`blizzard:egress-contract` fails when the code, the writer's output, `_schema/` or the published dictionary in
+[`docs/deployment/egress.md`](./deployment/egress.md) drift from it, so a shape change is always a deliberate edit to
+the dictionary.
+
+- **Additive.** A new nullable column, or a new value of an enumerated column, keeps the major version. A consumer must
+  tolerate values an open column does not list. The writer does not yet exercise this rule: it refuses an existing
+  `_schema/` document whose bytes differ, so the first additive column needs the writer to replace that document first.
+- **Breaking.** Removing, renaming or retyping a column, or changing a meaning, writes a new major version beside the
+  old (`steps/v2/`). Both are written for at least one minor release before the old one stops, as with a trace rename.
+  Stopping the old major is the breaking change, and carries the `!` marker.
 
 ## The hub↔runner skew window
 

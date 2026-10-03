@@ -124,6 +124,9 @@ dev = [
     "ast-grep-cli==0.45.3",
     # Resolves the egress extra for pyright and the Parquet tests.
     "pyarrow>=25.0.1",
+    # Runs the published newest-copy views in tests/test_egress_contract.py; a hard dependency,
+    # because a skipped run would pass the check without running it.
+    "duckdb>=1.1.0",
 ]
 # `mise run mutation` (blizzard:mutation) — never installed into .venv. mutmut pulls in
 # textual, and through it rich, which `uv run` would otherwise leave in the default
@@ -169,6 +172,7 @@ also_copy = [
     ".github/workflows/push.yml",
     ".github/workflows/release.yml",
     "contracts/cli",
+    "contracts/egress",
     "contracts/sse",
     "contracts/traces",
     "packaging/docker",
@@ -183,6 +187,7 @@ also_copy = [
     "scripts/restated_invariants.py",
     "scripts/mutation.py",
     "docs/deployment/transcripts.md",
+    "docs/deployment/egress.md",
     "docs/deployment/tracing.md",
     "docs/versioning.md",
     "docs/deployment/install.md",
