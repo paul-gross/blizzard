@@ -21,7 +21,8 @@ from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository, 
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids
+from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 
 
 class ChunkWorkRefsStore:
@@ -70,8 +71,6 @@ class ChunkWorkRefsStore:
 
         pairs: list[tuple[WorkRef, str]] = []
         with self._store.read("live_holders") as conn:
-            # Unfiltered — the same whole-fleet scan `live_work_refs` already pays.
-            ephemeral = ephemeral_ids(conn)
             for source, refs in refs_by_source.items():
                 for batch in id_batches(refs):
                     rows = conn.execute(
@@ -79,14 +78,24 @@ class ChunkWorkRefsStore:
                             (s.chunk_work_refs.c.source == source) & (s.chunk_work_refs.c.ref.in_(batch))
                         )
                     ).all()
-                    for row in rows:
-                        if row.chunk_id in ephemeral:
-                            continue  # grouped away or deleted; the pointer moved on or is withdrawn
-                        pairs.append((WorkRef(source=source, ref=row.ref), row.chunk_id))
+                    pairs.extend((WorkRef(source=source, ref=row.ref), row.chunk_id) for row in rows)
+            # The pointer set bounds every read below: only chunks that held one of these
+            # pointers are asked about, and only the maybe-live ones survive.
+            held_ids = sorted({chunk_id for _, chunk_id in pairs})
+            ephemeral = ephemeral_ids_in(conn, held_ids) if held_ids else set()
+            maybe_live_ids = {
+                chunk_id
+                for batch in id_batches([c for c in held_ids if c not in ephemeral])
+                for chunk_id in conn.execute(
+                    select(s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(batch), maybe_live())
+                ).scalars()
+            }
 
-        # Called after the read connection above has closed, not nested inside it.
-        candidate_ids = sorted({chunk_id for _, chunk_id in pairs})
-        facts_by_id = self._facts.load_facts_for(candidate_ids)
+        # Called after the read connection above has closed, not nested inside it. A chunk
+        # outside `maybe_live_ids` is ephemeral or settled terminal, so its pairs drop here —
+        # `resolve_live_holders` would read an absent status as live.
+        pairs = [(pointer, chunk_id) for pointer, chunk_id in pairs if chunk_id in maybe_live_ids]
+        facts_by_id = self._facts.status_facts_for(sorted(maybe_live_ids))
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
         return resolve_live_holders(pairs, statuses)
 

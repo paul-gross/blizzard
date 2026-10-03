@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.work import Chunk, WorkRef
 from blizzard.hub.store import schema as s
 from tests.support import (
     HubHarness,
@@ -85,6 +85,48 @@ def _done_by_transition(hub: HubHarness, chunk_id: str) -> None:
     _transition(hub.engine, chunk_id, RESERVED_TERMINAL, epoch=2, at=2)
 
 
+def _held(hub: HubHarness, chunk_id: str, ref: str) -> None:
+    """Mint ``chunk_id`` holding the hub-source pointer ``ref``."""
+    stores = chunk_stores(hub.engine, hub.clock)
+    stores.record.mint(
+        Chunk(
+            chunk_id=chunk_id,
+            graph_id="gr_1",
+            work_refs=[WorkRef(source="hub", ref=ref)],
+            minted_at=_at(200),
+            default_model=[],
+        )
+    )
+
+
+def _escalate(engine: Engine, chunk_id: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.escalations).values(chunk_id=chunk_id, epoch=1, takeover_command="resume", recorded_at=_at(5))
+        )
+
+
+def _add_terminal_only_history(hub: HubHarness) -> None:
+    """Chunks that pass the terminal prefilter or hold a pointer yet can never be live:
+    grouped away, deleted, escalated then stopped, and a pointer holder then completed."""
+    for i in range(3):
+        grouped, deleted = f"ch_grouped_{i}", f"ch_deleted_{i}"
+        _held(hub, grouped, f"g{i}")
+        _held(hub, deleted, f"d{i}")
+        with hub.engine.begin() as conn:
+            conn.execute(
+                insert(s.chunk_grouped).values(chunk_id=grouped, grouped_into="ch_live_00", grouped_at=_at(300))
+            )
+            conn.execute(insert(s.chunk_deleted).values(chunk_id=deleted, deleted_at=_at(300), deleted_by="op"))
+        escalated, held = f"ch_escalated_stopped_{i}", f"ch_held_done_{i}"
+        _mint(hub, escalated, index=400 + i)
+        _escalate(hub.engine, escalated)
+        with hub.engine.begin() as conn:
+            conn.execute(insert(s.chunk_stopped).values(chunk_id=escalated, stopped_at=_at(500)))
+        _held(hub, held, f"h{i}")
+        _done_by_transition(hub, held)
+
+
 def _hub(tmp_path: Path, *, live: int, terminal: int) -> HubHarness:
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
@@ -103,6 +145,8 @@ def _hub(tmp_path: Path, *, live: int, terminal: int) -> HubHarness:
             _done_by_transition(hub, chunk_id)
         else:
             _terminate(hub, chunk_id, i)
+    if terminal:
+        _add_terminal_only_history(hub)
     return hub
 
 
@@ -138,7 +182,14 @@ def _token(hub: HubHarness) -> str:
     return _enroll(hub, "runner-a")
 
 
-_READS = ["/api/queue", "/api/backlog", "/api/fleet/summary"]
+_READS = [
+    "/api/queue",
+    "/api/backlog",
+    "/api/fleet/summary",
+    "/api/events",
+    "/api/chunks/ch_live_00/work-items",
+    "/api/work-sources/hub/items",
+]
 
 
 def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_count(tmp_path: Path) -> None:

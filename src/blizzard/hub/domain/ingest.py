@@ -42,8 +42,8 @@ class IngestService:
         self._clock = clock
 
     def ingest(self, pointers: list[WorkRef], *, graph: Graph) -> str:
-        for pointer in pointers:
-            require_no_live_holder(self._work_refs, pointer)
+        for pointer, holder in self._work_refs.live_holders(pointers).items():
+            raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
         chunk = mint_chunk(pointers, graph_id=graph.graph_id, at=self._clock.now())
         self._record.mint(chunk)
         return chunk.chunk_id
