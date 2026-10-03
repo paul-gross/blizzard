@@ -35,6 +35,9 @@ _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 _ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+_ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
+_ENV_WORK_ITEMS = "BZ_HUB_WORK_ITEMS"
+_ENV_CHUNK_URL = "BZ_HUB_CHUNK_URL"
 
 # Test-only pause to widen the between-repo crash window.
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
@@ -212,6 +215,9 @@ class LandRun:
     owner: str = ""
     token: str | None = None
     feature_title: str = ""
+    chunk_id: str = ""
+    work_items: tuple[dict[str, Any], ...] = ()
+    chunk_url: str = ""
     #: The HTTP seam, resolved per call so :func:`forge_request` stays substitutable.
     request: Callable[..., tuple[int, Any]] | None = None
     env: ScriptEnv = field(default_factory=ScriptEnv)
@@ -238,8 +244,44 @@ class LandRun:
             owner=env.get(_ENV_FORGE_OWNER),
             token=env.get(_ENV_FORGE_TOKEN),
             feature_title=env.get(_ENV_FEATURE_TITLE),
+            chunk_id=env.get(_ENV_CHUNK_ID),
+            work_items=cls._work_items(env.get(_ENV_WORK_ITEMS, "[]")),
+            chunk_url=env.get(_ENV_CHUNK_URL),
             env=env,
         )
+
+    @staticmethod
+    def _work_items(raw: str) -> tuple[dict[str, Any], ...]:
+        """Missing or malformed degrades to no items, never a failed delivery."""
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(parsed, list):
+            return ()
+        return tuple(i for i in parsed if isinstance(i, dict) and isinstance(i.get("label"), str))
+
+    def item_lines(self) -> list[str]:
+        """``Refs <reference>`` per item, else its label — never a closing keyword or title."""
+        return [f"Refs {i['reference']}" if i.get("reference") else str(i["label"]) for i in self.work_items]
+
+    def pr_body(self) -> str:
+        """A newly opened PR's body: the work items, the chunk id, and its board link."""
+        parts = ["Delivered by blizzard."]
+        lines = self.item_lines()
+        if lines:
+            parts.append("Work items:\n" + "\n".join(f"- {line}" for line in lines))
+        if self.chunk_id:
+            parts.append(f"Chunk: {self.chunk_id}")
+        if self.chunk_url:
+            parts.append(f"Board: {self.chunk_url}")
+        return "\n\n".join(parts) + "\n"
+
+    def merge_message(self, bare_repo: str) -> str:
+        """The merge commit message: the title, then each work item's line."""
+        title = self.feature_title or f"blizzard: land {bare_repo}"
+        lines = self.item_lines()
+        return f"{title}\n\n" + "\n".join(lines) if lines else title
 
     def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
         """One forge call, ``path`` relative to the injected forge URL."""
@@ -413,6 +455,7 @@ class PullRequest:
                     "title": run.pr_title(branch),
                     "head": branch,
                     "base": run.base_branch,
+                    "body": run.pr_body(),
                     "user": _HUB_USER,
                 },
             )
@@ -523,7 +566,7 @@ class PullRequest:
             "PUT",
             f"/repos/{self.repo}/pulls/{self.number}/merge",
             {
-                "commit_message": self.run.feature_title or f"blizzard: land {self.bare_repo}",
+                "commit_message": self.run.merge_message(self.bare_repo),
                 "sha": sha,
                 "merge_method": method,
                 "user": _HUB_USER,

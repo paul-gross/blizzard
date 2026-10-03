@@ -7,11 +7,13 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 
 from __future__ import annotations
 
+import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
@@ -19,6 +21,7 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work import WorkRef
@@ -126,6 +129,12 @@ def test_web_url_renders_the_browser_issue_address() -> None:
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     pointer = WorkRef(source="widget", ref="12")
     assert source.web_url(pointer, live_holder=None) == "https://github.com/acme/widget/issues/12"
+
+
+def test_forge_reference_names_the_configured_repo_not_the_source_alias() -> None:
+    """GitHub cross-links ``owner/repo#n``; the source ``name`` is only a config alias."""
+    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    assert source.forge_reference(WorkRef(source="widget", ref="12")) == "acme/widget#12"
 
 
 def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
@@ -592,7 +601,7 @@ def test_close_issues_the_documented_patch() -> None:
     double = github_double(issues={"acme/widget#1": {"body": "b"}})
     source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
 
-    source.close(WorkRef(source="widget", ref="1"))
+    source.close(WorkRef(source="widget", ref="1"), trace=None)
 
     assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
         "state": "closed",
@@ -605,8 +614,8 @@ def test_close_is_idempotent() -> None:
     source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
     pointer = WorkRef(source="widget", ref="1")
 
-    source.close(pointer)
-    source.close(pointer)  # must not raise — a clean no-op re-close
+    source.close(pointer, trace=None)
+    source.close(pointer, trace=None)  # must not raise — a clean no-op re-close
 
     assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
         "state": "closed",
@@ -618,7 +627,7 @@ def test_close_a_missing_item_raises_work_item_gone() -> None:
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
 
     with pytest.raises(WorkItemGoneError):
-        source.close(WorkRef(source="widget", ref="999"))
+        source.close(WorkRef(source="widget", ref="999"), trace=None)
 
 
 def test_close_scope_failure_degrades_to_work_close_error() -> None:
@@ -627,7 +636,94 @@ def test_close_scope_failure_degrades_to_work_close_error() -> None:
     source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
 
     with pytest.raises(WorkCloseError):
-        source.close(WorkRef(source="widget", ref="1"))
+        source.close(WorkRef(source="widget", ref="1"), trace=None)
+
+
+_TRACE = DeliveryTrace(
+    chunk_id="ch_9",
+    board_url="https://hub.example/board/chunk/ch_9",
+    landings=(
+        TraceLanding(
+            repo="acme/widget",
+            pr_url="https://github.com/acme/widget/pull/7",
+            commit_hash="0123456789abcdef",
+            commit_url="https://github.com/acme/widget/commit/0123456789abcdef",
+        ),
+    ),
+)
+_CLOSING_KEYWORD = re.compile(r"\b(close[sd]?|fix(es|ed)?|resolve[sd]?)\b", re.IGNORECASE)
+
+
+def _trace_comments(double: TestClient, key: str = "acme/widget#1") -> list[str]:
+    return [c for c in forge_state(double)["issues"][key]["comments"] if "blizzard-delivery:ch_9" in c]  # type: ignore[index]
+
+
+def _closer_over(issues: dict[str, dict]) -> tuple[TestClient, GitHubWorkSource]:
+    double = github_double(issues=issues)
+    return double, GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+
+def test_close_with_a_trace_comments_the_landing_then_closes() -> None:
+    double, source = _closer_over({"acme/widget#1": {"body": "b"}})
+
+    source.close(WorkRef(source="widget", ref="1"), trace=_TRACE)
+
+    [comment] = _trace_comments(double)
+    assert "https://github.com/acme/widget/pull/7" in comment
+    assert "https://github.com/acme/widget/commit/0123456789abcdef" in comment
+    assert "ch_9" in comment
+    assert not _CLOSING_KEYWORD.search(comment)
+    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+
+
+def test_a_repeat_close_posts_no_second_comment() -> None:
+    double, source = _closer_over({"acme/widget#1": {"body": "b"}})
+    pointer = WorkRef(source="widget", ref="1")
+
+    source.close(pointer, trace=_TRACE)
+    source.close(pointer, trace=_TRACE)
+
+    assert len(_trace_comments(double)) == 1
+
+
+def test_a_comment_followed_by_a_failed_close_is_not_repeated_on_retry() -> None:
+    double, source = _closer_over({"acme/widget#1": {"body": "b"}})
+    pointer = WorkRef(source="widget", ref="1")
+    forge_state(double)["forbidden"] = True
+    with pytest.raises(WorkCloseError):
+        source.close(pointer, trace=_TRACE)
+    forge_state(double)["forbidden"] = False
+
+    source.close(pointer, trace=_TRACE)
+
+    assert len(_trace_comments(double)) == 1
+    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+
+
+def test_the_marker_is_found_past_the_first_page_of_comments() -> None:
+    crowd = [f"chatter {i}" for i in range(250)]
+    double, source = _closer_over({"acme/widget#1": {"body": "b", "comments": crowd}})
+    pointer = WorkRef(source="widget", ref="1")
+
+    source.close(pointer, trace=_TRACE)
+    source.close(pointer, trace=_TRACE)
+
+    assert len(_trace_comments(double)) == 1
+
+
+def test_close_without_a_trace_posts_no_comment() -> None:
+    double, source = _closer_over({"acme/widget#1": {"body": "b"}})
+
+    source.close(WorkRef(source="widget", ref="1"), trace=None)
+
+    assert forge_state(double)["issues"]["acme/widget#1"].get("comments", []) == []  # type: ignore[index]
+
+
+def test_close_a_missing_item_with_a_trace_raises_work_item_gone() -> None:
+    _double, source = _closer_over({})
+
+    with pytest.raises(WorkItemGoneError):
+        source.close(WorkRef(source="widget", ref="999"), trace=_TRACE)
 
 
 def test_registry_closer_is_none_when_no_closer_is_bound() -> None:

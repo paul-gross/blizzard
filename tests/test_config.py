@@ -890,6 +890,37 @@ def test_annotation_interval_seconds_absent_from_toml_defaults_to_120(tmp_path: 
 
 
 @pytest.mark.unit
+def test_public_url_defaults_to_none_and_is_shown_commented_out(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    assert config.public_url is None
+    assert '# public_url = "' in config.to_toml()
+    config.config_path.write_text(config.to_toml())
+    assert HubConfig.load(config.root).public_url is None
+
+
+@pytest.mark.unit
+def test_public_url_round_trips_through_to_toml_and_load_without_a_trailing_slash(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\npublic_url = "https://blizzard.example.com/"\n')
+    loaded = HubConfig.load(root, allow_external_db=True)
+    assert loaded.public_url == "https://blizzard.example.com"
+
+    loaded.config_path.write_text(loaded.to_toml())
+    assert HubConfig.load(root, allow_external_db=True).public_url == "https://blizzard.example.com"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ['"blizzard.example.com"', '"/board"', '"ftp://blizzard.example.com"', "8080"])
+def test_a_public_url_that_is_not_an_absolute_http_url_fails_the_load(tmp_path: Path, value: str) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\npublic_url = {value}\n')
+    with pytest.raises(HubConfigError, match="public_url"):
+        HubConfig.load(root, allow_external_db=True)
+
+
+@pytest.mark.unit
 def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: Path) -> None:
     """Deliberate no-alias: a config still carrying the pre-rename
     `[[pm_source]]` key fails fast, naming the new key, rather than silently parsing as

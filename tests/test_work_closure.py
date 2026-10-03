@@ -13,13 +13,16 @@ from typing import cast
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import (
@@ -253,6 +256,12 @@ class _FakeCloseChunks:
         self.events: list[_RecordedEvent] = []
         self.skipped_attempts: list[int] = []
         self._written: set[tuple[str, str, str, str]] = set()
+        self.delivery_reads: list[list[str]] = []
+        self.sources: dict[str, DeliverySources] = {}
+
+    def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
+        self.delivery_reads.append(list(chunk_ids))
+        return {c: self.sources[c] for c in chunk_ids if c in self.sources}
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         return list(self._candidates)
@@ -304,12 +313,20 @@ _NOW = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _drainer(
-    chunks: _FakeCloseChunks, closers: dict[str, FakeCloser], clock: FixedClock | None = None
+    chunks: _FakeCloseChunks,
+    closers: dict[str, FakeCloser],
+    clock: FixedClock | None = None,
+    public_url: str | None = None,
 ) -> CloseIntentDrainer:
     registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
     clock = clock or FixedClock(_NOW)
     return CloseIntentDrainer(
-        delivery=_as_delivery(chunks), events=_as_events(chunks), work_sources=registry, clock=clock
+        delivery=_as_delivery(chunks),
+        artifacts=cast(IReadChunkArtifactsRepository, chunks),
+        events=_as_events(chunks),
+        work_sources=registry,
+        clock=clock,
+        public_url=public_url,
     )
 
 
@@ -440,8 +457,8 @@ def test_sweep_reads_the_clock_once_at_the_top_of_the_pass_for_every_intents_due
     clock = FixedClock(_NOW)
 
     class _AdvancingCloser(FakeCloser):
-        def close(self, pointer: WorkRef) -> None:
-            super().close(pointer)
+        def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
+            super().close(pointer, trace=trace)
             clock.advance(timedelta(hours=1))
 
     advancing = _AdvancingCloser()
@@ -449,6 +466,56 @@ def test_sweep_reads_the_clock_once_at_the_top_of_the_pass_for_every_intents_due
 
     assert advancing.closed == [a.ref]  # b was judged not-due at the pass's own start
     assert closer.closed == []
+
+
+def _marker(chunk_id: str, name: str, data: str) -> ArtifactRow:
+    return ArtifactRow(
+        kind=ArtifactKind.ASSET,
+        name=name,
+        data=data,
+        repo=None,
+        forge=None,
+        artifact_id=f"a_{name}",
+        chunk_id=chunk_id,
+        node_id="nd_1",
+        node_name="merge",
+        epoch=1,
+    )
+
+
+def test_sweep_hands_each_closer_the_trace_of_its_chunks_landing_from_one_batched_read() -> None:
+    landed = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))
+    also_landed = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="2"), intent_id=2)
+    by_hand = PendingCloseIntent(chunk_id="ch_2", ref=WorkRef(source="default", ref="3"), intent_id=3)
+    chunks = _FakeCloseChunks([landed, also_landed, by_hand])
+    pr_url = "https://forge.example/acme/widget/pull/9"
+    chunks.sources["ch_1"] = DeliverySources(
+        markers=[
+            _marker(
+                "ch_1", "delivery-pr/acme/widget/9", json.dumps({"repo": "acme/widget", "number": 9, "url": pr_url})
+            ),
+            _marker("ch_1", "merged/acme/widget", "abc123def456789"),
+        ]
+    )
+    closer = FakeCloser()
+
+    _drainer(chunks, {"default": closer}, public_url="https://hub.example/").sweep()
+
+    assert chunks.delivery_reads == [["ch_1", "ch_2"]]
+    trace = closer.traces[0]
+    assert trace is not None
+    assert (trace.chunk_id, trace.board_url) == ("ch_1", "https://hub.example/board/chunk/ch_1")
+    assert [(g.repo, g.pr_url, g.commit_hash) for g in trace.landings] == [("acme/widget", pr_url, "abc123def456789")]
+    assert closer.traces[1] == trace
+    assert closer.traces[2] is None  # a hand-completed chunk landed nothing to name
+
+
+def test_sweep_reads_no_delivery_when_no_intent_is_due() -> None:
+    chunks = _FakeCloseChunks([])
+
+    _drainer(chunks, {"default": FakeCloser()}).sweep()
+
+    assert chunks.delivery_reads == []
 
 
 def test_sweep_of_a_skipped_intent_ticks_the_same_backoff_as_a_failed_one() -> None:
@@ -473,6 +540,7 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
@@ -502,6 +570,7 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
@@ -532,6 +601,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
@@ -564,6 +634,7 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,

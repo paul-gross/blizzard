@@ -444,6 +444,7 @@ def build_services(
     forge_url: str | None = None,
     forge_token: str | None = None,
     forge_owner: str | None = None,
+    public_url: str | None = None,
     forge_http_client: httpx.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
     oauth_http_client: httpx.Client | None = None,
@@ -592,6 +593,7 @@ def build_services(
         forge_url=forge_url,
         forge_token=forge_token,
         forge_owner=forge_owner,
+        public_url=public_url,
         work_sources=work_sources,
     )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
@@ -759,7 +761,12 @@ def build_services(
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
         close_drain=CloseIntentDrainer(
-            delivery=chunk_delivery, events=event_log, work_sources=work_sources, clock=clock
+            delivery=chunk_delivery,
+            artifacts=chunk_artifacts,
+            events=event_log,
+            work_sources=work_sources,
+            clock=clock,
+            public_url=public_url,
         ),
         trace_export=trace_export,
         trace_status=trace_status,

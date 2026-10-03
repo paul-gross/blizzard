@@ -24,9 +24,11 @@ from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
+    ENV_CHUNK_URL,
     ENV_GARDEN_DELIVERY_URL,
     ENV_MARKER_TOKEN,
     ENV_REVIEW_FINDINGS_URL,
+    ENV_WORK_ITEMS,
     HubEnv,
     PollPolicy,
     PrintedChoice,
@@ -569,17 +571,38 @@ def test_build_hub_env_carries_the_feature_title_when_given() -> None:
     assert env["BZ_HUB_FEATURE_TITLE"] == "Add rate limiting to the widget API"
 
 
+def test_build_hub_env_links_the_board_only_from_a_declared_public_url() -> None:
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+
+    def env_for(public_url: str | None) -> dict[str, str]:
+        return HubEnv(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=1,
+            artifacts=[],
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+            public_url=public_url,
+        ).vars
+
+    assert env_for("https://blizzard.example.com")[ENV_CHUNK_URL] == "https://blizzard.example.com/board/chunk/ch_x"
+    assert ENV_CHUNK_URL not in env_for(None)
+    assert json.loads(env_for(None)[ENV_WORK_ITEMS]) == []
+
+
 # Component — the executor wired with fakes over a real hub store
 
 
-def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML):  # type: ignore[no-untyped-def]
+def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML, tokens=None):  # type: ignore[no-untyped-def]
     """Ingest, promote, claim, and complete ``build`` -> ``merge`` for one chunk.
 
     Returns ``(chunk_id, build_node_id, graph)``. The completion's own apply already
     runs the hub node executor synchronously (``apply.py``'s hub-node branch) — most
     tests below want that; the barrier test bypasses it (see its own helper)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
+    resp = hub.client.post("/api/chunks", json={"tokens": tokens or [pointer_token(pointer)]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
@@ -1646,3 +1669,50 @@ def _env_for_expectation(*, expects: bool) -> dict[str, str]:
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
         expects_git_commits=expects,
     ).vars
+
+
+@pytest.mark.component
+def test_the_env_names_every_work_item_by_its_forge_reference_and_links_the_board(tmp_path: Path) -> None:
+    """A chunk mixing a forge-sourced item and a built-in ``hub`` item hands the land
+    script one ``{label, reference}`` per item, in ``work_refs`` order, resolved with no
+    forge read — the ``hub`` item has no forge reference to give."""
+    runner = FakeHubCommandRunner()
+    source = FakeWorkSource(repo="acme/widget")
+    hub = build_hub(
+        tmp_path,
+        hub_command_runner=runner,
+        hub_workdir=FakeHubWorkdir(),
+        work_sources={"default": source},
+        public_url="https://blizzard.example.com",
+    )
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
+    minted = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    hub_ref = minted["ref"]
+    # Minting seats the item on its own chunk; stopping that chunk frees the ref to ride along.
+    assert hub.client.post(f"/api/chunks/{minted['chunk_id']}/stop", json={"by": "operator"}).status_code == 202
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, tokens=["default:42", f"hub:{hub_ref}"])
+    fetched_before = list(source.fetched)
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    _command, _cwd, env = runner.calls[0]
+    assert json.loads(env[ENV_WORK_ITEMS]) == [
+        {"label": "default#42", "reference": "acme/widget#42"},
+        {"label": f"hub:{hub_ref}", "reference": None},
+    ]
+    assert env[ENV_CHUNK_URL] == f"https://blizzard.example.com/board/chunk/{chunk_id}"
+    # Only the feature title's one read of the first item — the references read nothing.
+    assert source.fetched == [*fetched_before, "42"]
+
+
+@pytest.mark.component
+def test_the_env_omits_the_board_link_when_no_public_url_is_declared(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    _command, _cwd, env = runner.calls[0]
+    assert ENV_CHUNK_URL not in env
+    assert json.loads(env[ENV_WORK_ITEMS]) == [{"label": "default#42", "reference": "acme/widget#42"}]

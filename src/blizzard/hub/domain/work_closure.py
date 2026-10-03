@@ -12,7 +12,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.work import WorkItemCloseOutcome
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -55,14 +57,33 @@ class CloseIntentDrainer:
         self,
         *,
         delivery: IWriteChunkDeliveryRepository,
+        artifacts: IReadChunkArtifactsRepository,
         events: EventLogService,
         work_sources: IWorkSourceRegistry,
         clock: IClock,
+        public_url: str | None = None,
     ) -> None:
         self._delivery = delivery
+        self._artifacts = artifacts
+        self._public_url = public_url
         self._events = events
         self._work_sources = work_sources
         self._clock = clock
+
+    def _traces(self, chunk_ids: set[str]) -> dict[str, DeliveryTrace | None]:
+        """One batched delivery read for the whole pass (``bzh:bulk-reconstitution``)."""
+        if not chunk_ids:
+            return {}
+        sources = self._artifacts.delivery_sources_for(sorted(chunk_ids))
+        base = self._public_url.rstrip("/") if self._public_url else None
+        return {
+            chunk_id: DeliveryTrace.of(
+                chunk_id,
+                sources.get(chunk_id, DeliverySources()),
+                board_url=f"{base}/board/chunk/{chunk_id}" if base else None,
+            )
+            for chunk_id in chunk_ids
+        }
 
     def sweep(self) -> None:
         """One complete drain pass over every pending intent. A per-ref failure is caught
@@ -70,9 +91,13 @@ class CloseIntentDrainer:
         informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         closed = gone = failed = skipped = 0
         now = self._clock.now()
-        for intent in self._delivery.pending_close_intents():
-            if not close_intent_is_due(now, attempt_count=intent.attempt_count, last_attempt_at=intent.last_attempt_at):
-                continue
+        due = [
+            intent
+            for intent in self._delivery.pending_close_intents()
+            if close_intent_is_due(now, attempt_count=intent.attempt_count, last_attempt_at=intent.last_attempt_at)
+        ]
+        traces = self._traces({intent.chunk_id for intent in due})
+        for intent in due:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 skipped += 1
@@ -82,7 +107,7 @@ class CloseIntentDrainer:
                 continue
             at = self._clock.now()
             try:
-                closer.close(intent.ref)
+                closer.close(intent.ref, trace=traces.get(intent.chunk_id))
                 outcome, reason = WorkItemCloseOutcome.CLOSED, None
             except WorkItemGoneError as exc:
                 outcome, reason = WorkItemCloseOutcome.GONE, str(exc)
