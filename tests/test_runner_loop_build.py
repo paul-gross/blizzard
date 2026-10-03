@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 import blizzard.runner.app as runner_app
+import blizzard.runner.loop.build as loop_build
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
@@ -400,6 +401,28 @@ def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_a
     hosted = build_hosted_app(RunnerConfig.load(tmp_path))
 
     assert hosted.app.state.harness_health is hosted.harness_health
+
+
+@pytest.mark.unit
+def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A driver of repeated ticks hands one graph in: its platform tracer reaches the tick's context, its
+    hub client is instrumented, and the tick does not close it."""
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    graph = build_runner_process(config)
+    ticked: list[object] = []
+    instrumented: list[httpx.Client | httpx.AsyncClient] = []
+    monkeypatch.setattr(loop_build, "tick", lambda ctx: ticked.append(ctx.tracer))
+    monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
+    try:
+        LoopWiring.of(config).tick_once(process=graph)
+        LoopWiring.of(config).tick_once(process=graph)
+        assert ticked == [graph.platform_tracing.tracer] * 2
+        assert len(instrumented) == 2
+        assert not graph.executor._shutdown
+    finally:
+        graph.close()
 
 
 @pytest.mark.unit

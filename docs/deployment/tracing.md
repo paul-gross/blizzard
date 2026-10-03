@@ -273,6 +273,41 @@ under **Nesting under a step** below. The [Spans](#spans) table does not list th
 - **What never leaves.** The [What never leaves](#what-never-leaves) rules hold here too. A request's query string and a
   query's bound values are never recorded, and nor are headers or bodies.
 
+### Arrival order
+
+Spans reach the collector in the order they are made, not the order of the trace they belong to.
+
+- **Platform spans arrive live.** A request, query or outbound call leaves with its daemon's next batch, while the step
+  is still running.
+- **The hub's step root arrives late.** The hub tells a step only once it has closed and `settle_seconds` have passed,
+  so the root and its waits arrive at least that long after the step ends, on the next sweep (`sweep_seconds`) after
+  that.
+- **The runner's spans arrive after its own sweep.** A `worker` span and its children leave when the runner's sweep
+  tells the lease, `settle_seconds` after it closes, so they arrive after the lease's platform spans.
+
+A trace backend assembles a trace when it is queried, so arrival order changes nothing there. A stage that decides about
+a trace while spans are still arriving does see it, as the next two paragraphs describe.
+
+**Tail sampling.** A collector stage that waits a bounded time before it decides splits a trace or drops it: whatever
+arrives after the decision is handled as the decision was, or on its own. The `tail_sampling` processor counts its
+`decision_wait` from the first span of a trace, which for a step is its first platform span, and a policy that keeps a
+trace only if it holds the step's root decides long before the root arrives. The `tail_sampling` processor of
+`otelcol-contrib` 0.162.0 then drops the trace, including the root that arrives afterwards. The working settings are
+either of these:
+
+- a `decision_wait` longer than the longest step plus the largest `settle_seconds` plus `sweep_seconds` across the hub
+  and the runners, so the decision comes after the root and the chain are both there;
+- no tail sampling ahead of this pipeline.
+
+A collector that holds every span of a trace for that long needs memory for it. At the default `settle_seconds` of 300
+and `sweep_seconds` of 60, that is more than six minutes of every span the daemons send, plus the longest step, and
+`num_traces` must cover the traces started in that time or the processor drops the oldest early. Lower `settle_seconds`
+on the daemons to shrink it.
+
+**Platform spans without fleet spans.** The `platform` switch and the step traces' own export are independent. With
+platform spans on and the step traces off, the spans made on a step's behalf still carry the step's trace id and a
+parent that is never exported, so a backend shows them grouped under a root that is missing. Turn both on.
+
 ### Worker spans
 
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
@@ -290,9 +325,10 @@ only while platform tracing is on; with it off the path answers `404`, and a sen
 - **What the CLI sends.** Each `blizzard runner` command a worker runs, other than `heartbeat`, is one span named for
   the command, such as `runner chunk history`, a child of the step's span, whose context the runner passes down in
   `BLIZZARD_TRACEPARENT`. Its own context goes out as `traceparent` on every request the command makes. Just before the
-  command exits, the span is posted here within 100 ms in total, whatever the outcome. A failed send is silent and never
-  changes the command's output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. The span records the
-  command's names, never an argument or option value.
+  command exits, the span is posted here within 100 ms in total, whatever the outcome. Tracing adds at most 5 ms at p95
+  to a command's own duration, which a service-tier test pins. A failed send is silent and never changes the command's
+  output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. The span records the command's names, never an
+  argument or option value.
 - **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
   scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
   never kept.

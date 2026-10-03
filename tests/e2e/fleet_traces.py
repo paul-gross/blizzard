@@ -23,15 +23,19 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import httpx
 import pytest
+import sqlalchemy
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import SpanRole, StepKey, span_id, trace_id
-from blizzard.runner.composition import build_runner_process
+from blizzard.hub.domain.tracing import attributes as hub_attr
+from blizzard.runner.composition import RunnerProcess, build_runner_platform_tracing, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.tracing import attributes as runner_attr
-from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.store.schema import route_tokens
 from tests.repo_files import repo_root
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name, scope_of_role
@@ -399,7 +403,127 @@ def assert_invocations(runner: Sequence[ExportedSpan], expect: Mapping[str, Invo
 
 
 # --------------------------------------------------------------------------- #
+# Platform spans: what a worker command's request leaves in the file
+
+_SERVER_SCOPE = "fastapi"
+_CLIENT_SCOPE = "opentelemetry.instrumentation.httpx"
+_QUERY_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
+_HUB_SERVICE = hub_attr.DEFAULT_SERVICE_NAME
+_RUNNER_SERVICE = runner_attr.DEFAULT_SERVICE_NAME
+#: The worker command whose runner request the runner passes through to the hub.
+PASSTHROUGH_COMMAND = "runner work-items"
+
+
+def assert_platform_nesting(
+    fleet: Sequence[ExportedSpan], platform: Sequence[ExportedSpan], *, chained: str = PASSTHROUGH_COMMAND
+) -> None:
+    """Every worker command's span sits in a step trace of ``fleet`` and reaches that step's root through its
+    ancestors; its runner request is its child. A ``chained`` command's runner request carries on to the hub: a
+    runner→hub client span under it, a hub server span under that, and a query under the hub's request."""
+    by_id = {(s.trace_id, s.span_id): s for s in (*fleet, *platform)}
+    kids: dict[tuple[str, str], list[ExportedSpan]] = {}
+    for span in platform:
+        if span.parent_span_id is not None:
+            kids.setdefault((span.trace_id, span.parent_span_id), []).append(span)
+    roots = {s.trace_id: s for s in fleet if s.is_root and s.role == "step"}
+
+    def under(span: ExportedSpan, scope: str, service: str) -> list[ExportedSpan]:
+        return [c for c in kids.get((span.trace_id, span.span_id), []) if c.scope == scope and _service(c) == service]
+
+    def descendants(span: ExportedSpan) -> Iterator[ExportedSpan]:
+        for child in kids.get((span.trace_id, span.span_id), []):
+            yield child
+            yield from descendants(child)
+
+    commands = [s for s in platform if s.scope == platform_attr.CLI_SCOPE]
+    assert commands, "the file holds no worker command span"
+    chains = 0
+    for command in commands:
+        name = command.attributes.get(platform_attr.CLI_COMMAND)
+        root = roots.get(command.trace_id)
+        assert root is not None, f"command {name!r}: trace {command.trace_id} is no exported step trace"
+        node = command
+        while node.parent_span_id is not None:
+            parent = by_id.get((node.trace_id, node.parent_span_id))
+            assert parent is not None, f"command {name!r}: ancestor {node.parent_span_id} was never exported"
+            node = parent
+        assert node.span_id == root.span_id, f"command {name!r}: its ancestry ends at {node.name!r}, not its step root"
+        servers = under(command, _SERVER_SCOPE, _RUNNER_SERVICE)
+        assert servers, f"command {name!r}: no runner request is its child"
+        if name != chained:
+            continue
+        clients = [c for server in servers for c in under(server, _CLIENT_SCOPE, _RUNNER_SERVICE)]
+        assert clients, f"command {name!r}: the runner's request made no hub client span under it"
+        hub = [h for client in clients for h in under(client, _SERVER_SCOPE, _HUB_SERVICE)]
+        assert hub, f"command {name!r}: no hub request span is under the runner's client span"
+        assert any(d.scope == _QUERY_SCOPE for h in hub for d in descendants(h)), (
+            f"command {name!r}: no query span is under the hub's request"
+        )
+        chains += 1
+    assert chains, f"no {chained!r} command span is in the file to carry the chain"
+
+
+def _service(span: ExportedSpan) -> object:
+    return span.resource.get(shared.SERVICE_NAME)
+
+
+# --------------------------------------------------------------------------- #
+# Leaks: what must never be in the file
+
+#: The env var that names the directory a scenario's worker scripts write their lease token to.
+PLANT_DIR_VAR = "BLIZZARD_E2E_PLANT_DIR"
+#: Prepended to a worker script: writes the lease token the worker was handed to ``$PLANT_DIR_VAR/<lease id>-<pid>``.
+PLANT_LEASE_TOKEN_SCRIPT = (
+    "import os as _os, pathlib as _pathlib\n"
+    f"_plant_dir = _os.environ.get({PLANT_DIR_VAR!r})\n"
+    "if _plant_dir:\n"
+    "    _name = _os.environ['BLIZZARD_LEASE_ID'] + '-' + str(_os.getpid())\n    _pathlib.Path(_plant_dir, _name).write_text(_os.environ['BLIZZARD_LEASE_TOKEN'])\n"
+)
+#: The body a worker submits as an artifact, distinctive enough that a trace carrying it is a leak.
+SENTINEL_ARTIFACT_BODY = "LEAK-SENTINEL artifact body that no span may carry"
+
+
+def planted_lease_tokens(plant_dir: Path) -> list[str]:
+    """The lease tokens the workers wrote into ``plant_dir``."""
+    return [path.read_text() for path in sorted(plant_dir.iterdir())] if plant_dir.is_dir() else []
+
+
+def stashed_route_tokens(config: RunnerConfig) -> list[str]:
+    """The route tokens the runner's own store holds."""
+    engine = sqlalchemy.create_engine(config.db_url)
+    try:
+        with engine.connect() as connection:
+            return [row[0] for row in connection.execute(sqlalchemy.select(route_tokens.c.token))]
+    finally:
+        engine.dispose()
+
+
+def enroll_runner(hub: httpx.Client, config: RunnerConfig) -> RunnerConfig:
+    """``config`` with a bearer the hub resolves to this runner. The hub continues a trace only for a caller whose
+    credential resolves, so a runner that is not enrolled leaves no hub span under its requests."""
+    registered = hub.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": config.runner_id,
+            "workspace_id": config.workspace_id,
+            "url": f"http://{config.host}:{config.port}",
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    enrolled = hub.post(f"/api/runners/{config.runner_id}/enrollments")
+    assert enrolled.status_code == 201, enrolled.text
+    return dataclasses.replace(config, hub_token=enrolled.json()["token"])
+
+
+# --------------------------------------------------------------------------- #
 # The running collector
+
+
+def documented_decision_wait(*, settle_seconds: int, sweep_seconds: int, longest_step_seconds: int) -> int:
+    """The ``decision_wait`` ``docs/deployment/tracing.md`` (Platform spans, Tail sampling) documents for a
+    collector that tail-samples on a step root: counted from a trace's first span, which is the step's first
+    platform span, so it spans the step, the hub's settle and a sweep, with a second to spare."""
+    return longest_step_seconds + settle_seconds + sweep_seconds + 1
 
 
 class FleetCollector:
@@ -407,10 +531,12 @@ class FleetCollector:
     scenario's chunk has closed. ``binary`` is ``None`` where no usable collector exists, and then the hub runs
     untraced and :meth:`require` skips the traces subtest."""
 
-    def __init__(self, binary: str | None, workdir: Path) -> None:
+    def __init__(self, binary: str | None, workdir: Path, *, decision_wait_seconds: int | None = None) -> None:
         self.binary = binary
+        self._decision_wait = decision_wait_seconds
         self._workdir = workdir
         self._export = workdir / "traces.jsonl"
+        self._received = workdir / "received.jsonl"
         self._log = workdir / "collector.log"
         self._proc: subprocess.Popen[str] | None = None
         self._port = 0
@@ -438,7 +564,7 @@ class FleetCollector:
         self._port = free_port()
         overlay = self._workdir / "overlay.yaml"
         overlay.write_text(
-            "receivers:\n"
+            self._tail_sampling() + "receivers:\n"
             "  otlp:\n"
             "    protocols:\n"
             "      http:\n"
@@ -446,13 +572,16 @@ class FleetCollector:
             "exporters:\n"
             "  file:\n"
             f"    path: {self._export}\n"
+            f"{self._received_exporter()}"
             "service:\n"
             "  telemetry:\n"
             "    metrics:\n"
             "      level: none\n"
             "  pipelines:\n"
             "    traces:\n"
+            f"{self._processors()}"
             "      exporters: [file]\n"
+            f"{self._received_pipeline()}"
         )
         self._proc = subprocess.Popen(
             [self.binary, f"--config={_DOCUMENTED_CONFIG}", f"--config={overlay}"],
@@ -470,6 +599,43 @@ class FleetCollector:
             time.sleep(0.1)
         raise AssertionError(f"collector did not listen on {self._port}:\n{read_daemon_log(self._log)}")
 
+    def _tail_sampling(self) -> str:
+        """The overlay's ``tail_sampling`` processor, where the run has one: it keeps a trace only if it holds a
+        fleet step root, the shape of the root-keyed policies operators write, so a trace split by its
+        ``decision_wait`` differs in content, not just timing."""
+        if self._decision_wait is None:
+            return ""
+        return (
+            "processors:\n"
+            "  tail_sampling:\n"
+            f"    decision_wait: {self._decision_wait}s\n"
+            "    policies:\n"
+            "      - name: keep-step-roots\n"
+            "        type: ottl_condition\n"
+            "        ottl_condition:\n"
+            "          error_mode: ignore\n"
+            "          span:\n"
+            f"            - 'attributes[\"{hub_attr.STEP_OUTCOME}\"] != nil'\n"
+        )
+
+    def _received_exporter(self) -> str:
+        return "" if self._decision_wait is None else f"  file/received:\n    path: {self._received}\n"
+
+    def _received_pipeline(self) -> str:
+        """A second pipeline over the same receiver with no sampler: what was sent, to read the sampler's work against."""
+        if self._decision_wait is None:
+            return ""
+        return (
+            "    traces/received:\n"
+            "      receivers: [otlp]\n"
+            "      processors: [batch]\n"
+            "      exporters: [file/received]\n"
+        )
+
+    def _processors(self) -> str:
+        """The traces pipeline's processor line: the sampler ahead of the documented ``batch``."""
+        return "" if self._decision_wait is None else "      processors: [tail_sampling, batch]\n"
+
     def stop(self) -> None:
         proc, self._proc = self._proc, None
         if proc is None:
@@ -481,16 +647,22 @@ class FleetCollector:
             proc.kill()
             proc.wait()
 
-    def _read(self) -> list[ExportedSpan]:
-        if not self._export.exists():
+    def _read(self, path: Path | None = None) -> list[ExportedSpan]:
+        path = path or self._export
+        if not path.exists():
             return []
         try:
-            return parse_export(self._export.read_text())
+            return parse_export(path.read_text())
         except json.JSONDecodeError:  # a line the exporter is still writing
             return []
 
-    def _read_fleet(self) -> list[ExportedSpan]:
-        return [s for s in self._read() if is_fleet(s)]
+    def _read_fleet(self, path: Path | None = None) -> list[ExportedSpan]:
+        return [s for s in self._read(path) if is_fleet(s)]
+
+    @property
+    def _arrived(self) -> Path:
+        """Where spans show up first: the unsampled copy where a sampler holds the main file's back."""
+        return self._export if self._decision_wait is None else self._received
 
     @staticmethod
     def _counts(spans: Sequence[ExportedSpan]) -> tuple[int, int]:
@@ -504,7 +676,7 @@ class FleetCollector:
         while time.monotonic() < deadline:
             if drive is not None:
                 drive()
-            if self._counts(self._read_fleet())[1] >= workers:
+            if self._counts(self._read_fleet(self._arrived))[1] >= workers:
                 return
             time.sleep(0.25)
 
@@ -530,10 +702,38 @@ class FleetCollector:
         )
         return self._spans
 
+    def received_spans(self, *, roots: int, timeout: float = 60.0) -> list[ExportedSpan]:
+        """Every span the collector received, sampler or no: wait until ``roots`` step roots and the runner ``worker``
+        spans :meth:`await_workers` expects have arrived, then read the unsampled copy."""
+        assert self._decision_wait is not None, "only a tail-sampling collector keeps a copy of what it received"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            seen_roots, seen_workers = self._counts(self._read_fleet(self._received))
+            if seen_roots >= roots and seen_workers >= self._workers:
+                break
+            time.sleep(0.25)
+        return self._read(self._received)
+
+    def kept_spans(self) -> list[ExportedSpan]:
+        """Every span the sampler kept: stop the collector so its file is complete, then read it."""
+        self.stop()
+        return self._read()
+
     def platform_spans(self) -> list[ExportedSpan]:
         """Every non-fleet span in the file, read by the same :meth:`spans` call that completed it."""
         assert self._all is not None, "read the fleet spans first — that is what completes the file"
         return [s for s in self._all if not is_fleet(s)]
+
+    def assert_no_leaks(self, planted: Mapping[str, Sequence[str]]) -> None:
+        """No planted value is anywhere in the raw file — every resource, span, event and attribute — read by the
+        same :meth:`spans` call that completed it. A kind with nothing planted fails: that scan would pass empty."""
+        assert self._all is not None, "read the fleet spans first — that is what completes the file"
+        raw = self._export.read_text()
+        assert raw, "the collector's file is empty"
+        for kind, values in planted.items():
+            assert values and all(values), f"nothing was planted for {kind}: the scan would pass vacuously"
+            for value in values:
+                assert value not in raw, f"the exported file carries a planted {kind}"
 
     def traces(self, *, roots: int, exact: bool = True, decision_ids: Sequence[str] = ()) -> list[StepTrace]:
         """The step traces, once they have passed the shape and identity checks."""
@@ -552,8 +752,10 @@ class FleetCollector:
 
 
 @contextlib.contextmanager
-def fleet_collector(workdir: Path) -> Iterator[FleetCollector]:
-    collector = FleetCollector(resolve_collector(), workdir)
+def fleet_collector(workdir: Path, *, decision_wait_seconds: int | None = None) -> Iterator[FleetCollector]:
+    """A collector running the documented config; ``decision_wait_seconds`` puts a tail-sampling stage with that
+    ``decision_wait`` ahead of its ``batch``."""
+    collector = FleetCollector(resolve_collector(), workdir, decision_wait_seconds=decision_wait_seconds)
     if collector.available:
         collector.start()
     try:
@@ -563,10 +765,14 @@ def fleet_collector(workdir: Path) -> Iterator[FleetCollector]:
 
 
 class RunnerSweep:
-    """The runner's real sweep via its composition root; :meth:`plant` before the first tick, then :meth:`drain`."""
+    """The runner's real sweep via its composition root; :meth:`plant` before the first tick, then :meth:`drain`.
 
-    def __init__(self, sweep: LeaseTraceSweep | None, collector: FleetCollector) -> None:
-        self._sweep = sweep
+    ``process`` is the one traced graph the scenario's ticks and local API share, so a worker command's request
+    lands in the runner's platform spans; ``None`` where there is no collector, and the scenario runs untraced."""
+
+    def __init__(self, process: RunnerProcess | None, collector: FleetCollector) -> None:
+        self.process = process
+        self._sweep = process.trace_sweep if process is not None else None
         self._collector = collector
 
     def plant(self) -> None:
@@ -579,17 +785,29 @@ class RunnerSweep:
 
 
 @contextlib.contextmanager
-def runner_sweep(config: RunnerConfig, collector: FleetCollector) -> Iterator[RunnerSweep]:
+def runner_sweep(
+    config: RunnerConfig, collector: FleetCollector, *, settle_seconds: int = 0, sweep_seconds: int = 1
+) -> Iterator[RunnerSweep]:
+    """The runner's one process graph, traced like the hub: fleet sweep and platform spans (at a zero root sample
+    ratio, so only spans parented on a step's context export) to ``collector``."""
     if not collector.available:
         yield RunnerSweep(None, collector)
         return
     environ = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
     environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint
-    traced = dataclasses.replace(config, tracing=TracingConfig(sweep_seconds=1, settle_seconds=0))
+    environ["OTEL_BSP_SCHEDULE_DELAY"] = "200"  # inline platform spans reach the file before the sweep's roots do
+    traced = dataclasses.replace(
+        config,
+        tracing=TracingConfig(
+            sweep_seconds=sweep_seconds, settle_seconds=settle_seconds, platform=True, platform_sample_ratio=0.0
+        ),
+    )
     with mock.patch.dict(os.environ, environ, clear=True):
-        process = build_runner_process(traced, environ=environ)
+        process = build_runner_process(
+            traced, environ=environ, platform_tracing=build_runner_platform_tracing(traced, environ)
+        )
     try:
         assert process.trace_sweep is not None, "the collector endpoint did not enable the runner's trace sweep"
-        yield RunnerSweep(process.trace_sweep, collector)
+        yield RunnerSweep(process, collector)
     finally:
         process.close()

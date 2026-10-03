@@ -185,6 +185,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
         headers = {"Content-Type": "application/json", "X-Blizzard-Lease-Token": token}
         try:
             _await_http(proc, tcp, "/api/health", log=log)
+            assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
             store = make_store(config.db_url)
             now = datetime.now(UTC)
             store.record_lease(

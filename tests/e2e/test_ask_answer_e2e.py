@@ -7,31 +7,33 @@ sibling ``blizzard-mock`` worktree provisioned.
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import json
 import os
 import subprocess
 import sys
-import threading
 import time
-from collections.abc import Iterator
 from pathlib import Path
 
 import httpx
 import pytest
-import uvicorn
 
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
 from tests.e2e.fleet_traces import (
+    PLANT_DIR_VAR,
+    PLANT_LEASE_TOKEN_SCRIPT,
     FleetCollector,
     InvocationExpect,
     StepExpect,
     assert_invocations,
+    assert_platform_nesting,
     assert_skeleton,
+    enroll_runner,
+    planted_lease_tokens,
     runner_sweep,
+    stashed_route_tokens,
 )
 from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
 from tests.e2e.test_acceptance_loop import (
@@ -43,6 +45,7 @@ from tests.e2e.test_acceptance_loop import (
     _free_port,
     _hub,
     _mock_bin_dir,
+    _runner_api,
     _runner_config,
     _winter_source,
 )
@@ -56,11 +59,18 @@ pytestmark = [
 ]
 
 # build turn 1: ask an undecidable question and exit (ask-and-exit).
-_ASK_SCRIPT = 'ask("Which API style should the endpoint use?", ["rest", "graphql"])\n'
+_ASK_QUESTION = "Which API style should the endpoint use?"
+# Before it asks, the worker plants its lease token for the leak scan and calls the hub through the runner.
+_ASK_SCRIPT = (
+    PLANT_LEASE_TOKEN_SCRIPT
+    + "import os, subprocess\n"
+    + 'subprocess.run(["blizzard", "runner", "work-items", os.environ["BLIZZARD_CHUNK_ID"]], check=True, capture_output=True)\n'
+    + f'ask("{_ASK_QUESTION}", ["rest", "graphql"])\n'
+)
 # The human's answer, delivered as `blizzard hub question answer <qid> "<script>"`. It
 # arrives as the resume message and makes the real commit the build node owes.
 _ANSWER_SCRIPT = (
-    "import subprocess, pathlib\n"
+    PLANT_LEASE_TOKEN_SCRIPT + "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed after the human answered\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
@@ -74,7 +84,7 @@ _ANSWER_SCRIPT = (
 # build judgement (elicited on the resumed session after the commit): pass to review.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'resumed with the human answer; committed and green')\n"
 # review: a fresh cold-eyes pass that produces findings and passes on the first look.
-_REVIEW_SCRIPT = "pass\n"
+_REVIEW_SCRIPT = PLANT_LEASE_TOKEN_SCRIPT + "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: clean; ready to deliver')\n"
 
 
@@ -121,36 +131,14 @@ def _graph_yaml(harness: MockHarness) -> str:
     return harness.graph_yaml(graph)
 
 
-@contextlib.contextmanager
-def _runner_api(config: RunnerConfig) -> Iterator[None]:
-    """Serve the runner's local API in a thread — the daemon `blizzard runner ask` POSTs to.
-
-    The reconciliation loop is still driven synchronously by the test; this only stands
-    up the local API so the real ask verb has somewhere to land.
-    """
-    app = build_hosted_app(config).app
-    server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
-    thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
-    thread.start()
-    client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
-    try:
-        deadline = time.monotonic() + 30.0
-        while time.monotonic() < deadline:
-            with contextlib.suppress(httpx.HTTPError):
-                if client.get("/api/health").status_code == 200:
-                    break
-            time.sleep(0.1)
-        else:
-            raise AssertionError("runner local API did not come up")
-        yield
-    finally:
-        client.close()
-        server.should_exit = True
-        thread.join(timeout=10.0)
-
-
 def _tick_until(
-    config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
+    config: RunnerConfig,
+    hub: httpx.Client,
+    chunk_id: str,
+    fenced: dict[str, str],
+    targets: set[str],
+    timeout: float,
+    process: RunnerProcess | None = None,
 ) -> str:
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status."""
     prior = dict(os.environ)
@@ -159,7 +147,7 @@ def _tick_until(
         deadline = time.monotonic() + timeout
         status = "ready"
         while time.monotonic() < deadline:
-            LoopWiring.of(config).tick_once()
+            LoopWiring.of(config).tick_once(process=process)
             status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
             if status in targets:
                 return status
@@ -170,13 +158,13 @@ def _tick_until(
         os.environ.update(prior)
 
 
-def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
+def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int, process: RunnerProcess | None = None) -> None:
     """Drive exactly ``count`` full reconciliation ticks (REAP→PULL→FILL→ADVANCE)."""
     prior = dict(os.environ)
     os.environ.update(fenced)
     try:
         for _ in range(count):
-            LoopWiring.of(config).tick_once()
+            LoopWiring.of(config).tick_once(process=process)
     finally:
         os.environ.clear()
         os.environ.update(prior)
@@ -227,7 +215,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
     forge_port, hub_port = _free_port(), _free_port()
     with (
         _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ask/answer", "body": "the chunk"})
@@ -244,13 +232,21 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         # A free local-API port the worker's `blizzard runner ask` will POST to.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), max_agents=1)
+        if fleet_traces.available:
+            config = enroll_runner(hub, config)
+        planted = tmp_path / "planted"
+        planted.mkdir()
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
+        fenced[PLANT_DIR_VAR] = str(planted)
 
-        with _runner_api(config), runner_sweep(config, fleet_traces) as sweep:
+        with runner_sweep(config, fleet_traces) as sweep, _runner_api(config, process=sweep.process):
+            process = sweep.process
             sweep.plant()
             # The worker asks and the chunk parks — derived waiting_on_human.
-            status = _tick_until(config, hub, chunk_id, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
+            status = _tick_until(
+                config, hub, chunk_id, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0, process
+            )
             assert status == "waiting_on_human", f"chunk did not park (last status {status!r})"
 
             detail = hub.get(f"/api/chunks/{chunk_id}").json()
@@ -262,7 +258,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
 
             # Assert the park is inert: several more ticks leave the chunk waiting_on_human
             # with the same single question open (a consumed retry would re-spawn the worker).
-            _tick_n(config, fenced, 4)
+            _tick_n(config, fenced, 4, process)
             still = hub.get(f"/api/chunks/{chunk_id}").json()
             assert still["status"] == "waiting_on_human", f"the park was not inert (status {still['status']!r})"
             open_qs = hub.get("/api/questions").json()
@@ -290,7 +286,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
             assert answered.returncode == 0, f"hub question answer failed:\n{answered.stderr}"
 
             # The runner resumes the dormant session with the answer and lands.
-            status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
+            status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0, process)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
             sweep.drain(workers=2)
 
@@ -327,6 +323,18 @@ def test_ask_parks_then_answer_resumes_session_to_done(
             assert "parked on ask" in [s.name for s in runner], sorted(s.name for s in runner)
             expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
             assert_invocations(runner, {"build": expect, "review": expect})
+
+        with subtests.test(msg="platform spans"):
+            fleet_traces.require()
+            assert_platform_nesting(fleet_traces.spans(roots=3), fleet_traces.platform_spans())
+            fleet_traces.assert_no_leaks(
+                {
+                    "lease token": planted_lease_tokens(planted),
+                    "route token": stashed_route_tokens(config),
+                    "runner bearer": [config.hub_token],
+                    "ask text": [_ASK_QUESTION],
+                }
+            )
 
     # The dormant session was resumed around the answer — its persisted state advanced and
     # recorded the resume message carrying the human's answer script (same session).

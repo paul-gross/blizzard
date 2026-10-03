@@ -245,24 +245,32 @@ class LoopWiring:
             tracer=tracer or NoopPlatformTracer(),
         )
 
-    def _with_context(self, use: Callable[[LoopContext], _T]) -> _T:
+    def _with_context(self, use: Callable[[LoopContext], _T], *, process: RunnerProcess | None = None) -> _T:
         """Build the process graph, the hub client and one context over them, run ``use``,
-        and close all three — the standalone verbs' one shared lifecycle."""
+        and close all three — the standalone verbs' one shared lifecycle.
+
+        A caller-supplied ``process`` is used as it is, with its platform tracing on the client and the
+        tick, and is left open for the caller to close."""
         config = self.config
-        graph = build_runner_process(config, events=self.events, bundle=self.bundle)
+        graph = process or build_runner_process(config, events=self.events, bundle=self.bundle)
         try:
             with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-                ctx = self.context(HttpHubClient(client), graph)
+                graph.platform_tracing.instrument_client(client)
+                ctx = self.context(HttpHubClient(client), graph, tracer=graph.platform_tracing.tracer)
                 try:
                     return use(ctx)
                 finally:
                     ctx.usage_http_client.close()
         finally:
-            graph.close()
+            if process is None:
+                graph.close()
 
-    def tick_once(self) -> None:
-        """Run one synchronous reconciliation tick — the CLI verb and e2e driver."""
-        self._with_context(tick)
+    def tick_once(self, *, process: RunnerProcess | None = None) -> None:
+        """Run one synchronous reconciliation tick — the CLI verb and e2e driver.
+
+        ``process`` runs the tick over one caller-owned graph, so a driver of repeated ticks shares the
+        graph's platform tracing with the runner's local API instead of building a graph per tick."""
+        self._with_context(tick, process=process)
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,

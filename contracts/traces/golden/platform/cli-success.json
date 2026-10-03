@@ -1,0 +1,62 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "blizzard-cli"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "blizzard.cli",
+            "version": "1"
+          },
+          "spans": [
+            {
+              "attributes": [
+                {
+                  "key": "blizzard.cli.command",
+                  "value": {
+                    "stringValue": "artifact get"
+                  }
+                },
+                {
+                  "key": "blizzard.chunk.id",
+                  "value": {
+                    "stringValue": "ch_1"
+                  }
+                },
+                {
+                  "key": "blizzard.lease.id",
+                  "value": {
+                    "stringValue": "lease_1"
+                  }
+                },
+                {
+                  "key": "process.exit.code",
+                  "value": {
+                    "intValue": "0"
+                  }
+                }
+              ],
+              "endTimeUnixNano": "1700000000250000000",
+              "flags": 1,
+              "kind": 1,
+              "name": "artifact get",
+              "parentSpanId": "88d23b1ca9cc34d2",
+              "spanId": "c11c11c11c11c11c",
+              "startTimeUnixNano": "1700000000000000000",
+              "traceId": "914265ea3262e40441fa95402ba66e6d"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

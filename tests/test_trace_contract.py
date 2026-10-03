@@ -57,6 +57,7 @@ pytestmark = pytest.mark.unit
 _ROOT = repo_root()
 _CONTRACT_DIR = _ROOT / "contracts" / "traces"
 _GOLDEN_DIR = _CONTRACT_DIR / "golden"
+_PLATFORM_GOLDEN_DIR = _GOLDEN_DIR / "platform"
 _TRACING_DOC = _ROOT / "docs" / "deployment" / "tracing.md"
 _VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
 _REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
@@ -191,6 +192,28 @@ RUNNER_SCENARIOS = {
 }
 
 
+def _cli_payload(command: str, exit_code: int) -> dict[str, Any]:
+    """A worker command's span over a fixed clock and fixed ids, so its encoding is reproducible."""
+    parent = DerivedContext.of(StepKey.attempt("ch_1", 1), SpanRole.STEP)
+    monotonic = iter((0, 0, 250_000_000))
+    clock = cli_spans.Clock(wall_ns=lambda: 1_700_000_000_000_000_000, monotonic_ns=lambda: next(monotonic))
+    span = cli_spans.CliSpan.open(
+        parent, command, chunk_id="ch_1", lease_id="lease_1", clock=clock, new_span_id=lambda: 0xC11C11C11C11C11C
+    )
+    span.finish(exit_code)
+    return span.payload()
+
+
+CLI_SCENARIOS = {
+    "cli-success": lambda: _cli_payload("artifact get", 0),
+    "cli-failed-request": lambda: _cli_payload("artifact create", 1),
+}
+
+
+def _live_platform() -> dict[str, str]:
+    return {name: json.dumps(build(), indent=2, sort_keys=True) + "\n" for name, build in CLI_SCENARIOS.items()}
+
+
 def _declared_events(module: object) -> set[str]:
     return {value for name, value in vars(module).items() if name.startswith("EVENT_")}
 
@@ -264,6 +287,11 @@ def _regenerate_if_asked() -> None:
         stale.unlink()
     for name, text in _live().items():
         (_GOLDEN_DIR / f"{name}.json").write_text(text)
+    _PLATFORM_GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    for stale in _PLATFORM_GOLDEN_DIR.glob("*.json"):
+        stale.unlink()
+    for name, text in _live_platform().items():
+        (_PLATFORM_GOLDEN_DIR / f"{name}.json").write_text(text)
 
 
 def _observed() -> tuple[set[str], set[str], set[str], set[str], set[tuple[str, str]]]:
@@ -301,6 +329,40 @@ def test_the_live_assembly_equals_the_golden() -> None:
         f"the assembled spans for {drifted} have drifted from contracts/traces/golden/; if the shape change is "
         f"intended, edit contracts/traces/dictionary.json and regenerate with `{_REGEN_COMMAND}`"
     )
+
+
+def test_the_live_cli_span_equals_the_platform_golden() -> None:
+    live = _live_platform()
+    golden = {path.stem: path.read_text() for path in sorted(_PLATFORM_GOLDEN_DIR.glob("*.json"))}
+    assert set(live) == set(golden), (
+        f"platform golden scenarios differ from the seeds; regenerate with `{_REGEN_COMMAND}`"
+    )
+    drifted = sorted(name for name in live if live[name] != golden[name])
+    assert not drifted, (
+        f"the CLI span for {drifted} has drifted from contracts/traces/golden/platform/; if the change is "
+        f"intended, edit contracts/traces/dictionary.json and regenerate with `{_REGEN_COMMAND}`"
+    )
+
+
+def _otlp_value_type(value: dict[str, Any]) -> str:
+    (kind,) = value
+    return {"stringValue": "string", "intValue": "int", "doubleValue": "double", "boolValue": "bool"}[kind]
+
+
+def test_the_cli_golden_spans_are_the_declared_platform_shape() -> None:
+    declared = {a["name"]: a["type"] for a in dictionary()["platform"]["attributes"]}
+    golden = {path.stem: json.loads(path.read_text()) for path in sorted(_PLATFORM_GOLDEN_DIR.glob("*.json"))}
+    assert golden
+    for name, payload in golden.items():
+        for resource_spans in payload["resourceSpans"]:
+            for scope_spans in resource_spans["scopeSpans"]:
+                assert scope_spans["scope"]["name"] == platform_attr.CLI_SCOPE, name
+                assert scope_spans["spans"], name
+                for span in scope_spans["spans"]:
+                    for entry in span["attributes"]:
+                        key = entry["key"]
+                        assert key in declared, f"{name}: undeclared attribute {key}"
+                        assert _otlp_value_type(entry["value"]) == declared[key], f"{name}: {key}"
 
 
 def test_the_dictionary_names_exactly_the_attributes_the_code_declares() -> None:

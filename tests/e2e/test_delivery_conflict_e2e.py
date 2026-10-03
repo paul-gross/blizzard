@@ -7,6 +7,7 @@ Skipped unless `BLIZZARD_E2E=1` with the sibling `blizzard-mock` worktree provis
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import time
@@ -15,9 +16,21 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
+from tests.e2e.fleet_traces import (
+    PLANT_DIR_VAR,
+    PLANT_LEASE_TOKEN_SCRIPT,
+    FleetCollector,
+    StepExpect,
+    assert_platform_nesting,
+    assert_skeleton,
+    enroll_runner,
+    planted_lease_tokens,
+    runner_sweep,
+    stashed_route_tokens,
+)
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -42,8 +55,10 @@ pytestmark = [
 ]
 
 _BUILD_SCRIPT = (
-    "import subprocess, pathlib\n"
+    PLANT_LEASE_TOKEN_SCRIPT + "import os, subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
+    # A command whose request the runner passes through to the hub — the chain a trace should show end to end.
+    'subprocess.run(["blizzard", "runner", "work-items", os.environ["BLIZZARD_CHUNK_ID"]], check=True, capture_output=True)\n'
     '(pathlib.Path(repo) / "CONFLICTED.md").write_text("armed conflict\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
     "subprocess.run(\n"
@@ -87,7 +102,13 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced_env: dict[str, str]) -> str:
+def _drive_one_bounce(
+    config: RunnerConfig,
+    hub: httpx.Client,
+    chunk_id: str,
+    fenced_env: dict[str, str],
+    process: RunnerProcess | None,
+) -> str:
     """Tick until the chunk is back at `build` (post-bounce) or reaches a terminal status.
 
     A conflict never terminates the chunk (#64), so this stops on the first bounce rather
@@ -96,11 +117,11 @@ def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fe
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        with _runner_api(config):
+        with _runner_api(config, process=process):
             deadline = time.monotonic() + 60.0
             status = "ready"
             while time.monotonic() < deadline:
-                LoopWiring.of(config).tick_once()
+                LoopWiring.of(config).tick_once(process=process)
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 body = detail.json()
@@ -116,15 +137,21 @@ def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fe
         os.environ.update(prior)
 
 
-def _drive_until_rebuilt(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced_env: dict[str, str]) -> None:
+def _drive_until_rebuilt(
+    config: RunnerConfig,
+    hub: httpx.Client,
+    chunk_id: str,
+    fenced_env: dict[str, str],
+    process: RunnerProcess | None,
+) -> None:
     """Tick until the re-entered build has passed again — its step is closed, so it can be exported."""
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        with _runner_api(config):
+        with _runner_api(config, process=process):
             deadline = time.monotonic() + 60.0
             while time.monotonic() < deadline:
-                LoopWiring.of(config).tick_once()
+                LoopWiring.of(config).tick_once(process=process)
                 history = hub.get(f"/api/chunks/{chunk_id}").json()["history"]
                 if sum(1 for h in history if h["choice_name"] == "pass") >= 2:
                     return
@@ -173,6 +200,7 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
     with (
         _forge(bin_dir, origins, forge_port) as forge,
         _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
+        contextlib.ExitStack() as stack,
     ):
         # Arm the mock forge's merge_conflict lever for the fixture repo — repo-scoped
         # (no PR number), so it applies to whichever PR the script opens.
@@ -189,9 +217,15 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        if fleet_traces.available:
+            config = enroll_runner(hub, config)
+        planted = tmp_path / "planted"
+        planted.mkdir()
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_one_bounce(config, hub, chunk_id, fenced)
+        fenced[PLANT_DIR_VAR] = str(planted)
+        process = stack.enter_context(runner_sweep(config, fleet_traces)).process
+        status = _drive_one_bounce(config, hub, chunk_id, fenced, process)
 
         # Fleet truth: never terminal — a bounce is contention, not failure (#64).
         assert status == "running", f"conflict chunk did not bounce back to running (last status {status!r})"
@@ -215,7 +249,7 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         # on the very `hub exec` span the sweep tells, which proves the inline derivation and the sweep agree.
         with subtests.test(msg="fleet traces"):
             fleet_traces.require()
-            _drive_until_rebuilt(config, hub, chunk_id, fenced)
+            _drive_until_rebuilt(config, hub, chunk_id, fenced, process)
             traces = fleet_traces.traces(roots=3, exact=False)
             (bounce,) = [e for e in traces[1].root.events if e.name == "bounce"]
             assert bounce.attributes["blizzard.bounce.cause"] == "conflict"
@@ -245,6 +279,17 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
             assert run_steps, "the deliver step's trace carries no `hub run step` span"
             assert {s.parent_span_id for s in run_steps} == {hub_exec.span_id}
             assert all("blizzard.hub.run_step.exit_code" in s.attributes for s in run_steps)
+
+        with subtests.test(msg="platform spans"):
+            fleet_traces.require()
+            assert_platform_nesting(fleet_traces.spans(roots=3, exact=False), fleet_traces.platform_spans())
+            fleet_traces.assert_no_leaks(
+                {
+                    "lease token": planted_lease_tokens(planted),
+                    "route token": stashed_route_tokens(config),
+                    "runner bearer": [config.hub_token],
+                }
+            )
 
     # Bare main is exactly where it started — the conflicted change never landed.
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
