@@ -23,6 +23,10 @@ from blizzard.hub.config import AUTH_MODE_NONE
 
 _SESSION_COOKIE_NAME = "bz_session"
 
+#: ASGI-scope key holding the identity the trace gate already resolved, so the route's own
+#: dependency reuses it — one session lookup and one sliding-expiry touch per request.
+_IDENTITY_SCOPE_KEY = "blizzard.resolved_identity"
+
 #: The implicit identity every request resolves to under ``auth.mode = "none"`` — the
 #: unauthenticated ``"operator"`` singleton, carrying every permission (``superuser``).
 IMPLICIT_OPERATOR = ResolvedIdentity(
@@ -62,6 +66,12 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
     if mode == AUTH_MODE_NONE:
         return IMPLICIT_OPERATOR
     assert services is not None  # `require`/`me` already resolved services under oauth
+    if _IDENTITY_SCOPE_KEY not in request.scope:
+        request.scope[_IDENTITY_SCOPE_KEY] = _resolve_session(request, services)
+    return request.scope[_IDENTITY_SCOPE_KEY]
+
+
+def _resolve_session(request: Request, services: HubServices) -> ResolvedIdentity | None:
     id_hash = PresentedSession(request).id_hash
     if id_hash is None:
         return None

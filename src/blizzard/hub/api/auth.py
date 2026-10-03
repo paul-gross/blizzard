@@ -22,6 +22,10 @@ from blizzard.hub.domain.tracing.attributes import RUNNER_ID
 
 _log = get_logger("blizzard.hub.auth")
 
+#: ASGI-scope key holding the principal the trace gate already resolved, so the route's own auth
+#: dependency reuses it rather than resolving the same token a second time.
+_PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
+
 
 @dataclass(frozen=True)
 class RunnerPrincipal:
@@ -68,6 +72,12 @@ class RunnerAuth:
     def principal(self) -> RunnerPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
         """The presented token resolved to its runner, or ``None`` when the header is
         missing/malformed or the token does not resolve — no mode logic, no rejection."""
+        scope = self.request.scope
+        if _PRINCIPAL_SCOPE_KEY not in scope:
+            scope[_PRINCIPAL_SCOPE_KEY] = self._resolve()
+        return scope[_PRINCIPAL_SCOPE_KEY]
+
+    def _resolve(self) -> RunnerPrincipal | None:
         token = presented_bearer(self.request)
         if token is None:
             return None
