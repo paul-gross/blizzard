@@ -17,7 +17,13 @@ from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefu
 from blizzard.hub.domain.work import EscalationOpen
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, record_hub_lease
+from blizzard.hub.store.internal.chunk_rows import (
+    ephemeral_ids_select,
+    fence,
+    lock_chunk_row,
+    record_hub_lease,
+)
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 
 
 class ChunkEscalationsStore:
@@ -117,10 +123,16 @@ class ChunkEscalationsStore:
             return True
 
     def _newest_escalation_per_chunk(self):  # type: ignore[no-untyped-def]
-        """The newest ``escalations`` row per chunk. Low-volume, so a full scan is fine."""
+        """The newest ``escalations`` row per chunk, over the chunks that might still be
+        live — a chunk a terminal fact settles, or one grouped away or deleted, can never
+        hold an open escalation, so it is excluded in the query rather than loaded and
+        dropped by the fold."""
+        live_chunk_ids = select(s.chunks.c.chunk_id).where(
+            maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
+        )
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newest_by_chunk = {}
-            for e in conn.execute(select(s.escalations)).all():
+            for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids))).all():
                 current = newest_by_chunk.get(e.chunk_id)
                 if current is None or e.recorded_at > current.recorded_at:
                     newest_by_chunk[e.chunk_id] = e

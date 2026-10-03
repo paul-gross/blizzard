@@ -190,8 +190,14 @@ class ChunkFactsStore:
 
     def _maybe_live_statuses(self, conn) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
-        prefilter's tie residue derives here, not in SQL."""
-        candidate_ids = [r.chunk_id for r in conn.execute(select(s.chunks.c.chunk_id).where(maybe_live()))]
+        prefilter's tie residue derives here, not in SQL. Ephemeral chunks never write a
+        terminal fact, so they are excluded in the same query."""
+        candidate_ids = [
+            r.chunk_id
+            for r in conn.execute(
+                select(s.chunks.c.chunk_id).where(maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select()))
+            )
+        ]
         facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
