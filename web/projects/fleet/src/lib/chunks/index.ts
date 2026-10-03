@@ -1,7 +1,5 @@
 export { injectHubBoardChunksQuery } from './chunks.query';
 export { injectHubChunkCountsQuery } from './chunk-counts.query';
-export { injectHubChunkDetailQuery } from './chunk-detail.query';
-export { injectHubChunkWorkItemsQuery } from './chunk-work-items.query';
 export { injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure } from './human.mutations';
 export type { AnswerFailure, AnswerVars, ResolveVars } from './human.mutations';
 export { injectDetachChunkMutation } from './detach.mutations';

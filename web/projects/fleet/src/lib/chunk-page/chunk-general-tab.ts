@@ -32,14 +32,11 @@ import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
  *
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
  * the three operator-action outputs plus {@link pickStep} back out, no
- * injection. The two call sites' variance is every input but `detail` and
- * `workItems`: {@link canControl}, {@link canAnswer}, {@link canResolve}, and
- * {@link graphLinkBase} default to exactly what the runner's own tab rendered
- * (off, unlinked), so the runner opts into nothing and the hub opts into all
- * four plus the three outputs; {@link issuePanePlacement} defaults to
- * {@link ChunkIssuePane}'s own `'center'` (the hub's rendering), and the
- * runner's narrow single-column route is the one caller that opts into
- * `'inline'`.
+ * injection. {@link canControl}, {@link canAnswer}, {@link canResolve}, and
+ * {@link graphLinkBase} default to read-only (off, unlinked), so `ChunkPage` forwards
+ * them from its daemon's actions port and a daemon with none opts into nothing;
+ * {@link issuePanePlacement} defaults to {@link ChunkIssuePane}'s own `'center'`, and
+ * `ChunkPage`, a narrow single-column page at phone widths, opts into `'inline'`.
  */
 @Component({
   selector: 'fleet-chunk-general-tab',

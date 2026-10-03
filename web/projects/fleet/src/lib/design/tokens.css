@@ -101,7 +101,7 @@
    * The selected state's own left-edge accent is the other half of this
    * scale: `border-left: 2px solid transparent` reserved at rest so
    * recoloring it to `--cyan` on selection never shifts the row/card's own
-   * box (`chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` is the
+   * box (`chunk-artifacts-panel.css`'s `.art-item`/`.art-item.active` is the
    * pattern this follows — reused directly, not redefined as a token, since
    * every consumer already resolves selection accents through `--cyan`
    * itself). Hover carries no border of its own — the background step above

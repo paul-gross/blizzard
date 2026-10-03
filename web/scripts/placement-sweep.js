@@ -75,7 +75,6 @@ const PLACEMENT_PENDING_MIGRATION = [
   { unit: 'health', reach: ['hub'] },
   { unit: 'mutation-keys.ts', reach: ['hub'] },
   { unit: 'paginated-read.ts', reach: ['hub'] },
-  { unit: 'polling.ts', reach: ['hub'] },
   { unit: 'questions', reach: ['hub'] },
   { unit: 'queue', reach: ['hub'] },
   { unit: 'runners', reach: ['hub'] },

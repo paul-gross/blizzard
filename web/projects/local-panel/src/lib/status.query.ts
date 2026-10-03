@@ -1,9 +1,8 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
 import { localPauseMutationKey } from './mutation-keys';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerDashboardKey } from './query-keys';
 
 /**

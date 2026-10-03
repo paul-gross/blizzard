@@ -3,7 +3,6 @@
  */
 
 export * from './lib/auth.query';
-export * from './lib/chunk-detail.query';
 export * from './lib/chunk-title.query';
 export * from './lib/fact-log';
 export * from './lib/leases.query';

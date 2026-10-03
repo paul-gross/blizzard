@@ -1,18 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { ageMs, compactRef, errorMessage, formatAge, injectNowSignal, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
+import {
+  NOT_PAUSABLE,
+  ageMs,
+  compactRef,
+  errorMessage,
+  formatAge,
+  injectChunkDetailQuery,
+  injectNowSignal,
+  KitPanel,
+  KitPanelHeader,
+  runnerClient,
+  type runnerApi,
+} from 'fleet';
 
-import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import { MachineDetailView } from './chunk-detail-view';
 import { injectRunnerDashboardQuery } from './status.query';
 import type { MachineChunkStatus } from './chunk-status';
 import { MachineDetailHeader } from './machine-detail-header';
-
-/** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
- * here so the dock never offers a Pause the server would answer with a 409 — the
- * same table `fleet/chunk-detail/chunk-detail-header.ts`'s own `NOT_PAUSABLE` pins
- * on the hub board's side of this same brake. */
-const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'delivering']);
 
 /**
  * The machine detail dock's container (`bzh:frontend-container-presentational`) —
@@ -89,7 +94,11 @@ export class MachineDetail {
    * this, the same self-fetching shape `injectChunkTitleQuery` established for the
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
    */
-  protected readonly detailQuery = injectChunkDetailQuery(() => this.chunkId());
+  protected readonly detailQuery = injectChunkDetailQuery(
+    () => runnerClient,
+    () => 'runner',
+    () => this.chunkId(),
+  );
 
   /** The chunk's work refs, for the header — mirrors the hub header's own `pointers`. */
   protected readonly workRefs = computed<readonly runnerApi.WorkRefView[]>(

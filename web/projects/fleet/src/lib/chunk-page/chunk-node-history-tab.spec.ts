@@ -1,11 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ArtifactView, hubApi } from 'fleet';
+import type { ArtifactView, ChunkDetail } from '../api/hub';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
-const DETAIL: hubApi.ChunkDetail = {
+const DETAIL: ChunkDetail = {
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',

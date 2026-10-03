@@ -1,22 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import {
-  type ArtifactView,
-  ChunkArtifactBody,
-  ChunkTimelineSelection,
-  type hubApi,
-  KitAccordionSection,
-  KitAsyncState,
-  KitMasterDetail,
-  type KitAsyncStateValue,
-  mergeLateLinks,
-  type TranscriptSegmentContentView,
-  type TranscriptSegmentIndexEntry,
-  TranscriptSegmentView,
-} from 'fleet';
 
-/** {@link ChunkTimelineSelection.graphLinkBase} — the graphs view's own path segments,
- * the same target every other hub composition site links a row's graph badge to. */
-const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
+import type {
+  ArtifactView,
+  ChunkDetail,
+  TranscriptSegmentContentView,
+  TranscriptSegmentIndexEntry,
+} from '../api/hub';
+import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
+import { ChunkTimelineSelection } from '../chunk-detail/chunk-timeline-selection';
+import { KitAccordionSection } from '../kit/kit-accordion-section';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitMasterDetail } from '../kit/kit-master-detail';
+import { mergeLateLinks } from '../transcripts/merge-late-links';
+import { TranscriptSegmentView } from '../transcripts/transcript-segment-view';
 
 /**
  * The chunk detail page's Node history tab — {@link ChunkTimelineSelection}'s
@@ -50,14 +46,14 @@ const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
  * carries no copy of that markup.
  */
 @Component({
-  selector: 'app-chunk-node-history-tab',
+  selector: 'fleet-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAccordionSection, KitAsyncState, KitMasterDetail, TranscriptSegmentView],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })
 export class ChunkNodeHistoryTab {
-  readonly detail = input.required<hubApi.ChunkDetail>();
+  readonly detail = input.required<ChunkDetail>();
 
   /** The raw `?step` URL param — forwarded straight to {@link ChunkTimelineSelection} with
    * no lookup against the timeline's own rows here. */
@@ -93,7 +89,9 @@ export class ChunkNodeHistoryTab {
    * the container, which pages {@link segmentData} to it. */
   readonly pickSegment = output<string>();
 
-  protected readonly graphLinkBase = GRAPH_LINK_BASE;
+  /** {@link ChunkTimelineSelection.graphLinkBase} — the daemon's graphs view, or `null`
+   * to leave each row's graph badge unlinked where the daemon serves no graphs view. */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
 
   protected readonly hasSelection = computed(() => this.selectedKey() !== null);
 

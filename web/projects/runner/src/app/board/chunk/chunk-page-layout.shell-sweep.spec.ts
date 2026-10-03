@@ -7,12 +7,11 @@ import { runnerClient } from 'fleet';
 import { settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import { ChunkDetailPage } from './chunk-detail-page';
+import { CHUNK_PAGE_ROUTES } from './chunk-page.routes';
 
 /**
- * The runner-local chunk detail page's half of `web:shell-sweep`
- * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep,
- * now tabbed, further widened for Node history) — a real,
+ * The shared chunk page, mounted through the runner's own route table, as its half of
+ * `web:shell-sweep` (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep) — a real,
  * headless-Chromium proof that every tab — General (work item, issues, node
  * history summary, asks · decisions), Node history, Artifacts, Transcripts —
  * renders with no horizontal overflow at phone widths, the way the hub's own
@@ -29,7 +28,7 @@ import { ChunkDetailPage } from './chunk-detail-page';
  * history, and Transcripts (now grouped by node, sharing the
  * `fleet-chunk-transcripts-container` nav-plus-viewer pane, not the prior lease-chip
  * `section-transcript` panel) are each one nav-plus-viewer pane rather than a stack of
- * independent panels (`fleet-chunk-artifacts-panel`, `app-chunk-node-history-tab`,
+ * independent panels (`fleet-chunk-artifacts-panel`, `fleet-chunk-node-history-tab`,
  * `fleet-chunk-transcripts-container`) — for these three, the horizontal-overflow check
  * above already stands in for it: the Artifacts tab defaults its viewer to the fixture's
  * single (deliberately long-keyed) artifact with no click needed, so the overflow check
@@ -93,7 +92,7 @@ const TABS = [
   { testid: 'tab-transcripts', label: 'Transcripts', expectSections: false },
 ] as const;
 
-describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', () => {
+describe('runner chunk page shell sweep (web:shell-sweep)', () => {
   it('stacks every tab’s own sections with no horizontal overflow at phone widths', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
@@ -106,7 +105,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', component: ChunkDetailPage }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
@@ -127,8 +126,8 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
           await new Promise((resolve) => requestAnimationFrame(resolve));
 
           const label = `width=${width}, tab=${tabLabel}`;
-          const pageEl = root.querySelector<HTMLElement>('[data-testid="chunk-detail-page"]')!;
-          expect(pageEl, `${label}: no chunk-detail-page in the DOM`).not.toBeNull();
+          const pageEl = root.querySelector<HTMLElement>('fleet-chunk-page-shell')!;
+          expect(pageEl, `${label}: no fleet-chunk-page-shell in the DOM`).not.toBeNull();
           expect(
             pageEl.scrollWidth,
             `${label}: the page overflows horizontally (${pageEl.scrollWidth} > ${window.innerWidth})`,
@@ -161,7 +160,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
    * page-level status line is `fleet-kit-async-state`'s absolutely-centered
    * `placement="center"`, so it resolves against its nearest positioned
    * ancestor: centering it against a box whose only in-flow content is the
-   * 44px back bar paints "FAILED TO LOAD CHUNK" straight across "‹ Board".
+   * 44px back bar paints "CHUNK UNAVAILABLE" straight across "‹ Board".
    * This pins the fix — the status centers in `.body`, the back row's sibling,
    * which fills the space below it.
    */
@@ -174,7 +173,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', component: ChunkDetailPage }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
@@ -189,9 +188,9 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         const label = `width=${width}`;
-        const status = root.querySelector<HTMLElement>('[data-testid="chunk-detail-page-error"]');
+        const status = root.querySelector<HTMLElement>('[data-testid="mobile-chunk-error"]');
         expect(status, `${label}: the page error status is not in the DOM`).not.toBeNull();
-        const backRect = root.querySelector<HTMLElement>('[data-testid="chunk-detail-back"]')!.getBoundingClientRect();
+        const backRect = root.querySelector<HTMLElement>('[data-testid="mobile-chunk-back"]')!.getBoundingClientRect();
         const statusRect = status!.getBoundingClientRect();
         expect(
           statusRect.top,
@@ -211,11 +210,10 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
    * overflowed and got clipped mid-word at phone widths, invisible to a
    * page-level `scrollWidth` check (the test above) since the status line was
    * `position: absolute` and clipped by an ancestor without ever pushing the
-   * page wider. Fixed by this page's own mount opting `ChunkIssuePane` into
-   * `placement="inline"` (`chunk-detail-page.ts`) — normal flow, not
+   * page wider. Fixed by the chunk page opting `ChunkIssuePane` into
+   * `placement="inline"` (`chunk-page.html`) — normal flow, not
    * absolutely positioned, and scoped to this narrow-layout consumer rather
-   * than every mount (the desktop dock and hub keep `'center'`, their prior
-   * rendering, unaffected). This pins the fix: the full text renders, in-bounds, at phone widths, for a
+   * than every mount (the desktop dock keeps `'center'`). This pins the fix: the full text renders, in-bounds, at phone widths, for a
    * real environment with no forge configured (this env's own runner API
    * returns 503 for `/work-items`).
    */
@@ -230,7 +228,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', component: ChunkDetailPage }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();

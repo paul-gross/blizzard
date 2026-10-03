@@ -207,6 +207,22 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
  * {@link chunkTranscriptsKey} for the runner plane's own gap. */
 export type TranscriptPlane = 'hub' | 'runner';
 
+/** One chunk's full aggregate on either plane, keyed by plane and id — each plane's
+ * key sits under the prefix its own live-update registry already invalidates: the hub's
+ * {@link hubChunkKey} (`sse/fleet-live.ts`), and the runner's `[runner, chunk, id,
+ * detail]`, which the runner panel's registry and pause mutation stale by this same
+ * function. */
+export function chunkDetailKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
+  return plane === 'hub' ? hubChunkKey(chunkId) : ['runner', 'chunk', chunkId, 'detail'];
+}
+
+/** One chunk's related work items on either plane, keyed by plane and id. The runner's
+ * entry is its own `work-items-detail` key so it never shares a cache entry or observer
+ * options with the runner panel's severable row-title read of the same endpoint. */
+export function chunkWorkItemsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
+  return plane === 'hub' ? hubChunkWorkItemsKey(chunkId) : ['runner', 'chunk', chunkId, 'work-items-detail'];
+}
+
 /** One chunk's transcript-segment index, keyed by plane and id —
  * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
  * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as

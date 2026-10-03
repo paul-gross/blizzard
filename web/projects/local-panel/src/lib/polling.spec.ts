@@ -1,14 +1,12 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, injectChunkDetailQuery, runnerClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerSessionQuery } from './auth.query';
-import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectRunnerLeasesQuery } from './leases.query';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /** A minimal host mounting all four backstop-governed reads in one injection context —
@@ -23,7 +21,11 @@ class PollingHost {
   readonly dashboard = injectRunnerDashboardQuery();
   readonly leases = injectRunnerLeasesQuery();
   readonly session = injectRunnerSessionQuery();
-  readonly chunkDetail = injectChunkDetailQuery(() => null);
+  readonly chunkDetail = injectChunkDetailQuery(
+    () => runnerClient,
+    () => 'runner',
+    () => null,
+  );
 }
 
 /**

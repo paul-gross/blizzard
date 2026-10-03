@@ -1,20 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import {
-  asyncState,
-  deriveTranscriptSteps,
-  filterArtifactsByStep,
-  type hubApi,
-  injectHubChunkTranscriptSegmentQuery,
-  injectHubChunkTranscriptsQuery,
-  type KitAsyncStateValue,
-  parseNodeStepKey,
-  resolveSegmentSeams,
-  sortArtifacts,
-  type TranscriptSegmentIndexEntry,
-  type TranscriptStep,
-  TranscriptFetchError,
-} from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
+import type { ChunkDetail, TranscriptSegmentIndexEntry } from '../api/hub';
+import { filterArtifactsByStep } from '../chunk-detail/filter-artifacts-by-step';
+import { sortArtifacts } from '../chunk-detail/sort-artifacts';
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { parseNodeStepKey } from '../node-step';
+import { asyncState } from '../query-state';
+import {
+  injectChunkTranscriptSegmentQuery,
+  injectChunkTranscriptsQuery,
+  TranscriptFetchError,
+} from '../transcripts/transcript-segments.query';
+import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from '../transcripts/transcript-steps';
+import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
 /**
@@ -24,6 +22,10 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
  * Transcripts tab already mounts), forwarding resolved state to the presentational
  * {@link ChunkNodeHistoryTab}, which injects nothing. `ChunkPage` mounts this only inside
  * its `@case ('node-history')` branch, keeping the query lazy the same way.
+ *
+ * The transcript reads cross the daemon's own seam ({@link CHUNK_PAGE_DAEMON}'s `client`
+ * and `plane`), so each daemon's page shows the per-step transcript from its own
+ * transcript endpoints.
  *
  * A step can carry more than one segment (a resumed lease). {@link pickedSegmentId}
  * is this container's own local UI state — never URL-held, unlike the step selection
@@ -38,7 +40,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
  * the rest.
  */
 @Component({
-  selector: 'app-chunk-node-history-container',
+  selector: 'fleet-chunk-node-history-container',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkNodeHistoryTab],
   templateUrl: './chunk-node-history-container.html',
@@ -47,13 +49,22 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 export class ChunkNodeHistoryContainer {
   /** See {@link ChunkTranscriptsContainer.chunkId} — nullable for the same reason. */
   readonly chunkId = input.required<string | null>();
-  readonly detail = input.required<hubApi.ChunkDetail>();
+  readonly detail = input.required<ChunkDetail>();
   readonly selectedKey = input<string | null>(null);
+  /** {@link ChunkTimelineSelection.graphLinkBase}, forwarded — `null` leaves graph
+   * badges unlinked. */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
   /** Opts the presentational tab into the hub phone's list/detail presentation. */
   readonly drilldown = input(false);
   readonly pickStep = output<string | null>();
 
-  protected readonly indexQuery = injectHubChunkTranscriptsQuery(() => this.chunkId());
+  private readonly daemon = inject(CHUNK_PAGE_DAEMON);
+
+  protected readonly indexQuery = injectChunkTranscriptsQuery(
+    () => this.daemon.client,
+    () => this.daemon.plane,
+    () => this.chunkId(),
+  );
 
   private readonly parsedSelection = computed(() => {
     const key = this.selectedKey();
@@ -105,7 +116,9 @@ export class ChunkNodeHistoryContainer {
     return this.selectedStepSegments().find((s) => s.segment_id === this.effectiveSegmentId())?.final ?? false;
   });
 
-  protected readonly segmentQuery = injectHubChunkTranscriptSegmentQuery(
+  protected readonly segmentQuery = injectChunkTranscriptSegmentQuery(
+    () => this.daemon.client,
+    () => this.daemon.plane,
     () => this.chunkId(),
     () => this.effectiveSegmentId(),
     () => this.effectiveSegmentFinal(),

@@ -1,3 +1,5 @@
+import { chunkDetailKey } from 'fleet';
+
 /**
  * The TanStack Query keys the local panel reads under, in one place — mirrors
  * `fleet`'s `hub`-namespaced `query-keys.ts` (the fleet/local split: local
@@ -32,18 +34,6 @@ export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
 }
 
 /**
- * One chunk's work items for the chunk detail route's Issues section
- * — full-fidelity, not the severable row-decoration read above: this
- * page renders a real loading/error/empty triad for it, so it needs a real
- * fetch (retried, not silently swallowed after one attempt) rather than the
- * list rows' single-shot decoration. Its own key so it shares neither cache
- * entry nor observer options with {@link runnerChunkWorkItemsKey}.
- */
-export function runnerChunkWorkItemsDetailKey(chunkId: string): readonly unknown[] {
-  return ['runner', 'chunk', chunkId, 'work-items-detail'];
-}
-
-/**
  * One lease's transcript read, keyed by lease id — switching the
  * selected row is a distinct cache entry, never invalidated by the leases poll.
  */
@@ -56,8 +46,9 @@ export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
  * header, pass-through-forwarded to the hub (`ChunkDetail.pause` is the only
  * way this panel learns a chunk is paused). Its own key, keyed by chunk id,
  * distinct from the severable {@link runnerChunkWorkItemsKey} title read and
- * from `hub`-namespaced `chunk` reads in `fleet`.
+ * from `hub`-namespaced `chunk` reads in `fleet`. Defined once by `fleet`'s
+ * {@link chunkDetailKey}, since the shared chunk page and this dock read the same entry.
  */
 export function runnerChunkDetailKey(chunkId: string): readonly unknown[] {
-  return ['runner', 'chunk', chunkId, 'detail'];
+  return chunkDetailKey('runner', chunkId);
 }

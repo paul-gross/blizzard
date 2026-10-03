@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
+import { NOT_PAUSABLE } from '../chunk-pausable';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
 import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../kit/kit-confirm-dialog';
@@ -9,16 +10,6 @@ import { KitMenu, KitMenuPanel } from '../kit/kit-menu';
 import { KitMenuItem, KitMenuItemSubtitle } from '../kit/kit-menu-item';
 import { KitTooltip } from '../kit/kit-tooltip';
 import { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
-
-/** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
- * here so the dock never offers a Pause the server would answer with a 409.
- * A terminal or mid-delivery chunk has no work to stop.
- *
- * `paused` is deliberately **absent**: whether a chunk is already paused is not a
- * question `status` can answer (PAUSED derives below the human-gated states), so it is
- * never asked here — see {@link ChunkDetailHeader.pause}, which owns that half by
- * reading the fact. */
-const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
 
 /** Statuses the hub's `CompleteService` treats as a no-op rather than a transition:
  * a `done` chunk is already done, so the dock withholds the control
@@ -30,7 +21,7 @@ const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
 /** Statuses with no acquiring runner — the only ones Delete reaches:
  * a `not_ready`/`ready` chunk has no live route to release, unlike every status
  * Detach guards. Owned right beside the control it gates, the same shape as
- * {@link NOT_PAUSABLE}/{@link NOT_COMPLETABLE} above. */
+ * {@link NOT_COMPLETABLE} above. */
 const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
 
 /**

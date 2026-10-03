@@ -12,9 +12,9 @@
      letter-spaced labels (GENERAL/ARTIFACTS/TRANSCRIPTS) measure ~315px —
      wider than a 320px phone's content box — and a plain non-wrapping flex
      row pushed that overflow all the way up to the page, which is what
-     chunk-detail-page.shell-sweep.spec.ts caught at width 320. Scrolling
+     the runner chunk page's shell sweep caught at width 320. Scrolling
      here absorbs it instead: both current mounts (AppShell's .shell,
-     chunk-detail-page's .body) are column flex containers, so the
+     ChunkPageShell's .cps-body) are column flex containers, so the
      strip's width is the *cross* axis, where a flex item's default
      min-width: auto is not clamped to its min-content size the way the
      main axis is — overflow-x: auto alone is what lets the strip stay

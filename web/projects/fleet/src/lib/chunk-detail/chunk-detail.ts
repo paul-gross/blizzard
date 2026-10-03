@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 
 import type { ChunkDetail as ChunkDetailAggregate, ChunkStatus } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
-import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
-import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
+import { injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery } from '../chunk-page/chunk-detail.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';

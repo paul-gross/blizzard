@@ -3,20 +3,20 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type hubApi } from 'fleet';
+import { ChunkPage, hubClient, type hubApi } from 'fleet';
 import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import { ChunkPage } from './chunk-page';
+import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 
 /**
- * The Artifacts tab's real composed chain — `ChunkPage` → `ChunkArtifactsTab` →
- * `ChunkArtifactsPanel` — under a real browser (review M1/G16). `ChunkArtifactsPanel`'s
+ * The Artifacts tab's real composed chain — `ChunkPage` → `ChunkArtifactsPanel` — under
+ * a real browser. `ChunkArtifactsPanel`'s
  * `.art-tab` sizes itself with `height: 100%`, a claim jsdom parses but never lays out —
  * `web:unit-test` cannot see whether that percentage actually resolves against a definite
  * containing block, only that the rule exists. Driven through a real router the way
  * `chunk-page-layout.shell-sweep.spec.ts`'s own composed-chain cases drive `ChunkPage`, so
- * `ChunkArtifactsTab`'s real host is genuinely in the chain, not stood in for.
+ * the panel's real host is genuinely in the chain, not stood in for.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
@@ -24,7 +24,7 @@ import { ChunkPage } from './chunk-page';
  */
 
 /** Pump change detection until `ready()` holds, without `settle()`'s `whenStable()` —
- * `chunk-page-layout.shell-sweep.spec.ts`'s own `pumpUntil` (review G11/G12): a query
+ * `chunk-page-layout.shell-sweep.spec.ts`'s own `pumpUntil`: a query
  * enabled only once an earlier one resolves registers a pending task Angular's zoneless
  * stability never retires, so `whenStable()` waits forever even once the DOM is settled. */
 async function pumpUntil(fixture: { detectChanges(): void }, ready: () => boolean, tries = 60): Promise<void> {
@@ -73,7 +73,7 @@ class ChainBoardStub {}
 
 const CHAIN_ROUTES = [
   { path: 'board', component: ChainBoardStub },
-  { path: 'board/chunk/:chunkId', component: ChunkPage },
+  { path: 'board/chunk/:chunkId', component: ChunkPage, providers: HUB_CHUNK_PAGE_PROVIDERS },
 ];
 
 /** Stands in for `App`'s own `.layout` (`app.ts`) — the real height-capped, flex-column
@@ -111,9 +111,9 @@ describe('chunk page Artifacts tab composed-chain layout shell sweep (web:shell-
         await page.viewport(390, 700);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const tab = root.querySelector<HTMLElement>('app-chunk-artifacts-tab');
+        const tab = root.querySelector<HTMLElement>('fleet-chunk-artifacts-panel');
         const nav = root.querySelector<HTMLElement>('[data-testid="artifacts-tab-nav"]');
-        expect(tab, 'no app-chunk-artifacts-tab in the composed chain').not.toBeNull();
+        expect(tab, 'no fleet-chunk-artifacts-panel in the composed chain').not.toBeNull();
         expect(nav, 'no artifacts-tab-nav in the DOM').not.toBeNull();
 
         // The regression's own signature: under the bug, `.art-tab`'s containing block

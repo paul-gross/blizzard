@@ -1,8 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ArtifactView } from 'fleet';
-
-import { ChunkArtifactsTab } from './chunk-artifacts-tab';
+import type { ArtifactView } from '../api/hub';
+import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
 
 const OLDER: ArtifactView = {
   key: 'build.branch.1',
@@ -28,16 +27,25 @@ const NEWER: ArtifactView = {
   recorded_at: '2026-07-16T11:30:00.000Z',
 };
 
-describe('ChunkArtifactsTab', () => {
+/** The chunk page's Artifacts tab — {@link ChunkArtifactsPanel} under the
+ * `artifacts-tab` testid prefix `ChunkPage` mounts it with, the handles the hub's
+ * demo tour and browser e2e steer by. */
+function createTab() {
+  const fixture = TestBed.createComponent(ChunkArtifactsPanel);
+  fixture.componentRef.setInput('testidPrefix', 'artifacts-tab');
+  return fixture;
+}
+
+describe("ChunkPage's Artifacts tab", () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ChunkArtifactsTab],
+      imports: [ChunkArtifactsPanel],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
 
   it('lists every entry in recorded_at order, oldest first', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [NEWER, OLDER]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -47,7 +55,7 @@ describe('ChunkArtifactsTab', () => {
   });
 
   it('emits pickArtifact with a clicked row’s key', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     let selected: string | undefined;
     fixture.componentInstance.pickArtifact.subscribe((key) => (selected = key));
@@ -59,7 +67,7 @@ describe('ChunkArtifactsTab', () => {
   });
 
   it('defaults the viewer to the most recent entry when no key is selected', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -70,7 +78,7 @@ describe('ChunkArtifactsTab', () => {
   });
 
   it('renders the selected entry’s full content, and a git_commit’s ref rather than content', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     fixture.componentRef.setInput('selectedKey', OLDER.key);
     await fixture.whenStable();
@@ -94,7 +102,7 @@ describe('ChunkArtifactsTab', () => {
    * artifacts, silently. Change it here and the director changes with it.
    */
   it('renders the selected key inside the viewer — the handle demo mode steers by', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     fixture.componentRef.setInput('selectedKey', OLDER.key);
     await fixture.whenStable();
@@ -106,7 +114,7 @@ describe('ChunkArtifactsTab', () => {
   });
 
   it('resolves a key naming nothing in the store to the empty state, not a silent fallback', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     fixture.componentRef.setInput('selectedKey', 'gone.missing.9');
     await fixture.whenStable();
@@ -117,7 +125,7 @@ describe('ChunkArtifactsTab', () => {
   });
 
   it('renders the empty state for an empty store', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', []);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -126,8 +134,8 @@ describe('ChunkArtifactsTab', () => {
     expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('No artifacts yet');
   });
 
-  it('renders no "Artifact store" header above the nav list (blizzard#203)', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+  it('renders no "Artifact store" header above the nav list', async () => {
+    const fixture = createTab();
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

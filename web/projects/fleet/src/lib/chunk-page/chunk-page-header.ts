@@ -22,8 +22,8 @@ import type { Tone } from '../kit/tone';
  * break (`overflow-wrap: anywhere`, with `min-width: 0` so the flex item can
  * actually shrink to less than its content's width) rather than pushing a
  * phone-width page wider than its viewport — the shell sweeps
- * (`chunk-page-layout.shell-sweep.spec.ts`,
- * `chunk-detail-page.shell-sweep.spec.ts`) assert that at 320px.
+ * (the hub's and the runner's `chunk-page-layout.shell-sweep.spec.ts`) assert that
+ * at 320px.
  */
 @Component({
   selector: 'fleet-chunk-page-header',

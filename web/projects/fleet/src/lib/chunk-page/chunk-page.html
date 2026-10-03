@@ -33,12 +33,13 @@
         <fleet-chunk-general-tab
           [detail]="d"
           [workItems]="workItems()"
+          issuePanePlacement="inline"
           [canControl]="canControl()"
           [canAnswer]="canAnswer()"
           [canResolve]="canResolve()"
           [resolvePending]="resolvePending()"
           [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
-          [graphLinkBase]="['/graphs']"
+          [graphLinkBase]="graphLinkBase"
           [showNodeHistory]="!mobile()"
           (answerQuestion)="onAnswer($event)"
           (resolveDecision)="onResolve($event)"
@@ -47,27 +48,33 @@
         />
       }
       @case ('node-history') {
-        <app-chunk-node-history-container
+        <fleet-chunk-node-history-container
           [chunkId]="chunkId()"
           [detail]="d"
           [selectedKey]="selection.stepKey()"
+          [graphLinkBase]="graphLinkBase"
           [drilldown]="mobile()"
           (pickStep)="onSelectStep($event)"
         />
       }
       @case ('artifacts') {
-        <app-chunk-artifacts-tab
+        <!-- `testidPrefix="artifacts-tab"` keeps every handle this tab has always
+             rendered — `DemoDirector`'s unattended kiosk tour steers by
+             `artifacts-tab-artifact` / `artifacts-tab-artifact-key`, so it cannot drift
+             onto the panel's own `artifacts-panel-*` default. -->
+        <fleet-chunk-artifacts-panel
           [artifacts]="d.artifacts ?? []"
           [selectedKey]="selection.artifactKey()"
           [drilldown]="mobile()"
+          testidPrefix="artifacts-tab"
           (pickArtifact)="onSelectArtifact($event)"
           (clearArtifact)="onSelectArtifact(null)"
         />
       }
       @case ('transcripts') {
         <fleet-chunk-transcripts-container
-          [client]="hubClient"
-          plane="hub"
+          [client]="daemon.client"
+          [plane]="daemon.plane"
           [chunkId]="chunkId()"
           [history]="d.history ?? []"
           [currentNodeId]="d.current_node_id"

@@ -57,6 +57,8 @@ export {
   hubQuestionsKey,
   hubGardenProposalsKey,
   hubChunkKey,
+  chunkDetailKey,
+  chunkWorkItemsKey,
   hubGraphsKey,
   hubGraphKey,
   chunkTranscriptsKey,
@@ -64,6 +66,8 @@ export {
   type TranscriptPlane,
 } from './lib/query-keys';
 export * from './lib/query-state';
+export { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/polling';
+export { NOT_PAUSABLE } from './lib/chunk-pausable';
 export {
   promoteChunkMutationKey,
   repositionQueueMutationKey,

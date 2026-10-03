@@ -109,7 +109,7 @@ async function render(
  * `MachineDetail`'s summary facts always render off the chunk's newest
  * attempt (the `leases` list's last entry) — per-attempt selection and the
  * transcript moved to the runner-local chunk detail route —
- * `chunk-detail-page.spec.ts` covers that rendering contract now.
+ * the shared chunk page's spec covers that rendering contract now.
  */
 describe('MachineDetail summary facts', () => {
   let stub: RequestClientStub;

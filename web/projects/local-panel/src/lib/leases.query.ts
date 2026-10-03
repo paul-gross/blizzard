@@ -1,7 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerLeasesKey } from './query-keys';
 
 /**

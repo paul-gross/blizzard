@@ -24,8 +24,8 @@ export interface WorkItemsQuery {
  * isPending/isError/success fold `query-state.ts`'s {@link asyncState} derives
  * for the generic triad, specialized to carry the resolved `items` alongside it
  * rather than a bare `KitAsyncStateValue` — every container mounting the issue
- * pane (the desktop dock's `chunk-detail.ts`, the hub's `chunk-page.ts`, the
- * runner's `chunk-detail-page.ts`) shares this one derivation rather than
+ * pane (the desktop dock's `chunk-detail.ts` and the shared `chunk-page.ts`) shares
+ * this one derivation rather than
  * duplicating it. `isPending()` is checked before `isError()`, which is
  * harmless rather than a real precedence choice: TanStack's underlying
  * `status` is mutually exclusive, so a query is never both at once.

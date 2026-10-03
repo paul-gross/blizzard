@@ -32,8 +32,8 @@
  *     Transcripts tab (blizzard#248), the latter both standalone and through
  *     its real ChunkPage → container → tab chain.
  *   - projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts —
- *     the Artifacts tab's real `ChunkPage` → `ChunkArtifactsTab` →
- *     `ChunkArtifactsPanel` chain (review M1): a 40-artifact nav list genuinely
+ *     the Artifacts tab's real `ChunkPage` → `ChunkArtifactsPanel` chain, mounted
+ *     with the hub's daemon: a 40-artifact nav list genuinely
  *     scrolls inside a bounded box rather than clipping with no scroll
  *     container — the `height: 100%` percentage chain jsdom cannot resolve.
  *   - projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts — the
@@ -69,9 +69,9 @@
  *   - projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts — the runner
  *     shell's own top tab strip (issue #313, `AppNav`): the Board/Events
  *     labels never force the strip to overflow its own width.
- *   - projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts —
- *     the runner-local chunk detail page (issue #318): each of its three
- *     tabs — General, Artifacts, Transcripts — genuinely stacks its own
+ *   - projects/runner/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts —
+ *     the shared chunk page through the runner's own route: each of its four
+ *     tabs — General, Node history, Artifacts, Transcripts — genuinely stacks its own
  *     sections with no horizontal overflow at phone widths, including the
  *     General tab's `@media (min-width: 720px)` two-column grid collapse and
  *     a long unbroken artifact key on the Artifacts tab.
@@ -255,7 +255,7 @@ const SWEEPS = [
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
-  { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },

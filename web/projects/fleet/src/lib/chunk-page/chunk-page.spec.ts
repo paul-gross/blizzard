@@ -3,18 +3,21 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { ChunkDetailPage } from './chunk-detail-page';
+import { client as runnerClient } from '../api/runner/client.gen';
+import { ViewportService } from '../viewport/viewport-service';
+import { ChunkPage } from './chunk-page';
+import { provideChunkPageDaemon } from './chunk-page-daemon';
 
 /**
- * The runner-local chunk detail page (`/board/chunk/:chunkId`,
- * tabbed follow-up) — driven through a real router (`RouterTestingHarness`)
- * rather than a stubbed `ActivatedRoute`: the page reads its own route param
- * (`:chunkId`) and two independent query params (`?tab=`, `?attempt=`) and
- * renders a `routerLink`-free but genuinely routed page, so the URL round
- * trip is part of what is under test.
+ * The shared chunk detail page (`/board/chunk/:chunkId`) mounted with a runner's daemon —
+ * its own client and plane and **no** operator-action port — the read-only half of the
+ * daemon seam. The hub's half, with its port, is the hub board's own chunk-page spec.
+ * Driven through a real router (`RouterTestingHarness`) rather than a stubbed
+ * `ActivatedRoute`: the page reads its own route param (`:chunkId`) and independent
+ * query params (`?tab=`, `?attempt=`), so the URL round trip is part of what is under
+ * test.
  *
  * The runner client's transport is stubbed, so this asserts what the page
  * composes off known reads, not the queries themselves (those have their
@@ -59,13 +62,32 @@ const DETAIL = {
 };
 
 /** Stands in for the board route — only its resolving matters here. */
-@Component({ selector: 'app-board-stub', template: '' })
+@Component({ selector: 'fleet-board-stub', template: '' })
 class BoardStub {}
 
 const ROUTES = [
   { path: 'board', component: BoardStub },
-  { path: 'board/chunk/:chunkId', component: ChunkDetailPage },
+  {
+    path: 'board/chunk/:chunkId',
+    component: ChunkPage,
+    providers: [provideChunkPageDaemon({ client: runnerClient, plane: 'runner' })],
+  },
 ];
+
+const SEGMENT = {
+  segment_id: 'sg_1',
+  node_id: 'nd_build',
+  epoch: 1,
+  spawn_generation: 0,
+  turn_range_start: 0,
+  turn_range_end: 1,
+  final: true,
+  truncated: false,
+  byte_count: 40,
+  normalizer_version: 'v1',
+  harness_version: null,
+  received_at: '2026-07-16T11:05:00.000Z',
+};
 
 function routes(segments: readonly unknown[] = []): (method: string, path: string) => unknown {
   return (method, path) => {
@@ -83,7 +105,7 @@ function routes(segments: readonly unknown[] = []): (method: string, path: strin
   };
 }
 
-describe('ChunkDetailPage', () => {
+describe('ChunkPage on a runner daemon', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
@@ -95,6 +117,7 @@ describe('ChunkDetailPage', () => {
         provideRouter(ROUTES),
       ],
     });
+    TestBed.inject(ViewportService).setOverride('desktop');
   });
 
   afterEach(() => stub.restore());
@@ -109,7 +132,7 @@ describe('ChunkDetailPage', () => {
   it('renders work item, issues, node history, and asks · decisions on the General tab, active by default', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="chunk-detail-page"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="board-chunk-detail"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="tab-general"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('fleet-chunk-detail-facts')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
@@ -118,10 +141,9 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('fleet-chunk-artifacts-panel')).toBeNull();
   });
 
-  it('opts the issue pane into inline placement — the narrow-route fix issue #318 shipped', async () => {
-    // A page-level mount check for `issuePanePlacement="inline"` (`chunk-detail-page.html`):
-    // the `.inline` class only shows up on the pane's own status line, so a real error state
-    // is needed to observe it — success renders no status line at all.
+  it('opts the issue pane into inline placement, so its error status reads in flow at phone widths', async () => {
+    // The `.inline` class only shows up on the pane's own status line, so a real error
+    // state is needed to observe it — success renders no status line at all.
     stub.restore();
     stub = stubRequestClient(
       runnerClient,
@@ -138,10 +160,7 @@ describe('ChunkDetailPage', () => {
     expect(status?.classList.contains('inline')).toBe(true);
   });
 
-  it('gains the identity header the hub’s own chunk page carries, naming the chunk by its full id', async () => {
-    // This page never had one before this refactor — the shared
-    // `fleet-chunk-page-header` (`ChunkPageShell`'s composition) — so this pins
-    // both that it now exists and that it reads the full id, not a compact ref.
+  it('names the chunk by its full id in the identity header, not a compact ref', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     const ref = el.querySelector('[data-testid="mobile-chunk-ref"]');
@@ -154,7 +173,7 @@ describe('ChunkDetailPage', () => {
 
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('fleet-chunk-artifacts-panel')).not.toBeNull();
-    expect(el.querySelector('[data-testid="artifacts-panel-nav-item"]')?.getAttribute('data-artifact-key')).toBe(
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.getAttribute('data-artifact-key')).toBe(
       'build.retrospective.1',
     );
     expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
@@ -166,15 +185,15 @@ describe('ChunkDetailPage', () => {
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-panel-nav-item"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.retrospective.1`);
-    expect(el.querySelector('[data-testid="artifacts-panel-nav-item"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.classList.contains('active')).toBe(true);
   });
 
-  it('renders the Node history tab with the shared timeline, row activation on, and no transcript pane', async () => {
+  it('renders the Node history tab with the shared timeline, row activation on, and no transcript pane before a pick', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
 
     expect(el.querySelector('[data-testid="tab-node-history"]')?.getAttribute('aria-selected')).toBe('true');
@@ -196,6 +215,16 @@ describe('ChunkDetailPage', () => {
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
     expect(el.querySelector('[data-testid="node-history-artifact-key"]')?.textContent).toContain('build.retrospective.1');
+  });
+
+  it('shows a picked step’s own transcript, read through the runner’s own transcript endpoints', async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, routes([SEGMENT]));
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
+    expect(el.querySelector('[data-testid="node-history-transcript-body"]')).not.toBeNull();
   });
 
   it('switches tabs on click, writing ?tab= with no full reload, and keeps an unrelated param across the switch', async () => {
@@ -249,25 +278,7 @@ describe('ChunkDetailPage', () => {
 
   it('renders the open segment\u2019s content on the Transcripts tab, resolved through plane="runner"', async () => {
     stub.restore();
-    stub = stubRequestClient(
-      runnerClient,
-      routes([
-        {
-          segment_id: 'sg_1',
-          node_id: 'nd_build',
-          epoch: 1,
-          spawn_generation: 0,
-          turn_range_start: 0,
-          turn_range_end: 1,
-          final: true,
-          truncated: false,
-          byte_count: 40,
-          normalizer_version: 'v1',
-          harness_version: null,
-          received_at: '2026-07-16T11:05:00.000Z',
-        },
-      ]),
-    );
+    stub = stubRequestClient(runnerClient, routes([SEGMENT]));
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1`);
 
     expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
@@ -365,7 +376,7 @@ describe('ChunkDetailPage', () => {
     // restore it into, so the back link never writes one.
     const el = await open(`/board/chunk/${CHUNK_ID}?attempt=lease_1`);
 
-    const back = el.querySelector<HTMLAnchorElement>('[data-testid="chunk-detail-back"]');
+    const back = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]');
     expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}`);
   });
 
@@ -377,7 +388,90 @@ describe('ChunkDetailPage', () => {
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="chunk-detail-page-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunk-error"]')?.textContent).toContain('CHUNK UNAVAILABLE');
     expect(el.querySelector('fleet-chunk-detail-facts')).toBeNull();
+  });
+
+  // --- Read-only: a daemon with no actions port ----------------------------
+
+  it('renders no answer or resolve controls for an open question and gate decision', async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
+        return {
+          ...DETAIL,
+          status: 'waiting_on_human',
+          questions: [
+            {
+              question_id: 'qn_77',
+              chunk_id: CHUNK_ID,
+              question: 'Which API style?',
+              options: ['rest', 'graphql'],
+              epoch: 2,
+              runner_id: 'rn_01',
+              asked_at: '2026-07-16T11:20:00.000Z',
+              answered: false,
+            },
+          ],
+          decision: {
+            decision_id: 'de_01',
+            chunk_id: CHUNK_ID,
+            node_id: 'nd_review',
+            node_name: 'review',
+            epoch: 2,
+            submitted_at: '2026-07-16T11:20:00.000Z',
+            choices: [
+              { name: 'approve', description: 'Ship it.' },
+              { name: 'reject', description: 'Send it back.' },
+            ],
+            transitioned: false,
+          },
+        };
+      }
+      return routes()(method, path);
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.textContent).toContain('Which API style?');
+    expect(el.querySelector('[data-testid="answer-input"]')).toBeNull();
+    expect(el.querySelector('[data-testid="answer-submit"]')).toBeNull();
+    expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
+  });
+
+  it('renders no graph edit for a not-ready chunk', async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready' };
+      return routes()(method, path);
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="graph-value"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
+  });
+
+  it('links nothing to /graphs on the General or Node history tab', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
+    expect(el.querySelector('a[href^="/graphs"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-node-history"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('a[href^="/graphs"]')).toBeNull();
+  });
+
+  it('offers the Transcripts tab — no permission model to hide it behind', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const tabs = Array.from(el.querySelectorAll('[data-testid^="tab-"]')).map((t) => t.getAttribute('data-testid'));
+    expect(tabs).toEqual(['tab-general', 'tab-node-history', 'tab-artifacts', 'tab-transcripts']);
+    expect(stub.requests.some((r) => r.path === '/api/me')).toBe(false);
   });
 });

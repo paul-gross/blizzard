@@ -2,70 +2,67 @@ import { type Signal, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
-/** The runner chunk detail page's tabs (now widened for Node history) —
- * mirrors the hub's own {@link ChunkDetailTab} (`hub`'s `chunk-detail-selection.ts`), on
- * this page's own four regions. */
-export type RunnerChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcripts';
+/** The chunk detail page's tabs. */
+export type ChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcripts';
 
 /**
- * The chunk detail page's tab selection, as the URL holds it — `tab` names
- * the active tab, `artifact` the artifact selected within the Artifacts tab,
- * `step` the node-step selected within the Node history tab. The same
- * contract the hub's own `chunk-detail-selection.ts` establishes: the URL is
- * the single source of truth, so a link is copyable, a reload keeps its
- * place, and back/forward walk the selection.
- *
- * Every navigation here merges into the URL rather than replacing it, so one
- * selection survives a tab switch alongside every other, and a deep link can
- * carry all of them at once.
+ * The chunk detail page's selection, as the URL holds it — `tab` names the active tab; `artifact` the artifact
+ * selected within the Artifacts tab; `segment`/`sidechain` the Transcripts
+ * tab's own open segment and, within it, a standalone-opened sidechain
+ * conversation — nested under a tool call or unlinked, either carries one.
+ * The URL is the single source of truth: the page derives its
+ * state from these params and every selection writes them back, never the
+ * reverse, so a link is copyable, a reload keeps its place, back/forward walk
+ * the selection, and any link to a selection is a plain `routerLink`.
  */
 export interface ChunkDetailSelection {
   /** The active tab. An absent or unrecognized `tab` param resolves to
-   * `'general'` — never a fifth, ungoverned state. */
-  readonly tab: Signal<RunnerChunkDetailTab>;
+   * `'general'` — never a fourth, ungoverned state. */
+  readonly tab: Signal<ChunkDetailTab>;
 
   /** The raw `artifact` param — the artifact key selected in the Artifacts
    * tab, or `null`. Unvalidated: a key naming nothing in the store is the
-   * Artifacts panel's own dead-link state to resolve. */
+   * Artifacts tab's own dead-link state to resolve. */
   readonly artifactKey: Signal<string | null>;
 
-  /** The raw `step` param — the node-step key selected in the Node history
-   * tab, or `null`. Unvalidated, the same stance as {@link artifactKey}. */
+  /** The raw `step` param — the node-step key ({@link nodeStepKey}) selected in the
+   * Node history tab, or `null`. Unvalidated, the same stance as `artifactKey`; not
+   * cleared by {@link select}, {@link selectArtifact}, or the transcript selectors, so
+   * switching tabs and back never silently discards it. */
   readonly stepKey: Signal<string | null>;
 
   /** The raw `segment` param — the transcript segment id opened in the
-   * Transcripts tab, or `null`. Unvalidated, the same stance as {@link artifactKey}. */
+   * Transcripts tab, or `null`. Unvalidated, the same stance as `artifactKey`. */
   readonly transcriptSegment: Signal<string | null>;
 
   /** The raw `sidechain` param — an encoded `SidechainPath` (`fleet`'s
    * `transcript-sidechain-path.ts`) naming the sidechain, nested under a tool
-   * call or unlinked, opened standalone within the open segment, or `null`. */
+   * call or unlinked, opened standalone within the open segment,
+   * or `null`. */
   readonly transcriptSidechain: Signal<string | null>;
 
-  /** Merge a tab into the URL — a client-side navigation (no reload) that
-   * pushes a history entry, leaving every other query param (`?artifact=`,
-   * `?step=`, `?segment=`, `?sidechain=`) untouched. */
-  select(tab: RunnerChunkDetailTab): void;
+  /** Merge a tab into the URL — a client-side navigation (no reload) that pushes a
+   * history entry, leaving every other tab's own param untouched. */
+  select(tab: ChunkDetailTab): void;
 
-  /** Pick an artifact in the Artifacts tab — switches to that tab and writes
-   * its key back to the URL. */
-  selectArtifact(key: string): void;
-
-  /** Select a node-step (or close one with `null`) in the Node history tab —
-   * switches to that tab and writes the step's join key back to the URL. */
-  selectStep(stepKey: string | null): void;
+  /** Pick an artifact in the Artifacts tab (or clear the pick with `null`) — switches
+   * to that tab and writes its key back to the URL. */
+  selectArtifact(key: string | null): void;
 
   /** Open a transcript segment (or close one with `null`) — clears any
    * standalone-opened sidechain, since it belongs to the previously open
-   * segment. Mirrors the hub's own `chunk-detail-selection.ts`. */
+   * segment. */
   selectTranscriptSegment(segmentId: string | null): void;
 
   /** Open (or close, with `null`) a sidechain standalone within the
    * currently open segment, addressed by its encoded `SidechainPath`. */
   selectTranscriptSidechain(path: string | null): void;
+
+  /** Select a node-step (or close one with `null`) in the Node history tab. */
+  selectStep(stepKey: string | null): void;
 }
 
-const TABS: readonly RunnerChunkDetailTab[] = ['general', 'node-history', 'artifacts', 'transcripts'];
+const TABS: readonly ChunkDetailTab[] = ['general', 'node-history', 'artifacts', 'transcripts'];
 
 /** Bind {@link ChunkDetailSelection} to the current route. Call from an
  * injection context (a component field initializer or constructor). */
@@ -79,30 +76,23 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
   return {
     tab: computed(() => {
       const raw = params().get('tab');
-      return (TABS as readonly string[]).includes(raw ?? '') ? (raw as RunnerChunkDetailTab) : 'general';
+      return (TABS as readonly string[]).includes(raw ?? '') ? (raw as ChunkDetailTab) : 'general';
     }),
     artifactKey: computed(() => params().get('artifact')),
     stepKey: computed(() => params().get('step')),
     transcriptSegment: computed(() => params().get('segment')),
     transcriptSidechain: computed(() => params().get('sidechain')),
-    select(tab: RunnerChunkDetailTab): void {
+    select(tab: ChunkDetailTab): void {
       void router.navigate([], {
         relativeTo: route,
         queryParams: { tab },
         queryParamsHandling: 'merge',
       });
     },
-    selectArtifact(key: string): void {
+    selectArtifact(key: string | null): void {
       void router.navigate([], {
         relativeTo: route,
         queryParams: { tab: 'artifacts', artifact: key },
-        queryParamsHandling: 'merge',
-      });
-    },
-    selectStep(stepKey: string | null): void {
-      void router.navigate([], {
-        relativeTo: route,
-        queryParams: { tab: 'node-history', step: stepKey },
         queryParamsHandling: 'merge',
       });
     },
@@ -117,6 +107,13 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
       void router.navigate([], {
         relativeTo: route,
         queryParams: { sidechain: path },
+        queryParamsHandling: 'merge',
+      });
+    },
+    selectStep(stepKey: string | null): void {
+      void router.navigate([], {
+        relativeTo: route,
+        queryParams: { tab: 'node-history', step: stepKey },
         queryParamsHandling: 'merge',
       });
     },

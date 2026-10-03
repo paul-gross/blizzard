@@ -1,7 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ageMs, formatAge, injectNowSignal } from 'fleet';
-
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal } from 'fleet';
 
 /**
  * How stale a heartbeat may read before REAP calls it dead — mirrors the
