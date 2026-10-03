@@ -60,8 +60,7 @@ pytestmark = [
 
 # build turn 1: ask an undecidable question and exit (ask-and-exit).
 _ASK_QUESTION = "Which API style should the endpoint use?"
-# Before it asks, the worker plants its lease token for the leak scan and makes a command whose request the runner
-# passes through to the hub.
+# Before it asks, the worker plants its lease token for the leak scan and calls the hub through the runner.
 _ASK_SCRIPT = (
     PLANT_LEASE_TOKEN_SCRIPT
     + "import os, subprocess\n"

@@ -5160,9 +5160,9 @@
   },
   "blizzard/runner/loop/build.py": {
    "comments": 32,
-   "docstrings": 53,
+   "docstrings": 59,
    "over_cap": 3,
-   "total": 374
+   "total": 382
   },
   "blizzard/runner/loop/capability_snapshot.py": {
    "comments": 0,
@@ -6439,10 +6439,10 @@
    "total": 60
   },
   "e2e/fleet_traces.py": {
-   "comments": 14,
-   "docstrings": 39,
+   "comments": 23,
+   "docstrings": 67,
    "over_cap": 1,
-   "total": 595
+   "total": 813
   },
   "e2e/harness_variants.py": {
    "comments": 0,
@@ -6451,16 +6451,16 @@
    "total": 51
   },
   "e2e/test_acceptance_loop.py": {
-   "comments": 63,
-   "docstrings": 40,
-   "over_cap": 10,
-   "total": 694
+   "comments": 72,
+   "docstrings": 47,
+   "over_cap": 12,
+   "total": 858
   },
   "e2e/test_ask_answer_e2e.py": {
-   "comments": 20,
-   "docstrings": 14,
+   "comments": 21,
+   "docstrings": 9,
    "over_cap": 1,
-   "total": 340
+   "total": 348
   },
   "e2e/test_basic_workspace.py": {
    "comments": 4,
@@ -6487,10 +6487,10 @@
    "total": 191
   },
   "e2e/test_delivery_conflict_e2e.py": {
-   "comments": 11,
+   "comments": 12,
    "docstrings": 12,
    "over_cap": 1,
-   "total": 251
+   "total": 296
   },
   "e2e/test_delivery_pr_ci_e2e.py": {
    "comments": 24,
@@ -9530,9 +9530,9 @@
   },
   "test_runner_loop_build.py": {
    "comments": 7,
-   "docstrings": 59,
+   "docstrings": 61,
    "over_cap": 1,
-   "total": 583
+   "total": 606
   },
   "test_runner_nudge.py": {
    "comments": 25,
@@ -10058,9 +10058,9 @@
   },
   "test_trace_contract.py": {
    "comments": 0,
-   "docstrings": 2,
+   "docstrings": 3,
    "over_cap": 0,
-   "total": 497
+   "total": 559
   },
   "test_trace_cursor.py": {
    "comments": 6,

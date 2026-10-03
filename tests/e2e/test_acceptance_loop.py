@@ -119,9 +119,7 @@ _BUILD_SCRIPT = (
     "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
-# The same build, preceded by the probes a trace proof reads back: the lease token the worker was handed goes where
-# the scenario can scan for it, and a command whose request the runner passes through to the hub makes the chain a
-# trace should show end to end.
+# The build, probed: it plants its lease token for the leak scan and calls the hub through the runner.
 _PROBED_BUILD_SCRIPT = (
     PLANT_LEASE_TOKEN_SCRIPT
     + "import os, subprocess\n"
@@ -332,8 +330,7 @@ def _hub(
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
         WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
-        # Inline platform spans leave on the batch processor's schedule; a short one has them in the file before the
-        # sweep's step roots are, which is when the scenario reads it.
+        # A short batch delay puts the inline platform spans in the file before the sweep's roots.
         **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
         **(extra_env or {}),
     }
