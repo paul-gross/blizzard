@@ -276,8 +276,11 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
                 for s in fleet_traces.platform_spans()
                 if s.name == "hub run step" and s.trace_id == deliver.root.trace_id
             ]
-            assert run_steps, "the deliver step's trace carries no `hub run step` span"
-            assert {s.parent_span_id for s in run_steps} == {hub_exec.span_id}
+            assert run_steps, "the chunk's trace carries no `hub run step` span"
+            # The chunk's one trace holds every deliver step's runs; each hangs on its own step's `hub exec`.
+            hub_execs = {c.span_id for trace in traces for c in trace.children if c.name == "hub exec"}
+            assert {s.parent_span_id for s in run_steps} <= hub_execs
+            assert hub_exec.span_id in {s.parent_span_id for s in run_steps}
             assert all("blizzard.hub.run_step.exit_code" in s.attributes for s in run_steps)
 
         with subtests.test(msg="platform spans"):

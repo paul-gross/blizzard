@@ -8128,6 +8128,11 @@
             "title": "Batches",
             "type": "integer"
           },
+          "chunks": {
+            "default": 0,
+            "title": "Chunks",
+            "type": "integer"
+          },
           "detail": {
             "title": "Detail",
             "type": "string"
@@ -8177,10 +8182,15 @@
         "type": "object"
       },
       "TraceReplayResponse": {
-        "description": "What a replay told, or with ``dry_run`` would have told.",
+        "description": "What a replay told, or with ``dry_run`` would have told; ``chunks`` counts chunk spans and markers.",
         "properties": {
           "batches": {
             "title": "Batches",
+            "type": "integer"
+          },
+          "chunks": {
+            "default": 0,
+            "title": "Chunks",
             "type": "integer"
           },
           "dry_run": {
@@ -8206,7 +8216,7 @@
         "type": "object"
       },
       "TraceStatusResponse": {
-        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``\nis the runner's span-receiver tally and is ``None`` on the hub, which has no receiver.",
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter\nerror text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.\n``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the\nwidest window one replay request may cover.",
         "properties": {
           "cursor_at": {
             "anyOf": [
@@ -8320,6 +8330,17 @@
               }
             ],
             "title": "Rejected Value"
+          },
+          "replay_max_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Max Window Seconds"
           },
           "state": {
             "enum": [
@@ -18813,7 +18834,7 @@
     },
     "/api/traces/replay": {
       "post": {
-        "description": "Tell every step closed in ``[since, until)`` again, inside the request, without moving the live cursor.\nA bad window is 422, a replay that must export while tracing is off is 409, and an exporter that\nrefuses is 502 with the counts it accepted before.",
+        "description": "Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.\nA bad window is 422, a replay that must export while tracing is off is 409, and an exporter that\nrefuses is 502 with the counts it accepted before.",
         "operationId": "trace_replay_api_traces_replay_post",
         "requestBody": {
           "content": {

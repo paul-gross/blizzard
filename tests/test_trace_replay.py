@@ -100,10 +100,17 @@ def test_replay_tells_the_same_ids_as_the_live_sweep_and_leaves_the_cursor_alone
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body == {"steps": 2, "spans": len(live), "batches": 1, "dry_run": False}
+    assert body == {"steps": 2, "chunks": 1, "spans": len(live), "batches": 1, "dry_run": False}
     assert sorted(s.context.span_id for s in exporter.batches[-1]) == live
     assert _cursor_rows(hub) == rows
     assert _event_count(hub) == events
+
+
+@pytest.mark.component
+def test_status_names_the_widest_window_a_replay_request_may_cover(tmp_path: Path) -> None:
+    hub, _ = _hub(tmp_path)
+
+    assert hub.client.get("/api/traces/status").json()["replay_max_window_seconds"] == 3600
 
 
 @pytest.mark.component
@@ -115,7 +122,7 @@ def test_a_window_wider_than_the_batch_limit_is_told_in_full(tmp_path: Path) -> 
 
     body = hub.client.post("/api/traces/replay", json=_window(hub)).json()
 
-    assert (body["steps"], body["batches"]) == (2, 2)
+    assert (body["steps"], body["chunks"], body["batches"]) == (2, 1, 3)
     assert sorted(s.context.span_id for b in exporter.batches[before:] for s in b) == live
 
 
@@ -183,35 +190,122 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
 
     assert resp.status_code == 502
     body = resp.json()
-    assert (body["steps"], body["batches"]) == (1, 1)
+    assert (body["steps"] + body["chunks"], body["batches"]) == (1, 1)
     assert body["spans"] > 0
     assert _cursor_rows(hub) == rows
+
+
+def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    """Route the CLI's module-level ``httpx`` calls to the hub's test client; returns each replay request's body."""
+    bodies: list[dict[str, object]] = []
+
+    def post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> httpx.Response:
+        assert timeout > 15.0
+        bodies.append(json)
+        return hub.client.post(url, json=json)
+
+    def get(url: str, **_: object) -> httpx.Response:
+        return hub.client.get(url)
+
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(httpx, "get", get)
+    return bodies
+
+
+def _local(at: datetime) -> str:
+    return at.astimezone().replace(tzinfo=None).isoformat()
+
+
+_ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 
 
 @pytest.mark.component
 def test_the_cli_is_a_pure_client_and_renders_both_outcomes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub, _ = _hub(tmp_path)
     _told_live(hub)
-    timeouts: list[float] = []
+    bodies = _relay(hub, monkeypatch)
+    since, until = _local(_T0), _local(hub.clock.now() + timedelta(seconds=1))
 
-    def relay(url: str, *, json: object, timeout: float, **_: object) -> httpx.Response:
-        timeouts.append(timeout)
-        return hub.client.post(url, json=json)
-
-    monkeypatch.setattr(httpx, "post", relay)
-    since = _T0.astimezone().replace(tzinfo=None).isoformat()
-    until = (hub.clock.now() + timedelta(seconds=1)).astimezone().replace(tzinfo=None).isoformat()
-    env = {"BZ_HUB_URL": "http://hub.local:8421"}
-
-    dry = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", until, "--dry-run"], env=env)
+    dry = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", until, "--dry-run"], env=_ENV)
     assert dry.exit_code == 0, dry.output
-    assert "would tell 2 steps" in dry.output
-    wet = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", until], env=env)
+    assert "would tell 2 steps, 1 chunks" in dry.output
+    wet = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", until], env=_ENV)
     assert wet.exit_code == 0, wet.output
-    assert "told 2 steps" in wet.output
-    assert min(timeouts) > 15.0
+    assert "told 2 steps, 1 chunks" in wet.output
+    assert len(bodies) == 2
 
-    wide = (hub.clock.now() + timedelta(days=30)).astimezone().replace(tzinfo=None).isoformat()
-    refused = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", wide], env=env)
-    assert refused.exit_code != 0
-    assert "replay_max_window" in refused.output
+
+@pytest.mark.component
+def test_the_cli_splits_a_range_wider_than_the_limit_and_reports_each_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, exporter = _hub(tmp_path)
+    _told_live(hub)
+    live = sorted(s.context.span_id for s in exporter.spans)
+    before = len(exporter.batches)
+    bodies = _relay(hub, monkeypatch)
+    end = hub.clock.now() + timedelta(seconds=1)
+    start = end - timedelta(seconds=3600 * 2 + 1800)
+
+    result = CliRunner().invoke(
+        hub_group, ["traces", "replay", "--since", _local(start), "--until", _local(end)], env=_ENV
+    )
+
+    assert result.exit_code == 0, result.output
+    windows = [(datetime.fromisoformat(str(b["since"])), datetime.fromisoformat(str(b["until"]))) for b in bodies]
+    assert len(windows) == 3
+    assert all(stop - begin <= timedelta(seconds=3600) for begin, stop in windows)
+    assert [w[1] for w in windows[:-1]] == [w[0] for w in windows[1:]]
+    assert (windows[0][0], windows[-1][1]) == (start, end)
+    assert "window 1 of 3" in result.output and "window 3 of 3" in result.output
+    assert "told 2 steps, 1 chunks" in result.output
+    assert sorted(s.context.span_id for b in exporter.batches[before:] for s in b) == live
+
+
+@pytest.mark.component
+def test_the_cli_stops_on_a_failing_window_and_names_where_to_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, exporter = _hub(tmp_path)
+    _told_live(hub)
+    bodies = _relay(hub, monkeypatch)
+    exporter.fail = True
+    end = hub.clock.now() + timedelta(seconds=1)
+    start = end - timedelta(seconds=3600 * 3 + 1800)
+    # The told spans sit in the last of four windows; the three before it are empty and pass.
+    failing_start = start + timedelta(seconds=3600 * 3)
+
+    result = CliRunner().invoke(
+        hub_group, ["traces", "replay", "--since", _local(start), "--until", _local(end)], env=_ENV
+    )
+
+    assert result.exit_code != 0
+    assert len(bodies) == 4
+    assert "window 4 of 4" in result.output
+    assert f"resume with --since {failing_start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("failure", ["transport", "unmapped status"])
+def test_the_cli_names_where_to_resume_when_a_window_request_itself_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    hub, _ = _hub(tmp_path)
+    _relay(hub, monkeypatch)
+
+    def post(url: str, **_: object) -> httpx.Response:
+        if failure == "transport":
+            raise httpx.ReadTimeout("timed out")
+        return httpx.Response(500, json={}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    end = hub.clock.now() + timedelta(seconds=1)
+    start = end - timedelta(seconds=3600 + 1800)
+
+    result = CliRunner().invoke(
+        hub_group, ["traces", "replay", "--since", _local(start), "--until", _local(end)], env=_ENV
+    )
+
+    assert result.exit_code != 0
+    assert "window 1 of 2" in result.output
+    assert f"resume with --since {start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output

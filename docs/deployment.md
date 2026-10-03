@@ -63,8 +63,8 @@ owns what that assumption still costs.
 
 ### Watching it
 
-| File                                                           | When to read                                                                                                                                            |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deployment/observability.md`](./deployment/observability.md) | A chunk is stuck and its status won't say why: the operational event log, the kiosk board for a wall screen, and a worker's raw captured stdout/stderr  |
-| [`deployment/analytics.md`](./deployment/analytics.md)         | You are querying the event stream derived from shipped transcripts, or the duration/spend/outcome datasets built on it                                  |
-| [`deployment/tracing.md`](./deployment/tracing.md)             | You are building a backend or dashboard against a chunk's step traces: the span shape, every attribute, id derivation, and an example collector fan-out |
+| File                                                           | When to read                                                                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`deployment/observability.md`](./deployment/observability.md) | A chunk is stuck and its status won't say why: the operational event log, the kiosk board for a wall screen, and a worker's raw captured stdout/stderr |
+| [`deployment/analytics.md`](./deployment/analytics.md)         | You are querying the event stream derived from shipped transcripts, or the duration/spend/outcome datasets built on it                                 |
+| [`deployment/tracing.md`](./deployment/tracing.md)             | You are building a backend or dashboard against a chunk's traces: the span shape, every attribute, id derivation, and an example collector fan-out     |

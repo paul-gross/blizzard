@@ -37,16 +37,17 @@ from tests.e2e.fleet_traces import (
     FleetCollector,
     InvocationExpect,
     StepExpect,
+    assert_chunk_trace,
     assert_invocations,
     assert_platform_nesting,
     assert_skeleton,
-    documented_decision_wait,
     enroll_runner,
     fleet_collector,
     is_fleet,
     planted_lease_tokens,
     runner_sweep,
     stashed_route_tokens,
+    whole_chunk_decision_wait,
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.support import (
@@ -493,8 +494,8 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
         assert pulls, "no PR was opened at the forge"
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-        # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step, each told once,
-        #    chained by `next` links, the last leading to the reserved terminal.
+        # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step under the chunk
+        #    span, each told once, chained by `next` links, the last leading to the reserved terminal.
         with subtests.test(msg="fleet traces"):
             fleet_traces.require()
             assert_skeleton(
@@ -505,6 +506,11 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
                     StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
                 ],
             )
+
+        with subtests.test(msg="chunk trace"):
+            fleet_traces.require()
+            chunk = assert_chunk_trace(fleet_traces.spans(roots=3), chunk_id, outcome="done", steps=3)
+            assert chunk.attributes["blizzard.chunk.bounces"] == 0
 
         with subtests.test(msg="runner traces"):
             fleet_traces.require()
@@ -530,27 +536,29 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
 
 # --------------------------------------------------------------------------- #
-# Scenario: a tail-sampling collector's decision_wait splits a step's trace, or keeps it whole
+# Scenario: a tail-sampling collector's decision_wait splits a chunk's trace, or keeps it whole
 
 _HUB_SETTLE_SECONDS = 3
 _SWEEP_SECONDS = 1
-# The longest step this run has: the build and review each take a few seconds.
-_LONGEST_STEP_SECONDS = 15
+# The longest chunk this run has: the build, review and delivery each take a few seconds.
+_LONGEST_CHUNK_SECONDS = 60
 _SHORT_DECISION_WAIT_SECONDS = 1
 
 
-@pytest.mark.parametrize("setting", ["short", "documented"])
-def test_a_tail_sampling_decision_wait_splits_or_keeps_the_step_trace(
+@pytest.mark.parametrize("setting", ["short", "whole-chunk"])
+def test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace(
     tmp_path: Path, setting: str, subtests: pytest.Subtests
 ) -> None:
     """A collector that keeps a trace only if it holds a step root decides on a trace's first span, long before
-    the hub's root arrives (it waits ``settle_seconds`` for the step to settle): a ``decision_wait`` shorter than
-    that keeps nothing of the step's trace, root included, and the documented one keeps root and platform chain."""
+    the roots arrive: a short ``decision_wait`` keeps nothing of the chunk's trace, and one longer than the
+    whole chunk keeps roots and platform chain."""
     wait = (
         _SHORT_DECISION_WAIT_SECONDS
         if setting == "short"
-        else documented_decision_wait(
-            settle_seconds=_HUB_SETTLE_SECONDS, sweep_seconds=_SWEEP_SECONDS, longest_step_seconds=_LONGEST_STEP_SECONDS
+        else whole_chunk_decision_wait(
+            settle_seconds=_HUB_SETTLE_SECONDS,
+            sweep_seconds=_SWEEP_SECONDS,
+            longest_chunk_seconds=_LONGEST_CHUNK_SECONDS,
         )
     )
     bin_dir = _mock_bin_dir()
@@ -626,7 +634,7 @@ def test_a_tail_sampling_decision_wait_splits_or_keeps_the_step_trace(
                 # dropped stays dropped, so the late root went with it.
                 time.sleep(wait + 2)
                 kept = collector.kept_spans()
-                assert not [s for s in kept if s.is_root], "a short decision_wait still kept a step root"
+                assert not [s for s in kept if s.is_step_root], "a short decision_wait still kept a step root"
                 assert not [s for s in kept if s.scope == platform_attr.CLI_SCOPE], (
                     "a short decision_wait still kept the worker commands' spans"
                 )

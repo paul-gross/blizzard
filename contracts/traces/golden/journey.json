@@ -76,11 +76,11 @@
     "kind": "INTERNAL",
     "links": [],
     "name": "step build",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "88d23b1ca9cc34d2",
     "start": "2026-01-01T00:00:10Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -113,7 +113,7 @@
     "span_id": "f9bd60eae4dd84f7",
     "start": "2026-01-01T00:00:02Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -146,7 +146,7 @@
     "span_id": "43fdab531371e04c",
     "start": "2026-01-01T00:00:03Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -180,7 +180,7 @@
     "span_id": "dda4afb651e1a008",
     "start": "2026-01-01T00:00:16Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -215,7 +215,7 @@
     "span_id": "7318776fe1e87ef4",
     "start": "2026-01-01T00:00:20Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -248,7 +248,7 @@
     "span_id": "28925f2e5e1689dc",
     "start": "2026-01-01T00:00:12Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -298,15 +298,15 @@
           "blizzard.link.reason": "next"
         },
         "span_id": "88d23b1ca9cc34d2",
-        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "step review",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "4577b46a05cd43d6",
     "start": "2026-01-01T00:00:35Z",
     "status": "UNSET",
-    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -336,7 +336,7 @@
     "span_id": "2eedf631921023c2",
     "start": "2026-01-01T00:00:15Z",
     "status": "UNSET",
-    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -366,7 +366,7 @@
     "span_id": "5e9b89656eac66bc",
     "start": "2026-01-01T00:00:32Z",
     "status": "UNSET",
-    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -407,15 +407,15 @@
           "blizzard.link.reason": "bounce"
         },
         "span_id": "4577b46a05cd43d6",
-        "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "step build",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "74b20379223e78cb",
     "start": "2026-01-01T00:01:00Z",
     "status": "UNSET",
-    "trace_id": "0d338bce0f63eb7ab7992a965d508c04"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -456,15 +456,15 @@
           "blizzard.link.reason": "next"
         },
         "span_id": "74b20379223e78cb",
-        "trace_id": "0d338bce0f63eb7ab7992a965d508c04"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "gate gate",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "820ad9ec286b8378",
     "start": "2026-01-01T00:01:11Z",
     "status": "UNSET",
-    "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -493,7 +493,7 @@
     "span_id": "aa6deedf536cbbf9",
     "start": "2026-01-01T00:01:40Z",
     "status": "UNSET",
-    "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -551,15 +551,15 @@
           "blizzard.link.reason": "next"
         },
         "span_id": "820ad9ec286b8378",
-        "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "step verify",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "4840c1f1fc5718b2",
     "start": "2026-01-01T00:02:00Z",
     "status": "UNSET",
-    "trace_id": "051031d65b3fa101a511c88d81202ab6"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -587,7 +587,7 @@
     "span_id": "e22f40e991178577",
     "start": "2026-01-01T00:02:03Z",
     "status": "UNSET",
-    "trace_id": "051031d65b3fa101a511c88d81202ab6"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -626,14 +626,117 @@
           "blizzard.link.reason": "bounce"
         },
         "span_id": "4840c1f1fc5718b2",
-        "trace_id": "051031d65b3fa101a511c88d81202ab6"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "step build",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "dc95b1cea6e3ae76",
     "start": "2026-01-01T00:02:20Z",
     "status": "ERROR",
-    "trace_id": "ab7589710e4df09216b59b8931d5ea9f"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.active_ms": 158000,
+      "blizzard.chunk.backlog_ms": 2000,
+      "blizzard.chunk.bounces": 2,
+      "blizzard.chunk.cache_create_tokens": 20,
+      "blizzard.chunk.cache_read_tokens": 2000,
+      "blizzard.chunk.cost.estimated": true,
+      "blizzard.chunk.cost.partial": true,
+      "blizzard.chunk.cost.usd": 0.75,
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.input_tokens": 200,
+      "blizzard.chunk.outcome": "stopped",
+      "blizzard.chunk.output_tokens": 100,
+      "blizzard.chunk.steps": 6,
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:02:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "chunk",
+    "parent_span_id": null,
+    "span_id": "3df6797481a5fac6",
+    "start": "2026-01-01T00:00:00Z",
+    "status": "UNSET",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:00:02Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "backlog wait",
+    "parent_span_id": "3df6797481a5fac6",
+    "span_id": "056e7c311fd68bd8",
+    "start": "2026-01-01T00:00:00Z",
+    "status": "UNSET",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:02:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "escalation wait",
+    "parent_span_id": "3df6797481a5fac6",
+    "span_id": "b91b130b3436ff47",
+    "start": "2026-01-01T00:02:30Z",
+    "status": "UNSET",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:00:06Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "pause wait",
+    "parent_span_id": "3df6797481a5fac6",
+    "span_id": "8271a84c37627814",
+    "start": "2026-01-01T00:00:04Z",
+    "status": "UNSET",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.outcome": "done",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:02:50Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "chunk completed",
+    "parent_span_id": "3df6797481a5fac6",
+    "span_id": "9aeb3a3a6ce40602",
+    "start": "2026-01-01T00:02:50Z",
+    "status": "UNSET",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   }
 ]

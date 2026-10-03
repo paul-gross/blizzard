@@ -128,7 +128,8 @@ class TraceStore:
         return {chunk_id: _with_graphs(facts, graphs) for chunk_id, facts in built.items()}
 
     def _hydrate(self, conn: Connection, batch: Sequence[str]) -> dict[str, StepFacts]:
-        pins = {r.chunk_id: r.graph_id for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(batch)))}
+        chunk_rows = {r.chunk_id: r for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(batch)))}
+        pins = {chunk_id: row.graph_id for chunk_id, row in chunk_rows.items()}
         if not pins:
             return {}
         ids = list(pins)
@@ -158,6 +159,7 @@ class TraceStore:
             chunk_id: StepFacts(
                 chunk_id=chunk_id,
                 pin_graph_id=pin,
+                minted_at=chunk_rows[chunk_id].minted_at,
                 lease_facts=tuple(LeaseRecord(r.epoch, r.minted_at) for r in leases[chunk_id]),
                 epoch_owners=tuple(EpochOwnerRecord(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
                 transitions=tuple(_transition(r) for r in transitions[chunk_id]),

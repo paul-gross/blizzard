@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.hub.fleet_spans"
-INSTRUMENTATION_SCOPE_VERSION = "1"
+INSTRUMENTATION_SCOPE_VERSION = "2"
 #: The scope the hub's own platform spans (sweep roots) are opened under.
 PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.hub.platform"
 PLATFORM_INSTRUMENTATION_SCOPE_VERSION = "1"
@@ -27,6 +27,20 @@ BOUNCE_CAUSE = "blizzard.bounce.cause"
 ASK_ANSWERED = "blizzard.ask.answered"
 CLOCK_SKEW = "blizzard.clock_skew"
 LINK_REASON = "blizzard.link.reason"
+
+# Dimensions and measures — the chunk span only
+CHUNK_OUTCOME = "blizzard.chunk.outcome"
+CHUNK_BACKLOG_MS = "blizzard.chunk.backlog_ms"
+CHUNK_ACTIVE_MS = "blizzard.chunk.active_ms"
+CHUNK_STEPS = "blizzard.chunk.steps"
+CHUNK_BOUNCES = "blizzard.chunk.bounces"
+CHUNK_INPUT_TOKENS = "blizzard.chunk.input_tokens"
+CHUNK_OUTPUT_TOKENS = "blizzard.chunk.output_tokens"
+CHUNK_CACHE_READ_TOKENS = "blizzard.chunk.cache_read_tokens"
+CHUNK_CACHE_CREATE_TOKENS = "blizzard.chunk.cache_create_tokens"
+CHUNK_COST_USD = "blizzard.chunk.cost.usd"
+CHUNK_COST_ESTIMATED = "blizzard.chunk.cost.estimated"
+CHUNK_COST_PARTIAL = "blizzard.chunk.cost.partial"
 
 # Measures — the step root only
 STEP_INPUT_TOKENS = "blizzard.step.input_tokens"

@@ -1,4 +1,4 @@
-"""Assembling one closed step into its finished span records.
+"""Assembling one closed step into its finished span records, its root parented on the chunk span.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace, §Span events,
 §Links, §Status, §Attributes, §GenAI usage and §What never leaves. Pure: a :class:`StepFacts` and a closed
@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, step_root
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, chunk_span_id, step_root
 from blizzard.foundation.trace_spans import (
     AttributeValue,
     EventRecord,
@@ -179,7 +179,7 @@ def assemble_step(facts: StepFacts, step: NodeStep) -> tuple[SpanRecord, ...]:
     gate = step.kind is StepKind.GATE
     root = SpanRecord(
         context=step_root(step.key),
-        parent_span_id=None,
+        parent_span_id=chunk_span_id(facts.chunk_id),
         name=f"{'gate' if gate else 'step'} {summary.node_name}",
         start=summary.started_at,
         end=summary.ended_at,

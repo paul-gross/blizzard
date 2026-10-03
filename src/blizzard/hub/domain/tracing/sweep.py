@@ -1,4 +1,4 @@
-"""The trace export sweep: tells closed node steps, in cursor order, to the configured exporter.
+"""The trace export sweep: tells closed node steps and finished chunks, in cursor order, to the configured exporter.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §What a sweep does,
 §The cursor and §Delivery semantics. Every collaborator is injected, so :meth:`TraceExportSweep.sweep`
@@ -81,23 +81,28 @@ class TraceExportSweep:
         assert newest is not None  # the first pass always leaves a cursor row behind
         cursor = newest.position
         window = read_window(self._steps, cursor, now - self._settle, self._batch_limit)
-        oldest = window.steps[0].key.at if window.steps else None
+        oldest = window.items[0].key.at if window.items else None
         lag_jump = lag_cap_jump(cursor, oldest, now, self._max_lag)
         if lag_jump is not None:
             self._jump(lag_jump, now)
             return
-        if not window.steps:
+        if not window.items:
             if window.position != cursor:
                 self._steps.append_cursor(TraceCursorRecord(window.position, 0, now))
             return
         spans = assemble_window(window)
         if not self._export(spans):
-            self._failed(now, len(window.steps))
+            self._failed(now, len(window.items))
             return
         _CP_TRACE_AFTER_EXPORT_BEFORE_CURSOR.reached()
         self._steps.append_cursor(TraceCursorRecord(window.position, len(spans), self._clock.now()))
         self._recovered()
-        _log.info("trace export sweep completed", steps=len(window.steps), spans=len(spans))
+        _log.info(
+            "trace export sweep completed",
+            steps=len(window.closed_steps()),
+            chunks=len(window.finished_chunks()),
+            spans=len(spans),
+        )
 
     def _export(self, spans: tuple[SpanRecord, ...]) -> bool:
         try:
@@ -106,11 +111,11 @@ class TraceExportSweep:
             _log.exception("trace exporter raised", spans=len(spans))
             return False
 
-    def _failed(self, now: datetime, steps: int) -> None:
+    def _failed(self, now: datetime, items: int) -> None:
         self._failures += 1
         delay = backoff_delay(self._failures, self._sweep_every)
         self._next_due = now + delay
-        _log.warning("trace export failed", steps=steps, failures=self._failures, retry_in=delay.total_seconds())
+        _log.warning("trace export failed", items=items, failures=self._failures, retry_in=delay.total_seconds())
         if self._failing:
             return
         self._failing = True

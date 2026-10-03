@@ -9,7 +9,8 @@ from typing import Any
 import click
 import httpx
 
-from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.cli.window import replay_windows, resume_since, since_option, until_option
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 
@@ -93,24 +94,44 @@ def traces_replay(
     since: datetime, until: datetime, dry_run: bool, as_json: bool, directory: str, runner_url: str | None
 ) -> None:
     """Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor
-    does not move, so spans the backend already holds arrive again — it dedupes on their ids. The window is
-    bounded by the runner's replay_max_window."""
-    body = {"since": utc_query_value(since), "until": utc_query_value(until), "dry_run": dry_run}
+    does not move, so spans the backend already holds arrive again — it dedupes on their ids. A range over
+    replay_max_window is told in windows; a failure names the --since to resume from."""
+    total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
     with RunnerDaemon.reach("traces replay", directory, runner_url) as daemon:
-        resp = daemon.client.post("/api/traces/replay", json=body, timeout=_REPLAY_TIMEOUT)
-    if resp.status_code == httpx.codes.BAD_GATEWAY:
-        failure = resp.json()
-        raise click.ClickException(
-            f"{failure['detail']} (told {failure['leases']} leases, {failure['spans']} spans "
-            f"in {failure['batches']} batches before it stopped)"
-        )
-    if resp.status_code in (httpx.codes.CONFLICT, httpx.codes.UNPROCESSABLE_ENTITY):
-        reason = "tracing is off" if resp.status_code == httpx.codes.CONFLICT else "window refused"
-        raise click.ClickException(f"{reason}: {resp.json().get('detail', '')}")
-    resp.raise_for_status()
-    result = resp.json()
+        status = daemon.get("/api/traces/status").json()
+        windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
+        for number, (start, stop) in enumerate(windows, 1):
+            body = {"since": iso_utc(start), "until": iso_utc(stop), "dry_run": dry_run}
+            where = f"window {number} of {len(windows)}; resume with --since {resume_since(start)}"
+            try:
+                resp = daemon.client.post("/api/traces/replay", json=body, timeout=_REPLAY_TIMEOUT)
+            except httpx.HTTPError as exc:
+                raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
+            if resp.status_code == httpx.codes.BAD_GATEWAY:
+                failure = resp.json()
+                raise click.ClickException(
+                    f"{failure['detail']} (told {failure['leases']} leases, {failure['spans']} spans "
+                    f"in {failure['batches']} batches before it stopped; {where})"
+                )
+            if resp.status_code in (httpx.codes.CONFLICT, httpx.codes.UNPROCESSABLE_ENTITY):
+                reason = "tracing is off" if resp.status_code == httpx.codes.CONFLICT else "window refused"
+                raise click.ClickException(f"{reason}: {resp.json().get('detail', '')} ({where})")
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
+            result = resp.json()
+            for key in ("leases", "spans", "batches"):
+                total[key] += result[key]
+            total["windows"] = number
+            if len(windows) > 1 and not as_json:
+                click.echo(
+                    f"window {number} of {len(windows)} [{iso_utc(start)}, {iso_utc(stop)}): "
+                    f"{result['leases']} leases, {result['spans']} spans",
+                    err=True,
+                )
     if as_json:
-        click.echo(json.dumps(result, indent=2))
+        click.echo(json.dumps({**total, "dry_run": dry_run}, indent=2))
         return
     verb = "would tell" if dry_run else "told"
-    click.echo(f"{verb} {result['leases']} leases, {result['spans']} spans in {result['batches']} batches")
+    click.echo(f"{verb} {total['leases']} leases, {total['spans']} spans in {total['batches']} batches")

@@ -20,7 +20,7 @@ from blizzard.foundation.platform_tracing.received import (
     decode_otlp,
 )
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_ids import StepKey, trace_id
+from blizzard.foundation.trace_ids import StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.tracing.receiver import MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
 from blizzard.runner.domain.tracing.receiver_limits import (
@@ -50,8 +50,8 @@ def _lease(chunk_id: str = "ch_1", epoch: int = 1) -> LeaseRecord:
     )
 
 
-def _trace(chunk_id: str = "ch_1", epoch: int = 1) -> int:
-    return trace_id(StepKey.attempt(chunk_id, epoch))
+def _trace(chunk_id: str = "ch_1") -> int:
+    return chunk_trace_id(chunk_id)
 
 
 def _span(**changes: object) -> ReceivedSpan:
@@ -240,12 +240,32 @@ def test_admit_keeps_an_in_step_cli_span_and_drops_the_rest() -> None:
     spans = [
         _span(),
         _span(trace_id=_trace("ch_2")),
-        _span(trace_id=_trace("ch_1", 2)),
         _span(scope_name="evil"),
     ]
     admission = admit(spans, _lease(), _ALLOWLIST)
     assert [s.trace_id for s in admission.kept] == [_trace()]
-    assert admission.dropped == 3
+    assert admission.dropped == 2
+
+
+def test_admit_drops_a_span_forging_or_hanging_under_the_chunk_span() -> None:
+    chunk_span = chunk_span_id("ch_1")
+    spans = [_span(), _span(span_id=chunk_span), _span(parent_span_id=chunk_span)]
+    admission = admit(spans, _lease(), _ALLOWLIST)
+    assert [s.span_id for s in admission.kept] == [_SPAN_ID]
+    assert admission.dropped == 2
+
+
+@pytest.mark.parametrize("epoch", [0, 1, 2])
+def test_admit_drops_a_span_forging_a_step_root_of_the_lease_epochs(epoch: int) -> None:
+    forged = step_root(StepKey.attempt("ch_1", epoch)).span_id
+    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST)
+    assert [s.span_id for s in admission.kept] == [_SPAN_ID]
+    assert admission.dropped == 1
+
+
+def test_admit_keeps_a_span_with_the_root_id_of_a_later_epoch() -> None:
+    later = step_root(StepKey.attempt("ch_1", 3)).span_id
+    assert admit([_span(span_id=later)], _lease(epoch=2), _ALLOWLIST).dropped == 0
 
 
 def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> None:

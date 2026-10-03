@@ -83,7 +83,7 @@ def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[Curso
     told: list[CursorKey] = []
     for _ in range(50):
         window = read_window(store, since, until, limit)
-        told += [c.key for c in window.steps]
+        told += [c.key for c in window.closed_steps()]
         if window.position == since:
             return told
         since = window.position
@@ -111,7 +111,7 @@ def test_a_window_reading_from_a_tie_tells_only_what_sorts_after_the_cursor(tmp_
 
     window = read_window(_store(hub), first, hub.clock.now() + timedelta(hours=1), 50)
 
-    assert [c.key for c in window.steps] == [second]
+    assert [c.key for c in window.closed_steps()] == [second]
 
 
 def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
@@ -123,7 +123,7 @@ def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
         _store(hub), CursorKey.opening(now - timedelta(seconds=1)), now - timedelta(microseconds=1), 50
     )
 
-    assert window.steps == ()
+    assert window.closed_steps() == ()
 
 
 def _fleet(tmp_path: Path, pairs: int) -> HubHarness:
@@ -144,7 +144,7 @@ def test_statement_count_is_flat_as_the_window_grows(tmp_path: Path) -> None:
         since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
 
         def call(store: TraceStore = store, since: CursorKey = since, name: str = name) -> None:
-            sizes[name] = len(read_window(store, since, since.at + timedelta(hours=2), 50).steps)
+            sizes[name] = len(read_window(store, since, since.at + timedelta(hours=2), 50).closed_steps())
 
         counts[name] = count_queries(hub.engine, call)
     assert sizes == {"small": 2, "large": 8}

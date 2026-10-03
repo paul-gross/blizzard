@@ -492,6 +492,7 @@ def _wire_hosted_app(
             leases=RunnerReadStores.of(runner_stores).lease_traces,
             clock=clock,
             receiver=graph.receiver_counter,
+            replay_max_window=config.tracing.replay_max_window,
         ),
         trace_replay=graph.trace_replay,
         span_limiter=graph.span_limiter,

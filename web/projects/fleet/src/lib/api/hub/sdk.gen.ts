@@ -1783,7 +1783,7 @@ export const fleetSpendApiSpendGet = <ThrowOnError extends boolean = false>(opti
 /**
  * Trace Replay
  *
- * Tell every step closed in ``[since, until)`` again, inside the request, without moving the live cursor.
+ * Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
  * A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
  * refuses is 502 with the counts it accepted before.
  */

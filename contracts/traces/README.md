@@ -1,7 +1,7 @@
 # Trace contract corpus
 
-The span shape the hub assembles for a step and a runner assembles for a lease, pinned so that a change to it is
-deliberate.
+The span shape the hub assembles for a chunk (its chunk span, step roots and waits) and a runner assembles for a lease,
+pinned so that a change to it is deliberate.
 
 - `dictionary.json` — the authored contract: every span name and its role, every event name, every attribute with its
   OTLP type, the roles that carry it and its meaning, the link reasons, the resource attributes, each role's scope, the

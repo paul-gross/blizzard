@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.runner.runner_spans"
-INSTRUMENTATION_SCOPE_VERSION = "1"
+INSTRUMENTATION_SCOPE_VERSION = "2"
 DEFAULT_SERVICE_NAME = "blizzard-runner"
 
 # Dimensions

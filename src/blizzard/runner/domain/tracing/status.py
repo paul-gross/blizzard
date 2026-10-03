@@ -37,6 +37,7 @@ class LeaseTraceStatus:
     last_error_message: str | None
     last_error_ongoing: bool
     receiver: ReceiverCount | None = None
+    replay_max_window_seconds: int | None = None
 
 
 class LeaseTraceStatusReader:
@@ -47,7 +48,9 @@ class LeaseTraceStatusReader:
         leases: IReadLeaseTraceCursor,
         clock: IClock,
         receiver: ReceiverCounter | None = None,
+        replay_max_window: int | None = None,
     ) -> None:
+        self._replay_max_window = replay_max_window
         self._settings = settings
         self._receiver = receiver
         self._leases = leases
@@ -71,6 +74,7 @@ class LeaseTraceStatusReader:
             last_error_message=FAILED_MESSAGE if failure else None,
             last_error_ongoing=ongoing,
             receiver=self._receiver.count() if self._receiver else None,
+            replay_max_window_seconds=self._replay_max_window,
         )
 
     def _lag(self, position: LeaseCursorKey) -> float | None:

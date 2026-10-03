@@ -17,13 +17,27 @@ from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION, HTTP_SEMCONV_VERSION
-from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
+from blizzard.foundation.trace_ids import (
+    ChunkRole,
+    DerivedContext,
+    RunnerSpanRole,
+    SpanRole,
+    StepKey,
+    chunk_span_id,
+    chunk_trace_id,
+    instant_text,
+    span_id,
+    trace_id,
+)
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing import platform as hub_platform
 from blizzard.hub.domain.tracing.assembly import assemble_step
+from blizzard.hub.domain.tracing.chunk_spans import assemble_chunk, assemble_completion, chunk_end, completion_instant
 from blizzard.hub.domain.tracing.facts import (
     BounceRecord,
+    ChunkCompletedRecord,
+    ChunkStoppedRecord,
     DecisionRecord,
     DecisionResolutionRecord,
     EpochOwnerRecord,
@@ -63,7 +77,9 @@ _VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
 _REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
 _REGEN_COMMAND = f"{_REGEN_VARIABLE}=1 uv run pytest tests/test_trace_contract.py"
 _ATTRIBUTE_TYPES = {"string", "int", "double", "bool", "string[]"}
-_ROLES: dict[str, SpanRole | RunnerSpanRole] = {role.value: role for role in (*SpanRole, *RunnerSpanRole)}
+_ROLES: dict[str, SpanRole | RunnerSpanRole | ChunkRole] = {
+    role.value: role for role in (*SpanRole, *RunnerSpanRole, *ChunkRole)
+}
 
 
 def _graph() -> Any:
@@ -98,10 +114,16 @@ def _journey() -> StepFacts:
         chunk_id="ch_1",
         graphs={"g1": _graph(), "g2": fx.G2},
         pin_graph_id="g1",
+        minted_at=fx.at(0),
         work_refs=("acme#42",),
         promotions=(PromotionRecord(fx.at(2)),),
         routes_created=(RouteCreatedRecord(fx.at(3)), RouteCreatedRecord(fx.at(32))),
-        pauses=(PauseRecord("p1", True, fx.at(12)), PauseRecord("p2", False, fx.at(15))),
+        pauses=(
+            PauseRecord("p0", True, fx.at(4)),
+            PauseRecord("p0b", False, fx.at(6)),
+            PauseRecord("p1", True, fx.at(12)),
+            PauseRecord("p2", False, fx.at(15)),
+        ),
         questions=(
             QuestionRecord("q1", 1, fx.at(16), fx.at(18)),
             QuestionRecord("q2", 1, fx.at(20), fx.at(19)),
@@ -121,6 +143,8 @@ def _journey() -> StepFacts:
         hub_polls=(HubPollRecord("hp1", "g1-verify", 4, fx.at(122)), HubPollRecord("hp2", "g1-verify", 4, fx.at(124))),
         hub_exec_slots=(HubExecSlotRecord("s1", "g1-verify", fx.at(123), fx.at(125)),),
         escalations=(EscalationRecord(5, fx.at(150)),),
+        chunk_stopped=(ChunkStoppedRecord(fx.at(160)),),
+        chunk_completed=(ChunkCompletedRecord(fx.at(170)),),
         epoch_owners=(
             EpochOwnerRecord(1, "r-1", fx.at(9)),
             EpochOwnerRecord(2, "r-1", fx.at(34)),
@@ -262,6 +286,10 @@ def _span(span: SpanRecord) -> dict[str, object]:
 def _serialize(facts: StepFacts) -> str:
     steps = [s for s in identify_steps(facts) if s.close is not None]
     spans = [_span(span) for step in steps for span in assemble_step(facts, step)]
+    if chunk_end(facts) is not None:
+        spans += [_span(span) for span in assemble_chunk(facts)]
+    if completion_instant(facts) is not None:
+        spans += [_span(span) for span in assemble_completion(facts)]
     return json.dumps(spans, indent=2, sort_keys=True) + "\n"
 
 
@@ -388,7 +416,7 @@ def test_the_dictionary_roles_are_the_code_roles() -> None:
     d = dictionary()
     assert {entry["role"] for entry in d["spans"]} == set(_ROLES)
     for entry in d["spans"]:
-        hub = isinstance(_ROLES[entry["role"]], SpanRole)
+        hub = isinstance(_ROLES[entry["role"]], SpanRole | ChunkRole)
         assert entry["scope"] == (attr.INSTRUMENTATION_SCOPE if hub else runner_attr.INSTRUMENTATION_SCOPE), entry[
             "role"
         ]
@@ -443,12 +471,29 @@ def test_the_id_vectors_reproduce_through_the_derivation() -> None:
     for vector in ids["vectors"]:
         key = StepKey(vector["chunk_id"], vector["epoch"], vector.get("decision_id"))
         assert key.text() == vector["key"]
-        assert f"{trace_id(key):032x}" == vector["trace_id"]
+        assert f"{trace_id(key):032x}" == vector["trace_id"] == f"{chunk_trace_id(vector['chunk_id']):032x}"
         role = _ROLES[vector["role"]]
+        assert isinstance(role, SpanRole | RunnerSpanRole)
         assert f"{span_id(key, role, vector['discriminator']):016x}" == vector["span_id"]
         assert DerivedContext.of(key, role, vector["discriminator"]).trace_flags == 1
         if "parent_span_id" in vector:
             assert vector["parent_span_id"] == f"{span_id(key, SpanRole.STEP):016x}"
+
+
+def test_the_chunk_vectors_reproduce_through_the_derivation() -> None:
+    ids = dictionary()["ids"]
+    assert ids["chunk_span"]["bytes"] == 8
+    assert ids["chunk_vectors"]
+    for vector in ids["chunk_vectors"]:
+        role = ChunkRole(vector["role"])
+        at = (
+            datetime.strptime(vector["instant"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+            if vector["instant"]
+            else None
+        )
+        assert (instant_text(at) if at else "") == vector["instant"]
+        assert f"{chunk_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
+        assert f"{chunk_span_id(vector['chunk_id'], role, at):016x}" == vector["span_id"]
 
 
 def test_a_runner_worker_vector_parents_into_the_step_vector_of_its_attempt() -> None:
@@ -463,7 +508,9 @@ def test_a_runner_worker_vector_parents_into_the_step_vector_of_its_attempt() ->
 def test_the_trace_id_prefix_and_span_prefix_match_thedictionary() -> None:
     ids = dictionary()["ids"]
     key = StepKey.attempt("ch_x", 1)
-    assert f"{trace_id(key):032x}" == hashlib.sha256((ids["trace"]["prefix"] + "ch_x/1").encode()).hexdigest()[:32]
+    assert f"{trace_id(key):032x}" == hashlib.sha256((ids["trace"]["prefix"] + "ch_x").encode()).hexdigest()[:32]
+    chunk_text = f"{ids['chunk_span']['prefix']}ch_x/chunk/"
+    assert f"{chunk_span_id('ch_x'):016x}" == hashlib.sha256(chunk_text.encode()).hexdigest()[:16]
     expected = hashlib.sha256((ids["span"]["prefix"] + "ch_x/1/step/").encode()).hexdigest()[:16]
     assert f"{span_id(key, SpanRole.STEP):016x}" == expected
 
