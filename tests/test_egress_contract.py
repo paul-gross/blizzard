@@ -41,6 +41,7 @@ from blizzard.hub.egress.writer import (
     rfc3339_utc,
 )
 from tests import trace_fixtures as fx
+from tests.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -432,14 +433,6 @@ def test_the_published_newest_copy_view_returns_one_latest_row_per_identity(name
     assert dict(got) == latest
 
 
-def recipe(name: str) -> str:
-    """The SQL of a ``### DuckDB`` recipe, found by its marker; it reads the newest-copy view as ``steps_newest``."""
-    section = _DOC.read_text().split("### DuckDB", 1)[1].split("\n### ", 1)[0]
-    match = re.search(rf"<!-- recipe:{re.escape(name)} -->\n\n```sql\n(.*?)\n```", section, re.DOTALL)
-    assert match, f"no recipe {name!r} under ### DuckDB"
-    return match.group(1)
-
-
 def _golden_steps_connection() -> duckdb.DuckDBPyConnection:
     files = sorted(str(p) for p in (_GOLDEN_DIR / "steps").rglob("*.ndjson"))
     connection = duckdb.connect()
@@ -452,7 +445,7 @@ def _golden_steps_connection() -> duckdb.DuckDBPyConnection:
 
 def test_the_cost_recipe_groups_the_newest_copies_by_station_and_day() -> None:
     connection = _golden_steps_connection()
-    got = connection.execute(recipe("cost-by-node-by-day")).fetchall()
+    got = connection.execute(recipe(COST_BY_NODE_BY_DAY)).fetchall()
     expected = connection.execute(
         "SELECT graph_name, node_name, CAST(ended_at AS DATE), sum(CAST(cost_billed_usd AS DECIMAL(18, 9))), "
         "sum(CAST(cost_estimated_usd AS DECIMAL(18, 9))) "
@@ -465,7 +458,7 @@ def test_the_cost_recipe_groups_the_newest_copies_by_station_and_day() -> None:
 
 def test_the_slowest_recipe_names_the_station_with_the_highest_mean_duration() -> None:
     connection = _golden_steps_connection()
-    sql = recipe("slowest-station-of-the-week").replace("now()", "TIMESTAMP '2026-01-05 00:00:00'")
+    sql = recipe(SLOWEST_STATION_OF_THE_WEEK).replace("now()", "TIMESTAMP '2026-01-05 00:00:00'")
     assert connection.execute(sql).fetchall() == [("flow", "poll", pytest.approx(93000.0))]
 
 
