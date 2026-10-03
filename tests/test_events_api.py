@@ -95,8 +95,8 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     seed_lease(hub.engine, "ch_a", epoch=2, runner_id="r1", at=at(5))
 
     feed = _events(hub)
-    # Severity-then-recency: critical band first (worker-lost t3 vs needs-human t4 -> needs-human
-    # newer), then warning, then the info band newest-first. The superseded ch_a escalation is absent.
+    # Newest first whatever the severity, so the order below is purely by recency. The superseded
+    # ch_a escalation is absent.
     assert [(e["severity"], e["kind"]) for e in feed] == [
         ("critical", "needs-human"),
         ("critical", "worker-lost"),
