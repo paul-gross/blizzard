@@ -7,6 +7,8 @@ kept and rewrites it — and what is kept joins the runner's own platform pipeli
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -15,6 +17,7 @@ from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
     PROTOBUF_CONTENT_TYPE,
     OtlpDecodeError,
+    ReceivedSpan,
     decode_otlp,
     encode_export_response,
 )
@@ -65,16 +68,25 @@ async def receive_traces(request: Request) -> Response:
         )
     config = wiring.maybe_config()
     programs = config is not None and config.tracing.worker_programs
+    mapped = config.tracing.worker_program_services if config is not None else {}
     admission = admit(spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
     cli = [span for span in admission.kept if span.scope_name == CLI_SCOPE]
     if programs:
         # The CLI's spans keep their declared attributes; only a third-party program's attributes pass wholesale.
         cli = admit(cli, lease, _CLI_ALLOWLIST).kept
         others = [span for span in admission.kept if span.scope_name != CLI_SCOPE]
-        await run_in_threadpool(platform_tracing.forward, others, PROGRAM_SERVICE_NAME)
+        for service_name, group in _by_service_name(others, mapped).items():
+            await run_in_threadpool(platform_tracing.forward, group, service_name)
     await run_in_threadpool(platform_tracing.forward, cli, CLI_SERVICE_NAME)
     counter.record(accepted=len(admission.kept), dropped=admission.dropped)
     return Response(content=encode_export_response(admission.dropped, content_type), media_type=content_type)
+
+
+def _by_service_name(spans: Sequence[ReceivedSpan], mapped: Mapping[str, str]) -> dict[str, list[ReceivedSpan]]:
+    groups: dict[str, list[ReceivedSpan]] = {}
+    for span in spans:
+        groups.setdefault(mapped.get(span.scope_name, PROGRAM_SERVICE_NAME), []).append(span)
+    return groups
 
 
 def _lease_for_token(wiring: RunnerWiring, token: str | None) -> LeaseRecord:

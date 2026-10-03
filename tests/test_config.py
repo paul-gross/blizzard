@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import re
 from pathlib import Path
 
 import pytest
@@ -1939,8 +1940,10 @@ def test_tracing_scaffold_renders_every_knob_commented_at_its_default(tmp_path: 
     root.mkdir()
     text = HubConfig.scaffold(root).to_toml()
     assert "[tracing]\n" in text
+    assert "worker_program_services" not in text
     for key, value in dataclasses.asdict(TracingConfig()).items():
-        assert f"# {key} = {toml_literal(value)}\n" in text
+        if key != "worker_program_services":
+            assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-hub.toml").write_text(text)
     assert HubConfig.load(root).tracing == TracingConfig()
 
@@ -1961,6 +1964,59 @@ def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -
     config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
     assert HubConfig.load(root).tracing == tracing
+
+
+@pytest.mark.unit
+def test_worker_program_services_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    tracing = TracingConfig(worker_program_services={"winter_cli": "winter-blizzard", "a.b": "svc"})
+    config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
+    (root / "blizzard-hub.toml").write_text(config.to_toml())
+    assert HubConfig.load(root).tracing == tracing
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("entry", "complaint"),
+    [
+        ('"" = "svc"', "empty scope"),
+        ('"blizzard.cli" = "svc"', "tracing.worker_program_services.blizzard.cli"),
+        ('winter_cli = ""', "tracing.worker_program_services.winter_cli"),
+        ("winter_cli = 3", "tracing.worker_program_services.winter_cli"),
+        ('winter_cli = "blizzard-hub"', "'blizzard-hub'"),
+        ('winter_cli = "blizzard-runner"', "'blizzard-runner'"),
+        ('winter_cli = "blizzard-cli"', "'blizzard-cli'"),
+    ],
+)
+def test_worker_program_services_refuses_a_bad_entry(tmp_path: Path, entry: str, complaint: str) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing.worker_program_services]\n{entry}\n'
+    )
+    with pytest.raises(HubConfigError, match=re.escape(complaint)):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nworker_program_services = "x"\n'
+    )
+    with pytest.raises(HubConfigError, match="must be a table"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_reserved_service_names_cover_each_daemons_own_name() -> None:
+    from blizzard.foundation.trace_export.config import RESERVED_SERVICE_NAMES
+    from blizzard.hub.domain.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
+    from blizzard.runner.domain.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
+
+    assert {HUB, RUNNER} <= RESERVED_SERVICE_NAMES
 
 
 @pytest.mark.unit
@@ -2039,6 +2095,9 @@ def test_runner_tracing_scaffold_renders_every_knob_commented_and_names_closed_l
     assert "[tracing]\n" in text
     assert "closed leases per export" in text
     for key, value in dataclasses.asdict(TracingConfig()).items():
+        if key == "worker_program_services":
+            assert "# [tracing.worker_program_services]\n" in text
+            continue
         assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-runner.toml").write_text(text)
     assert RunnerConfig.load(root).tracing == TracingConfig()

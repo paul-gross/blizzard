@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
+from blizzard.foundation.platform_tracing.attributes import CLI_SCOPE
+
+RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", CLI_SERVICE_NAME})
 
 
 @dataclass(frozen=True)
@@ -21,6 +27,8 @@ class TracingConfig:
     platform_sample_ratio: float = 0.01
     #: Worker programs' own spans reach the runner's receiver; takes effect only alongside ``platform``.
     worker_programs: bool = False
+    #: Scope name to the ``service.name`` its kept worker-program spans leave with.
+    worker_program_services: Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def of(cls, raw_tracing: object, invalid: type[Exception]) -> TracingConfig:
@@ -40,7 +48,25 @@ class TracingConfig:
                 raw_tracing, "platform_sample_ratio", defaults.platform_sample_ratio, invalid
             ),
             worker_programs=cls._boolean(raw_tracing, "worker_programs", defaults.worker_programs, invalid),
+            worker_program_services=cls._services(raw_tracing, invalid),
         )
+
+    @staticmethod
+    def _services(raw: Mapping[str, object], invalid: type[Exception]) -> dict[str, str]:
+        table = raw.get("worker_program_services", {})
+        if not isinstance(table, dict):
+            raise invalid(f"tracing.worker_program_services must be a table, got {table!r}")
+        for scope, name in table.items():
+            entry = f"tracing.worker_program_services.{scope}"
+            if not scope.strip():
+                raise invalid("tracing.worker_program_services has an empty scope name")
+            if scope == CLI_SCOPE:
+                raise invalid(f"{entry} maps the CLI scope, whose service.name is fixed")
+            if not isinstance(name, str) or not name.strip():
+                raise invalid(f"{entry} must be a non-empty string, got {name!r}")
+            if name in RESERVED_SERVICE_NAMES:
+                raise invalid(f"{entry} must not be the reserved service name {name!r}")
+        return dict(table)
 
     @staticmethod
     def _boolean(raw: Mapping[str, object], key: str, default: bool, invalid: type[Exception]) -> bool:
@@ -68,7 +94,7 @@ class TracingConfig:
             raise invalid(f"tracing.{key} must be {bound}, got {value!r}")
         return value
 
-    def to_toml(self, *, unit: str) -> list[str]:
+    def to_toml(self, *, unit: str, receiver: bool = False) -> list[str]:
         """The ``[tracing]`` block. Every knob is rendered — commented out at its default,
         live once overridden — so the file shows an operator what the values ARE."""
         defaults = TracingConfig()
@@ -80,6 +106,7 @@ class TracingConfig:
             "# queries, outbound calls), roots kept at platform_sample_ratio, 0 to 1.\n"
             "# worker_programs = true (with platform) also lets a worker's own programs send\n"
             "# spans to the runner; a third-party program may record bodies or parameters.\n"
+            f"{_SERVICES_NOTE if receiver else ''}"
             "# Uncomment to override.\n",
             "[tracing]\n",
         ]
@@ -87,8 +114,17 @@ class TracingConfig:
             value = getattr(self, key)
             literal = toml_literal(value)
             lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
+        if self.worker_program_services:
+            lines.append("\n[tracing.worker_program_services]\n")
+            lines.extend(
+                f"{json.dumps(scope)} = {json.dumps(name)}\n" for scope, name in self.worker_program_services.items()
+            )
+        elif receiver:
+            lines.append('\n# [tracing.worker_program_services]\n# winter_cli = "winter-blizzard"\n')
         return lines
 
+
+_SERVICES_NOTE = "# [tracing.worker_program_services] names those spans' service.name by scope.\n"
 
 _KEYS = (
     "sweep_seconds",
