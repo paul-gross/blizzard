@@ -836,6 +836,8 @@ Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
 Index("ix_usage_facts_recorded_at", usage_facts.c.recorded_at)
 # The analytics spend-by-node grouping — otherwise a temp B-tree.
 Index("ix_usage_facts_node_id", usage_facts.c.node_id)
+# (recorded_at, id) for the egress sweep's read of usage past a cursor position.
+Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
 # Open exactly while no answer row exists; the answer is first-write-wins CAS on the PK.
@@ -1263,6 +1265,30 @@ trace_cursor = Table(
 )
 # The newest-row read's own sort key.
 Index("ix_trace_cursor_recorded_at_id", trace_cursor.c.recorded_at, trace_cursor.c.id)
+
+# --- Fact egress cursor (egress_cursor) ----------------------------------------
+# Append-only, one row per advancing pass; a dataset's newest row is its position.
+
+egress_cursor = Table(
+    "egress_cursor",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("dataset", String, nullable=False),
+    Column(
+        "position_at", UtcDateTime, nullable=True
+    ),  # the last written step's closing-fact time; null for invocations
+    Column("chunk_id", String, nullable=True),
+    Column("epoch", Integer, nullable=True),
+    Column("decision_id", String, nullable=True),  # empty for runner and hub steps
+    Column("usage_recorded_at", UtcDateTime, nullable=False),
+    Column("usage_id", Integer, nullable=False),
+    Column("row_count", Integer, nullable=False),
+    Column("files", Text, nullable=False),  # JSON list of the placed paths, manifest last
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+Index(
+    "ix_egress_cursor_dataset_recorded_at_id", egress_cursor.c.dataset, egress_cursor.c.recorded_at, egress_cursor.c.id
+)
 
 # --- Transcript segments (epic:transcripts) ----------------------
 # One row per shipped record, append-only; the natural key dedupes re-offers.

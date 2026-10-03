@@ -53,6 +53,7 @@ from blizzard.hub.config import (
     ROUTE_TOKEN_WARN,
     RUNNER_AUTH_WARN,
     AuthConfig,
+    EgressConfig,
     HubConfig,
     WorkSourceConfig,
 )
@@ -618,6 +619,7 @@ def build_hub(
     trace_exporter: ITraceExporter | None = None,
     tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
+    egress: EgressConfig | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -635,6 +637,7 @@ def build_hub(
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
         trusted_proxies=tuple(trusted_proxies),
         tracing=tracing or TracingConfig(),
+        egress=egress or EgressConfig(),
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -685,6 +688,7 @@ def build_hub(
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
         tracing=config.tracing,
+        egress=config.egress,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

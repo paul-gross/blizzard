@@ -18,7 +18,7 @@ from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, EgressConfig, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
@@ -2078,6 +2078,94 @@ def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n'
     )
     with pytest.raises(HubConfigError, match=f"tracing.{key}"):
+        HubConfig.load(root)
+
+
+def _hub_egress_root(tmp_path: Path, table: str = "") -> Path:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n{table}')
+    return root
+
+
+@pytest.mark.unit
+def test_egress_is_off_with_working_defaults_when_the_table_is_absent(tmp_path: Path) -> None:
+    egress = HubConfig.load(_hub_egress_root(tmp_path)).egress
+    assert egress == EgressConfig()
+    assert egress.directory is None
+    assert egress.format == "ndjson"
+    assert egress.datasets == ("steps", "invocations")
+    assert (egress.settle_seconds, egress.min_free_bytes) == (300, 1024**3)
+
+
+@pytest.mark.unit
+def test_egress_scaffold_leaves_the_switch_off_and_every_other_knob_commented_at_its_default(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    text = HubConfig.scaffold(root).to_toml()
+    assert "[egress]\n" in text
+    assert '# directory = "' in text
+    for key in ("format", "datasets", "sweep_seconds", "settle_seconds", "batch_limit", "max_rows_per_file"):
+        assert f"# {key} = " in text
+    (root / "blizzard-hub.toml").write_text(text)
+    assert HubConfig.load(root).egress == EgressConfig()
+
+
+@pytest.mark.unit
+def test_egress_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    egress = EgressConfig(
+        directory=tmp_path / "out",
+        format="parquet",
+        datasets=("invocations",),
+        sweep_seconds=5,
+        settle_seconds=0,
+        batch_limit=10,
+        max_rows_per_file=20,
+        min_free_bytes=0,
+        backfill_max_window=3600,
+    )
+    config = dataclasses.replace(HubConfig.scaffold(root), egress=egress)
+    (root / "blizzard-hub.toml").write_text(config.to_toml())
+    assert HubConfig.load(root).egress == egress
+
+
+@pytest.mark.unit
+def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_writes_them(tmp_path: Path) -> None:
+    root = _hub_egress_root(
+        tmp_path, '\n[egress]\ndirectory = "/srv/egress"\ndatasets = ["invocations", "steps"]\nsettle_seconds = 0\n'
+    )
+    egress = HubConfig.load(root).egress
+    assert egress.directory == Path("/srv/egress")
+    assert egress.datasets == ("steps", "invocations")
+    assert egress.settle_seconds == 0
+    assert egress.sweep_seconds == 60
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("directory", '""'),
+        ("directory", "3"),
+        ("format", '"csv"'),
+        ("datasets", '["events"]'),
+        ("datasets", "[]"),
+        ("datasets", '"steps"'),
+        ("sweep_seconds", "0"),
+        ("settle_seconds", "-1"),
+        ("batch_limit", "0"),
+        ("max_rows_per_file", "0"),
+        ("min_free_bytes", "-1"),
+        ("backfill_max_window", "0"),
+        ("batch_limit", "true"),
+        ("sweep_seconds", "1.5"),
+    ],
+)
+def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> None:
+    root = _hub_egress_root(tmp_path, f"\n[egress]\n{key} = {value}\n")
+    with pytest.raises(HubConfigError, match=f"egress.{key}"):
         HubConfig.load(root)
 
 

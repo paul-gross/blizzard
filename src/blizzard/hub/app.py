@@ -66,7 +66,7 @@ from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_hub_core, build_services
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
+from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
 from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
@@ -131,7 +131,7 @@ class Sweep:
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep a work source opts into, plus the always-on
         event-derivation, delivery-materialization, and close-drain sweeps, plus the trace-export
-        sweep when tracing is enabled — none on the
+        sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
         on."""
@@ -180,6 +180,17 @@ class Sweep:
                 every,
                 app.state.shutdown,
                 "blizzard.hub.trace_export",
+                jitter_seconds=random.uniform(0, every),
+                tracer=tracer,
+            )
+
+        if services.egress_export is not None:
+            every = app.state.config.egress.sweep_seconds
+            yield cls(
+                services.egress_export,
+                every,
+                app.state.shutdown,
+                "blizzard.hub.egress",
                 jitter_seconds=random.uniform(0, every),
                 tracer=tracer,
             )
@@ -413,6 +424,7 @@ def build_hosted_app(
         tracing=config.tracing,
         tracing_settings=tracing,
         platform_tracer=platform_tracing.tracer,
+        egress=config.egress,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
@@ -420,6 +432,7 @@ def build_hosted_app(
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
+        _announce_rejected_egress(config.egress, services)
     app = create_app(config, readiness=readiness, services=services, platform_tracing=platform_tracing)
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
@@ -439,6 +452,24 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
         node_name=None,
         message=tracing.rejection_message("hub"),
         detail={"setting": tracing.setting, "value": tracing.value},
+        at=services.clock.now(),
+    )
+
+
+def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
+    """An export the hub cannot honor never stops startup: the hub serves with the export off and
+    records one hub-wide ``egress-config-rejected`` per start, naming what is missing."""
+    unavailable = services.egress_unavailable
+    if unavailable is None:
+        return
+    services.event_log.record(
+        kind="egress-config-rejected",
+        runner_id=None,
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message=f"fact egress is off: {unavailable.reason}",
+        detail={"setting": "egress.format", "value": egress.format},
         at=services.clock.now(),
     )
 

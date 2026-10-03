@@ -29,6 +29,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.domain.apply",
     "blizzard.hub.domain.work_closure",
     "blizzard.hub.domain.tracing.sweep",
+    "blizzard.hub.domain.egress.sweep",
 )
 
 
