@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, overload
+from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
 
@@ -510,6 +511,22 @@ class HubConfig:
     egress: EgressConfig = field(default_factory=EgressConfig)
     #: Reverse-proxy trust set — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
+    #: The absolute ``http(s)`` origin the board is publicly reached at, trailing slash
+    #: dropped; ``None`` omits every board link the hub would hand outward.
+    public_url: str | None = None
+
+    @staticmethod
+    def parse_public_url(value: object) -> str | None:
+        """``public_url`` validated — absent stays ``None``; anything but an absolute
+        ``http(s)`` URL is a :class:`ConfigError`."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ConfigError(f"public_url must be a string, got {value!r}")
+        parts = urlsplit(value)
+        if parts.scheme not in {"http", "https"} or not parts.netloc:
+            raise ConfigError(f"public_url must be an absolute http(s) URL, got {value!r}")
+        return value.rstrip("/")
 
     @property
     def config_path(self) -> Path:
@@ -593,6 +610,12 @@ class HubConfig:
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",
+            "\n# The absolute http(s) origin this hub's board is publicly reached at. When\n"
+            "# set, a delivered PR's body links its chunk's board page; unset, every board\n"
+            "# link is omitted. Never the bind address — a hosted hub is reached through a proxy.\n",
+            f'public_url = "{self.public_url}"\n'
+            if self.public_url
+            else '# public_url = "https://blizzard.example.com"\n',
             *self._transcript_cap_lines(),
             *self.tracing.to_toml(unit="closed steps"),
             *self.egress.to_toml(),
@@ -697,4 +720,5 @@ class HubConfig:
             tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
             egress=EgressConfig.of(raw.get("egress", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
+            public_url=cls.parse_public_url(raw.get("public_url")),
         )

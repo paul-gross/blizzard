@@ -88,6 +88,19 @@ Set `annotate = true` on at most one hub per forge repo: two sweeps against one 
 coordination — only the canonical instance opts in; every dev, staging, or snapshot hub pointed at the repo leaves it
 false.
 
+## Delivered PRs
+
+The PR a delivery opens carries a generated body: one line per work item of the chunk, the chunk id, and — when
+`blizzard-hub.toml` declares `public_url`, the absolute `http(s)` origin the board is publicly reached at — a link to
+the chunk's board page. The merge commit message is the PR title followed by the same work-item lines. A forge-sourced
+item appears as the forge's own cross-link (`Refs owner/repo#12`), so the issue links back to the PR; an item on no
+forge, the built-in `hub` source's included, appears as its label. With `public_url` unset the board link is omitted and
+delivery is otherwise unchanged; never set it to the bind address, which a proxied hub is not reached at from outside.
+
+No generated line ever puts a closing keyword (`closes`, `fixes`, `resolves`, or their variants) before a reference, and
+no item title is copied in: the forge must never close an item on merge, because the close drain below is the only
+closer and records each outcome. A PR opened before an upgrade keeps the body it was opened with.
+
 ## Delivery closure
 
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or

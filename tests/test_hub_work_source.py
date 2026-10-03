@@ -114,6 +114,11 @@ def test_branch_url_is_always_none(tmp_path: Path) -> None:
     assert source.branch_url("acme/widget", "feat/x") is None
 
 
+def test_forge_reference_is_always_none(tmp_path: Path) -> None:
+    source, _, _, _, _, _ = _source(tmp_path)
+    assert source.forge_reference(WorkRef(source="hub", ref="42")) is None
+
+
 def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)

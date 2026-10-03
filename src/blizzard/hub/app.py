@@ -407,6 +407,7 @@ def build_hosted_app(
         forge_url=os.environ.get(ENV_FORGE_URL),
         forge_token=os.environ.get(ENV_FORGE_TOKEN),
         forge_owner=owner,
+        public_url=config.public_url,
         forge_http_client=forge_client,
         oauth_providers=oauth_providers,
         oauth_http_client=oauth_client,

@@ -493,6 +493,10 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls, "no PR was opened at the forge"
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
+        # The PR traces back to what it delivers: the issue as the forge cross-links it, and the chunk.
+        merged_pr = next(p for p in pulls if p.get("merged"))
+        assert f"Refs {REPO}#{issue_number}" in (merged_pr.get("body") or ""), merged_pr
+        assert f"Chunk: {chunk_id}" in (merged_pr.get("body") or ""), merged_pr
 
         # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step under the work
         #    root, each told once, chained by `next` links, the last leading to the reserved terminal.
@@ -534,6 +538,9 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
     # 4e. Git truth — the mock harness's file is present on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"
+    # The merge commit carries the same reference, so the trace survives in git alone.
+    message = _git_bare(origin_bare, "log", "-1", "--format=%B", "main")
+    assert f"Refs {REPO}#{issue_number}" in message, f"merge commit names no work item:\n{message}"
 
 
 # --------------------------------------------------------------------------- #

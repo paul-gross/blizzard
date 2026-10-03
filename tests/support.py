@@ -262,6 +262,9 @@ class FakeWorkSource:
     def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
         return f"http://forge.local/{self.repo}/issues/{pointer.ref}"
 
+    def forge_reference(self, pointer: WorkRef) -> str | None:
+        return f"{self.repo}#{pointer.ref}"
+
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         return f"http://forge.local/{repo}/tree/{branch_name}"
 
@@ -606,6 +609,7 @@ def build_hub(
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
     forge_owner: str | None = None,
+    public_url: str | None = None,
     runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
     produces_mode: str = PRODUCES_WARN,
@@ -678,6 +682,7 @@ def build_hub(
         hub_workdir_root=tmp_path / "hub_workdirs",
         hub_marker_callback_base_url="http://testserver",
         forge_owner=forge_owner,
+        public_url=public_url,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `hub/app.py`'s own `build_hosted_app` gating exactly.

@@ -105,6 +105,11 @@ class GitHubWorkSource:
         ``live_holder`` is ignored."""
         return f"{self._web_base}/{self._repo}/issues/{pointer.ref}"
 
+    def forge_reference(self, pointer: WorkRef) -> str | None:
+        """``{owner}/{repo}#{ref}`` from the configured ``repo`` — the form GitHub itself
+        cross-links; the source ``name`` is only a config alias."""
+        return f"{self._repo}#{pointer.ref}"
+
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         """The forge ``tree`` URL for ``branch_name`` on ``repo`` — an owner-less repo (a
         produced artifact names its repo by the worktree dir alone) is qualified with this

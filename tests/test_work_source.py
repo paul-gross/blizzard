@@ -128,6 +128,12 @@ def test_web_url_renders_the_browser_issue_address() -> None:
     assert source.web_url(pointer, live_holder=None) == "https://github.com/acme/widget/issues/12"
 
 
+def test_forge_reference_names_the_configured_repo_not_the_source_alias() -> None:
+    """GitHub cross-links ``owner/repo#n``; the source ``name`` is only a config alias."""
+    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    assert source.forge_reference(WorkRef(source="widget", ref="12")) == "acme/widget#12"
+
+
 def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     assert source.branch_url("widget", "feat/x") == "https://github.com/acme/widget/tree/feat/x"

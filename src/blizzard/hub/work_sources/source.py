@@ -93,6 +93,11 @@ class IWorkSource(Protocol):
         address doesn't depend on liveness ignores it."""
         ...
 
+    def forge_reference(self, pointer: WorkRef) -> str | None:
+        """The reference the forge itself cross-links for ``pointer`` (for example
+        ``owner/repo#12``), or ``None`` when this source lives on no forge."""
+        ...
+
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         """The forge's browser ``tree`` address for ``branch_name`` on ``repo``, or
         ``None`` when this source has no web origin to link through."""

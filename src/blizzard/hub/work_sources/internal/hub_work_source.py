@@ -72,6 +72,10 @@ class HubWorkSource:
         origin. ``None`` when ``live_holder`` is ``None``."""
         return f"/board/chunk/{live_holder}" if live_holder is not None else None
 
+    def forge_reference(self, pointer: WorkRef) -> str | None:
+        """The built-in source lives on no forge, so there is nothing to cross-link."""
+        return None
+
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         """The built-in source names no forge to link a branch through."""
         return None

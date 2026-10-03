@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -148,6 +149,69 @@ def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: p
     assert title.endswith("…")
     # the merge commit message is a commit body, not a PR title — left untruncated.
     assert _merge_commit_message(calls) == long_title
+
+
+_CLOSING_KEYWORD = re.compile(r"\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b", re.IGNORECASE)
+
+_TWO_ITEMS = [
+    {"label": "widget#12", "reference": "acme/widget#12"},
+    {"label": "hub:7", "reference": None},
+]
+
+
+def _pr_body(calls: list[tuple[str, str, dict[str, Any] | None]]) -> str:
+    body = next(body for method, url, body in calls if method == "POST" and url.endswith("/pulls"))
+    assert body is not None
+    return body["body"]
+
+
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["land_default", "land_pr_ci"])
+def test_the_pr_body_and_merge_message_name_every_work_item_and_the_chunk(
+    monkeypatch: pytest.MonkeyPatch, module: Any
+) -> None:
+    _set_base_env(monkeypatch, feature_title="Fix #5 by closing the widget leak")
+    monkeypatch.setenv("BZ_HUB_CHUNK_ID", "ch_abc")
+    monkeypatch.setenv("BZ_HUB_WORK_ITEMS", json.dumps(_TWO_ITEMS))
+    monkeypatch.setenv("BZ_HUB_CHUNK_URL", "https://blizzard.example.com/board/chunk/ch_abc")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _scripted_forge(calls))
+
+    assert module.main() == 0
+
+    body = _pr_body(calls)
+    assert "- Refs acme/widget#12" in body
+    assert "- hub:7" in body
+    assert "Chunk: ch_abc" in body
+    assert "Board: https://blizzard.example.com/board/chunk/ch_abc" in body
+    message = _merge_commit_message(calls)
+    assert message == "Fix #5 by closing the widget leak\n\nRefs acme/widget#12\nhub:7"
+    # The title is the operator's prose; no generated line may form a closing keyword.
+    assert not _CLOSING_KEYWORD.search(body)
+    assert not _CLOSING_KEYWORD.search(message.split("\n\n", 1)[1])
+
+
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["land_default", "land_pr_ci"])
+@pytest.mark.parametrize("raw", [None, "not json", '{"label": "x"}', '[{"reference": "a/b#1"}]'])
+def test_missing_or_malformed_work_items_degrade_to_a_body_without_items(
+    monkeypatch: pytest.MonkeyPatch, module: Any, raw: str | None
+) -> None:
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.delenv("BZ_HUB_CHUNK_URL", raising=False)
+    monkeypatch.setenv("BZ_HUB_CHUNK_ID", "ch_abc")
+    if raw is None:
+        monkeypatch.delenv("BZ_HUB_WORK_ITEMS", raising=False)
+    else:
+        monkeypatch.setenv("BZ_HUB_WORK_ITEMS", raw)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _scripted_forge(calls))
+
+    assert module.main() == 0
+
+    body = _pr_body(calls)
+    assert "Work items" not in body
+    assert "Board:" not in body
+    assert "Chunk: ch_abc" in body
+    assert _merge_commit_message(calls) == "t"
 
 
 # PR-CI routing: heal behind, wait for CI, bounce on dirty.

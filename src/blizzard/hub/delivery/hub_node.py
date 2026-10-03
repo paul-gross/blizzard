@@ -115,6 +115,10 @@ ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
 # PR/merge title resolved from the primary work item, absent when unresolved.
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+# JSON list of {label, reference}, one per work_ref in order; reference is null off-forge.
+ENV_WORK_ITEMS = "BZ_HUB_WORK_ITEMS"
+# The chunk's public board page, absent when the hub declares no public_url.
+ENV_CHUNK_URL = "BZ_HUB_CHUNK_URL"
 # "1" if the graph declares a `git_commit`-kind `produces:`, else "0".
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
@@ -191,6 +195,8 @@ class HubEnv:
     feature_title: str | None = None
     expects_git_commits: bool = True
     marker_token: str = ""
+    work_items: tuple[dict[str, str | None], ...] = ()
+    public_url: str | None = None
 
     @property
     def vars(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
@@ -211,7 +217,10 @@ class HubEnv:
             ENV_ARTIFACT_NAMES: json.dumps(names),
             ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
             ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
+            ENV_WORK_ITEMS: json.dumps(list(self.work_items)),
         }
+        if self.public_url:
+            env[ENV_CHUNK_URL] = f"{self.public_url.rstrip('/')}/board/chunk/{self.chunk.chunk_id}"
         if self.garden_delivery_url:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.review_findings_url:
@@ -300,6 +309,7 @@ class HubNodeExecutor:
         forge_url: str | None = None,
         forge_token: str | None = None,
         forge_owner: str | None = None,
+        public_url: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
         tracer: IPlatformTracer | None = None,
@@ -319,6 +329,7 @@ class HubNodeExecutor:
         self._forge_url = forge_url
         self._forge_token = forge_token
         self._forge_owner = forge_owner
+        self._public_url = public_url
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
         self._tracer = tracer or NoopPlatformTracer()
@@ -411,6 +422,8 @@ class HubNodeExecutor:
                     feature_title=self._resolve_feature_title(chunk),
                     expects_git_commits=graph.declares_git_commit,
                     marker_token=marker_token,
+                    work_items=self._resolve_work_items(chunk),
+                    public_url=self._public_url,
                 ).vars
             except UnconvergedDeliveryError as exc:
                 # Routed as a `failure` rather than allowed to escape, which would
@@ -693,6 +706,23 @@ class HubNodeExecutor:
         except Exception:  # a forge read failing must never break delivery — degrade to no title
             return None
         return title or None
+
+    def _resolve_work_items(self, chunk: Chunk) -> tuple[dict[str, str | None], ...]:
+        """One ``{label, reference}`` per ``work_ref`` (:data:`ENV_WORK_ITEMS`), resolved
+        from each item's source binding with no forge read. An unconfigured source, or one
+        with no forge, leaves ``reference`` ``None``; ``label`` falls back to
+        ``<source>:<ref>``."""
+        items: list[dict[str, str | None]] = []
+        for pointer in chunk.work_refs:
+            source = self._work_sources.get(pointer.source) if self._work_sources is not None else None
+            label = source.label(pointer) if source is not None else None
+            items.append(
+                {
+                    "label": label or f"{pointer.source}:{pointer.ref}",
+                    "reference": source.forge_reference(pointer) if source is not None else None,
+                }
+            )
+        return tuple(items)
 
     def _marker_callback_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
         if not self._marker_callback_base_url:
