@@ -221,6 +221,30 @@ def test_trace_cursor_table_and_epoch_owner_index_survive_migration_roundtrip(tm
     assert _shape() == (True, True)
 
 
+def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """Hub-only — downgrades to the revision's own parent, so the dropped table and the dropped
+    ``usage_facts`` index are each asserted rather than inferred from a revision marker."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _shape() -> tuple[bool, bool]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            inspector = sa.inspect(engine)
+            usage_indexes = {i["name"] for i in inspector.get_indexes("usage_facts")}
+            return "egress_cursor" in inspector.get_table_names(), "ix_usage_facts_recorded_at_id" in usage_indexes
+        finally:
+            engine.dispose()
+
+    assert _shape() == (True, True)
+
+    runner.downgrade("20261001_1000_trace_cursor")
+    assert _shape() == (False, False)
+
+    runner.upgrade("head")
+    assert _shape() == (True, True)
+
+
 def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_items`` + ``work_item_sequence`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from

@@ -43,7 +43,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import OAuthProviderConfig
+from blizzard.hub.config import EgressConfig, OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -62,6 +62,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
+from blizzard.hub.domain.egress.sweep import EgressSweep
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
@@ -115,6 +116,8 @@ from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
+from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
@@ -122,6 +125,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
+from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -214,6 +218,10 @@ class HubServices:
     trace_status: TraceStatusReader
     #: Tells a past window again — always composed; holds the sweep's own exporter, or ``None`` with tracing off.
     trace_replay: TraceReplay
+    #: The fact-egress export sweep — ``None`` unless ``[egress] directory`` is set and its writer could be built.
+    egress_export: EgressSweep | None
+    #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
+    egress_unavailable: EgressUnavailable | None
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -424,6 +432,7 @@ def build_services(
     tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
     platform_tracer: IPlatformTracer | None = None,
+    egress: EgressConfig | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -489,6 +498,29 @@ def build_services(
         steps=trace_store,
         clock=clock,
         replay_max_window=trace_config.replay_max_window,
+    )
+    egress_config = egress or EgressConfig()
+    egress_writer = (
+        build_egress_writer(
+            egress_config.format,
+            egress_config.directory,
+            EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes),
+            mint_process_token(),
+        )
+        if egress_config.directory is not None
+        else None
+    )
+    egress_export = (
+        EgressSweep(
+            steps=trace_store,
+            egress=EgressStore(store_connections),
+            writer=egress_writer,
+            events=event_log,
+            clock=clock,
+            config=egress_config,
+        )
+        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
+        else None
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -680,6 +712,8 @@ def build_services(
         trace_export=trace_export,
         trace_status=trace_status,
         trace_replay=trace_replay,
+        egress_export=egress_export,
+        egress_unavailable=egress_writer if isinstance(egress_writer, EgressUnavailable) else None,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

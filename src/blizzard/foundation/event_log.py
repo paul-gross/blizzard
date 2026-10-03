@@ -25,6 +25,9 @@ EventLogKind = Literal[
     "trace-export-recovered",
     "trace-window-skipped",
     "trace-config-rejected",
+    "egress-write-failed",
+    "egress-write-recovered",
+    "egress-config-rejected",
 ]
 
 #: The closed severity vocabulary; every wire severity field narrows against it.
@@ -49,6 +52,9 @@ EVENT_LOG_SEVERITY: Mapping[EventLogKind, EventLogSeverity] = {
     "trace-export-recovered": "info",
     "trace-window-skipped": "warning",
     "trace-config-rejected": "warning",
+    "egress-write-failed": "warning",
+    "egress-write-recovered": "info",
+    "egress-config-rejected": "warning",
 }
 
 _EVENT_LOG_KINDS = frozenset(get_args(EventLogKind))

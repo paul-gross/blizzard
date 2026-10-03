@@ -8,6 +8,8 @@ a dedicated scenario each. Gated by ``BLIZZARD_CRASH_SWEEP=1``; see ``conftest.p
 from __future__ import annotations
 
 import contextlib
+import gzip
+import json
 import os
 import signal
 import subprocess
@@ -90,6 +92,7 @@ _DEDICATED_PREFIXES = (
     "usagelimit.",
     "trace.",
     "leasetrace.",
+    "egress.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -128,6 +131,8 @@ _USAGE_LIMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("usagelimit.")]
 _TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("trace.")]
 # `leasetrace.*`: the RUNNER's twin of `trace.*`, swept by `test_kill9_at_lease_trace_crash_point`.
 _LEASE_TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("leasetrace.")]
+# `egress.*` fires in the HUB's egress sweep; swept by `test_kill9_at_egress_crash_point`.
+_EGRESS_POINTS = [p for p in _ALL_POINTS if p.startswith("egress.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -208,6 +213,10 @@ _TRACE_CI_SUBSET = ("trace.after-export.before-cursor",)
 _LEASE_TRACE_CI_SUBSET = ("leasetrace.after-export.before-cursor",)
 
 
+# The egress CI subset: the later window; the full sweep runs both.
+_EGRESS_CI_SUBSET = ("egress.after-commit.before-cursor",)
+
+
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
     if os.environ.get("BLIZZARD_CRASH_SWEEP_CI") != "1":
@@ -236,6 +245,7 @@ _CLOSE_SWEEP = _select(_CLOSE_POINTS, _CLOSE_CI_SUBSET)
 _USAGE_LIMIT_SWEEP = _select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET)
 _TRACE_SWEEP = _select(_TRACE_POINTS, _TRACE_CI_SUBSET)
 _LEASE_TRACE_SWEEP = _select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET)
+_EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -261,6 +271,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET))
         | set(_select(_TRACE_POINTS, _TRACE_CI_SUBSET))
         | set(_select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET))
+        | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -3313,6 +3324,143 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         assert sum(advancing) == len(sink.spans()) - len(told_once), (
             "cursor rows do not cover each post-restart span exactly once"
         )
+
+
+# --- The egress sweep — the hub writes closed steps and usage as files in a real directory ---
+
+#: A pass runs every second.
+_EGRESS_SWEEP_SECONDS = 1
+
+
+def _scaffold_egress_hub(hub_dir: Path, directory: Path) -> None:
+    """Scaffold the hub with no work source and the egress sweep on a fast, zero-settle cadence."""
+    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
+    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    write_work_sources(hub_dir, ())
+    directory.mkdir()
+    toml = hub_dir / "blizzard-hub.toml"
+    head, marker, tail = toml.read_text().partition("[egress]\n")
+    assert marker, "scaffolded hub config no longer renders [egress]"
+    for commented, live in (
+        ('# directory = "/var/lib/blizzard/egress"', f'directory = "{directory}"'),
+        ("# sweep_seconds = 60", f"sweep_seconds = {_EGRESS_SWEEP_SECONDS}"),
+        ("# settle_seconds = 300", "settle_seconds = 0"),
+        ("# min_free_bytes = 1073741824", "min_free_bytes = 0"),
+    ):
+        assert commented in tail, f"scaffolded hub config no longer renders {commented!r}"
+        tail = tail.replace(commented, live, 1)
+    toml.write_text(head + marker + tail)
+
+
+def _egress_cursor_rows(hub_dir: Path) -> list[tuple[str, int, list[str]]]:
+    """Every ``egress_cursor`` row as ``(dataset, row_count, files)``, oldest first."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(
+                    hub_schema.egress_cursor.c.dataset,
+                    hub_schema.egress_cursor.c.row_count,
+                    hub_schema.egress_cursor.c.files,
+                ).order_by(hub_schema.egress_cursor.c.id)
+            ).all()
+    finally:
+        engine.dispose()
+    return [(row.dataset, row.row_count, json.loads(row.files)) for row in rows]
+
+
+def _egress_data_files(directory: Path) -> dict[str, list[dict[str, object]]]:
+    """Every placed data file's rows, by its path relative to ``directory``."""
+    placed: dict[str, list[dict[str, object]]] = {}
+    for path in sorted(directory.glob("*/v1/date=*/*.ndjson.gz")):
+        with gzip.open(path, "rt") as handle:
+            placed[path.relative_to(directory).as_posix()] = [json.loads(line) for line in handle.read().splitlines()]
+    return placed
+
+
+def _identity(dataset: str, row: dict[str, object]) -> object:
+    return row["step_key"] if dataset == "steps" else row["usage_id"]
+
+
+def _without_export_time(row: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in row.items() if key != "exported_at"}
+
+
+@pytest.mark.parametrize("point", _EGRESS_SWEEP)
+def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A kill between placing files and recording the cursor writes the same rows again, in new files."""
+    hub_dir, runner_dir, directory = tmp_path / "hub", tmp_path / "runner", tmp_path / "egress"
+    hub_port, runner_port = free_port(), free_port()
+    _scaffold_egress_hub(hub_dir, directory)
+
+    # On from the first start: the cursor anchors at enable time.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id, _ = _ingest_close_intent_chunk(hub)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        code = wait_death(hub_proc, timeout=90.0)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+        killed = _egress_data_files(directory)
+        assert killed, "the killed pass had placed no data file"
+        manifests = sorted((directory / "_manifests").glob("*.json")) if (directory / "_manifests").exists() else []
+        assert bool(manifests) == (point == "egress.after-commit.before-cursor"), (
+            f"{point}: the manifest is present exactly when the pass was killed after committing it"
+        )
+        assert all(count == 0 for _, count, _ in _egress_cursor_rows(hub_dir)), (
+            "a cursor row recorded rows the killed pass never got to record"
+        )
+        killed_bytes = {name: (directory / name).read_bytes() for name in killed}
+
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+        time.sleep(_EGRESS_SWEEP_SECONDS * 4)
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+    placed = _egress_data_files(directory)
+    assert {name: (directory / name).read_bytes() for name in killed} == killed_bytes, (
+        "a file the killed pass placed was changed"
+    )
+    for name, rows in killed.items():
+        dataset = name.split("/", 1)[0]
+        for row in rows:
+            later = [
+                copy
+                for other, copies in placed.items()
+                if other not in killed and other.startswith(f"{dataset}/")
+                for copy in copies
+                if _identity(dataset, copy) == _identity(dataset, row)
+            ]
+            assert later, f"{dataset} row {_identity(dataset, row)} of the killed pass was never written again"
+            assert _without_export_time(later[-1]) == _without_export_time(row)
+
+    named: set[str] = set()
+    for dataset, count, files in _egress_cursor_rows(hub_dir):
+        if count == 0:
+            assert files == []
+            continue
+        *data, manifest = files
+        listed = json.loads((directory / manifest).read_text())["files"]
+        assert [entry["path"] for entry in listed] == data
+        assert sum(entry["rows"] for entry in listed) == count
+        assert {entry["dataset"] for entry in listed} == {dataset}
+        named.update(data)
+    assert named
+    assert not named & set(killed), "a cursor row names a file of the pass that was killed before recording it"
 
 
 # --- The lease trace sweep — the runner tells closed leases to an in-test OTLP sink ---

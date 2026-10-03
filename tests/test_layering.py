@@ -780,3 +780,33 @@ def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
         or module.startswith(("blizzard.hub.store", "blizzard.runner.store"))
     ]
     assert not violations, violations
+
+
+def test_the_egress_sweep_imports_no_store_filesystem_or_format_library() -> None:
+    domain = _HUB_DIR / "domain" / "egress"
+    violations = [
+        f"{path.relative_to(_REPO_ROOT)} imports {module}"
+        for path in sorted(domain.glob("*.py"))
+        for module in sorted(_imported_modules(path))
+        if module.split(".")[0] in ("opentelemetry", "sqlalchemy", "pyarrow", "gzip", "os", "shutil", "pathlib")
+        or module.startswith(("blizzard.hub.store", "blizzard.hub.egress.internal", "blizzard.hub.egress.factory"))
+    ]
+    assert not violations, violations
+
+
+def test_only_the_composition_root_builds_an_egress_writer() -> None:
+    """Nothing in the fleet's path constructs or calls the writer: the factory and the file bindings are
+    named by the composition root alone, and the sweep sees only the ``IEgressWriter`` seam."""
+    homes = (
+        str((_HUB_DIR / "composition.py").relative_to(_REPO_ROOT)),
+        str((_HUB_DIR / "egress").relative_to(_REPO_ROOT)),
+    )
+    violations = [
+        v
+        for v in _violations(_SRC_DIR, ("blizzard.hub.egress.factory", "blizzard.hub.egress.internal"))
+        if not v.startswith(homes)
+    ]
+    assert not violations, violations
+    seam = (str((_HUB_DIR / "domain" / "egress").relative_to(_REPO_ROOT)), *homes)
+    callers = [v for v in _violations(_SRC_DIR, ("blizzard.hub.egress",)) if not v.startswith(seam)]
+    assert not callers, callers

@@ -100,7 +100,7 @@ class _FakeServices:
     reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
     (started unconditionally, no source gate), ``event_derivation``
     (started unconditionally too), and ``work_item_materialization``
-    (the same), and ``trace_export`` (``None`` — tracing is off)."""
+    (the same), ``trace_export`` (``None`` — tracing is off), and ``egress_export`` (``None`` — no directory)."""
 
     def __init__(
         self,
@@ -117,6 +117,7 @@ class _FakeServices:
         self.work_item_materialization = work_item_materialization or _CountingReconciler()
         self.annotation = annotation
         self.trace_export = None
+        self.egress_export = None
 
 
 class _FakeState:

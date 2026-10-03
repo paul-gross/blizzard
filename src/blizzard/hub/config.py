@@ -7,12 +7,13 @@ URL. The bind port falls back to ``BZ_HUB_PORT``. There is no stdlib TOML writer
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import overload
+from typing import Literal, overload
 
 from sqlalchemy.engine import make_url
 
@@ -367,6 +368,118 @@ class TranscriptCapsConfig:
         return value
 
 
+EGRESS_FORMATS = ("ndjson", "parquet")
+#: The datasets an export can carry, in the order a pass writes them.
+EGRESS_DATASETS = ("steps", "invocations")
+
+
+@dataclass(frozen=True)
+class EgressConfig:
+    """Resolved ``[egress]`` config — the fact-egress export's keys. It runs only when ``directory`` is set;
+    every other key has a default that works unset."""
+
+    directory: Path | None = None
+    format: Literal["ndjson", "parquet"] = "ndjson"
+    datasets: tuple[str, ...] = EGRESS_DATASETS
+    sweep_seconds: int = 60
+    #: How long a closed step or usage fact must have stood before it is exported; 0 exports at once.
+    settle_seconds: int = 300
+    batch_limit: int = 5000
+    max_rows_per_file: int = 100000
+    min_free_bytes: int = 1024**3
+    #: The widest window a backfill may write, in seconds.
+    backfill_max_window: int = 604800
+
+    @classmethod
+    def of(cls, raw_egress: object) -> EgressConfig:
+        if not isinstance(raw_egress, dict):
+            return cls()
+        defaults = cls()
+        return cls(
+            directory=cls._directory(raw_egress),
+            format=cls._format(raw_egress, defaults.format),
+            datasets=cls._datasets(raw_egress, defaults.datasets),
+            sweep_seconds=cls._integer(raw_egress, "sweep_seconds", defaults.sweep_seconds, minimum=1),
+            settle_seconds=cls._integer(raw_egress, "settle_seconds", defaults.settle_seconds, minimum=0),
+            batch_limit=cls._integer(raw_egress, "batch_limit", defaults.batch_limit, minimum=1),
+            max_rows_per_file=cls._integer(raw_egress, "max_rows_per_file", defaults.max_rows_per_file, minimum=1),
+            min_free_bytes=cls._integer(raw_egress, "min_free_bytes", defaults.min_free_bytes, minimum=0),
+            backfill_max_window=cls._integer(
+                raw_egress, "backfill_max_window", defaults.backfill_max_window, minimum=1
+            ),
+        )
+
+    @staticmethod
+    def _directory(raw: Mapping[str, object]) -> Path | None:
+        value = raw.get("directory")
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"egress.directory must be a non-empty path, got {value!r}")
+        return Path(value).expanduser()
+
+    @staticmethod
+    def _format(raw: Mapping[str, object], default: Literal["ndjson", "parquet"]) -> Literal["ndjson", "parquet"]:
+        value = raw.get("format", default)
+        if value == "ndjson":
+            return "ndjson"
+        if value == "parquet":
+            return "parquet"
+        raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
+
+    @staticmethod
+    def _datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
+        value = raw.get("datasets", list(default))
+        if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
+            raise ConfigError(
+                f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}"
+            )
+        # Pass order, not file order: steps first, once each.
+        return tuple(name for name in EGRESS_DATASETS if name in value)
+
+    @staticmethod
+    def _integer(raw: Mapping[str, object], key: str, default: int, *, minimum: int) -> int:
+        value = raw.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"egress.{key} must be an integer, got {value!r}")
+        if value < minimum:
+            bound = "non-negative" if minimum == 0 else "positive"
+            raise ConfigError(f"egress.{key} must be {bound}, got {value!r}")
+        return value
+
+    def to_toml(self) -> list[str]:
+        """The ``[egress]`` block. ``directory`` is the switch and has no default; every other key is rendered
+        commented out at its default, live once overridden."""
+        defaults = EgressConfig()
+        lines = [
+            "\n# Fact egress: write closed steps and usage as immutable files an analytics tool can load.\n"
+            "# Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
+            "# blizzard[egress] extra); datasets draws from steps and invocations. Seconds, except\n"
+            "# batch_limit and max_rows_per_file (rows) and min_free_bytes. Uncomment to override.\n",
+            "[egress]\n",
+            '# directory = "/var/lib/blizzard/egress"\n'
+            if self.directory is None
+            else f"directory = {json.dumps(str(self.directory))}\n",
+        ]
+        for key in _EGRESS_KEYS:
+            value = getattr(self, key)
+            literal = json.dumps(list(value)) if isinstance(value, tuple) else json.dumps(value)
+            lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
+        return lines
+
+
+_EGRESS_KEYS = (
+    "format",
+    "datasets",
+    "sweep_seconds",
+    "settle_seconds",
+    "batch_limit",
+    "max_rows_per_file",
+    "min_free_bytes",
+    "backfill_max_window",
+)
+
+
 @dataclass(frozen=True)
 class HubConfig:
     """Resolved hub runtime configuration."""
@@ -393,6 +506,8 @@ class HubConfig:
     transcripts: TranscriptCapsConfig = field(default_factory=TranscriptCapsConfig)
     #: Fleet-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
     tracing: TracingConfig = field(default_factory=TracingConfig)
+    #: Fact-egress export; no sweep runs unless ``[egress] directory`` is set.
+    egress: EgressConfig = field(default_factory=EgressConfig)
     #: Reverse-proxy trust set — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
 
@@ -480,6 +595,7 @@ class HubConfig:
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",
             *self._transcript_cap_lines(),
             *self.tracing.to_toml(unit="closed steps"),
+            *self.egress.to_toml(),
         ]
         if not self.work_sources:
             lines.append(_WORK_SOURCE_EXAMPLE_COMMENT)
@@ -579,5 +695,6 @@ class HubConfig:
             auth=AuthConfig.of(raw.get("auth", {})),
             transcripts=TranscriptCapsConfig.of(raw.get("transcripts", {})),
             tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
+            egress=EgressConfig.of(raw.get("egress", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
         )

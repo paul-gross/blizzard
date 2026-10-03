@@ -56,6 +56,7 @@ from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunks.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.chunks.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, UsagePosition
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
@@ -83,6 +84,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
+from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
@@ -815,6 +817,10 @@ _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
 
 def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceStore:
     return TraceStore(connections, graphs=hub.services.graphs, label=lambda ref: f"{ref.source}#{ref.ref}")
+
+
+def _egress_store_of(connections: HubStoreConnections) -> EgressStore:
+    return EgressStore(connections)
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -1655,6 +1661,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- trace export cursor ----------------------------------------------------------
     _trace_store_of(store_connections, hub).append_cursor(TraceCursorRecord(CursorKey.opening(_ht(0)), 0, _ht(100)))
+    _egress_store_of(store_connections).append_cursor(
+        EgressCursorRecord("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
+    )
 
     return HubWorld(
         hub=hub,
@@ -2010,6 +2019,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_latch(),
+    (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections).newest_cursor("steps"),
+    (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections).usage_after(
+        UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
+    (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections).newest_egress_latch(),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_cursor(),
