@@ -32,6 +32,7 @@ from blizzard.runner.api.analytics import router as analytics_router
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
+from blizzard.runner.api.chunk_asks import router as chunk_asks_router
 from blizzard.runner.api.chunk_detail import router as chunk_detail_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.dashboard import router as dashboard_router
@@ -133,6 +134,7 @@ _UNGATED = (
     git_commits_router,
     artifacts_router,
     history_router,
+    chunk_asks_router,
     work_items_router,
     garden_router,
     finding_router,

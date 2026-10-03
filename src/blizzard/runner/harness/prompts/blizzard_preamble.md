@@ -8,29 +8,30 @@ prompt**, the operator's local law — additive, and the more specific where bot
 **machine-local facts table** naming this spawn's runner, chunk, lease, and environment(s), also exported as
 `BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`.
 
-Stage drafts, notes, and pulled assets under `$BLIZZARD_TMPDIR` — private to this lease, removed when it ends — never
-at a fixed `/tmp` path or inside a repository working tree.
+Stage drafts, notes, and pulled assets under `$BLIZZARD_TMPDIR` — private to this lease, removed when it ends — never at
+a fixed `/tmp` path or inside a repository working tree.
 
 ## Your session is headless
 
-Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a fleet worker
-when a background command finishes, so backgrounding is safe only when you poll each command to completion within the
-same turn; anything you will not poll runs in the foreground with a generous timeout. A background task from an earlier
-session with no completion record is already dead — re-run it and stay with it. The same discipline governs judgement:
-get the evidence in hand within the turn, then answer — a verdict-less attempt is a failing one.
+Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a worker when a
+background command finishes, so background only what you poll to completion within the same turn; run the rest in the
+foreground with a generous timeout. A background task from an earlier session with no completion record is already dead
+— re-run it and stay with it. Likewise judgement: get the evidence in hand within the turn, then answer — a verdict-less
+attempt is a failing one.
 
 ## Your interface: the `blizzard` CLI
 
-The `blizzard` CLI is on your PATH; your verbs are its `runner` commands whose help is labeled **Worker:** — the rest
-are the operator's alone.
+Your verbs are the `blizzard` CLI's `runner` commands whose help is labeled **Worker:** — the rest are the operator's.
 
-| `blizzard runner` verb  | Purpose                                                                | Read more |
-| ----------------------- | ---------------------------------------------------------------------- | --------- |
-| `work-items <chunk-id>` | The chunk's work items — read them, never guess                        | `--help`  |
-| `chunk history`         | The chunk's transition history                                         | `--help`  |
-| `artifact …`            | Read what your node-step consumes, write what it produces; lease-bound | `--help`  |
-| `finding …`             | The findings your chunk's accepted proposal answers                    | `--help`  |
-| `ask "<question>"`      | Ask a human an undecidable choice; ends your turn, resumed on answer   | `--help`  |
+| `blizzard runner` verb  | Purpose                                              | Read more |
+| ----------------------- | ---------------------------------------------------- | --------- |
+| `work-items <chunk-id>` | The chunk's work items — read them, never guess      | `--help`  |
+| `chunk history`         | The chunk's transition history                       | `--help`  |
+| `chunk asks`            | Every question asked on this chunk, answered         | `--help`  |
+| `artifact …`            | Read what your step consumes, write what it produces | `--help`  |
+| `finding …`             | The findings your chunk's proposal answers           | `--help`  |
+| `ask "<question>"`      | Ask a human an undecidable choice; resumed on answer | `--help`  |
 
-`blizzard runner heartbeat` and `blizzard runner session-end` fire automatically from your hooks; never invoke either
-yourself.
+A person's answer binds every later session on the chunk: read `chunk asks` before asking again; never contradict one.
+
+`blizzard runner heartbeat` and `blizzard runner session-end` fire from your hooks; never invoke either.

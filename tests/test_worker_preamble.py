@@ -136,6 +136,7 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     # each pointing at its own `--help` for the detail the preamble no longer carries.
     assert "| `work-items <chunk-id>` |" in out
     assert "| `chunk history`" in out
+    assert "| `chunk asks`" in out
     assert "| `artifact …`" in out
     assert '| `ask "<question>"`' in out
     assert "blizzard runner heartbeat" in out

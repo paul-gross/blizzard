@@ -65,6 +65,16 @@ def chunk_history() -> None:
     click.echo(resp.text)
 
 
+@chunk_group.command("asks")
+def chunk_asks() -> None:
+    """Worker: read every question asked on this chunk, with its answer, as JSON — oldest-first,
+    open and answered alike, each row naming the asking node. A person's answer binds every later
+    session on the chunk: read this before asking again, and never contradict an answer."""
+    worker = WorkerCall.of("chunk asks")
+    resp = worker.get(worker.leased("asks"), failure="could not read the asks")
+    click.echo(resp.text)
+
+
 @click.command(hidden=True)
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 @click.pass_context

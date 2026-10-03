@@ -359,6 +359,55 @@ export type CapacitiesView = {
 };
 
 /**
+ * ChunkAskView
+ *
+ * One question asked on a chunk, open or answered. ``node`` is the asking node's name,
+ * falling back to its raw id when the payload names no node by that id.
+ */
+export type ChunkAskView = {
+    /**
+     * Answer
+     */
+    answer?: string | null;
+    /**
+     * Answered
+     */
+    answered?: boolean;
+    /**
+     * Answered At
+     */
+    answered_at?: string | null;
+    /**
+     * Answered By
+     */
+    answered_by?: string | null;
+    /**
+     * Asked At
+     */
+    asked_at: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node
+     */
+    node?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+};
+
+/**
  * ChunkDetail
  *
  * The whole chunk aggregate: transition history, inline artifact
@@ -3884,6 +3933,38 @@ export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses = {
 };
 
 export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponse = GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses];
+
+export type GetChunkAsksApiLeasesLeaseIdAsksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/asks';
+};
+
+export type GetChunkAsksApiLeasesLeaseIdAsksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAsksApiLeasesLeaseIdAsksGetError = GetChunkAsksApiLeasesLeaseIdAsksGetErrors[keyof GetChunkAsksApiLeasesLeaseIdAsksGetErrors];
+
+export type GetChunkAsksApiLeasesLeaseIdAsksGetResponses = {
+    /**
+     * Response Get Chunk Asks Api Leases  Lease Id  Asks Get
+     *
+     * Successful Response
+     */
+    200: Array<ChunkAskView>;
+};
+
+export type GetChunkAsksApiLeasesLeaseIdAsksGetResponse = GetChunkAsksApiLeasesLeaseIdAsksGetResponses[keyof GetChunkAsksApiLeasesLeaseIdAsksGetResponses];
 
 export type RecordAskApiLeasesLeaseIdAsksPostData = {
     body: AskRequest;
