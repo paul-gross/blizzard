@@ -71,13 +71,14 @@ class TraceExportSweep:
             return
         newest = self._steps.newest_cursor()
         if self._first_pass:
-            self._first_pass = False
             # A restart mid-outage must not announce the same failure again.
             self._failing = self._steps.newest_export_latch() == _FAILED
             jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=CursorKey)
             if jump is not None:
                 self._jump(jump, now)
+                self._first_pass = False
                 return
+            self._first_pass = False
         assert newest is not None  # the first pass always leaves a cursor row behind
         cursor = newest.position
         window = read_window(self._steps, cursor, now - self._settle, self._batch_limit)

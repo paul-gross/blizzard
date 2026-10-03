@@ -96,6 +96,34 @@ def test_the_first_pass_starts_the_cursor_at_now_and_exports_nothing(tmp_path: P
     assert _row_count(hub) == 1
 
 
+def test_a_failed_first_cursor_write_retries_start_without_a_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, exporter = _hub(tmp_path)
+    sweep = _sweep(hub)
+    append = sweep._steps.append_cursor
+    attempts = 0
+
+    def append_once_failed(record: TraceCursorRecord) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("transient cursor write failure")
+        append(record)
+
+    monkeypatch.setattr(sweep._steps, "append_cursor", append_once_failed)
+    with pytest.raises(OSError, match="transient cursor write failure"):
+        sweep.sweep()
+    assert _store(hub).newest_cursor() is None
+
+    sweep.sweep()
+    assert attempts == 2
+    assert _store(hub).newest_cursor() == TraceCursorRecord(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
+    _closed_pair(hub)
+    sweep.sweep()
+    assert len(_roots(exporter)) == 2
+
+
 def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_acceptance(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, TracingConfig(settle_seconds=0, batch_limit=1))
     _sweep(hub).sweep()
