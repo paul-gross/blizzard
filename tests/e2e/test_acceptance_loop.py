@@ -24,17 +24,25 @@ import uvicorn
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from tests.e2e.fleet_traces import (
+    PLANT_DIR_VAR,
+    PLANT_LEASE_TOKEN_SCRIPT,
+    SENTINEL_ARTIFACT_BODY,
     FleetCollector,
     InvocationExpect,
     StepExpect,
     assert_invocations,
+    assert_platform_nesting,
     assert_skeleton,
+    enroll_runner,
+    planted_lease_tokens,
     runner_sweep,
+    stashed_route_tokens,
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.support import (
@@ -68,7 +76,7 @@ RUNNER_ENV = "e1"
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
 # they ride the allowlist's operator-extension knob rather than the base allowlist.
-MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
+MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR)
 
 # The env var every scenario's ``[[work_source]]`` names as its credential —
 # a dummy value suffices, since the mock forge checks no token.
@@ -107,6 +115,15 @@ _BUILD_SCRIPT = (
     "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
+# The same build, preceded by the probes a trace proof reads back: the lease token the worker was handed goes where
+# the scenario can scan for it, and a command whose request the runner passes through to the hub makes the chain a
+# trace should show end to end.
+_PROBED_BUILD_SCRIPT = (
+    PLANT_LEASE_TOKEN_SCRIPT
+    + "import os, subprocess\n"
+    + 'subprocess.run(["blizzard", "runner", "work-items", os.environ["BLIZZARD_CHUNK_ID"]], check=True, capture_output=True)\n'
+    + _BUILD_SCRIPT
+)
 # The judgement-resume prompt: also arrives as code.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
@@ -114,6 +131,15 @@ _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; che
 # deliver with no re-build; the base turn is a no-op, the verdict comes on judgement resume.
 _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
+# The review, probed: it submits the sentinel body as its findings artifact.
+_PROBED_REVIEW_SCRIPT = (
+    PLANT_LEASE_TOKEN_SCRIPT
+    + "import subprocess\n"
+    + "subprocess.run(\n"
+    + '    ["blizzard", "runner", "artifact", "create", "--name", "review-findings"],\n'
+    + f"    input={SENTINEL_ARTIFACT_BODY!r}, text=True, check=True, capture_output=True,\n"
+    + ")\n"
+)
 
 # The pass-through scenario's distinctive work item — a body + a comment whose exact text
 # is asserted on the bare origin's main.
@@ -143,11 +169,12 @@ _WORK_ITEM_BUILD_SCRIPT = (
 )
 
 
-def _graph_yaml(harness: MockHarness = CLAUDE_CODE) -> str:
+def _graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> str:
     """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
-    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``.
+    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``. ``probed`` swaps in
+    the build and review scripts a trace proof reads back.
     """
     graph = {
         "name": "default-delivery",
@@ -155,7 +182,7 @@ def _graph_yaml(harness: MockHarness = CLAUDE_CODE) -> str:
         "nodes": {
             "build": {
                 "executor": "runner",
-                "prompt": _BUILD_SCRIPT,
+                "prompt": _PROBED_BUILD_SCRIPT if probed else _BUILD_SCRIPT,
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
                     "choices": {
@@ -169,7 +196,7 @@ def _graph_yaml(harness: MockHarness = CLAUDE_CODE) -> str:
             },
             "review": {
                 "executor": "runner",
-                "prompt": _REVIEW_SCRIPT,
+                "prompt": _PROBED_REVIEW_SCRIPT if probed else _REVIEW_SCRIPT,
                 "session": "fresh",
                 "produces": ["review-findings"],
                 "judgement": {
@@ -299,7 +326,9 @@ def _hub(
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
         WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
-        **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint} if export_to else {}),
+        # Inline platform spans leave on the batch processor's schedule; a short one has them in the file before the
+        # sweep's step roots are, which is when the scenario reads it.
+        **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
         **(extra_env or {}),
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
@@ -413,7 +442,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
     forge_port, hub_port = _free_port(), _free_port()
     with (
         _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
     ):
         # Sanity: the forge sees the fixture's bare repo on default branch main.
         repo = forge.get(f"/repos/{REPO}")
@@ -422,7 +451,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
         # 2. Pre-mint the scripted default graph (reused by name on ingest), then file
         #    an issue on the forge and ingest its pointer -> a `ready` chunk.
-        minted = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)})
+        minted = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness, probed=True)})
         assert minted.status_code == 201, minted.text
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "land a change", "body": "the acceptance chunk"})
@@ -441,11 +470,16 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
         # 3. Drive the runner loop one synchronous tick at a time until the chunk lands.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        if fleet_traces.available:
+            config = enroll_runner(hub, config)
+        planted = tmp_path / "planted"
+        planted.mkdir()
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
+        fenced[PLANT_DIR_VAR] = str(planted)
         with runner_sweep(config, fleet_traces) as sweep:
             sweep.plant()
-            status = _drive_until_done(config, hub, chunk_id, fenced)
+            status = _drive_until_done(config, hub, chunk_id, fenced, process=sweep.process)
             sweep.drain(workers=2)
 
         # 4a. Fleet truth — the hub's facts derive the chunk done.
@@ -474,6 +508,18 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
             runner = fleet_traces.runner_spans(roots=3, workers=2)
             expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
             assert_invocations(runner, {"build": expect, "review": expect})
+
+        with subtests.test(msg="platform spans"):
+            fleet_traces.require()
+            assert_platform_nesting(fleet_traces.spans(roots=3), fleet_traces.platform_spans())
+            fleet_traces.assert_no_leaks(
+                {
+                    "lease token": planted_lease_tokens(planted),
+                    "route token": stashed_route_tokens(config),
+                    "runner bearer": [config.hub_token],
+                    "artifact body": [SENTINEL_ARTIFACT_BODY],
+                }
+            )
 
     # 4e. Git truth — the mock harness's file is present on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
@@ -514,21 +560,28 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
 
 
 def _drive_until_done(
-    config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced_env: dict[str, str], *, timeout: float = 120.0
+    config: RunnerConfig,
+    hub: httpx.Client,
+    chunk_id: str,
+    fenced_env: dict[str, str],
+    *,
+    timeout: float = 120.0,
+    process: RunnerProcess | None = None,
 ) -> str:
     """Tick the reconciliation loop until the chunk is terminal; return its last status.
 
     Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass, interleaved with short
     waits so the asynchronously spawned mock worker can commit before ADVANCE judges it.
+    ``process`` is one traced graph the ticks and the local API share.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
     try:
-        with _runner_api(config):
+        with _runner_api(config, process=process):
             deadline = time.monotonic() + timeout
             status = "ready"
             while time.monotonic() < deadline:
-                LoopWiring.of(config).tick_once()
+                LoopWiring.of(config).tick_once(process=process)
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 status = detail.json()["status"]
@@ -592,12 +645,15 @@ def _work_item_graph_yaml() -> str:
 
 
 @contextlib.contextmanager
-def _runner_api(config: RunnerConfig, *, events: EventBroker | None = None) -> Iterator[None]:
+def _runner_api(
+    config: RunnerConfig, *, events: EventBroker | None = None, process: RunnerProcess | None = None
+) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
     Touches no store, so it runs alongside the tick without contention. ``events``
-    threads a broker in, for a scenario proving the stream route too."""
-    app = build_hosted_app(config, events=events).app
+    threads a broker in, for a scenario proving the stream route too; ``process`` serves the app over a traced
+    graph the scenario's ticks share."""
+    app = build_hosted_app(config, events=events, process_graph=process).app
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
     thread.start()
