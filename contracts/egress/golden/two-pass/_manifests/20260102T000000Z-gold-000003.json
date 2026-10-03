@@ -1,0 +1,26 @@
+{
+  "pass_started_at": "2026-01-02T00:00:00.000000Z",
+  "backfill": false,
+  "files": [
+    {
+      "path": "steps/v1/date=2026-01-01/steps-20260102T000000Z-gold-000001.ndjson",
+      "dataset": "steps",
+      "version": 1,
+      "partition": "2026-01-01",
+      "rows": 29,
+      "first_position": "2026-01-01T00:00:30.000000Z|ch_runner-step|0000000001|",
+      "last_position": "2026-01-01T00:00:40.000000Z|ch_no-invocations|0000000001|",
+      "sha256": "<normalized>"
+    },
+    {
+      "path": "invocations/v1/date=2026-01-01/invocations-20260102T000000Z-gold-000002.ndjson",
+      "dataset": "invocations",
+      "version": 1,
+      "partition": "2026-01-01",
+      "rows": 13,
+      "first_position": "2026-01-01T00:00:14.000000Z|000000000001",
+      "last_position": "2026-01-01T00:00:12.000000Z|000000000013",
+      "sha256": "<normalized>"
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "dataset": "invocations",
+  "major_version": 1,
+  "columns": [
+    {
+      "name": "usage_id",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "The row's identity: the usage_facts id"
+    },
+    {
+      "name": "step_key",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The runner step it belongs to, by chunk and epoch"
+    },
+    {
+      "name": "trace_id",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The step's derived trace id, as 32 hex characters"
+    },
+    {
+      "name": "chunk_id",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The chunk"
+    },
+    {
+      "name": "epoch",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "The epoch"
+    },
+    {
+      "name": "graph_id",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The graph its step stood in"
+    },
+    {
+      "name": "graph_name",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The graph's name"
+    },
+    {
+      "name": "node_id",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The node"
+    },
+    {
+      "name": "node_name",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The node's name"
+    },
+    {
+      "name": "runner_id",
+      "type": "string",
+      "nullable": false,
+      "meaning": "The runner that reported it"
+    },
+    {
+      "name": "kind",
+      "type": "string",
+      "nullable": false,
+      "meaning": "spawn, resume or judge; a nudge reads resume"
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "nullable": false,
+      "meaning": "As reported"
+    },
+    {
+      "name": "harness_id",
+      "type": "string",
+      "nullable": true,
+      "meaning": "As reported"
+    },
+    {
+      "name": "harness_version",
+      "type": "string",
+      "nullable": true,
+      "meaning": "As reported"
+    },
+    {
+      "name": "input_tokens",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "As reported"
+    },
+    {
+      "name": "output_tokens",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "As reported"
+    },
+    {
+      "name": "cache_read_tokens",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "As reported"
+    },
+    {
+      "name": "cache_create_tokens",
+      "type": "int64",
+      "nullable": false,
+      "meaning": "As reported"
+    },
+    {
+      "name": "cost_billed_usd",
+      "type": "money",
+      "nullable": true,
+      "meaning": "As reported; null when absent"
+    },
+    {
+      "name": "cost_estimated_usd",
+      "type": "money",
+      "nullable": true,
+      "meaning": "As reported; null when absent"
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp",
+      "nullable": false,
+      "meaning": "When the hub received it"
+    },
+    {
+      "name": "exported_at",
+      "type": "timestamp",
+      "nullable": false,
+      "meaning": "When this copy of the row was written"
+    }
+  ]
+}
