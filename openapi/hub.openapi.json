@@ -2992,6 +2992,66 @@
         "title": "EgressDatasetStatus",
         "type": "object"
       },
+      "EgressResetRequest": {
+        "description": "Move ``dataset``'s cursor to ``to``, an instant not in the future: forward skips the window between, back\nrepeats it.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "to"
+        ],
+        "title": "EgressResetRequest",
+        "type": "object"
+      },
+      "EgressResetResponse": {
+        "description": "Where the cursor stood (``None`` before the dataset's first pass), where it stands now, and whether the\nwindow between was ``skipped`` or ``repeated``.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "skipped",
+              "repeated"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "from_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From At"
+          },
+          "to_at": {
+            "title": "To At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "from_at",
+          "to_at",
+          "direction"
+        ],
+        "title": "EgressResetResponse",
+        "type": "object"
+      },
       "EgressStatusResponse": {
         "description": "Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory\nis configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any\ndataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export\nis not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill\nmay write.",
         "properties": {
@@ -14049,6 +14109,48 @@
         "summary": "Resolve Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/egress/reset": {
+      "post": {
+        "description": "Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future\ninstant is 422, and a reset while the export is off or rejected is 409.",
+        "operationId": "egress_reset_api_egress_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EgressResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressResetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Egress Reset",
+        "tags": [
+          "egress"
         ]
       }
     },

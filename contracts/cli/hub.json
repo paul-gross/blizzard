@@ -1682,6 +1682,61 @@
     },
     "egress": {
       "commands": {
+        "reset": {
+          "help": "Move one dataset's cursor to --to. Forward skips the window between and never exports it; back repeats it,\nwriting its rows again to new files. The move is recorded as an egress-cursor-reset event.",
+          "params": [
+            {
+              "help": "The dataset whose cursor moves: steps or invocations.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dataset",
+              "opts": [
+                "--dataset"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The instant the cursor moves to, read in the caller's own local time; not in the future.",
+              "hidden": false,
+              "kind": "option",
+              "name": "to",
+              "opts": [
+                "--to"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub egress reset",
+          "short_help": "Move one dataset's cursor to --to."
+        },
         "status": {
           "help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and\nfile, the last error, and the free space.",
           "params": [

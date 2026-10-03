@@ -74,4 +74,5 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "egress-write-failed": Recorded("hub/domain/egress/sweep.py:EgressSweep._failed", "warning"),
     "egress-write-recovered": Recorded("hub/domain/egress/sweep.py:EgressSweep._recovered", "info"),
     "egress-config-rejected": Recorded("hub/app.py:_announce_rejected_egress", "warning"),
+    "egress-cursor-reset": Recorded("hub/domain/egress/reset.py:EgressReset.reset", "info"),
 }

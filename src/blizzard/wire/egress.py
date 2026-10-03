@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -40,3 +41,21 @@ class EgressStatusResponse(BaseModel):
     free_bytes: int | None
     min_free_bytes: int | None
     backfill_max_window_seconds: int
+
+
+class EgressResetRequest(BaseModel):
+    """Move ``dataset``'s cursor to ``to``, an instant not in the future: forward skips the window between, back
+    repeats it."""
+
+    dataset: str
+    to: datetime
+
+
+class EgressResetResponse(BaseModel):
+    """Where the cursor stood (``None`` before the dataset's first pass), where it stands now, and whether the
+    window between was ``skipped`` or ``repeated``."""
+
+    dataset: str
+    from_at: str | None
+    to_at: str
+    direction: Literal["skipped", "repeated"]

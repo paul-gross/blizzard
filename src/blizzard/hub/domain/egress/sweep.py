@@ -7,6 +7,7 @@ placed, so a crash anywhere before the cursor row re-writes the same rows on the
 
 from __future__ import annotations
 
+import threading
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
@@ -75,6 +76,7 @@ class EgressSweep:
         events: EventLogService,
         clock: IClock,
         config: EgressConfig,
+        pass_lock: threading.Lock | None = None,
     ) -> None:
         self._steps = steps
         self._egress = egress
@@ -89,8 +91,18 @@ class EgressSweep:
         self._failing = False
         self._failures = 0
         self._next_due: datetime | None = None
+        self._pass_lock = pass_lock or threading.Lock()
 
     def sweep(self) -> None:
+        """One pass, or none: while an operator's reset holds the pass lock the tick is skipped, not queued."""
+        if not self._pass_lock.acquire(blocking=False):
+            return
+        try:
+            self._pass()
+        finally:
+            self._pass_lock.release()
+
+    def _pass(self) -> None:
         now = self._clock.now()
         if self._next_due is not None and now < self._next_due:
             return

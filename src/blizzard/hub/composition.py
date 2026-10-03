@@ -62,6 +62,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
+from blizzard.hub.domain.egress.reset import EgressReset
 from blizzard.hub.domain.egress.status import EgressStatusReader
 from blizzard.hub.domain.egress.sweep import EgressSweep
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
@@ -226,6 +227,8 @@ class HubServices:
     egress_unavailable: EgressUnavailable | None
     #: The operator's read of the fact export — always composed, so status answers with the export off.
     egress_status: EgressStatusReader
+    #: Moves a dataset's cursor — always composed; it refuses while the export is off.
+    egress_reset: EgressReset
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -515,6 +518,7 @@ def build_services(
         else None
     )
     egress_store = EgressStore(store_connections)
+    egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     egress_status = EgressStatusReader(
         config=egress_config,
@@ -532,9 +536,18 @@ def build_services(
             events=event_log,
             clock=clock,
             config=egress_config,
+            pass_lock=egress_pass_lock,
         )
         if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
         else None
+    )
+    egress_reset = EgressReset(
+        egress=egress_store,
+        events=event_log,
+        clock=clock,
+        config=egress_config,
+        active=egress_export is not None,
+        pass_lock=egress_pass_lock,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -729,6 +742,7 @@ def build_services(
         egress_export=egress_export,
         egress_unavailable=egress_unavailable,
         egress_status=egress_status,
+        egress_reset=egress_reset,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

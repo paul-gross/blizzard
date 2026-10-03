@@ -6,15 +6,21 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import FLEET_VIEW
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.auth_core import ANALYTICS_ADMIN, FLEET_VIEW
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.wire.egress import EgressDatasetStatus, EgressStatusResponse
+from blizzard.hub.domain.egress.reset import ResetRefused, ResetUnavailable
+from blizzard.wire.egress import (
+    EgressDatasetStatus,
+    EgressResetRequest,
+    EgressResetResponse,
+    EgressStatusResponse,
+)
 
 router = APIRouter(prefix="/api/egress", tags=["egress"], dependencies=[Depends(reject_runner_principal)])
 
@@ -46,4 +52,24 @@ def egress_status(services: Annotated[HubServices, Depends(get_services)]) -> Eg
         free_bytes=read.free_bytes,
         min_free_bytes=read.min_free_bytes,
         backfill_max_window_seconds=read.backfill_max_window_seconds,
+    )
+
+
+@router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require(ANALYTICS_ADMIN))])
+def egress_reset(
+    request: EgressResetRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> EgressResetResponse:
+    """Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future
+    instant is 422, and a reset while the export is off or rejected is 409."""
+    try:
+        result = services.egress_reset.reset(request.dataset, as_utc(request.to))
+    except ResetRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except ResetUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return EgressResetResponse(
+        dataset=result.dataset,
+        from_at=iso_utc(result.previous) if result.previous else None,
+        to_at=iso_utc(result.moved_to),
+        direction=result.direction,
     )

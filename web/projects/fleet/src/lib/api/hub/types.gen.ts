@@ -1876,6 +1876,48 @@ export type EgressDatasetStatus = {
 };
 
 /**
+ * EgressResetRequest
+ *
+ * Move ``dataset``'s cursor to ``to``, an instant not in the future: forward skips the window between, back
+ * repeats it.
+ */
+export type EgressResetRequest = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * To
+     */
+    to: string;
+};
+
+/**
+ * EgressResetResponse
+ *
+ * Where the cursor stood (``None`` before the dataset's first pass), where it stands now, and whether the
+ * window between was ``skipped`` or ``repeated``.
+ */
+export type EgressResetResponse = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * Direction
+     */
+    direction: 'skipped' | 'repeated';
+    /**
+     * From At
+     */
+    from_at: string | null;
+    /**
+     * To At
+     */
+    to_at: string;
+};
+
+/**
  * EgressStatusResponse
  *
  * Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory
@@ -8192,6 +8234,31 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
+
+export type EgressResetApiEgressResetPostData = {
+    body: EgressResetRequest;
+    path?: never;
+    query?: never;
+    url: '/api/egress/reset';
+};
+
+export type EgressResetApiEgressResetPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EgressResetApiEgressResetPostError = EgressResetApiEgressResetPostErrors[keyof EgressResetApiEgressResetPostErrors];
+
+export type EgressResetApiEgressResetPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressResetResponse;
+};
+
+export type EgressResetApiEgressResetPostResponse = EgressResetApiEgressResetPostResponses[keyof EgressResetApiEgressResetPostResponses];
 
 export type EgressStatusApiEgressStatusGetData = {
     body?: never;
