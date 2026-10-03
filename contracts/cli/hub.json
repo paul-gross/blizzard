@@ -1680,6 +1680,179 @@
       "path": "hub decision",
       "short_help": "Operator verbs over open gate decisions: list, resolve."
     },
+    "egress": {
+      "commands": {
+        "backfill": {
+          "help": "Write the rows of [since, until) again, as the live export would have, without moving a cursor. The files\ncarry backfill in their names, each row lands in its own date's partition, and a loader keeps the copy with the\nlatest exported_at. A window over backfill_max_window is refused, not split.",
+          "params": [
+            {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Only records before this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Only this dataset: steps or invocations. Default: every configured one.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dataset",
+              "opts": [
+                "--dataset"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Count what would be written; write nothing.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dry_run",
+              "opts": [
+                "--dry-run"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub egress backfill",
+          "short_help": "Write the rows of [since, until) again, as the live export would have, without moving a cursor."
+        },
+        "reset": {
+          "help": "Move one dataset's cursor to --to. Forward skips the window between and never exports it; back repeats it,\nwriting its rows again to new files. The move is recorded as an egress-cursor-reset event.",
+          "params": [
+            {
+              "help": "The dataset whose cursor moves: steps or invocations.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dataset",
+              "opts": [
+                "--dataset"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The instant the cursor moves to, read in the caller's own local time; not in the future.",
+              "hidden": false,
+              "kind": "option",
+              "name": "to",
+              "opts": [
+                "--to"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub egress reset",
+          "short_help": "Move one dataset's cursor to --to."
+        },
+        "status": {
+          "help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and\nfile, the last error, and the free space.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub egress status",
+          "short_help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and file, the last error, and the free space."
+        }
+      },
+      "help": "Operator verbs over the fact-egress export.",
+      "params": [],
+      "path": "hub egress",
+      "short_help": "Operator verbs over the fact-egress export."
+    },
     "finding": {
       "commands": {
         "confirm-gone": {

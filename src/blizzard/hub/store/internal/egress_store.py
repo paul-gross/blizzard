@@ -12,14 +12,22 @@ from datetime import datetime
 from sqlalchemy import and_, insert, or_, select
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IWriteEgressCursor, UsagePosition
+from blizzard.hub.config import EGRESS_DATASETS
+from blizzard.hub.domain.egress.repository import (
+    EgressCursorRecord,
+    EgressFailureRecord,
+    IWriteEgressCursor,
+    UsagePosition,
+)
 from blizzard.hub.domain.egress.rows import UsageRow
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.work import UsageFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
-_LATCH_KINDS: tuple[EventLogKind, ...] = ("egress-write-failed", "egress-write-recovered")
+_FAILED: EventLogKind = "egress-write-failed"
+_LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "egress-write-recovered")
+_NO_FILES = json.dumps([])
 
 
 class EgressStore:
@@ -33,21 +41,36 @@ class EgressStore:
         stmt = select(s.egress_cursor).where(c.dataset == dataset).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
         with self._store.read("egress_newest_cursor") as conn:
             row = conn.execute(stmt).first()
-        if row is None:
-            return None
-        step = (
-            CursorKey(row.position_at, row.chunk_id or "", row.epoch or 0, row.decision_id or "")
-            if row.position_at is not None
-            else None
+        return _cursor(row) if row is not None else None
+
+    def newest_cursor_with_files(self) -> EgressCursorRecord | None:
+        """The newest row that placed files across the datasets — one indexed read per dataset."""
+        c = s.egress_cursor.c
+        newest: list[EgressCursorRecord] = []
+        for dataset in EGRESS_DATASETS:
+            stmt = (
+                select(s.egress_cursor)
+                .where(c.dataset == dataset, c.files != _NO_FILES)
+                .order_by(c.recorded_at.desc(), c.id.desc())
+                .limit(1)
+            )
+            with self._store.read("egress_newest_cursor_with_files") as conn:
+                row = conn.execute(stmt).first()
+            if row is not None:
+                newest.append(_cursor(row))
+        return max(newest, key=lambda record: record.recorded_at, default=None)
+
+    def newest_egress_failure(self) -> EgressFailureRecord | None:
+        """Walks the latch events newest-first — one per outage edge, so a few — to the first failure."""
+        c = s.event_log.c
+        stmt = (
+            select(c.kind, c.recorded_at, c.message)
+            .where(c.kind.in_(_LATCH_KINDS))
+            .order_by(c.recorded_at.desc(), c.id.desc())
         )
-        return EgressCursorRecord(
-            dataset=row.dataset,
-            step=step,
-            usage=UsagePosition(row.usage_recorded_at, row.usage_id),
-            row_count=row.row_count,
-            files=tuple(json.loads(row.files)),
-            recorded_at=row.recorded_at,
-        )
+        with self._store.read("egress_newest_failure") as conn:
+            row = next((r for r in conn.execute(stmt) if r.kind == _FAILED), None)
+        return EgressFailureRecord(row.recorded_at, row.message) if row is not None else None
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[UsageRow]:
         u = s.usage_facts.c
@@ -84,6 +107,22 @@ class EgressStore:
                     recorded_at=record.recorded_at,
                 )
             )
+
+
+def _cursor(row) -> EgressCursorRecord:  # type: ignore[no-untyped-def]
+    step = (
+        CursorKey(row.position_at, row.chunk_id or "", row.epoch or 0, row.decision_id or "")
+        if row.position_at is not None
+        else None
+    )
+    return EgressCursorRecord(
+        dataset=row.dataset,
+        step=step,
+        usage=UsagePosition(row.usage_recorded_at, row.usage_id),
+        row_count=row.row_count,
+        files=tuple(json.loads(row.files)),
+        recorded_at=row.recorded_at,
+    )
 
 
 def _fact(u) -> UsageFact:  # type: ignore[no-untyped-def]

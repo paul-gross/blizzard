@@ -2954,6 +2954,395 @@
         "title": "DocketEntryView",
         "type": "object"
       },
+      "EgressBackfillCount": {
+        "description": "One dataset's rows and data files \u2014 written, or with ``dry_run`` that would be.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "files": {
+            "title": "Files",
+            "type": "integer"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset",
+          "rows",
+          "files"
+        ],
+        "title": "EgressBackfillCount",
+        "type": "object"
+      },
+      "EgressBackfillFailure": {
+        "description": "The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and\n``cause`` names why, as the live export's own failure events do.",
+        "properties": {
+          "cause": {
+            "title": "Cause",
+            "type": "string"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressBackfillCount"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "cause",
+          "datasets"
+        ],
+        "title": "EgressBackfillFailure",
+        "type": "object"
+      },
+      "EgressBackfillRequest": {
+        "description": "The half-open window ``[since, until)`` to write again, for one ``dataset`` or all configured.\n``dry_run`` counts what would be written and writes nothing.",
+        "properties": {
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "EgressBackfillRequest",
+        "type": "object"
+      },
+      "EgressBackfillResponse": {
+        "description": "What a backfill wrote, or with ``dry_run`` would have written, per dataset.",
+        "properties": {
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressBackfillCount"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dry_run",
+          "datasets"
+        ],
+        "title": "EgressBackfillResponse",
+        "type": "object"
+      },
+      "EgressDatasetStatus": {
+        "description": "One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;\n``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits.",
+        "properties": {
+          "cursor_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor At"
+          },
+          "lag_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cursor_at",
+          "lag_seconds"
+        ],
+        "title": "EgressDatasetStatus",
+        "type": "object"
+      },
+      "EgressResetRequest": {
+        "description": "Move ``dataset``'s cursor to ``to``, an instant not in the future: forward skips the window between, back\nrepeats it.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "to"
+        ],
+        "title": "EgressResetRequest",
+        "type": "object"
+      },
+      "EgressResetResponse": {
+        "description": "Where the cursor stood (``None`` before the dataset's first pass), where it stands now, and whether the\nwindow between was ``skipped`` or ``repeated``.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "skipped",
+              "repeated"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "from_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From At"
+          },
+          "to_at": {
+            "title": "To At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "from_at",
+          "to_at",
+          "direction"
+        ],
+        "title": "EgressResetResponse",
+        "type": "object"
+      },
+      "EgressStatusResponse": {
+        "description": "Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory\nis configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any\ndataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export\nis not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill\nmay write.",
+        "properties": {
+          "backfill_max_window_seconds": {
+            "title": "Backfill Max Window Seconds",
+            "type": "integer"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressDatasetStatus"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directory"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Bytes"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_ongoing": {
+            "title": "Last Error Ongoing",
+            "type": "boolean"
+          },
+          "last_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last File"
+          },
+          "last_pass_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass At"
+          },
+          "last_pass_dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Dataset"
+          },
+          "last_pass_row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Row Count"
+          },
+          "min_free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Free Bytes"
+          },
+          "rejected_setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Setting"
+          },
+          "rejected_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Value"
+          },
+          "state": {
+            "enum": [
+              "on",
+              "off",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "rejected_setting",
+          "rejected_value",
+          "directory",
+          "format",
+          "datasets",
+          "last_pass_at",
+          "last_pass_dataset",
+          "last_pass_row_count",
+          "last_file",
+          "last_error_at",
+          "last_error_message",
+          "last_error_ongoing",
+          "free_bytes",
+          "min_free_bytes",
+          "backfill_max_window_seconds"
+        ],
+        "title": "EgressStatusResponse",
+        "type": "object"
+      },
       "EnvelopeArtifact": {
         "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
@@ -13830,6 +14219,122 @@
         "summary": "Resolve Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/egress/backfill": {
+      "post": {
+        "description": "Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window\nor dataset is 422, a backfill while the export is off or rejected \u2014 even a dry run \u2014 is 409, and a writer that\nrefuses is 502 with the counts committed before.",
+        "operationId": "egress_backfill_api_egress_backfill_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EgressBackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressBackfillResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressBackfillFailure"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Egress Backfill",
+        "tags": [
+          "egress"
+        ]
+      }
+    },
+    "/api/egress/reset": {
+      "post": {
+        "description": "Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future\ninstant is 422, and a reset while the export is off or rejected is 409.",
+        "operationId": "egress_reset_api_egress_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EgressResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressResetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Egress Reset",
+        "tags": [
+          "egress"
+        ]
+      }
+    },
+    "/api/egress/status": {
+      "get": {
+        "description": "Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the\nfree space.",
+        "operationId": "egress_status_api_egress_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Egress Status",
+        "tags": [
+          "egress"
         ]
       }
     },

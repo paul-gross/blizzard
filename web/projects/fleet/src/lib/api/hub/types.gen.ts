@@ -1855,6 +1855,227 @@ export type DocketEntryView = {
 };
 
 /**
+ * EgressBackfillCount
+ *
+ * One dataset's rows and data files — written, or with ``dry_run`` that would be.
+ */
+export type EgressBackfillCount = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * Files
+     */
+    files: number;
+    /**
+     * Rows
+     */
+    rows: number;
+};
+
+/**
+ * EgressBackfillFailure
+ *
+ * The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and
+ * ``cause`` names why, as the live export's own failure events do.
+ */
+export type EgressBackfillFailure = {
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressBackfillCount>;
+    /**
+     * Detail
+     */
+    detail: string;
+};
+
+/**
+ * EgressBackfillRequest
+ *
+ * The half-open window ``[since, until)`` to write again, for one ``dataset`` or all configured.
+ * ``dry_run`` counts what would be written and writes nothing.
+ */
+export type EgressBackfillRequest = {
+    /**
+     * Dataset
+     */
+    dataset?: string | null;
+    /**
+     * Dry Run
+     */
+    dry_run?: boolean;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
+ * EgressBackfillResponse
+ *
+ * What a backfill wrote, or with ``dry_run`` would have written, per dataset.
+ */
+export type EgressBackfillResponse = {
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressBackfillCount>;
+    /**
+     * Dry Run
+     */
+    dry_run: boolean;
+};
+
+/**
+ * EgressDatasetStatus
+ *
+ * One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
+ * ``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits.
+ */
+export type EgressDatasetStatus = {
+    /**
+     * Cursor At
+     */
+    cursor_at: string | null;
+    /**
+     * Lag Seconds
+     */
+    lag_seconds: number | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * EgressResetRequest
+ *
+ * Move ``dataset``'s cursor to ``to``, an instant not in the future: forward skips the window between, back
+ * repeats it.
+ */
+export type EgressResetRequest = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * To
+     */
+    to: string;
+};
+
+/**
+ * EgressResetResponse
+ *
+ * Where the cursor stood (``None`` before the dataset's first pass), where it stands now, and whether the
+ * window between was ``skipped`` or ``repeated``.
+ */
+export type EgressResetResponse = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * Direction
+     */
+    direction: 'skipped' | 'repeated';
+    /**
+     * From At
+     */
+    from_at: string | null;
+    /**
+     * To At
+     */
+    to_at: string;
+};
+
+/**
+ * EgressStatusResponse
+ *
+ * Whether the fact export runs and how it is doing. ``directory`` and ``format`` are set whenever a directory
+ * is configured; a ``rejected`` export names the setting and value. ``last_pass_*`` is the newest cursor row of any
+ * dataset, ``last_file`` the last data file written (never a manifest). ``free_bytes`` is ``None`` when the export
+ * is not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill
+ * may write.
+ */
+export type EgressStatusResponse = {
+    /**
+     * Backfill Max Window Seconds
+     */
+    backfill_max_window_seconds: number;
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressDatasetStatus>;
+    /**
+     * Directory
+     */
+    directory: string | null;
+    /**
+     * Format
+     */
+    format: string | null;
+    /**
+     * Free Bytes
+     */
+    free_bytes: number | null;
+    /**
+     * Last Error At
+     */
+    last_error_at: string | null;
+    /**
+     * Last Error Message
+     */
+    last_error_message: string | null;
+    /**
+     * Last Error Ongoing
+     */
+    last_error_ongoing: boolean;
+    /**
+     * Last File
+     */
+    last_file: string | null;
+    /**
+     * Last Pass At
+     */
+    last_pass_at: string | null;
+    /**
+     * Last Pass Dataset
+     */
+    last_pass_dataset: string | null;
+    /**
+     * Last Pass Row Count
+     */
+    last_pass_row_count: number | null;
+    /**
+     * Min Free Bytes
+     */
+    min_free_bytes: number | null;
+    /**
+     * Rejected Setting
+     */
+    rejected_setting: string | null;
+    /**
+     * Rejected Value
+     */
+    rejected_value: string | null;
+    /**
+     * State
+     */
+    state: 'on' | 'off' | 'rejected';
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -8095,6 +8316,76 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
+
+export type EgressBackfillApiEgressBackfillPostData = {
+    body: EgressBackfillRequest;
+    path?: never;
+    query?: never;
+    url: '/api/egress/backfill';
+};
+
+export type EgressBackfillApiEgressBackfillPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Bad Gateway
+     */
+    502: EgressBackfillFailure;
+};
+
+export type EgressBackfillApiEgressBackfillPostError = EgressBackfillApiEgressBackfillPostErrors[keyof EgressBackfillApiEgressBackfillPostErrors];
+
+export type EgressBackfillApiEgressBackfillPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressBackfillResponse;
+};
+
+export type EgressBackfillApiEgressBackfillPostResponse = EgressBackfillApiEgressBackfillPostResponses[keyof EgressBackfillApiEgressBackfillPostResponses];
+
+export type EgressResetApiEgressResetPostData = {
+    body: EgressResetRequest;
+    path?: never;
+    query?: never;
+    url: '/api/egress/reset';
+};
+
+export type EgressResetApiEgressResetPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EgressResetApiEgressResetPostError = EgressResetApiEgressResetPostErrors[keyof EgressResetApiEgressResetPostErrors];
+
+export type EgressResetApiEgressResetPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressResetResponse;
+};
+
+export type EgressResetApiEgressResetPostResponse = EgressResetApiEgressResetPostResponses[keyof EgressResetApiEgressResetPostResponses];
+
+export type EgressStatusApiEgressStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/egress/status';
+};
+
+export type EgressStatusApiEgressStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressStatusResponse;
+};
+
+export type EgressStatusApiEgressStatusGetResponse = EgressStatusApiEgressStatusGetResponses[keyof EgressStatusApiEgressStatusGetResponses];
 
 export type ListEventsApiEventsGetData = {
     body?: never;
