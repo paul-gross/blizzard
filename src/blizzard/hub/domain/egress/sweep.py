@@ -139,9 +139,9 @@ class EgressSweep:
         window = read_window(self._steps, cursor.step, until, self._batch_limit)
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
         now = egress_pass.started_at
-        facts: dict[str, StepFacts] = {closed.step.key.chunk_id: closed.facts for closed in window.steps}
+        facts: dict[str, StepFacts] = {closed.step.key.chunk_id: closed.facts for closed in window.closed_steps()}
         batch: dict[str, tuple[CursorKey, EgressRow]] = {}
-        for closed in window.steps:
+        for closed in window.closed_steps():
             self._add_step(batch, facts[closed.step.key.chunk_id], closed.step, closed.key, now)
         late = [row for row in usage if row.chunk_id not in facts]
         facts.update(self._steps.step_facts_for(sorted({row.chunk_id for row in late})))
