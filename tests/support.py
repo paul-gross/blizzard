@@ -60,6 +60,7 @@ from blizzard.hub.config import (
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
+from blizzard.hub.domain.delivery_read import DeliveryTrace
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
@@ -321,13 +322,15 @@ class FakeCloser:
         self.gone_refs = gone_refs or set()
         self.fail_refs = fail_refs or set()
         self.closed: list[WorkRef] = []
+        self.traces: list[DeliveryTrace | None] = []
 
-    def close(self, pointer: WorkRef) -> None:
+    def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
         if pointer.ref in self.gone_refs:
             raise WorkItemGoneError(f"{pointer.ref} no longer exists")
         if pointer.ref in self.fail_refs:
             raise WorkCloseError(f"boom closing {pointer.ref}")
         self.closed.append(pointer)
+        self.traces.append(trace)
 
 
 def _conforms_fake_closer(x: FakeCloser) -> IWorkCloser:
@@ -367,6 +370,7 @@ def github_double(
         "repo_labels": {},
         "issue_labels": {},
         "pr_numbers": set(pull_numbers or set()),
+        "issues": issue_store,
     }
 
     @app.get("/repos/{owner}/{repo}/issues/{number}")
@@ -395,10 +399,26 @@ def github_double(
         return JSONResponse(status_code=200, content={"number": number, **issue_state[key]})
 
     @app.get("/repos/{owner}/{repo}/issues/{number}/comments")
-    def get_comments(owner: str, repo: str, number: int) -> list[dict]:
+    def get_comments(
+        request: Request, owner: str, repo: str, number: int, page: int = 1, per_page: int = 30
+    ) -> JSONResponse:
         key = f"{owner}/{repo}#{number}"
-        data = issue_store.get(key, {"body": "", "comments": []})
-        return [{"body": c} for c in data["comments"]]
+        if key not in issue_store and key not in state.setdefault("issue_state", {}):  # type: ignore[call-overload]
+            return JSONResponse(status_code=404, content={"message": "Not Found"})
+        comments = issue_store.get(key, {}).get("comments", [])
+        chunk = comments[(page - 1) * per_page : page * per_page]
+        headers = {}
+        if page * per_page < len(comments):
+            headers["Link"] = f'<{request.url.include_query_params(page=page + 1, per_page=per_page)}>; rel="next"'
+        return JSONResponse(content=[{"body": c} for c in chunk], headers=headers)
+
+    @app.post("/repos/{owner}/{repo}/issues/{number}/comments")
+    def post_comment(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
+        key = f"{owner}/{repo}#{number}"
+        if key not in issue_store:
+            return JSONResponse(status_code=404, content={"message": "Not Found"})
+        issue_store[key].setdefault("comments", []).append(body["body"])
+        return JSONResponse(status_code=201, content={"body": body["body"]})
 
     @app.post("/repos/{owner}/{repo}/pulls")
     def create_pull(owner: str, repo: str, body: dict) -> JSONResponse:

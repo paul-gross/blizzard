@@ -116,3 +116,40 @@ class DeliveryRead:
             landed_repos=rows,
             landed=bool(rows) or facts.delivery_landed or bool(facts.landed_repos),
         )
+
+
+@dataclass(frozen=True)
+class TraceLanding:
+    """One landed repo as a work source's note names it: the merged PR (if one is known),
+    the landed commit, and its web address (if the forge's origin is known)."""
+
+    repo: str
+    pr_url: str | None
+    commit_hash: str
+    commit_url: str | None
+
+
+@dataclass(frozen=True)
+class DeliveryTrace:
+    """What landed a chunk's work, forge-neutral: the chunk, its board page (only when the hub
+    declares a public origin), and each landed repo. A source renders it in its own format."""
+
+    chunk_id: str
+    board_url: str | None
+    landings: tuple[TraceLanding, ...]
+
+    @classmethod
+    def of(cls, chunk_id: str, sources: DeliverySources, *, board_url: str | None) -> DeliveryTrace | None:
+        """Projected from the delivery markers by the same fold as :meth:`DeliveryRead.of`;
+        ``None`` when no repo landed (a hand-completed chunk has nothing to name)."""
+        read = DeliveryRead.of(ChunkFacts(minted=True), sources)
+        landings = tuple(
+            TraceLanding(
+                repo=landed.repo,
+                pr_url=next((p.url for p in reversed(read.closed_prs) if p.repo == landed.repo), None),
+                commit_hash=landed.commit_hash,
+                commit_url=landed.url,
+            )
+            for landed in read.landed_repos
+        )
+        return cls(chunk_id, board_url, landings) if landings else None

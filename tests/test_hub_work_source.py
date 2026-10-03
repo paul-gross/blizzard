@@ -531,7 +531,7 @@ def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
     )
     pointer = WorkRef(source="hub", ref=created.ref)
 
-    source.close(pointer)
+    source.close(pointer, trace=None)
 
     row = items.get("hub", created.ref)
     assert row is not None
@@ -550,8 +550,8 @@ def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> Non
     )
     pointer = WorkRef(source="hub", ref=created.ref)
 
-    source.close(pointer)
-    source.close(pointer)  # must not raise — a clean no-op re-close
+    source.close(pointer, trace=None)
+    source.close(pointer, trace=None)  # must not raise — a clean no-op re-close
 
     row = items.get("hub", created.ref)
     assert row is not None
@@ -562,7 +562,7 @@ def test_close_a_missing_ref_raises_work_item_gone(tmp_path: Path) -> None:
     source, _, _, _, _, _ = _source(tmp_path)
 
     with pytest.raises(WorkItemGoneError):
-        source.close(WorkRef(source="hub", ref="999"))
+        source.close(WorkRef(source="hub", ref="999"), trace=None)
 
 
 def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
@@ -579,7 +579,7 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
     items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
     pointer = WorkRef(source="hub", ref=created.ref)
 
-    source.close(pointer)  # must not raise, must not flip the closure
+    source.close(pointer, trace=None)  # must not raise, must not flip the closure
 
     row = items.get("hub", created.ref)
     assert row is not None
@@ -645,7 +645,7 @@ def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp
     pointer = WorkRef(source="hub", ref=created.ref)
     proposal_id = _seed_accepted_proposal(engine, pointer=pointer)
 
-    source.close(pointer)
+    source.close(pointer, trace=None)
 
     finding = FindingStore(hub_store_connections(engine)).get("fin_1")
     assert finding is not None
@@ -674,8 +674,8 @@ def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     pointer = WorkRef(source="hub", ref=created.ref)
     _seed_accepted_proposal(engine, pointer=pointer)
 
-    source.close(pointer)
-    source.close(pointer)
+    source.close(pointer, trace=None)
+    source.close(pointer, trace=None)
 
     with engine.connect() as conn:
         facts = conn.execute(select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")).all()
@@ -704,7 +704,7 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
         )
         conn.execute(insert(s.finding_facts).values(finding_id="fin_1", kind="observed", recorded_at=_T0))
 
-    source.close(pointer)
+    source.close(pointer, trace=None)
 
     finding = FindingStore(hub_store_connections(engine)).get("fin_1")
     assert finding is not None
@@ -742,7 +742,7 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
         at=_T0,
     )
 
-    source.close(pointer)  # must not raise
+    source.close(pointer, trace=None)  # must not raise
 
     finding = FindingStore(hub_store_connections(engine)).get("fin_1")
     assert finding is not None

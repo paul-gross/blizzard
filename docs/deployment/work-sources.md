@@ -121,6 +121,13 @@ per-repo single-writer coordination, but it does need a way for a hub that shoul
 writing to one at all — adding a `[[work_source]]` block for label rendering (the next section) would otherwise also
 silently grant close authority.
 
+Before closing a GitHub issue the closer leaves one comment naming the merged PR and landed commit of each repo the
+chunk landed, carrying a hidden per-chunk marker. The comment is posted only when no comment on the issue has that
+marker, so a retried or redelivered close never posts a second one, and it lands before the close so an issue is never
+closed without its trace. A chunk with no landed repo, completed by hand, gets no comment. There is no switch for the
+comment: `close_forge_writes_enabled` gates it along with every other forge write the closer makes. Like a delivered PR,
+it never places a closing keyword before a reference.
+
 A stopped chunk that never landed closes nothing; a chunk that landed and was later stopped still closes — landing, not
 chunk status, is what the drain gates on. Closing is best-effort and non-atomic: each ref is attempted independently,
 one failure never blocks another, and a failed attempt retries on the next pass — no bound on how many passes a

@@ -14,6 +14,7 @@ from typing import ClassVar
 import httpx
 
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.delivery_read import DeliveryTrace
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
@@ -201,13 +202,18 @@ class GitHubWorkSource:
 
     # -- IWorkCloser -----------------------------------------------------------
 
-    def close(self, pointer: WorkRef) -> None:
-        """``PATCH`` the issue closed with ``state_reason: completed`` — idempotent,
-        mirroring GitHub's own PATCH (re-closing an already-closed issue is a clean
-        200 no-op). A 404/410 means the item is gone rather than merely unreachable,
-        so it degrades to the terminal :class:`WorkItemGoneError` instead of the
-        retried :class:`WorkCloseError`."""
+    def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
+        """Leave one trace comment naming what landed the item (unless ``trace`` is
+        ``None``), then ``PATCH`` the issue closed with ``state_reason: completed``. Both
+        are idempotent: the comment carries a hidden per-chunk marker and is posted only
+        when no existing comment has it, and re-closing an already-closed issue is a clean
+        200 no-op — so a re-attempt after a failed PATCH or a crash never double-posts. A
+        404/410 on either call means the item is gone rather than merely unreachable, so
+        it degrades to the terminal :class:`WorkItemGoneError` instead of the retried
+        :class:`WorkCloseError`."""
         try:
+            if trace is not None:
+                self._post_trace_once(pointer, trace)
             resp = self._client.patch(
                 f"/repos/{self._repo}/issues/{pointer.ref}",
                 json={"state": "closed", "state_reason": "completed"},
@@ -218,6 +224,47 @@ class GitHubWorkSource:
         except httpx.HTTPError as exc:
             _log.error("close failed", source=self._name, ref=pointer.ref, error=str(exc))
             raise WorkCloseError(f"failed to close {self._name}#{pointer.ref}: {exc}") from exc
+
+    def _post_trace_once(self, pointer: WorkRef, trace: DeliveryTrace) -> None:
+        marker = _trace_marker(trace.chunk_id)
+        path = f"/repos/{self._repo}/issues/{pointer.ref}/comments"
+        url: str | None = path
+        params: dict[str, str | int] | None = {"per_page": 100}
+        while url is not None:
+            resp = self._client.get(url, params=params)
+            if resp.status_code in (404, 410):
+                raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
+            resp.raise_for_status()
+            if any(marker in (c.get("body") or "") for c in resp.json()):
+                return
+            next_link = resp.links.get("next")
+            url = next_link["url"] if next_link else None
+            params = None  # the Link header's next URL already carries the query
+        resp = self._client.post(path, json={"body": _trace_comment(trace, marker)})
+        if resp.status_code in (404, 410):
+            raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
+        resp.raise_for_status()
+
+
+def _trace_marker(chunk_id: str) -> str:
+    return f"<!-- blizzard-delivery:{chunk_id} -->"
+
+
+def _trace_comment(trace: DeliveryTrace, marker: str) -> str:
+    """One line naming each landing's PR and commit — plain references, never a closing
+    keyword, since blizzard's close outbox is the only closer."""
+    landed = "; ".join(
+        ", ".join(
+            [
+                landing.repo,
+                *([f"merged {landing.pr_url}"] if landing.pr_url else []),
+                f"commit {landing.commit_url or landing.commit_hash[:12]}",
+            ]
+        )
+        for landing in trace.landings
+    )
+    chunk = f"chunk {trace.chunk_id}" + (f" ({trace.board_url})" if trace.board_url else "")
+    return f"Delivered by blizzard {chunk}: {landed}\n\n{marker}"
 
 
 def _conforms_work_source(x: GitHubWorkSource) -> IWorkSource:

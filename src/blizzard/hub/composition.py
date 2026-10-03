@@ -761,7 +761,12 @@ def build_services(
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
         close_drain=CloseIntentDrainer(
-            delivery=chunk_delivery, events=event_log, work_sources=work_sources, clock=clock
+            delivery=chunk_delivery,
+            artifacts=chunk_artifacts,
+            events=event_log,
+            work_sources=work_sources,
+            clock=clock,
+            public_url=public_url,
         ),
         trace_export=trace_export,
         trace_status=trace_status,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.delivery_read import DeliveryTrace
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
@@ -82,7 +83,7 @@ class HubWorkSource:
 
     # -- IWorkCloser -----------------------------------------------------------
 
-    def close(self, pointer: WorkRef) -> None:
+    def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
         """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
         raises is :class:`WorkItemGoneError`, for a ref with no item row. Then resolves
         whichever garden-proposal findings `pointer` answers, if any, safe to repeat:
