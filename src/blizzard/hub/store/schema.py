@@ -831,12 +831,10 @@ usage_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
-# The spend read's range predicate — no deployment folds it in SQL yet
-# without an index-backed range.
-Index("ix_usage_facts_recorded_at", usage_facts.c.recorded_at)
 # The analytics spend-by-node grouping — otherwise a temp B-tree.
 Index("ix_usage_facts_node_id", usage_facts.c.node_id)
-# (recorded_at, id) for the egress sweep's read of usage past a cursor position.
+# The spend read's range predicate, and the egress sweep's read of usage past a cursor position —
+# one composite whose leading column serves both, so a second single-column index never competes.
 Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------

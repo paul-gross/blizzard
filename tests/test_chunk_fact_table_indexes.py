@@ -196,7 +196,7 @@ def test_spend_by_node_plans_through_the_node_index_when_unfiltered(tmp_path: Pa
 
 
 def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windowed(tmp_path: Path) -> None:
-    """A windowed `spend_by_node` call plans through `ix_usage_facts_recorded_at` for the
+    """A windowed `spend_by_node` call plans through `ix_usage_facts_recorded_at_id` for the
     range instead — `ix_usage_facts_node_id` goes unused and the `GROUP BY` falls back to
     a temp B-tree. Accepted, not fixed: the range is the more
     selective predicate on a windowed call, and no case elsewhere pins this trade-off."""
@@ -207,7 +207,7 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
     )
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
-    assert _plan_uses_index(plan, "ix_usage_facts_recorded_at"), plan
+    assert _plan_uses_index(plan, "ix_usage_facts_recorded_at_id"), plan
     assert any("TEMP B-TREE FOR GROUP BY" in str(row) for row in plan), plan
 
 
