@@ -935,7 +935,7 @@
       {
         "name": "blizzard.cli.command",
         "type": "string",
-        "meaning": "The CLI command a worker ran, as a span of the scope `blizzard.cli`."
+        "meaning": "The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`."
       },
       {
         "name": "blizzard.hub.run_step.exit_code",
@@ -1017,7 +1017,7 @@
   },
   "resource_attributes": [
     {
-      "meaning": "The service name; `blizzard-hub` or `blizzard-runner` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
+      "meaning": "The service name; `blizzard-hub` or `blizzard-runner` (`blizzard-cli` for an operator command) unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
       "name": "service.name",
       "type": "string"
     },

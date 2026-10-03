@@ -75,6 +75,7 @@ def test_the_dataset_choice_list_matches_the_table() -> None:
     summary_command = analytics.commands["summary"]
     dataset_param = next(p for p in summary_command.params if p.name == "dataset")
 
+    assert isinstance(dataset_param.type, click.Choice)
     assert set(dataset_param.type.choices) == set(_DATASETS)
 
 

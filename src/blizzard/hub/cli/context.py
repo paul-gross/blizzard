@@ -11,6 +11,7 @@ from typing import Any, Protocol
 import click
 import httpx
 
+from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.hub.cli.sessions import IReadSessionStore
 
 
@@ -243,7 +244,9 @@ class CliContext:
         return resp
 
     def _headers(self) -> dict[str, str]:
-        """The ``Authorization: Bearer`` header for this hub — empty when the
-        local session store holds none, so every verb keeps working with no login."""
+        """The ``Authorization: Bearer`` header for this hub — absent when the local session
+        store holds none, so every verb keeps working with no login — and the running operator
+        command's ``traceparent`` when it is traced."""
         token = self.session_reader.load(self.hub_url)
-        return {"Authorization": f"Bearer {token}"} if token else {}
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        return {**headers, **OperatorTrace.headers()}

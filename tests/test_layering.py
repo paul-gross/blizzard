@@ -712,6 +712,18 @@ def test_a_hub_client_verb_loads_no_opentelemetry() -> None:
     )
 
 
+def test_an_operator_trace_loads_no_opentelemetry_and_an_untraced_command_no_emitter() -> None:
+    """The operator span is hand-built OTLP/JSON: sending it never loads the SDK, and a command
+    with no endpoint configured never loads the emitter."""
+    argv = ["hub", "chunk", "list", "--hub-url", "http://127.0.0.1:1"]
+    traced = _loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"})
+    untraced = _loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": ""})
+    heavy = sorted(m for m in traced if m.split(".")[0] == "opentelemetry")
+    assert not heavy, f"an operator trace loaded {len(heavy)} opentelemetry modules, first {heavy[:3]}"
+    assert "blizzard.foundation.cli_spans" in traced
+    assert "blizzard.foundation.cli_spans" not in untraced
+
+
 def test_trace_ids_load_no_driver_or_hub_store() -> None:
     """The runner imports the id derivation, so it loads nothing but the standard library and the kernel."""
     loaded = _loaded_after_importing("blizzard.foundation.trace_ids")

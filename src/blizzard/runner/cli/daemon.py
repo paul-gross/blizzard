@@ -10,6 +10,7 @@ from typing import Literal
 import click
 import httpx
 
+from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.param_rank import ParamSource
 from blizzard.runner.config import RunnerConfig
 
@@ -21,7 +22,12 @@ def uds_client(sock: Path) -> httpx.Client:
     """A client whose transport reaches the runner over ``sock`` — the base_url host is a
     placeholder, since the UDS transport decides where the bytes go."""
     transport = httpx.HTTPTransport(uds=str(sock))
-    return httpx.Client(transport=transport, base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT)
+    return httpx.Client(
+        transport=transport,
+        base_url="http://runner",
+        timeout=LOCAL_CLIENT_TIMEOUT,
+        headers=OperatorTrace.headers(),
+    )
 
 
 @dataclass(frozen=True)
@@ -48,7 +54,8 @@ class RunnerDaemon:
                 "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
             )
         if url_source is not None and url_source > dir_source and runner_url is not None:
-            return cls(verb, httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT), runner_url)
+            client = httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=OperatorTrace.headers())
+            return cls(verb, client, runner_url)
 
         sock = RunnerConfig.socket_path_for(Path(directory))
         if not sock.exists():

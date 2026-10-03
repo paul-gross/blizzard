@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import click
 
-from blizzard.cli.lazy_group import LazyGroup
+from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 from blizzard.hub.cli.sessions.service import SessionService
 
@@ -38,7 +38,7 @@ _COMMANDS = {
 }
 
 
-@click.group(cls=LazyGroup, lazy=_COMMANDS, invoke_without_command=True)
+@click.group(cls=OperatorGroup, lazy=_COMMANDS, trace_root="hub", invoke_without_command=True)
 @click.pass_context
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
