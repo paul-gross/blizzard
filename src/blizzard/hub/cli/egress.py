@@ -7,10 +7,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 import click
+import httpx
 
+from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+
+#: A backfill runs inside the request, and a week-long window outlasts the default client timeout.
+_BACKFILL_TIMEOUT = 600.0
 
 
 @dataclass(frozen=True)
@@ -77,3 +82,29 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
         result,
         f"{result['dataset']} cursor moved from {was} to {result['to_at']}; the window was {result['direction']}",
     )
+
+
+@egress_group.command("backfill", cls=FleetCommand)
+@since_option(required=True)
+@until_option(required=True)
+@click.option("--dataset", default=None, help="Only this dataset: steps or invocations. Default: every configured one.")
+@click.option("--dry-run", is_flag=True, default=False, help="Count what would be written; write nothing.")
+def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: str | None, dry_run: bool) -> None:
+    """Write the rows of [since, until) again, as the live export would have, without moving a cursor. The files
+    carry backfill in their names, each row lands in its own date's partition, and a loader keeps the copy with the
+    latest exported_at. A window over backfill_max_window is refused, not split."""
+    body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
+    resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
+    if resp.status_code == httpx.codes.BAD_GATEWAY:
+        failure = resp.json()
+        placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in failure["datasets"])
+        raise click.ClickException(
+            f"{failure['detail']} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
+        )
+    cli.check(
+        resp, "POST /egress/backfill", on_status={409: "the egress export is not configured", 422: "window refused"}
+    )
+    result = resp.json()
+    verb = "would write" if dry_run else "wrote"
+    lines = [f"{verb} {c['rows']} {c['dataset']} rows in {c['files']} files" for c in result["datasets"]]
+    cli.show_lines(result, *lines)

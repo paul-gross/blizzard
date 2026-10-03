@@ -1855,6 +1855,88 @@ export type DocketEntryView = {
 };
 
 /**
+ * EgressBackfillCount
+ *
+ * One dataset's rows and data files — written, or with ``dry_run`` that would be.
+ */
+export type EgressBackfillCount = {
+    /**
+     * Dataset
+     */
+    dataset: string;
+    /**
+     * Files
+     */
+    files: number;
+    /**
+     * Rows
+     */
+    rows: number;
+};
+
+/**
+ * EgressBackfillFailure
+ *
+ * The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and
+ * ``cause`` names why, as the live export's own failure events do.
+ */
+export type EgressBackfillFailure = {
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressBackfillCount>;
+    /**
+     * Detail
+     */
+    detail: string;
+};
+
+/**
+ * EgressBackfillRequest
+ *
+ * The half-open window ``[since, until)`` to write again, for one ``dataset`` or all configured.
+ * ``dry_run`` counts what would be written and writes nothing.
+ */
+export type EgressBackfillRequest = {
+    /**
+     * Dataset
+     */
+    dataset?: string | null;
+    /**
+     * Dry Run
+     */
+    dry_run?: boolean;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
+ * EgressBackfillResponse
+ *
+ * What a backfill wrote, or with ``dry_run`` would have written, per dataset.
+ */
+export type EgressBackfillResponse = {
+    /**
+     * Datasets
+     */
+    datasets: Array<EgressBackfillCount>;
+    /**
+     * Dry Run
+     */
+    dry_run: boolean;
+};
+
+/**
  * EgressDatasetStatus
  *
  * One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
@@ -8234,6 +8316,35 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
+
+export type EgressBackfillApiEgressBackfillPostData = {
+    body: EgressBackfillRequest;
+    path?: never;
+    query?: never;
+    url: '/api/egress/backfill';
+};
+
+export type EgressBackfillApiEgressBackfillPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Bad Gateway
+     */
+    502: EgressBackfillFailure;
+};
+
+export type EgressBackfillApiEgressBackfillPostError = EgressBackfillApiEgressBackfillPostErrors[keyof EgressBackfillApiEgressBackfillPostErrors];
+
+export type EgressBackfillApiEgressBackfillPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EgressBackfillResponse;
+};
+
+export type EgressBackfillApiEgressBackfillPostResponse = EgressBackfillApiEgressBackfillPostResponses[keyof EgressBackfillApiEgressBackfillPostResponses];
 
 export type EgressResetApiEgressResetPostData = {
     body: EgressResetRequest;

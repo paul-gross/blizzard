@@ -123,6 +123,11 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN
         (
             "POST",
+            "/api/egress/backfill",
+            {"since": "2026-07-13T00:00:00+00:00", "until": "2026-07-13T01:00:00+00:00"},
+        ),  # ANALYTICS_ADMIN
+        (
+            "POST",
             "/api/egress/reset",
             {"dataset": "steps", "to": "2026-07-13T00:00:00+00:00"},
         ),  # ANALYTICS_ADMIN

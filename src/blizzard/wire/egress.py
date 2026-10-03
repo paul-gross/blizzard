@@ -59,3 +59,37 @@ class EgressResetResponse(BaseModel):
     from_at: str | None
     to_at: str
     direction: Literal["skipped", "repeated"]
+
+
+class EgressBackfillRequest(BaseModel):
+    """The half-open window ``[since, until)`` to write again, for one ``dataset`` or all configured.
+    ``dry_run`` counts what would be written and writes nothing."""
+
+    since: datetime
+    until: datetime
+    dataset: str | None = None
+    dry_run: bool = False
+
+
+class EgressBackfillCount(BaseModel):
+    """One dataset's rows and data files — written, or with ``dry_run`` that would be."""
+
+    dataset: str
+    rows: int
+    files: int
+
+
+class EgressBackfillResponse(BaseModel):
+    """What a backfill wrote, or with ``dry_run`` would have written, per dataset."""
+
+    dry_run: bool
+    datasets: list[EgressBackfillCount]
+
+
+class EgressBackfillFailure(BaseModel):
+    """The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and
+    ``cause`` names why, as the live export's own failure events do."""
+
+    detail: str
+    cause: str
+    datasets: list[EgressBackfillCount]

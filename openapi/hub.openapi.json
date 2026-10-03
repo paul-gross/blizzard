@@ -2954,6 +2954,116 @@
         "title": "DocketEntryView",
         "type": "object"
       },
+      "EgressBackfillCount": {
+        "description": "One dataset's rows and data files \u2014 written, or with ``dry_run`` that would be.",
+        "properties": {
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "files": {
+            "title": "Files",
+            "type": "integer"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset",
+          "rows",
+          "files"
+        ],
+        "title": "EgressBackfillCount",
+        "type": "object"
+      },
+      "EgressBackfillFailure": {
+        "description": "The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and\n``cause`` names why, as the live export's own failure events do.",
+        "properties": {
+          "cause": {
+            "title": "Cause",
+            "type": "string"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressBackfillCount"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "cause",
+          "datasets"
+        ],
+        "title": "EgressBackfillFailure",
+        "type": "object"
+      },
+      "EgressBackfillRequest": {
+        "description": "The half-open window ``[since, until)`` to write again, for one ``dataset`` or all configured.\n``dry_run`` counts what would be written and writes nothing.",
+        "properties": {
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "EgressBackfillRequest",
+        "type": "object"
+      },
+      "EgressBackfillResponse": {
+        "description": "What a backfill wrote, or with ``dry_run`` would have written, per dataset.",
+        "properties": {
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/EgressBackfillCount"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dry_run",
+          "datasets"
+        ],
+        "title": "EgressBackfillResponse",
+        "type": "object"
+      },
       "EgressDatasetStatus": {
         "description": "One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;\n``lag_seconds`` is the oldest waiting row's age, ``None`` when nothing waits.",
         "properties": {
@@ -14109,6 +14219,58 @@
         "summary": "Resolve Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/egress/backfill": {
+      "post": {
+        "description": "Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window\nor dataset is 422, a backfill while the export is off or rejected \u2014 even a dry run \u2014 is 409, and a writer that\nrefuses is 502 with the counts committed before.",
+        "operationId": "egress_backfill_api_egress_backfill_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EgressBackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressBackfillResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EgressBackfillFailure"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Egress Backfill",
+        "tags": [
+          "egress"
         ]
       }
     },

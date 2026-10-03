@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import ANALYTICS_ADMIN, FLEET_VIEW
 from blizzard.foundation.store.utc import as_utc, iso_utc
@@ -14,8 +15,13 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.egress.backfill import BackfillUnavailable, BackfillWindowRefused
 from blizzard.hub.domain.egress.reset import ResetRefused, ResetUnavailable
 from blizzard.wire.egress import (
+    EgressBackfillCount,
+    EgressBackfillFailure,
+    EgressBackfillRequest,
+    EgressBackfillResponse,
     EgressDatasetStatus,
     EgressResetRequest,
     EgressResetResponse,
@@ -73,3 +79,34 @@ def egress_reset(
         to_at=iso_utc(result.moved_to),
         direction=result.direction,
     )
+
+
+@router.post(
+    "/backfill",
+    response_model=EgressBackfillResponse,
+    responses={status.HTTP_502_BAD_GATEWAY: {"model": EgressBackfillFailure}},
+    dependencies=[Depends(require(ANALYTICS_ADMIN))],
+)
+def egress_backfill(
+    request: EgressBackfillRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> EgressBackfillResponse | JSONResponse:
+    """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
+    or dataset is 422, a backfill while the export is off or rejected — even a dry run — is 409, and a writer that
+    refuses is 502 with the counts committed before."""
+    try:
+        result = services.egress_backfill.backfill(
+            as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run
+        )
+    except BackfillWindowRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except BackfillUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    counts = [EgressBackfillCount(dataset=c.dataset, rows=c.rows, files=c.files) for c in result.datasets]
+    if result.failure is not None:
+        failure = EgressBackfillFailure(
+            detail="the egress writer did not accept a batch; the backfill stopped",
+            cause=result.failure.cause.value,
+            datasets=counts,
+        )
+        return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content=failure.model_dump())
+    return EgressBackfillResponse(dry_run=result.dry_run, datasets=counts)
