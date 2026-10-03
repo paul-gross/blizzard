@@ -26,14 +26,18 @@
  * driving the cache through invalidation, named in `NO_CACHE_WRITE_EXEMPT_FILES` when
  * `onMutate` is used for a non-cache side effect instead.
  *
- * Finally, a repository-wide census keeps retired board Top/group controls out of
+ * Also a repository-wide census keeps retired board Top/group controls out of
  * `projects/`, while leaving the generated grouping API available to other clients.
+ *
+ * Finally, the placement sweep (`placement-sweep.js`, `bzh:frontend-placement`): every
+ * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROJECTS_DIR = path.join(ROOT, 'projects');
@@ -642,6 +646,7 @@ function main() {
   assertDockControlDetectorWorks();
   assertInvalidateReturnedDetectorWorks();
   assertNoCacheWriteDetectorWorks();
+  assertPlacementDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -712,13 +717,16 @@ function main() {
     }
   }
 
+  const placementLines = placementViolations();
+
   if (
     realTimerViolations.length > 0 ||
     kitFloorViolations.length > 0 ||
     boardControlViolations.length > 0 ||
     dockControlViolations.length > 0 ||
     invalidateDiscardedViolations.length > 0 ||
-    cacheWriteViolations.length > 0
+    cacheWriteViolations.length > 0 ||
+    placementLines.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -771,6 +779,14 @@ function main() {
           'NO_CACHE_WRITE_EXEMPT_FILES with a one-line reason.',
       );
     }
+    if (placementLines.length > 0) {
+      console.error('structural-gate: fleet units placed outside what both apps reach:\n');
+      for (const line of placementLines) console.error(line);
+      console.error(
+        '\nfleet holds only what both apps reach: move a unit one app reaches into that app, delete a dead one, ' +
+          'and never import an app from fleet; a reasoned exemption goes in PLACEMENT_EXEMPT_UNITS with a one-line reason.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -781,6 +797,7 @@ function main() {
   console.log('structural-gate: retired dock-control census clean.');
   console.log('structural-gate: mutation-hook invalidation sweep clean.');
   console.log('structural-gate: mutation-hook cache-write sweep clean.');
+  console.log('structural-gate: placement sweep clean.');
 }
 
 main();
