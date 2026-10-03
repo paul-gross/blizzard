@@ -61,6 +61,11 @@ dependencies = [
 postgres = [
     "psycopg[binary]>=3.2.0",
 ]
+# The egress export's Parquet binding (hub/egress/internal/parquet.py) — opt-in, so the
+# default install stays lean; NDJSON needs nothing new.
+egress = [
+    "pyarrow>=25.0.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -117,6 +122,8 @@ dev = [
     # The ast-grep structural-gate channel (blizzard-context:bzh:domain-takes-objects) —
     # pinned exactly, since a rule's match set can shift across engine versions.
     "ast-grep-cli==0.45.3",
+    # Resolves the egress extra for pyright and the Parquet tests.
+    "pyarrow>=25.0.1",
 ]
 # `mise run mutation` (blizzard:mutation) — never installed into .venv. mutmut pulls in
 # textual, and through it rich, which `uv run` would otherwise leave in the default

@@ -755,6 +755,18 @@ def test_only_the_trace_bindings_import_opentelemetry() -> None:
     assert not violations, violations
 
 
+def test_only_the_parquet_binding_imports_pyarrow() -> None:
+    home = str((_HUB_DIR / "egress" / "internal" / "parquet.py").relative_to(_REPO_ROOT))
+    violations = [v for v in _violations(_SRC_DIR, ("pyarrow",)) if not v.startswith(home)]
+    assert not violations, violations
+
+
+@pytest.mark.parametrize("module", ["blizzard.hub.egress", "blizzard.hub.egress.factory", "blizzard.hub.app"])
+def test_importing_the_egress_package_or_the_hub_loads_no_pyarrow(module: str) -> None:
+    loaded = _loaded_after_importing(module)
+    assert not {m for m in loaded if m.split(".")[0] == "pyarrow"}
+
+
 def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
     tracing = _HUB_DIR / "domain" / "tracing"
     runner_tracing = _RUNNER_DOMAIN_DIR / "tracing"
