@@ -26,6 +26,8 @@ from blizzard.foundation.trace_ids import (
     chunk_span_id,
     chunk_trace_id,
     instant_text,
+    lifetime_span_id,
+    lifetime_trace_id,
     span_id,
     trace_id,
 )
@@ -33,7 +35,13 @@ from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing import platform as hub_platform
 from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import assemble_chunk, assemble_completion, chunk_end, completion_instant
+from blizzard.hub.domain.tracing.chunk_spans import (
+    assemble_completion,
+    assemble_lifetime,
+    assemble_work,
+    chunk_end,
+    completion_instant,
+)
 from blizzard.hub.domain.tracing.facts import (
     BounceRecord,
     ChunkCompletedRecord,
@@ -77,6 +85,17 @@ _VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
 _REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
 _REGEN_COMMAND = f"{_REGEN_VARIABLE}=1 uv run pytest tests/test_trace_contract.py"
 _ATTRIBUTE_TYPES = {"string", "int", "double", "bool", "string[]"}
+_LIFETIME_ROLES = {
+    role.value
+    for role in (
+        ChunkRole.LIFETIME,
+        ChunkRole.STEP,
+        ChunkRole.COMPLETED,
+        ChunkRole.BACKLOG,
+        ChunkRole.ESCALATION,
+        ChunkRole.PAUSE,
+    )
+}
 _ROLES: dict[str, SpanRole | RunnerSpanRole | ChunkRole] = {
     role.value: role for role in (*SpanRole, *RunnerSpanRole, *ChunkRole)
 }
@@ -123,6 +142,8 @@ def _journey() -> StepFacts:
             PauseRecord("p0b", False, fx.at(6)),
             PauseRecord("p1", True, fx.at(12)),
             PauseRecord("p2", False, fx.at(15)),
+            PauseRecord("p3", True, fx.at(135)),
+            PauseRecord("p4", False, fx.at(138)),
         ),
         questions=(
             QuestionRecord("q1", 1, fx.at(16), fx.at(18)),
@@ -273,6 +294,7 @@ def _span(span: SpanRecord) -> dict[str, object]:
         "span_id": f"{span.context.span_id:016x}",
         "parent_span_id": None if span.parent_span_id is None else f"{span.parent_span_id:016x}",
         "name": span.name,
+        "service_name": span.service_name,
         "kind": span.kind.value,
         "status": span.status.value,
         "start": _instant(span.start),
@@ -287,7 +309,7 @@ def _serialize(facts: StepFacts) -> str:
     steps = [s for s in identify_steps(facts) if s.close is not None]
     spans = [_span(span) for step in steps for span in assemble_step(facts, step)]
     if chunk_end(facts) is not None:
-        spans += [_span(span) for span in assemble_chunk(facts)]
+        spans += [_span(span) for span in (*assemble_work(facts), *assemble_lifetime(facts))]
     if completion_instant(facts) is not None:
         spans += [_span(span) for span in assemble_completion(facts)]
     return json.dumps(spans, indent=2, sort_keys=True) + "\n"
@@ -330,7 +352,7 @@ def _observed() -> tuple[set[str], set[str], set[str], set[str], set[tuple[str, 
     carried: set[tuple[str, str]] = set()
     for spans in _golden().values():
         for span in spans:
-            role = role_of_name(span["name"])
+            role = role_of_name(span["name"], span["attributes"])
             names.add(PARAMETERIZED_NAMES.get(role) or span["name"])
             for key in span["attributes"]:
                 keys.add(key)
@@ -420,6 +442,8 @@ def test_the_dictionary_roles_are_the_code_roles() -> None:
         assert entry["scope"] == (attr.INSTRUMENTATION_SCOPE if hub else runner_attr.INSTRUMENTATION_SCOPE), entry[
             "role"
         ]
+        lifetime = entry["role"] in _LIFETIME_ROLES
+        assert entry.get("service") == (attr.CHUNK_SERVICE_NAME if lifetime else None), entry["role"]
     for entry in d["attributes"]:
         assert entry["type"] in _ATTRIBUTE_TYPES, entry["name"]
         assert entry["meaning"], entry["name"]
@@ -437,11 +461,19 @@ def test_the_golden_shape_is_the_dictionary_shape() -> None:
     assert carried <= declared
 
 
+def test_each_golden_span_leaves_under_the_service_its_dictionary_role_declares() -> None:
+    services = {entry["role"]: entry.get("service") for entry in dictionary()["spans"]}
+    for name, spans in _golden().items():
+        for span in spans:
+            role = role_of_name(span["name"], span["attributes"])
+            assert span["service_name"] == services[role], f"{name}: {span['name']} ({role})"
+
+
 def test_a_required_attribute_rides_every_span_that_carries_it() -> None:
     required = required_by_role()
     for spans in _golden().values():
         for span in spans:
-            role = role_of_name(span["name"])
+            role = role_of_name(span["name"], span["attributes"])
             for key, on in required.items():
                 if role in on:
                     assert key in span["attributes"], f"{span['name']} lacks required {key}"
@@ -480,20 +512,28 @@ def test_the_id_vectors_reproduce_through_the_derivation() -> None:
             assert vector["parent_span_id"] == f"{span_id(key, SpanRole.STEP):016x}"
 
 
-def test_the_chunk_vectors_reproduce_through_the_derivation() -> None:
+def test_the_work_root_vector_reproduces_through_the_derivation() -> None:
     ids = dictionary()["ids"]
     assert ids["chunk_span"]["bytes"] == 8
-    assert ids["chunk_vectors"]
-    for vector in ids["chunk_vectors"]:
+    (vector,) = ids["chunk_vectors"]
+    assert ChunkRole(vector["role"]) is ChunkRole.WORK
+    assert f"{chunk_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
+    assert f"{chunk_span_id(vector['chunk_id']):016x}" == vector["span_id"]
+
+
+def test_the_lifetime_vectors_reproduce_through_the_derivation() -> None:
+    ids = dictionary()["ids"]
+    assert (ids["lifetime_trace"]["bytes"], ids["lifetime_span"]["bytes"]) == (16, 8)
+    assert ids["lifetime_vectors"]
+    for vector in ids["lifetime_vectors"]:
         role = ChunkRole(vector["role"])
-        at = (
-            datetime.strptime(vector["instant"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
-            if vector["instant"]
-            else None
-        )
-        assert (instant_text(at) if at else "") == vector["instant"]
-        assert f"{chunk_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
-        assert f"{chunk_span_id(vector['chunk_id'], role, at):016x}" == vector["span_id"]
+        assert role.value in _LIFETIME_ROLES
+        assert f"{lifetime_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
+        assert f"{lifetime_span_id(vector['chunk_id'], role, vector['discriminator']):016x}" == vector["span_id"]
+        assert vector["trace_id"] != f"{chunk_trace_id(vector['chunk_id']):032x}"
+        if role in (ChunkRole.COMPLETED, ChunkRole.BACKLOG, ChunkRole.ESCALATION, ChunkRole.PAUSE):
+            at = datetime.strptime(vector["discriminator"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+            assert instant_text(at) == vector["discriminator"]
 
 
 def test_a_runner_worker_vector_parents_into_the_step_vector_of_its_attempt() -> None:
@@ -511,6 +551,13 @@ def test_the_trace_id_prefix_and_span_prefix_match_thedictionary() -> None:
     assert f"{trace_id(key):032x}" == hashlib.sha256((ids["trace"]["prefix"] + "ch_x").encode()).hexdigest()[:32]
     chunk_text = f"{ids['chunk_span']['prefix']}ch_x/chunk/"
     assert f"{chunk_span_id('ch_x'):016x}" == hashlib.sha256(chunk_text.encode()).hexdigest()[:16]
+    lifetime = hashlib.sha256((ids["lifetime_trace"]["prefix"] + "ch_x").encode()).hexdigest()[:32]
+    assert f"{lifetime_trace_id('ch_x'):032x}" == lifetime
+    lifetime_text = f"{ids['lifetime_span']['prefix']}ch_x/chunk/lifetime/"
+    assert (
+        f"{lifetime_span_id('ch_x', ChunkRole.LIFETIME):016x}"
+        == hashlib.sha256(lifetime_text.encode()).hexdigest()[:16]
+    )
     expected = hashlib.sha256((ids["span"]["prefix"] + "ch_x/1/step/").encode()).hexdigest()[:16]
     assert f"{span_id(key, SpanRole.STEP):016x}" == expected
 

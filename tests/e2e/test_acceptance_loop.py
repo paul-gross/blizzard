@@ -494,8 +494,8 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
         assert pulls, "no PR was opened at the forge"
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-        # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step under the chunk
-        #    span, each told once, chained by `next` links, the last leading to the reserved terminal.
+        # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step under the work
+        #    root, each told once, chained by `next` links, the last leading to the reserved terminal.
         with subtests.test(msg="fleet traces"):
             fleet_traces.require()
             assert_skeleton(
@@ -509,8 +509,9 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
         with subtests.test(msg="chunk trace"):
             fleet_traces.require()
-            chunk = assert_chunk_trace(fleet_traces.spans(roots=3), chunk_id, outcome="done", steps=3)
-            assert chunk.attributes["blizzard.chunk.bounces"] == 0
+            traces = assert_chunk_trace(fleet_traces.spans(roots=3), chunk_id, outcome="done", steps=3)
+            assert traces.lifetime.attributes["blizzard.chunk.bounces"] == 0
+            assert traces.work.attributes["blizzard.chunk.bounces"] == 0
 
         with subtests.test(msg="runner traces"):
             fleet_traces.require()

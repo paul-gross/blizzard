@@ -77,6 +77,7 @@
     "links": [],
     "name": "step build",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "88d23b1ca9cc34d2",
     "start": "2026-01-01T00:00:10Z",
     "status": "UNSET",
@@ -110,6 +111,7 @@
     "links": [],
     "name": "queue wait",
     "parent_span_id": "88d23b1ca9cc34d2",
+    "service_name": null,
     "span_id": "f9bd60eae4dd84f7",
     "start": "2026-01-01T00:00:02Z",
     "status": "UNSET",
@@ -143,6 +145,7 @@
     "links": [],
     "name": "claim",
     "parent_span_id": "88d23b1ca9cc34d2",
+    "service_name": null,
     "span_id": "43fdab531371e04c",
     "start": "2026-01-01T00:00:03Z",
     "status": "UNSET",
@@ -177,6 +180,7 @@
     "links": [],
     "name": "ask",
     "parent_span_id": "88d23b1ca9cc34d2",
+    "service_name": null,
     "span_id": "dda4afb651e1a008",
     "start": "2026-01-01T00:00:16Z",
     "status": "UNSET",
@@ -212,6 +216,7 @@
     "links": [],
     "name": "ask",
     "parent_span_id": "88d23b1ca9cc34d2",
+    "service_name": null,
     "span_id": "7318776fe1e87ef4",
     "start": "2026-01-01T00:00:20Z",
     "status": "UNSET",
@@ -245,6 +250,7 @@
     "links": [],
     "name": "pause",
     "parent_span_id": "88d23b1ca9cc34d2",
+    "service_name": null,
     "span_id": "28925f2e5e1689dc",
     "start": "2026-01-01T00:00:12Z",
     "status": "UNSET",
@@ -303,6 +309,7 @@
     ],
     "name": "step review",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "4577b46a05cd43d6",
     "start": "2026-01-01T00:00:35Z",
     "status": "UNSET",
@@ -333,6 +340,7 @@
     "links": [],
     "name": "queue wait",
     "parent_span_id": "4577b46a05cd43d6",
+    "service_name": null,
     "span_id": "2eedf631921023c2",
     "start": "2026-01-01T00:00:15Z",
     "status": "UNSET",
@@ -363,6 +371,7 @@
     "links": [],
     "name": "claim",
     "parent_span_id": "4577b46a05cd43d6",
+    "service_name": null,
     "span_id": "5e9b89656eac66bc",
     "start": "2026-01-01T00:00:32Z",
     "status": "UNSET",
@@ -412,6 +421,7 @@
     ],
     "name": "step build",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "74b20379223e78cb",
     "start": "2026-01-01T00:01:00Z",
     "status": "UNSET",
@@ -461,6 +471,7 @@
     ],
     "name": "gate gate",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "820ad9ec286b8378",
     "start": "2026-01-01T00:01:11Z",
     "status": "UNSET",
@@ -490,6 +501,7 @@
     "links": [],
     "name": "decision pickup",
     "parent_span_id": "820ad9ec286b8378",
+    "service_name": null,
     "span_id": "aa6deedf536cbbf9",
     "start": "2026-01-01T00:01:40Z",
     "status": "UNSET",
@@ -556,6 +568,7 @@
     ],
     "name": "step verify",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "4840c1f1fc5718b2",
     "start": "2026-01-01T00:02:00Z",
     "status": "UNSET",
@@ -584,6 +597,7 @@
     "links": [],
     "name": "hub exec",
     "parent_span_id": "4840c1f1fc5718b2",
+    "service_name": null,
     "span_id": "e22f40e991178577",
     "start": "2026-01-01T00:02:03Z",
     "status": "UNSET",
@@ -631,9 +645,47 @@
     ],
     "name": "step build",
     "parent_span_id": "3df6797481a5fac6",
+    "service_name": null,
     "span_id": "dc95b1cea6e3ae76",
     "start": "2026-01-01T00:02:20Z",
     "status": "ERROR",
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.bounces": 2,
+      "blizzard.chunk.cache_create_tokens": 20,
+      "blizzard.chunk.cache_read_tokens": 2000,
+      "blizzard.chunk.cost.estimated": true,
+      "blizzard.chunk.cost.partial": true,
+      "blizzard.chunk.cost.usd": 0.75,
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.input_tokens": 200,
+      "blizzard.chunk.outcome": "stopped",
+      "blizzard.chunk.output_tokens": 100,
+      "blizzard.chunk.steps": 6,
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ]
+    },
+    "end": "2026-01-01T00:02:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "lifetime"
+        },
+        "span_id": "2217fceaa579bb76",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      }
+    ],
+    "name": "chunk work",
+    "parent_span_id": null,
+    "service_name": null,
+    "span_id": "3df6797481a5fac6",
+    "start": "2026-01-01T00:00:10Z",
+    "status": "UNSET",
     "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
@@ -661,10 +713,319 @@
     "links": [],
     "name": "chunk",
     "parent_span_id": null,
-    "span_id": "3df6797481a5fac6",
+    "service_name": "blizzard-chunk",
+    "span_id": "2217fceaa579bb76",
     "start": "2026-01-01T00:00:00Z",
     "status": "UNSET",
-    "trace_id": "1b74f66284990c6da69e0005db74f243"
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 20,
+      "blizzard.step.cache_read_tokens": 2000,
+      "blizzard.step.choice": "pass",
+      "blizzard.step.cost.estimated": true,
+      "blizzard.step.cost.partial": true,
+      "blizzard.step.cost.usd": 0.75,
+      "blizzard.step.epoch": 1,
+      "blizzard.step.input_tokens": 200,
+      "blizzard.step.kind": "step",
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 100,
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 2000,
+      "blizzard.step.wait.claim_ms": 7000,
+      "blizzard.step.wait.pause_ms": 3000,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 1000
+    },
+    "end": "2026-01-01T00:00:30Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "88d23b1ca9cc34d2",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "build",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "7d416546e1cca91d",
+    "start": "2026-01-01T00:00:02Z",
+    "status": "UNSET",
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "conflict",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-review",
+      "blizzard.node.name": "review",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.choice": "fail",
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 2,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.kind": "step",
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 3000,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 17000
+    },
+    "end": "2026-01-01T00:00:55Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "4577b46a05cd43d6",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "review",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "3710486b05aebbee",
+    "start": "2026-01-01T00:00:30Z",
+    "status": "UNSET",
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 3,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.kind": "step",
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.preceded_by": "requeue",
+      "blizzard.step.to_node.name": "gate",
+      "blizzard.step.visit": 2,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:01:10Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "74b20379223e78cb",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "build",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "fe3b7cd18088e248",
+    "start": "2026-01-01T00:01:00Z",
+    "status": "UNSET",
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "human",
+      "blizzard.node.id": "g1-gate",
+      "blizzard.node.name": "gate",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.choice": "approve",
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 3,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.kind": "gate",
+      "blizzard.step.outcome": "decided",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "verify",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 20000,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:02:00Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "820ad9ec286b8378",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "gate",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "fd717c60e235bc01",
+    "start": "2026-01-01T00:01:11Z",
+    "status": "UNSET",
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "checks",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "hub",
+      "blizzard.node.id": "g1-verify",
+      "blizzard.node.name": "verify",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 4,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.kind": "step",
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:02:10Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "4840c1f1fc5718b2",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "verify",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "a4133e626932353c",
+    "start": "2026-01-01T00:02:00Z",
+    "status": "UNSET",
+    "trace_id": "f09d101be501667a643be80a461de251"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 5,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.kind": "step",
+      "blizzard.step.outcome": "escalated",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.visit": 3,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:02:30Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "work"
+        },
+        "span_id": "dc95b1cea6e3ae76",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
+    "name": "build",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "71f95782be59d28b",
+    "start": "2026-01-01T00:02:20Z",
+    "status": "ERROR",
+    "trace_id": "f09d101be501667a643be80a461de251"
   },
   {
     "attributes": {
@@ -678,11 +1039,12 @@
     "kind": "INTERNAL",
     "links": [],
     "name": "backlog wait",
-    "parent_span_id": "3df6797481a5fac6",
-    "span_id": "056e7c311fd68bd8",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "26a12aeecc15964e",
     "start": "2026-01-01T00:00:00Z",
     "status": "UNSET",
-    "trace_id": "1b74f66284990c6da69e0005db74f243"
+    "trace_id": "f09d101be501667a643be80a461de251"
   },
   {
     "attributes": {
@@ -696,11 +1058,12 @@
     "kind": "INTERNAL",
     "links": [],
     "name": "escalation wait",
-    "parent_span_id": "3df6797481a5fac6",
-    "span_id": "b91b130b3436ff47",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "4d949913d0ae1216",
     "start": "2026-01-01T00:02:30Z",
     "status": "UNSET",
-    "trace_id": "1b74f66284990c6da69e0005db74f243"
+    "trace_id": "f09d101be501667a643be80a461de251"
   },
   {
     "attributes": {
@@ -709,16 +1072,17 @@
         "acme#42"
       ]
     },
-    "end": "2026-01-01T00:00:06Z",
+    "end": "2026-01-01T00:02:18Z",
     "events": [],
     "kind": "INTERNAL",
     "links": [],
     "name": "pause wait",
-    "parent_span_id": "3df6797481a5fac6",
-    "span_id": "8271a84c37627814",
-    "start": "2026-01-01T00:00:04Z",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "6047a75942a9e719",
+    "start": "2026-01-01T00:02:15Z",
     "status": "UNSET",
-    "trace_id": "1b74f66284990c6da69e0005db74f243"
+    "trace_id": "f09d101be501667a643be80a461de251"
   },
   {
     "attributes": {
@@ -733,10 +1097,11 @@
     "kind": "INTERNAL",
     "links": [],
     "name": "chunk completed",
-    "parent_span_id": "3df6797481a5fac6",
-    "span_id": "9aeb3a3a6ce40602",
+    "parent_span_id": "2217fceaa579bb76",
+    "service_name": "blizzard-chunk",
+    "span_id": "4905de835907cd4d",
     "start": "2026-01-01T00:02:50Z",
     "status": "UNSET",
-    "trace_id": "1b74f66284990c6da69e0005db74f243"
+    "trace_id": "f09d101be501667a643be80a461de251"
   }
 ]

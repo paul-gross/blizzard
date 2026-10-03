@@ -10,11 +10,13 @@ from collections.abc import Mapping
 from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.hub.fleet_spans"
-INSTRUMENTATION_SCOPE_VERSION = "2"
+INSTRUMENTATION_SCOPE_VERSION = "3"
 #: The scope the hub's own platform spans (sweep roots) are opened under.
 PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.hub.platform"
 PLATFORM_INSTRUMENTATION_SCOPE_VERSION = "1"
 DEFAULT_SERVICE_NAME = "blizzard-hub"
+#: The service name the lifetime trace's spans leave under, whatever the environment names.
+CHUNK_SERVICE_NAME = "blizzard-chunk"
 
 # Dimensions
 STEP_OUTCOME = "blizzard.step.outcome"
@@ -27,8 +29,9 @@ BOUNCE_CAUSE = "blizzard.bounce.cause"
 ASK_ANSWERED = "blizzard.ask.answered"
 CLOCK_SKEW = "blizzard.clock_skew"
 LINK_REASON = "blizzard.link.reason"
+STEP_KIND = "blizzard.step.kind"
 
-# Dimensions and measures — the chunk span only
+# Dimensions and measures — the chunk roots only
 CHUNK_OUTCOME = "blizzard.chunk.outcome"
 CHUNK_BACKLOG_MS = "blizzard.chunk.backlog_ms"
 CHUNK_ACTIVE_MS = "blizzard.chunk.active_ms"

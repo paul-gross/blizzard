@@ -16,6 +16,9 @@ from blizzard.foundation.trace_ids import (
     chunk_span_id,
     chunk_trace_id,
     instant_text,
+    lifetime_context,
+    lifetime_span_id,
+    lifetime_trace_id,
     nonzero,
     span_id,
     step_root,
@@ -45,27 +48,48 @@ def test_trace_id_vectors() -> None:
 def test_chunk_span_id_vectors() -> None:
     # printf 'blizzard-chunk-span/v2/ch_1/chunk/' | sha256sum | cut -c1-16
     assert chunk_span_id("ch_1") == int("3df6797481a5fac6", 16)
+    assert chunk_span_id("ch_1") != chunk_span_id("ch_2")
+
+
+def test_lifetime_id_vectors() -> None:
     at = datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC)
-    # printf 'blizzard-chunk-span/v2/ch_1/chunk/completed/2026-01-01T00:00:30.000000Z' | sha256sum | cut -c1-16
-    assert chunk_span_id("ch_1", ChunkRole.COMPLETED, at) == int("434f93a251a84691", 16)
-    assert chunk_span_id("ch_1", ChunkRole.PAUSE, at) != chunk_span_id("ch_1", ChunkRole.ESCALATION, at)
-    assert chunk_span_id("ch_1", ChunkRole.PAUSE, at) != chunk_span_id("ch_2", ChunkRole.PAUSE, at)
+    # printf 'blizzard-lifetime-trace/v1/ch_1' | sha256sum | cut -c1-32
+    assert lifetime_trace_id("ch_1") == int("f09d101be501667a643be80a461de251", 16)
+    assert lifetime_trace_id("ch_1") != chunk_trace_id("ch_1")
+    # printf 'blizzard-lifetime-span/v1/ch_1/chunk/lifetime/' | sha256sum | cut -c1-16
+    assert lifetime_span_id("ch_1", ChunkRole.LIFETIME) == int("2217fceaa579bb76", 16)
+    # printf 'blizzard-lifetime-span/v1/ch_1/chunk/step/ch_1/3' | sha256sum | cut -c1-16
+    assert lifetime_span_id("ch_1", ChunkRole.STEP, _ATTEMPT.text()) == int("fe3b7cd18088e248", 16)
+    # printf 'blizzard-lifetime-span/v1/ch_1/chunk/completed/2026-01-01T00:00:30.000000Z' | sha256sum | cut -c1-16
+    assert lifetime_span_id("ch_1", ChunkRole.COMPLETED, instant_text(at)) == int("0a3717d77462cf2e", 16)
+    assert lifetime_span_id("ch_1", ChunkRole.PAUSE, instant_text(at)) != lifetime_span_id(
+        "ch_1", ChunkRole.ESCALATION, instant_text(at)
+    )
 
 
-def test_a_chunk_span_id_names_its_instant_in_utc() -> None:
+def test_an_instant_in_an_id_is_utc_microseconds() -> None:
     local = datetime(2026, 1, 1, 2, 0, 30, tzinfo=timezone(timedelta(hours=2)))
     utc = datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC)
 
     assert instant_text(local) == instant_text(utc) == "2026-01-01T00:00:30.000000Z"
-    assert chunk_span_id("ch_1", ChunkRole.BACKLOG, local) == chunk_span_id("ch_1", ChunkRole.BACKLOG, utc)
 
 
-def test_the_chunk_context_is_the_chunks_trace_and_the_roles_span() -> None:
+def test_the_chunk_context_is_the_work_trace_and_the_work_root() -> None:
     context = chunk_context("ch_1")
 
     assert (context.trace_id, context.span_id, context.trace_flags) == (
         chunk_trace_id("ch_1"),
         chunk_span_id("ch_1"),
+        1,
+    )
+
+
+def test_the_lifetime_context_is_the_lifetime_trace_and_the_roles_span() -> None:
+    context = lifetime_context("ch_1")
+
+    assert (context.trace_id, context.span_id, context.trace_flags) == (
+        lifetime_trace_id("ch_1"),
+        lifetime_span_id("ch_1", ChunkRole.LIFETIME),
         1,
     )
 

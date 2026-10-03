@@ -1,8 +1,10 @@
-"""A chunk told as one trace (unit tier) — ``StepFacts`` built directly, no store."""
+"""A chunk told as a lifetime trace and a work trace (unit tier) — ``StepFacts`` built directly, no store."""
 
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import pairwise
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -10,17 +12,25 @@ import pytest
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import (
     ChunkRole,
-    chunk_context,
     chunk_span_id,
     chunk_trace_id,
     instant_text,
+    lifetime_context,
+    lifetime_trace_id,
     step_root,
 )
 from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import ChunkOutcome, assemble_chunk, assemble_completion, chunk_end
+from blizzard.hub.domain.tracing.chunk_spans import (
+    ChunkOutcome,
+    _step_extents,
+    assemble_completion,
+    assemble_lifetime,
+    assemble_work,
+    chunk_end,
+)
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
     BounceRecord,
@@ -82,25 +92,180 @@ def _done(**extra: Any) -> StepFacts:
 
 def _all_spans(facts: StepFacts) -> list[SpanRecord]:
     steps = [s for s in identify_steps(facts) if s.close is not None]
-    return [span for step in steps for span in assemble_step(facts, step)] + list(assemble_chunk(facts))
+    return (
+        [span for step in steps for span in assemble_step(facts, step)]
+        + list(assemble_work(facts))
+        + list(assemble_lifetime(facts))
+    )
 
 
 def _named(spans: tuple[SpanRecord, ...], name: str) -> SpanRecord:
     return next(s for s in spans if s.name == name)
 
 
-def test_a_bounced_chunk_is_one_trace_under_one_chunk_span() -> None:
+def test_a_bounced_chunk_is_a_work_trace_under_one_work_root() -> None:
     facts = _done()
-    spans = _all_spans(facts)
+    steps = [s for step in identify_steps(facts) for s in assemble_step(facts, step)]
+    (work,) = assemble_work(facts)
 
-    assert {s.context.trace_id for s in spans} == {chunk_trace_id("ch_1")}
-    assert len({(s.context.trace_id, s.context.span_id) for s in spans}) == len(spans)
-    chunk = _named(tuple(spans), "chunk")
-    assert chunk.parent_span_id is None
-    assert chunk.context.span_id == chunk_span_id("ch_1")
-    roots = [s for s in spans if s.name.startswith("step ")]
+    assert {s.context.trace_id for s in [*steps, work]} == {chunk_trace_id("ch_1")}
+    assert len({(s.context.trace_id, s.context.span_id) for s in [*steps, work]}) == len(steps) + 1
+    assert (work.name, work.parent_span_id, work.context.span_id) == ("chunk work", None, chunk_span_id("ch_1"))
+    roots = [s for s in steps if s.name.startswith("step ")]
     assert len(roots) == 4
-    assert {r.parent_span_id for r in roots} == {chunk.context.span_id}
+    assert {r.parent_span_id for r in roots} == {work.context.span_id}
+
+
+def test_the_work_root_starts_at_the_first_step_and_ends_at_the_finish_with_totals_but_no_waits() -> None:
+    facts = _done()
+    (work,) = assemble_work(facts)
+    first = assemble_step(facts, identify_steps(facts)[0])[0]
+
+    assert (work.start, work.end) == (first.start, fx.at(100))
+    assert work.start > fx.at(0)
+    assert work.attributes[attr.CHUNK_OUTCOME] == "done"
+    assert work.attributes[attr.CHUNK_STEPS] == 4
+    assert work.attributes[attr.CHUNK_COST_USD] == 1.0
+    assert attr.CHUNK_BACKLOG_MS not in work.attributes
+    assert work.service_name is None
+    assert [(link.context, link.attributes[attr.LINK_REASON]) for link in work.links] == [
+        (lifetime_context("ch_1"), "lifetime")
+    ]
+
+
+def test_a_chunk_that_took_no_step_has_a_lifetime_trace_and_no_work_trace() -> None:
+    facts = fx.make_facts(chunk_stopped=(ChunkStoppedRecord(fx.at(40)),))
+
+    assert assemble_work(facts) == ()
+    assert [s.name for s in assemble_lifetime(facts)] == ["chunk", "backlog wait"]
+
+
+def test_the_lifetime_trace_is_its_own_trace_under_the_chunk_service() -> None:
+    spans = assemble_lifetime(_done())
+
+    assert {s.context.trace_id for s in spans} == {lifetime_trace_id("ch_1")} != {chunk_trace_id("ch_1")}
+    assert len({s.context.span_id for s in spans}) == len(spans)
+    assert {s.service_name for s in spans} == {"blizzard-chunk"}
+    root = spans[0]
+    assert (root.name, root.parent_span_id, root.context) == ("chunk", None, lifetime_context("ch_1"))
+    assert {s.parent_span_id for s in spans[1:]} == {root.context.span_id}
+
+
+def test_the_lifetime_trace_has_a_span_per_step_named_for_its_node_and_linking_to_the_step_root() -> None:
+    facts = _done()
+    steps = identify_steps(facts)
+    spans = assemble_lifetime(facts)
+    told = [s for s in spans if attr.STEP_KIND in s.attributes]
+    roots = [assemble_step(facts, step)[0] for step in steps]
+
+    assert [s.name for s in told] == ["build", "review", "build", "review"]
+    assert [(s.start, s.end) for s in told] == [
+        (fx.at(5), fx.at(30)),
+        (fx.at(35), fx.at(55)),
+        (fx.at(60), fx.at(80)),
+        (fx.at(85), fx.at(100)),
+    ]
+    assert [[(link.context, link.attributes[attr.LINK_REASON]) for link in s.links] for s in told] == [
+        [(step_root(step.key), "work")] for step in steps
+    ]
+    first = told[0].attributes
+    assert first[attr.STEP_KIND] == "step"
+    assert first[shared.NODE_NAME] == "build"
+    assert first[shared.STEP_EPOCH] == 1
+    assert first[attr.STEP_OUTCOME] == roots[0].attributes[attr.STEP_OUTCOME]
+    assert first[attr.STEP_INPUT_TOKENS] == roots[0].attributes[attr.STEP_INPUT_TOKENS] == 100
+    assert first[attr.STEP_COST_USD] == roots[0].attributes[attr.STEP_COST_USD] == 0.5
+    assert first[attr.WAIT_QUEUE_MS] == roots[0].attributes[attr.WAIT_QUEUE_MS] == 1000
+    assert first[attr.WAIT_CLAIM_MS] == roots[0].attributes[attr.WAIT_CLAIM_MS] == 4000
+    for name in (attr.WAIT_ASK_MS, attr.WAIT_PAUSE_MS, attr.WAIT_PICKUP_MS):
+        assert first[name] == roots[0].attributes[name]
+
+
+def test_the_lifetime_trace_leaves_no_gap_where_the_work_trace_accounts_for_the_time() -> None:
+    spans = assemble_lifetime(_done())
+    backlog = _named(spans, "backlog wait")
+    first_step = next(s for s in spans if s.attributes.get(attr.STEP_KIND) == "step")
+
+    assert backlog.end == first_step.start == fx.at(5)
+
+
+def test_a_lifetime_wait_and_a_lifetime_step_never_overlap() -> None:
+    spans = assemble_lifetime(_done(pauses=(PauseRecord("p1", True, fx.at(3)), PauseRecord("p2", False, fx.at(8)))))
+    covered = sorted((s.start, s.end, s.name) for s in spans[1:])
+
+    assert all(earlier[1] <= later[0] for earlier, later in pairwise(covered))
+
+
+def test_a_wait_that_reaches_into_a_step_span_is_clipped_to_what_no_step_shows() -> None:
+    facts = fx.make_facts(
+        promotions=(PromotionRecord(fx.at(5)),),
+        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
+        escalations=(EscalationRecord(1, fx.at(40)),),
+        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
+    )
+
+    spans = assemble_lifetime(facts)
+    steps = [s for s in spans if s.attributes.get(attr.STEP_KIND) == "step"]
+    waits = [s for s in spans if s.name.endswith(" wait")]
+
+    assert len(steps) == 2
+    assert all(w.end <= s.start or w.start >= s.end for w in waits for s in steps)
+    assert all(a.end <= b.start for a, b in pairwise(sorted(steps, key=lambda s: s.start)))
+    escalation = _named(spans, "escalation wait")
+    assert (escalation.start, escalation.end) == (fx.at(40), fx.at(310))
+    assert steps[1].start == fx.at(310)
+
+
+def test_an_escalation_a_restart_releases_is_a_wait_and_the_next_step_queues_from_the_restart() -> None:
+    facts = fx.make_facts(
+        promotions=(PromotionRecord(fx.at(5)),),
+        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
+        escalations=(EscalationRecord(1, fx.at(40)),),
+        restarts=(RestartRecord(2, fx.at(250), "g1", "g1-build"),),
+        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
+    )
+
+    spans = assemble_lifetime(facts)
+    wait = _named(spans, "escalation wait")
+    lifetime_steps = sorted((s for s in spans if s.attributes.get(attr.STEP_KIND) == "step"), key=lambda s: s.start)
+    second = assemble_step(facts, identify_steps(facts)[1])
+
+    assert (wait.start, wait.end) == (fx.at(40), fx.at(250))
+    assert lifetime_steps[1].start == fx.at(250)
+    assert _named(second, "queue wait").start == fx.at(250)
+
+
+def test_a_step_span_that_would_run_past_the_next_steps_start_ends_there() -> None:
+    def summary(started: int, ended: int, closed: int) -> Any:
+        return SimpleNamespace(started_at=fx.at(started), ended_at=fx.at(ended), closed_at=fx.at(closed), intervals=())
+
+    extents = _step_extents([summary(10, 50, 90), summary(60, 70, 70)], [])
+
+    assert extents == [(fx.at(10), fx.at(60)), (fx.at(60), fx.at(70))]
+
+
+def test_a_gate_is_a_lifetime_span_of_kind_gate() -> None:
+    facts = fx.make_facts(
+        promotions=(PromotionRecord(fx.at(5)),),
+        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
+        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
+        transitions=(
+            fx.to("g1", "build", 50, 2, decision_id="d1", choice_name="approve"),
+            TransitionRecord(2, fx.at(100), "g1", RESERVED_TERMINAL),
+        ),
+        **fx.runner_epoch(1, 10),
+    )
+
+    gate = next(s for s in assemble_lifetime(facts) if s.attributes.get(attr.STEP_KIND) == "gate")
+
+    gate_key = next(step.key for step in identify_steps(facts) if step.decision_id == "d1")
+
+    assert gate.name == "gate"
+    assert [(link.context, link.attributes[attr.LINK_REASON]) for link in gate.links] == [(step_root(gate_key), "work")]
+    assert gate.end == fx.at(50)
+    assert gate.attributes[attr.WAIT_PICKUP_MS] == 10000
 
 
 def test_step_roots_keep_their_links_and_reasons() -> None:
@@ -113,8 +278,9 @@ def test_step_roots_keep_their_links_and_reasons() -> None:
     assert not roots[0].links
 
 
-def test_the_chunk_span_runs_from_ingest_to_done_with_the_chunks_totals() -> None:
-    chunk, backlog = assemble_chunk(_done())
+def test_the_lifetime_root_runs_from_ingest_to_done_with_the_chunks_totals() -> None:
+    spans = assemble_lifetime(_done())
+    chunk, backlog = spans[0], spans[-1]
 
     assert (chunk.start, chunk.end) == (fx.at(0), fx.at(100))
     assert chunk.attributes[attr.CHUNK_OUTCOME] == "done"
@@ -129,11 +295,11 @@ def test_the_chunk_span_runs_from_ingest_to_done_with_the_chunks_totals() -> Non
     assert backlog.parent_span_id == chunk.context.span_id
 
 
-def test_the_chunk_span_is_derived_not_random() -> None:
-    first, second = assemble_chunk(_done()), assemble_chunk(_done())
+def test_the_lifetime_spans_are_derived_not_random() -> None:
+    first, second = assemble_lifetime(_done()), assemble_lifetime(_done())
 
     assert first == second
-    assert first[1].context == chunk_context("ch_1", ChunkRole.BACKLOG, fx.at(0))
+    assert first[-1].context == lifetime_context("ch_1", ChunkRole.BACKLOG, instant_text(fx.at(0)))
 
 
 def test_a_stopped_chunk_keeps_its_outcome_and_a_later_completion_is_a_marker() -> None:
@@ -144,7 +310,7 @@ def test_a_stopped_chunk_keeps_its_outcome_and_a_later_completion_is_a_marker() 
         **fx.runner_epoch(1, 10),
     )
 
-    chunk = assemble_chunk(facts)[0]
+    chunk = assemble_lifetime(facts)[0]
     (marker,) = assemble_completion(facts)
 
     assert chunk.end == fx.at(40)
@@ -154,6 +320,7 @@ def test_a_stopped_chunk_keeps_its_outcome_and_a_later_completion_is_a_marker() 
     assert marker.parent_span_id == chunk.context.span_id
     assert marker.attributes[attr.CHUNK_OUTCOME] == "done"
     assert marker.context.trace_id == chunk.context.trace_id
+    assert marker.service_name == "blizzard-chunk"
 
 
 def test_a_completion_that_ties_the_stop_decides_the_chunk_and_leaves_no_marker() -> None:
@@ -174,7 +341,7 @@ def test_an_unfinished_chunk_is_refused() -> None:
 
     assert chunk_end(facts) is None
     with pytest.raises(ValueError, match="unfinished"):
-        assemble_chunk(facts)
+        assemble_lifetime(facts)
 
 
 def test_an_escalation_wait_covers_the_gap_to_the_requeue() -> None:
@@ -187,7 +354,7 @@ def test_an_escalation_wait_covers_the_gap_to_the_requeue() -> None:
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
     )
 
-    spans = assemble_chunk(facts)
+    spans = assemble_lifetime(facts)
     wait = _named(spans, "escalation wait")
     second = assemble_step(facts, identify_steps(facts)[1])
 
@@ -204,7 +371,7 @@ def test_an_escalation_still_open_at_the_stop_ends_there() -> None:
         **fx.runner_epoch(1, 10),
     )
 
-    wait = _named(assemble_chunk(facts), "escalation wait")
+    wait = _named(assemble_lifetime(facts), "escalation wait")
 
     assert (wait.start, wait.end) == (fx.at(40), fx.at(70))
 
@@ -222,10 +389,10 @@ def test_a_pause_while_unclaimed_is_a_wait_and_a_pause_inside_a_step_is_not() ->
         **fx.runner_epoch(1, 10),
     )
 
-    waits = [s for s in assemble_chunk(facts) if s.name == "pause wait"]
+    waits = [s for s in assemble_lifetime(facts) if s.name == "pause wait"]
 
     assert [(w.start, w.end) for w in waits] == [(fx.at(7), fx.at(9))]
-    assert waits[0].context == chunk_context("ch_1", ChunkRole.PAUSE, fx.at(7))
+    assert waits[0].context == lifetime_context("ch_1", ChunkRole.PAUSE, instant_text(fx.at(7)))
 
 
 def test_a_pause_a_restart_closes_the_step_under_is_a_wait_from_the_close_to_the_resume() -> None:
@@ -239,11 +406,11 @@ def test_a_pause_a_restart_closes_the_step_under_is_a_wait_from_the_close_to_the
         ),
     )
 
-    waits = [s for s in assemble_chunk(facts) if s.name == "pause wait"]
+    waits = [s for s in assemble_lifetime(facts) if s.name == "pause wait"]
     pause_child = [s for s in assemble_step(facts, identify_steps(facts)[0]) if s.name == "pause"]
 
     assert [(w.start, w.end) for w in waits] == [(fx.at(30), fx.at(50))]
-    assert waits[0].context == chunk_context("ch_1", ChunkRole.PAUSE, fx.at(30))
+    assert waits[0].context == lifetime_context("ch_1", ChunkRole.PAUSE, instant_text(fx.at(30)))
     assert [(p.start, p.end) for p in pause_child] == [(fx.at(20), fx.at(30))]
 
 
@@ -260,10 +427,13 @@ def test_a_pause_while_a_gate_holds_the_route_is_a_wait_only_after_the_gate_clos
         **fx.runner_epoch(1, 10),
     )
 
-    waits = [s for s in assemble_chunk(facts) if s.name == "pause wait"]
+    waits = [s for s in assemble_lifetime(facts) if s.name == "pause wait"]
 
+    gate = next(s for s in assemble_lifetime(facts) if s.attributes.get(attr.STEP_KIND) == "gate")
+
+    assert (gate.start, gate.end) == (fx.at(20), fx.at(500))
     assert [(w.start, w.end) for w in waits] == [(fx.at(500), fx.at(520))]
-    assert waits[0].context == chunk_context("ch_1", ChunkRole.PAUSE, fx.at(500))
+    assert waits[0].context == lifetime_context("ch_1", ChunkRole.PAUSE, instant_text(fx.at(500)))
 
 
 def test_a_pause_inside_the_backlog_leaves_the_backlog_wait_alone() -> None:
@@ -274,7 +444,7 @@ def test_a_pause_inside_the_backlog_leaves_the_backlog_wait_alone() -> None:
         **fx.runner_epoch(1, 35),
     )
 
-    spans = assemble_chunk(facts)
+    spans = assemble_lifetime(facts)
     backlog = _named(spans, "backlog wait")
     waits = [s for s in spans if s.name == "pause wait"]
 
@@ -292,7 +462,7 @@ def test_a_pause_inside_an_escalation_wait_leaves_it_alone() -> None:
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 210)),
     )
 
-    spans = assemble_chunk(facts)
+    spans = assemble_lifetime(facts)
 
     assert (_named(spans, "escalation wait").start, _named(spans, "escalation wait").end) == (fx.at(40), fx.at(200))
     assert not [s for s in spans if s.name == "pause wait"]
@@ -301,7 +471,7 @@ def test_a_pause_inside_an_escalation_wait_leaves_it_alone() -> None:
 def test_a_chunk_never_promoted_rests_in_the_backlog_until_it_ends() -> None:
     facts = fx.make_facts(chunk_stopped=(ChunkStoppedRecord(fx.at(40)),))
 
-    chunk, backlog = assemble_chunk(facts)
+    chunk, backlog = assemble_lifetime(facts)
 
     assert (backlog.start, backlog.end) == (fx.at(0), fx.at(40))
     assert chunk.attributes[attr.CHUNK_BACKLOG_MS] == 40000
@@ -340,19 +510,39 @@ def test_a_chunk_span_is_told_before_a_later_completion_marker_and_neither_is_to
     assert kinds.count(False) == 1
     assert kinds.count(True) == 1
     assert _window(facts, told.position).items == ()
-    # A pass that stopped after the chunk span, before the completion, tells only the marker afterwards.
+    # A pass that stopped after the chunk was told, before the completion, tells only the marker afterwards.
     chunk_key = CursorKey.chunk_finished(fx.at(40), "ch_1")
     later = _window(facts, chunk_key)
     assert [i.completion for i in later.finished_chunks()] == [True]
 
 
 def test_a_replay_and_the_sweep_tell_the_same_ids() -> None:
-    facts = _done()
+    facts = _done(pauses=(PauseRecord("p1", True, fx.at(31)), PauseRecord("p2", False, fx.at(33))))
     swept = assemble_window(_window(facts, CursorKey.opening(fx.at(0))))
     replayed = assemble_window(_window(facts, CursorKey.opening(fx.at(100)), limit=100))
 
-    chunk_ids = {s.context.span_id for s in swept if s.name == "chunk"}
-    assert chunk_ids == {s.context.span_id for s in replayed if s.name == "chunk"} == {chunk_span_id("ch_1")}
+    def ids(spans: list[SpanRecord]) -> set[tuple[int, int, int | None]]:
+        return {(s.context.trace_id, s.context.span_id, s.parent_span_id) for s in spans}
+
+    def whole(spans: tuple[SpanRecord, ...]) -> list[SpanRecord]:
+        """What a finished chunk is told as: its lifetime trace and its work root, not the steps the sweep told earlier."""
+        return [s for s in spans if s.context.trace_id == lifetime_trace_id("ch_1") or s.name == "chunk work"]
+
+    assert ids(whole(swept)) == ids(whole(replayed))
+    assert {s.name for s in swept} >= {"chunk", "chunk work", "build", "backlog wait", "pause wait"}
+    roots = {(s.name, s.context) for s in swept if s.name in ("chunk", "chunk work")}
+    assert {c.span_id for _, c in roots} == {chunk_span_id("ch_1"), lifetime_context("ch_1").span_id}
+    assert {c.trace_id for _, c in roots} == {chunk_trace_id("ch_1"), lifetime_trace_id("ch_1")}
+
+
+def test_a_sweep_tells_both_traces_of_a_chunk_once() -> None:
+    facts = _done()
+    swept = assemble_window(_window(facts, CursorKey.opening(fx.at(0))))
+    contexts = [(s.context.trace_id, s.context.span_id) for s in swept]
+
+    assert len(contexts) == len(set(contexts))
+    assert [s.name for s in swept].count("chunk work") == [s.name for s in swept].count("chunk") == 1
+    assert {s.context.trace_id for s in swept} == {chunk_trace_id("ch_1"), lifetime_trace_id("ch_1")}
 
 
 def test_a_chunk_without_an_ingest_instant_is_not_a_finished_item() -> None:

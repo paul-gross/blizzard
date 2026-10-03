@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 from blizzard.foundation.trace_spans import AttributeValue
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 #: The OpenTelemetry semantic-conventions release the GenAI names below are pinned to.
 GENAI_SEMCONV_VERSION = "1.44.0"

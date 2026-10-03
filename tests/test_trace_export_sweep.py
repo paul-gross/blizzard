@@ -12,7 +12,14 @@ import sqlalchemy as sa
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
-from blizzard.foundation.trace_ids import SpanRole, StepKey, chunk_span_id, span_id
+from blizzard.foundation.trace_ids import (
+    SpanRole,
+    StepKey,
+    chunk_span_id,
+    lifetime_context,
+    lifetime_trace_id,
+    span_id,
+)
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import Sweep
@@ -70,12 +77,12 @@ def _closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:
 
 
 def _roots(exporter: InMemoryTraceExporter) -> list[int]:
-    """The step roots told so far — the chunk span is the trace's own root, so a step root is found by name."""
+    """The step roots told so far — the work root and the lifetime root are the traces' own, so a step root is found by name."""
     return [s.context.span_id for s in exporter.spans if s.name.startswith(("step ", "gate "))]
 
 
-def _chunk_spans(exporter: InMemoryTraceExporter) -> list[int]:
-    return [s.context.span_id for s in exporter.spans if s.name == "chunk"]
+def _chunk_spans(exporter: InMemoryTraceExporter, name: str) -> list[int]:
+    return [s.context.span_id for s in exporter.spans if s.name == name]
 
 
 def _root(chunk_id: str) -> int:
@@ -135,16 +142,18 @@ def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_accepta
         _sweep(hub).sweep()
 
     # One item a batch, in cursor order, each batch's cursor row written after it was accepted.
-    assert [len({s.context.trace_id for s in batch}) for batch in exporter.batches] == [1, 1, 1]
+    assert [len({s.context.trace_id for s in batch}) for batch in exporter.batches] == [
+        2 if k.epoch == -1 else 1 for k in keys
+    ]
     assert _roots(exporter) == [_root(k.chunk_id) for k in keys if k.epoch == 1]
-    assert len(_chunk_spans(exporter)) == 1
+    assert len(_chunk_spans(exporter, "chunk")) == len(_chunk_spans(exporter, "chunk work")) == 1
     newest = _store(hub).newest_cursor()
     assert newest is not None
     assert newest.position == keys[-1]
     assert newest.span_count == len(exporter.batches[2])
 
 
-def test_each_chunk_span_is_told_exactly_once_however_often_the_sweep_runs(tmp_path: Path) -> None:
+def test_each_chunk_is_told_in_both_traces_exactly_once_however_often_the_sweep_runs(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
     _sweep(hub).sweep()
     _moved, stopped = _closed_pair(hub)
@@ -153,7 +162,11 @@ def test_each_chunk_span_is_told_exactly_once_however_often_the_sweep_runs(tmp_p
         _sweep(hub).sweep()
         hub.clock.advance(timedelta(seconds=61))
 
-    assert _chunk_spans(exporter) == [chunk_span_id(stopped)]
+    assert _chunk_spans(exporter, "chunk work") == [chunk_span_id(stopped)]
+    assert _chunk_spans(exporter, "chunk") == [lifetime_context(stopped).span_id]
+    assert {s.service_name for s in exporter.spans if s.context.trace_id == lifetime_trace_id(stopped)} == {
+        "blizzard-chunk"
+    }
     assert len(_roots(exporter)) == 2
     assert {s.parent_span_id for s in exporter.spans if s.name.startswith("step ")} == {
         chunk_span_id(stopped),

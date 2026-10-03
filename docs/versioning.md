@@ -26,16 +26,19 @@ Mark a breaking commit with a `!` before the colon of its Conventional Commit su
 
 ## The trace contract
 
-[`contracts/traces/`](../contracts/traces/README.md) pins the shape of a chunk's trace — the chunk span, its step roots
-and the runner leases under them: `dictionary.json` is the authored contract, and `golden/` is the spans the hub and a
-runner assemble for seeded scenarios. `blizzard:trace-contract` fails when the assembled spans drift from either, so a
-shape change is always a deliberate edit to the dictionary.
+[`contracts/traces/`](../contracts/traces/README.md) pins the shape of a chunk's traces — the work root, its step roots
+and the runner leases under them, and the lifetime trace: `dictionary.json` is the authored contract, and `golden/` is
+the spans the hub and a runner assemble for seeded scenarios. `blizzard:trace-contract` fails when the assembled spans
+drift from either, so a shape change is always a deliberate edit to the dictionary.
 
 A rename is not a single release: the release that introduces the new name emits both, for at least one minor, with the
-old name marked deprecated in `dictionary.json`. Removing the old name afterwards is the breaking change. Every breaking
+old name marked deprecated in `dictionary.json`. Removing the old name afterwards is the breaking change. The exception
+is a breaking schema raise whose new shape cannot carry both names, such as one that moves a name to a different span:
+it may rename or reassign a span name with no deprecation period, and its upgrade note names the change. Every breaking
 trace change raises `blizzard.trace.schema_version` and the instrumentation scope version together, so a backend can
 tell shapes apart without reading the release notes. [`docs/deployment/tracing.md`](./deployment/tracing.md) describes
-the shape for operators. A raised schema version comes with an upgrade note; schema 2's is
+the shape for operators. A raised schema version comes with an upgrade note; schema 3's is
+[Upgrading from trace schema 2](./deployment/tracing.md#upgrading-from-trace-schema-2), and schema 2's is
 [Upgrading from trace schema 1](./deployment/tracing.md#upgrading-from-trace-schema-1).
 
 ## The egress contract

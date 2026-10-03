@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import Event, ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExportResult
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
@@ -38,11 +38,21 @@ class OtlpTraceExporter:
 
     def __init__(self, *, resource: Mapping[str, str], scope: str, scope_version: str) -> None:
         self._resource = Resource.create(dict(resource))
+        self._named: dict[str, Resource] = {}
         self._scope = InstrumentationScope(scope, scope_version)
         self._exporter = OTLPSpanExporter()
 
     def export(self, spans: Sequence[SpanRecord]) -> bool:
         return self._exporter.export([self._readable(span) for span in spans]) is SpanExportResult.SUCCESS
+
+    def _resource_of(self, span: SpanRecord) -> Resource:
+        if span.service_name is None:
+            return self._resource
+        if span.service_name not in self._named:
+            self._named[span.service_name] = Resource.create(
+                {**self._resource.attributes, SERVICE_NAME: span.service_name}
+            )
+        return self._named[span.service_name]
 
     def _readable(self, span: SpanRecord) -> ReadableSpan:
         context = span_context(span.context)
@@ -55,7 +65,7 @@ class OtlpTraceExporter:
             name=span.name,
             context=context,
             parent=parent,
-            resource=self._resource,
+            resource=self._resource_of(span),
             attributes=_attributes(span.attributes),
             events=[Event(e.name, _attributes(e.attributes), _nanos(e.time)) for e in span.events],
             links=[Link(span_context(link.context), _attributes(link.attributes)) for link in span.links],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pytest
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, lifetime_context
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
 from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.otlp_sink import OtlpSink, otlp_sink
@@ -122,6 +123,33 @@ def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpS
     steps = [s for s in spans if s.name.startswith("step ")]
     expected = {DerivedContext.of(StepKey.attempt(c, 1), SpanRole.STEP).span_id for c in (moved, stopped)}
     assert {int.from_bytes(s.span_id, "big") for s in steps} == expected
-    [chunk] = [s for s in spans if s.parent_span_id == b""]
-    assert (chunk.name, int.from_bytes(chunk.span_id, "big")) == ("chunk", chunk_span_id(stopped))
+    [work] = [s for s in spans if s.name == "chunk work"]
+    assert (work.parent_span_id, int.from_bytes(work.span_id, "big")) == (b"", chunk_span_id(stopped))
+    [lifetime] = [s for s in spans if s.name == "chunk"]
+    assert lifetime.span_id == lifetime_context(stopped).span_id.to_bytes(8, "big")
     assert {s.parent_span_id for s in steps} == {chunk_span_id(c).to_bytes(8, "big") for c in (moved, stopped)}
+    services = {
+        a.value.string_value for rs in sink.resource_spans() for a in rs.resource.attributes if a.key == "service.name"
+    }
+    assert services == {"blizzard-hub", "blizzard-chunk"}
+
+
+def test_a_span_naming_a_service_leaves_under_a_resource_of_its_own(sink: OtlpSink) -> None:
+    root, child = _records()
+    lifetime = replace(child, service_name="blizzard-chunk")
+
+    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export([root, lifetime]) is True
+
+    by_service = {
+        {a.key: a.value.string_value for a in rs.resource.attributes}["service.name"]: rs
+        for rs in sink.resource_spans()
+    }
+    assert set(by_service) == {"blizzard-hub", "blizzard-chunk"}
+    named = {a.key: a.value.string_value for a in by_service["blizzard-chunk"].resource.attributes}
+    assert {k: named[k] for k in _RESOURCE if k != "service.name"} == {
+        k: v for k, v in _RESOURCE.items() if k != "service.name"
+    }
+    for resource_spans in by_service.values():
+        [scope_spans] = resource_spans.scope_spans
+        assert (scope_spans.scope.name, scope_spans.scope.version) == tuple(_SCOPE.values())
+    assert [s.name for s in by_service["blizzard-chunk"].scope_spans[0].spans] == ["queue"]

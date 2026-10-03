@@ -35,7 +35,7 @@ class EventRecord:
 
 @dataclass(frozen=True)
 class LinkRecord:
-    """A link to the previous step's root; ``context`` is derived, never looked up."""
+    """A link to another span's root; ``context`` is derived, never looked up."""
 
     context: DerivedContext
     attributes: Attributes = field(default_factory=dict)
@@ -54,3 +54,5 @@ class SpanRecord:
     status: SpanStatus = SpanStatus.UNSET
     events: tuple[EventRecord, ...] = ()
     links: tuple[LinkRecord, ...] = ()
+    #: Replaces the exporter's resource ``service.name`` for this span alone.
+    service_name: str | None = None

@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.facts import StepFacts
+from blizzard.hub.domain.tracing.facts import (
+    EscalationRecord,
+    PromotionRecord,
+    RestartRecord,
+    RouteCreatedRecord,
+    StepFacts,
+    TransitionRecord,
+)
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.tracing.summary import IntervalKind, StepSummary, summarize_step
 from tests import trace_fixtures as fx
@@ -104,3 +112,17 @@ def test_an_open_step_is_refused() -> None:
     facts = fx.make_facts(**fx.runner_epoch(1, 10))
     with pytest.raises(ValueError, match="open"):
         summarize_step(facts, identify_steps(facts)[0])
+
+
+def test_a_step_released_by_a_restart_queues_from_the_restart_not_from_before_the_escalation() -> None:
+    facts = fx.make_facts(
+        promotions=(PromotionRecord(fx.at(5)),),
+        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
+        escalations=(EscalationRecord(1, fx.at(40)),),
+        restarts=(RestartRecord(2, fx.at(250), "g1", "g1-build"),),
+        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
+    )
+    second = _closed(facts)[1]
+    queue = next(i for i in second.intervals if i.kind is IntervalKind.QUEUE)
+    assert (queue.start, queue.end) == (fx.at(250), fx.at(300))
