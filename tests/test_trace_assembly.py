@@ -519,7 +519,7 @@ def test_planted_content_never_leaves_and_every_key_is_declared() -> None:
 
 def test_resource_defaults_the_service_name_only_when_no_variable_names_one() -> None:
     base = attr.resource_attributes({}, "1.2.3")
-    assert base == {"service.name": "blizzard-hub", "service.version": "1.2.3", "blizzard.trace.schema_version": "2"}
+    assert base == {"service.name": "blizzard-hub", "service.version": "1.2.3", "blizzard.trace.schema_version": "3"}
     assert attr.resource_attributes({"OTEL_SERVICE_NAME": "mine"}, "v")["service.name"] == "mine"
     named = {"OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=prod,service.name=other"}
     assert attr.resource_attributes(named, "v")["service.name"] == "other"

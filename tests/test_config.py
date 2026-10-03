@@ -2013,10 +2013,11 @@ def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_reserved_service_names_cover_each_daemons_own_name() -> None:
     from blizzard.foundation.trace_export.config import RESERVED_SERVICE_NAMES
+    from blizzard.hub.domain.tracing.attributes import CHUNK_SERVICE_NAME as CHUNK
     from blizzard.hub.domain.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
     from blizzard.runner.domain.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
 
-    assert {HUB, RUNNER} <= RESERVED_SERVICE_NAMES
+    assert {HUB, RUNNER, CHUNK} <= RESERVED_SERVICE_NAMES
 
 
 @pytest.mark.unit

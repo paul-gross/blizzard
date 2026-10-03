@@ -5447,7 +5447,7 @@ export type TraceReplayRequest = {
 /**
  * TraceReplayResponse
  *
- * What a replay told, or with ``dry_run`` would have told; ``chunks`` counts chunk spans and markers.
+ * What a replay told, or with ``dry_run`` would have told; ``chunks`` counts finished chunks and markers.
  */
 export type TraceReplayResponse = {
     /**

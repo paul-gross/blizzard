@@ -21,7 +21,7 @@ from blizzard.hub.domain.tracing.facts import (
     TransitionRecord,
 )
 from blizzard.hub.domain.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome, identify_steps
-from blizzard.hub.domain.work import UsageFact, UsageTotal
+from blizzard.hub.domain.work import MigrationSource, UsageFact, UsageTotal
 
 _HUMAN = "human"
 
@@ -194,6 +194,8 @@ def _claimable_at(facts: StepFacts, before: datetime) -> datetime:
     instants += [r.requeued_at for r in facts.requeues]
     instants += [p.set_at for p in facts.pauses if not p.paused]
     instants += [m.met_at for m in facts.prerequisites_met]
+    instants += [r.recorded_at for r in facts.restarts]
+    instants += [m.recorded_at for m in facts.migrations if m.source is MigrationSource.RESTART]
     eligible = [at for at in instants if at <= before]
     return max(eligible, default=before)
 

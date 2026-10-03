@@ -5,6 +5,8 @@
       "name": "blizzard.chunk.id",
       "on": [
         "chunk",
+        "chunk/lifetime",
+        "chunk/step",
         "chunk/completed",
         "chunk/backlog-wait",
         "chunk/escalation-wait",
@@ -32,6 +34,8 @@
       "name": "blizzard.chunk.work_refs",
       "on": [
         "chunk",
+        "chunk/lifetime",
+        "chunk/step",
         "chunk/completed",
         "chunk/backlog-wait",
         "chunk/escalation-wait",
@@ -66,6 +70,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -96,6 +101,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -118,6 +124,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -140,6 +147,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -162,6 +170,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -184,6 +193,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -205,7 +215,8 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -221,7 +232,8 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": false,
       "type": "string"
@@ -237,7 +249,8 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": true,
       "type": "string"
@@ -253,7 +266,8 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": true,
       "type": "string"
@@ -269,9 +283,19 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "Whether the step was a `step` or a `gate`.",
+      "name": "blizzard.step.kind",
+      "on": [
+        "chunk/step"
+      ],
+      "optional": false,
       "type": "string"
     },
     {
@@ -286,6 +310,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "runner/worker",
         "runner/invocation",
         "runner/ask-park",
@@ -308,6 +333,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "event:invocation",
         "runner/worker",
         "runner/invocation"
@@ -337,7 +363,8 @@
         "ask",
         "pause",
         "pickup",
-        "hub-exec"
+        "hub-exec",
+        "chunk/step"
       ],
       "optional": true,
       "type": "string[]"
@@ -354,6 +381,7 @@
         "pause",
         "pickup",
         "hub-exec",
+        "chunk/step",
         "event:bounce"
       ],
       "optional": true,
@@ -378,7 +406,7 @@
       "type": "bool"
     },
     {
-      "meaning": "Why this trace follows the one it links to: `next`, `retry`, `bounce`, `restart` or `migration`.",
+      "meaning": "Why a span links to the one it names: `next`, `retry`, `bounce`, `restart` or `migration` for the step before; `work` for the step root a lifetime span summarizes; `lifetime` for the lifetime trace's root.",
       "name": "blizzard.link.reason",
       "on": [
         "link"
@@ -391,7 +419,8 @@
       "name": "blizzard.step.input_tokens",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -401,7 +430,8 @@
       "name": "blizzard.step.output_tokens",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -411,7 +441,8 @@
       "name": "blizzard.step.cache_read_tokens",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -421,7 +452,8 @@
       "name": "blizzard.step.cache_create_tokens",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -431,7 +463,8 @@
       "name": "blizzard.step.cost.usd",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "double"
@@ -441,7 +474,8 @@
       "name": "blizzard.step.cost.estimated",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "bool"
@@ -451,7 +485,8 @@
       "name": "blizzard.step.cost.partial",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "bool"
@@ -461,7 +496,8 @@
       "name": "blizzard.step.wait.queue_ms",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -471,7 +507,8 @@
       "name": "blizzard.step.wait.claim_ms",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -481,7 +518,8 @@
       "name": "blizzard.step.wait.ask_ms",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -491,7 +529,8 @@
       "name": "blizzard.step.wait.pause_ms",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -501,7 +540,8 @@
       "name": "blizzard.step.wait.pickup_ms",
       "on": [
         "step",
-        "gate"
+        "gate",
+        "chunk/step"
       ],
       "optional": false,
       "type": "int"
@@ -511,25 +551,26 @@
       "name": "blizzard.chunk.outcome",
       "on": [
         "chunk",
+        "chunk/lifetime",
         "chunk/completed"
       ],
       "optional": false,
       "type": "string"
     },
     {
-      "meaning": "Milliseconds the chunk rested `not_ready` before its first promotion.",
+      "meaning": "Milliseconds the chunk rested `not_ready` before it left the backlog.",
       "name": "blizzard.chunk.backlog_ms",
       "on": [
-        "chunk"
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
     },
     {
-      "meaning": "Milliseconds from the chunk's first promotion to its finish.",
+      "meaning": "Milliseconds from when the chunk left the backlog to its finish.",
       "name": "blizzard.chunk.active_ms",
       "on": [
-        "chunk"
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -538,7 +579,8 @@
       "meaning": "How many steps the chunk took, gates included.",
       "name": "blizzard.chunk.steps",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -547,7 +589,8 @@
       "meaning": "How many times the chunk was bounced back.",
       "name": "blizzard.chunk.bounces",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -556,7 +599,8 @@
       "meaning": "Input tokens the chunk's invocations used, not counting cache.",
       "name": "blizzard.chunk.input_tokens",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -565,7 +609,8 @@
       "meaning": "Output tokens the chunk's invocations produced.",
       "name": "blizzard.chunk.output_tokens",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -574,7 +619,8 @@
       "meaning": "Input tokens the chunk's invocations read from the cache.",
       "name": "blizzard.chunk.cache_read_tokens",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -583,7 +629,8 @@
       "meaning": "Input tokens the chunk's invocations wrote to the cache.",
       "name": "blizzard.chunk.cache_create_tokens",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "int"
@@ -592,7 +639,8 @@
       "meaning": "The chunk's cost in US dollars, including any estimate.",
       "name": "blizzard.chunk.cost.usd",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "double"
@@ -601,7 +649,8 @@
       "meaning": "Whether part of the cost is a subscription estimate rather than a billed amount.",
       "name": "blizzard.chunk.cost.estimated",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "bool"
@@ -610,7 +659,8 @@
       "meaning": "Whether some invocation reported no cost, so the total is a floor.",
       "name": "blizzard.chunk.cost.partial",
       "on": [
-        "chunk"
+        "chunk",
+        "chunk/lifetime"
       ],
       "optional": false,
       "type": "bool"
@@ -946,44 +996,14 @@
   "ids": {
     "chunk_span": {
       "bytes": 8,
-      "instant": "The instant the span begins as UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`; empty for the chunk span itself.",
       "prefix": "blizzard-chunk-span/v2/",
-      "text": "<prefix><chunk_id>/<role>/<instant>"
+      "text": "<prefix><chunk_id>/chunk/"
     },
     "chunk_vectors": [
       {
         "chunk_id": "ch_1",
-        "instant": "",
         "role": "chunk",
         "span_id": "3df6797481a5fac6",
-        "trace_id": "1b74f66284990c6da69e0005db74f243"
-      },
-      {
-        "chunk_id": "ch_1",
-        "instant": "2026-01-01T00:00:30.000000Z",
-        "role": "chunk/completed",
-        "span_id": "434f93a251a84691",
-        "trace_id": "1b74f66284990c6da69e0005db74f243"
-      },
-      {
-        "chunk_id": "ch_1",
-        "instant": "2026-01-01T00:00:00.000000Z",
-        "role": "chunk/backlog-wait",
-        "span_id": "056e7c311fd68bd8",
-        "trace_id": "1b74f66284990c6da69e0005db74f243"
-      },
-      {
-        "chunk_id": "ch_1",
-        "instant": "2026-01-01T00:00:30.000000Z",
-        "role": "chunk/escalation-wait",
-        "span_id": "2153247cfe211539",
-        "trace_id": "1b74f66284990c6da69e0005db74f243"
-      },
-      {
-        "chunk_id": "ch_1",
-        "instant": "2026-01-01T00:00:30.000000Z",
-        "role": "chunk/pause-wait",
-        "span_id": "78553aae747499b3",
         "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
@@ -994,7 +1014,69 @@
       "attempt": "<chunk_id>/<epoch>",
       "gate": "<chunk_id>/<epoch>/gate/<decision_id>"
     },
-    "parents": "Every step and gate root, and every chunk wait and marker, has the chunk span as its parent; the chunk span is a trace root. A runner worker span's parent is its attempt's step root.",
+    "lifetime_span": {
+      "bytes": 8,
+      "discriminator": "Empty for the root; the step key for a step span; the instant the span begins as UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ` for a wait or the marker.",
+      "prefix": "blizzard-lifetime-span/v1/",
+      "text": "<prefix><chunk_id>/<role>/<discriminator>"
+    },
+    "lifetime_trace": {
+      "bytes": 16,
+      "prefix": "blizzard-lifetime-trace/v1/",
+      "text": "<prefix><chunk_id>"
+    },
+    "lifetime_vectors": [
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "",
+        "role": "chunk/lifetime",
+        "span_id": "2217fceaa579bb76",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "ch_1/1",
+        "role": "chunk/step",
+        "span_id": "7d416546e1cca91d",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "ch_1/1/gate/d1",
+        "role": "chunk/step",
+        "span_id": "099c8af7d515c475",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/completed",
+        "span_id": "0a3717d77462cf2e",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "2026-01-01T00:00:00.000000Z",
+        "role": "chunk/backlog-wait",
+        "span_id": "26a12aeecc15964e",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/escalation-wait",
+        "span_id": "d6122e7fe49243fa",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/pause-wait",
+        "span_id": "2d6800ea482e659f",
+        "trace_id": "f09d101be501667a643be80a461de251"
+      }
+    ],
+    "parents": "Every step and gate root has the work root as its parent; the work root is its trace's root. Every lifetime step span, wait and marker has the lifetime root as its parent; the lifetime root is its trace's root. A runner worker span's parent is its attempt's step root.",
     "span": {
       "bytes": 8,
       "prefix": "blizzard-span/v1/",
@@ -1054,11 +1136,11 @@
   "instrumentation_scopes": [
     {
       "name": "blizzard.hub.fleet_spans",
-      "version": "2"
+      "version": "3"
     },
     {
       "name": "blizzard.runner.runner_spans",
-      "version": "2"
+      "version": "3"
     }
   ],
   "link_reasons": [
@@ -1081,6 +1163,14 @@
     {
       "meaning": "The chunk moved to another graph between the two steps.",
       "name": "migration"
+    },
+    {
+      "meaning": "A lifetime step span summarizes the step root it links to in the work trace.",
+      "name": "work"
+    },
+    {
+      "meaning": "The work root links to the root of the chunk's lifetime trace.",
+      "name": "lifetime"
     }
   ],
   "platform": {
@@ -1180,7 +1270,7 @@
   },
   "resource_attributes": [
     {
-      "meaning": "The service name; `blizzard-hub` or `blizzard-runner` (`blizzard-cli` for an operator command) unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
+      "meaning": "The service name; `blizzard-hub` or `blizzard-runner` (`blizzard-cli` for an operator command) unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one. The hub's lifetime spans always read `blizzard-chunk`.",
       "name": "service.name",
       "type": "string"
     },
@@ -1195,16 +1285,16 @@
       "type": "string"
     }
   ],
-  "schema_version": "2",
+  "schema_version": "3",
   "spans": [
     {
-      "meaning": "One runner or hub attempt at a node, the root of a step, under the chunk span.",
+      "meaning": "One runner or hub attempt at a node, the root of a step, under the work root.",
       "name": "step <node>",
       "role": "step",
       "scope": "blizzard.hub.fleet_spans"
     },
     {
-      "meaning": "One human decision at a node, the root of a step, under the chunk span.",
+      "meaning": "One human decision at a node, the root of a step, under the work root.",
       "name": "gate <node>",
       "role": "gate",
       "scope": "blizzard.hub.fleet_spans"
@@ -1246,34 +1336,52 @@
       "scope": "blizzard.hub.fleet_spans"
     },
     {
-      "meaning": "The chunk from ingest to its first terminal fact, `done` or `stopped`, the root of its trace. Told once, when it finishes.",
-      "name": "chunk",
+      "meaning": "The chunk's work, from its first step's start to its first terminal fact, `done` or `stopped`, the root of its work trace. Told once, when the chunk finishes.",
+      "name": "chunk work",
       "role": "chunk",
       "scope": "blizzard.hub.fleet_spans"
     },
     {
-      "meaning": "A stopped chunk hand-completed, a zero-length span at the completion under the chunk span.",
+      "meaning": "The chunk from ingest to its first terminal fact, `done` or `stopped`, the root of its lifetime trace. Told once, when it finishes.",
+      "name": "chunk",
+      "role": "chunk/lifetime",
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
+    },
+    {
+      "meaning": "One step or gate of the chunk, named for its node, under the lifetime root; links to the step's root in the work trace. It runs from the start of the step's queue wait and claim, else its start, but never before the end of the previous step span or of a backlog or escalation wait that ended by its start, and never after its own start, to the later of its end and its close, so a gate's decision pickup is inside it; step spans never overlap, and it carries the step's wait totals. The work root keeps the role `chunk` for its unchanged span id; the lifetime spans are `chunk/*`.",
+      "name": "<node>",
+      "role": "chunk/step",
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
+    },
+    {
+      "meaning": "A stopped chunk hand-completed, a zero-length span at the completion under the lifetime root.",
       "name": "chunk completed",
       "role": "chunk/completed",
-      "scope": "blizzard.hub.fleet_spans"
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
     },
     {
-      "meaning": "The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish.",
+      "meaning": "The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish, less what a step span covers.",
       "name": "backlog wait",
       "role": "chunk/backlog-wait",
-      "scope": "blizzard.hub.fleet_spans"
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
     },
     {
-      "meaning": "The chunk parked `needs_human`, from the escalation to the requeue, restart, migration restart or lease mint that released it.",
+      "meaning": "The chunk parked `needs_human`, from the escalation to the requeue, restart, migration restart or lease mint that released it, less what a step span covers.",
       "name": "escalation wait",
       "role": "chunk/escalation-wait",
-      "scope": "blizzard.hub.fleet_spans"
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
     },
     {
-      "meaning": "The chunk paused while no step and no other chunk wait covered it, from the pause (or the close of the step it began in) to the resume.",
+      "meaning": "The chunk paused while no step span and no other chunk wait covered it, from the pause (or the end of the step span it began in) to the resume.",
       "name": "pause wait",
       "role": "chunk/pause-wait",
-      "scope": "blizzard.hub.fleet_spans"
+      "scope": "blizzard.hub.fleet_spans",
+      "service": "blizzard-chunk"
     },
     {
       "meaning": "One runner lease, from its minting to its close, parented to the hub's step root.",

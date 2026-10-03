@@ -8571,7 +8571,7 @@
         "type": "object"
       },
       "TraceReplayResponse": {
-        "description": "What a replay told, or with ``dry_run`` would have told; ``chunks`` counts chunk spans and markers.",
+        "description": "What a replay told, or with ``dry_run`` would have told; ``chunks`` counts finished chunks and markers.",
         "properties": {
           "batches": {
             "title": "Batches",

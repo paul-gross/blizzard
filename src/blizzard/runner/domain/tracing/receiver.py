@@ -1,8 +1,9 @@
 """The admission policy for spans a worker sends the runner — what is kept, and what it says once kept.
 
-Contract: ``docs/deployment/tracing.md`` §Worker spans. A span is kept only inside the presenting lease's chunk
-trace and the allowed scope, rebuilt to carry allowlisted attributes plus who sent it. The chunk span's id, a step
-root's and a parent of the chunk span are refused; gate, wait and marker ids cannot be derived. Pure."""
+Contract: ``docs/deployment/tracing.md`` §Worker spans. A span is kept only inside the presenting lease's work trace
+and the allowed scope, rebuilt to carry allowlisted attributes plus who sent it. The work root's id, a step root's
+and its queue and claim spans', and a parent of the work root are refused; ids built from a decision, question,
+pause or slot id (gate roots, ask, pause, hub-exec, pickup spans) cannot be derived here. Pure."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, LEASE_ID
 from blizzard.foundation.platform_tracing.received import ReceivedSpan, Scalar
-from blizzard.foundation.trace_ids import StepKey, chunk_span_id, chunk_trace_id, step_root
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 
 __all__ = [
@@ -60,7 +61,11 @@ def lease_trace_id(lease: LeaseRecord) -> int:
 def admit(spans: list[ReceivedSpan], lease: LeaseRecord, allowlist: Allowlist) -> Admission:
     expected = lease_trace_id(lease)
     chunk_span = chunk_span_id(lease.chunk_id)
-    reserved = {chunk_span, *(step_root(StepKey.attempt(lease.chunk_id, e)).span_id for e in range(lease.epoch + 1))}
+    keys = [StepKey.attempt(lease.chunk_id, e) for e in range(lease.epoch + 1)]
+    reserved = {chunk_span}
+    for key in keys:
+        reserved.add(step_root(key).span_id)
+        reserved.update(DerivedContext.of(key, role).span_id for role in (SpanRole.QUEUE, SpanRole.CLAIM))
     kept = [
         _rebuilt(span, lease, allowlist)
         for span in spans

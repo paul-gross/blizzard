@@ -1,9 +1,9 @@
-"""Derived trace and span ids for a chunk's trace — the cross-daemon id contract.
+"""Derived trace and span ids for a chunk's work and lifetime traces — the cross-daemon id contract.
 
 Ids are derived, never random, so a replay, a later slice and an inline span made elsewhere land in
 the same trace without anything crossing the wire. Contract:
-``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Identity. The ``v1`` prefixes are the
-contract version; changing the derivation is breaking."""
+``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Identity. The version segment of each
+prefix is its contract version; changing the derivation is breaking."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ SAMPLED = 0x01
 _TRACE_PREFIX = "blizzard-trace/v2/"
 _SPAN_PREFIX = "blizzard-span/v1/"
 _CHUNK_SPAN_PREFIX = "blizzard-chunk-span/v2/"
+_LIFETIME_TRACE_PREFIX = "blizzard-lifetime-trace/v1/"
+_LIFETIME_SPAN_PREFIX = "blizzard-lifetime-span/v1/"
 _TRACE_BYTES = 16
 _SPAN_BYTES = 8
 
@@ -49,9 +51,11 @@ class RunnerSpanRole(StrEnum):
 
 
 class ChunkRole(StrEnum):
-    """A chunk-level span's role: the chunk span, its completion marker, and the waits no step owns."""
+    """A chunk-level span's role: the work trace's root, and the spans of the lifetime trace."""
 
-    CHUNK = "chunk"
+    WORK = "chunk"
+    LIFETIME = "chunk/lifetime"
+    STEP = "chunk/step"
     COMPLETED = "chunk/completed"
     BACKLOG = "chunk/backlog-wait"
     ESCALATION = "chunk/escalation-wait"
@@ -107,16 +111,34 @@ def instant_text(at: datetime) -> str:
     return at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def chunk_span_id(chunk_id: str, role: ChunkRole = ChunkRole.CHUNK, at: datetime | None = None) -> int:
-    """A chunk-level span's 64-bit id — the first 8 bytes of
-    ``SHA-256("blizzard-chunk-span/v2/" + chunk id + "/" + role + "/" + instant)``; the chunk span has no instant."""
-    text = f"{_CHUNK_SPAN_PREFIX}{chunk_id}/{role.value}/{instant_text(at) if at is not None else ''}"
-    digest = hashlib.sha256(text.encode("utf-8")).digest()[:_SPAN_BYTES]
+def chunk_span_id(chunk_id: str) -> int:
+    """The work root's id — the first 8 bytes of ``SHA-256("blizzard-chunk-span/v2/" + chunk id + "/chunk/")``."""
+    digest = hashlib.sha256(f"{_CHUNK_SPAN_PREFIX}{chunk_id}/{ChunkRole.WORK.value}/".encode()).digest()[:_SPAN_BYTES]
     return int.from_bytes(nonzero(digest), "big")
 
 
-def chunk_context(chunk_id: str, role: ChunkRole = ChunkRole.CHUNK, at: datetime | None = None) -> DerivedContext:
-    return DerivedContext(chunk_trace_id(chunk_id), chunk_span_id(chunk_id, role, at))
+def chunk_context(chunk_id: str) -> DerivedContext:
+    return DerivedContext(chunk_trace_id(chunk_id), chunk_span_id(chunk_id))
+
+
+def lifetime_trace_id(chunk_id: str) -> int:
+    """The chunk's lifetime trace id — the first 16 bytes of ``SHA-256("blizzard-lifetime-trace/v1/" + chunk id)``."""
+    digest = hashlib.sha256((_LIFETIME_TRACE_PREFIX + chunk_id).encode("utf-8")).digest()[:_TRACE_BYTES]
+    return int.from_bytes(nonzero(digest), "big")
+
+
+def lifetime_span_id(chunk_id: str, role: ChunkRole, discriminator: str = "") -> int:
+    """A lifetime span's 64-bit id — the first 8 bytes of
+    ``SHA-256("blizzard-lifetime-span/v1/" + chunk id + "/" + role + "/" + discriminator)``.
+
+    The discriminator is the step key for a step span, the span's start instant for a wait or the marker, and
+    empty for the root."""
+    digest = hashlib.sha256(f"{_LIFETIME_SPAN_PREFIX}{chunk_id}/{role.value}/{discriminator}".encode()).digest()
+    return int.from_bytes(nonzero(digest[:_SPAN_BYTES]), "big")
+
+
+def lifetime_context(chunk_id: str, role: ChunkRole = ChunkRole.LIFETIME, discriminator: str = "") -> DerivedContext:
+    return DerivedContext(lifetime_trace_id(chunk_id), lifetime_span_id(chunk_id, role, discriminator))
 
 
 def span_id(key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = "") -> int:

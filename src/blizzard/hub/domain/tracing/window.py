@@ -12,7 +12,13 @@ from datetime import datetime
 
 from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import assemble_chunk, assemble_completion, chunk_end, completion_instant
+from blizzard.hub.domain.tracing.chunk_spans import (
+    assemble_completion,
+    assemble_lifetime,
+    assemble_work,
+    chunk_end,
+    completion_instant,
+)
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
@@ -110,7 +116,11 @@ def assemble_window(window: TraceWindow) -> tuple[SpanRecord, ...]:
 def _assemble(item: TraceItem) -> tuple[SpanRecord, ...]:
     if isinstance(item, ClosedStep):
         return assemble_step(item.facts, item.step)
-    return assemble_completion(item.facts) if item.completion else assemble_chunk(item.facts)
+    return (
+        assemble_completion(item.facts)
+        if item.completion
+        else (*assemble_work(item.facts), *assemble_lifetime(item.facts))
+    )
 
 
 def oldest_unsent(reads: IReadTraceSteps, since: CursorKey, until: datetime) -> TraceItem | None:

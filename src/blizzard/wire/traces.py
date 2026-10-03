@@ -47,7 +47,7 @@ class TraceReplayRequest(BaseModel):
 
 
 class TraceReplayResponse(BaseModel):
-    """What a replay told, or with ``dry_run`` would have told; ``chunks`` counts chunk spans and markers."""
+    """What a replay told, or with ``dry_run`` would have told; ``chunks`` counts finished chunks and markers."""
 
     steps: int
     spans: int

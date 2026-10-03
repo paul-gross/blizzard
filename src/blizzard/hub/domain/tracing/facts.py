@@ -188,7 +188,7 @@ class StepFacts:
     chunk_id: str
     graphs: dict[str, Graph] = field(default_factory=dict)
     pin_graph_id: str | None = None
-    #: The ingest instant, where the chunk span starts.
+    #: The ingest instant, where the lifetime root starts.
     minted_at: datetime | None = None
     lease_facts: tuple[LeaseRecord, ...] = ()
     epoch_owners: tuple[EpochOwnerRecord, ...] = ()

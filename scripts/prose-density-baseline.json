@@ -1640,7 +1640,7 @@
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 67
+   "total": 77
   },
   "blizzard/foundation/trace_export/settings.py": {
    "comments": 3,
@@ -1650,15 +1650,15 @@
   },
   "blizzard/foundation/trace_ids.py": {
    "comments": 1,
-   "docstrings": 33,
+   "docstrings": 38,
    "over_cap": 0,
-   "total": 187
+   "total": 209
   },
   "blizzard/foundation/trace_spans.py": {
-   "comments": 1,
+   "comments": 2,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 56
+   "total": 58
   },
   "blizzard/foundation/web.py": {
    "comments": 0,
@@ -2882,19 +2882,19 @@
    "comments": 0,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 191
+   "total": 200
   },
   "blizzard/hub/domain/tracing/attributes.py": {
-   "comments": 7,
+   "comments": 8,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 84
+   "total": 87
   },
   "blizzard/hub/domain/tracing/chunk_spans.py": {
    "comments": 0,
-   "docstrings": 13,
+   "docstrings": 20,
    "over_cap": 0,
-   "total": 216
+   "total": 310
   },
   "blizzard/hub/domain/tracing/cursor.py": {
    "comments": 0,
@@ -2948,7 +2948,7 @@
    "comments": 2,
    "docstrings": 16,
    "over_cap": 0,
-   "total": 323
+   "total": 325
   },
   "blizzard/hub/domain/tracing/sweep.py": {
    "comments": 5,
@@ -2960,7 +2960,7 @@
    "comments": 0,
    "docstrings": 16,
    "over_cap": 0,
-   "total": 125
+   "total": 135
   },
   "blizzard/hub/domain/transcripts.py": {
    "comments": 16,
@@ -4764,9 +4764,9 @@
   },
   "blizzard/runner/domain/tracing/receiver.py": {
    "comments": 3,
-   "docstrings": 10,
+   "docstrings": 11,
    "over_cap": 0,
-   "total": 108
+   "total": 113
   },
   "blizzard/runner/domain/tracing/receiver_limits.py": {
    "comments": 2,
@@ -6590,9 +6590,9 @@
   },
   "e2e/fleet_traces.py": {
    "comments": 23,
-   "docstrings": 71,
+   "docstrings": 77,
    "over_cap": 1,
-   "total": 854
+   "total": 937
   },
   "e2e/harness_variants.py": {
    "comments": 0,
@@ -6604,7 +6604,7 @@
    "comments": 72,
    "docstrings": 47,
    "over_cap": 12,
-   "total": 866
+   "total": 867
   },
   "e2e/test_ask_answer_e2e.py": {
    "comments": 21,
@@ -6637,10 +6637,10 @@
    "total": 191
   },
   "e2e/test_delivery_conflict_e2e.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 12,
    "over_cap": 1,
-   "total": 299
+   "total": 302
   },
   "e2e/test_delivery_pr_ci_e2e.py": {
    "comments": 24,
@@ -7684,7 +7684,7 @@
    "comments": 73,
    "docstrings": 44,
    "over_cap": 0,
-   "total": 2243
+   "total": 2244
   },
   "test_config_keys_reach_a_gating_tier.py": {
    "comments": 3,
@@ -10144,7 +10144,7 @@
    "comments": 2,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 380
+   "total": 389
   },
   "test_spawn_suppressed_registry.py": {
    "comments": 11,
@@ -10268,15 +10268,15 @@
   },
   "test_trace_chunk_spans.py": {
    "comments": 1,
-   "docstrings": 2,
+   "docstrings": 3,
    "over_cap": 0,
-   "total": 361
+   "total": 551
   },
   "test_trace_contract.py": {
    "comments": 0,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 606
+   "total": 653
   },
   "test_trace_cursor.py": {
    "comments": 6,
@@ -10288,7 +10288,7 @@
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 127
+   "total": 155
   },
   "test_trace_export_settings.py": {
    "comments": 0,
@@ -10300,13 +10300,13 @@
    "comments": 5,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 399
+   "total": 412
   },
   "test_trace_ids.py": {
-   "comments": 8,
+   "comments": 11,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 106
+   "total": 130
   },
   "test_trace_position.py": {
    "comments": 7,
@@ -10336,7 +10336,7 @@
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 106
+   "total": 128
   },
   "test_transcript_backfill.py": {
    "comments": 25,
@@ -10645,10 +10645,10 @@
    "total": 125
   },
   "trace_contract_support.py": {
-   "comments": 2,
-   "docstrings": 5,
+   "comments": 3,
+   "docstrings": 7,
    "over_cap": 0,
-   "total": 61
+   "total": 72
   },
   "trace_fixtures.py": {
    "comments": 1,

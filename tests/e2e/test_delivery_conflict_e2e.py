@@ -30,6 +30,7 @@ from tests.e2e.fleet_traces import (
     planted_lease_tokens,
     runner_sweep,
     stashed_route_tokens,
+    told_until,
 )
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
@@ -271,13 +272,15 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
             )
             deliver = traces[1]
             (hub_exec,) = [c for c in deliver.children if c.name == "hub exec"]
+            # A `hub run step` exports live, its `hub exec` only when its step closes: read the runs of told steps.
+            told = told_until([t.root for t in traces])[deliver.root.trace_id]
             run_steps = [
                 s
                 for s in fleet_traces.platform_spans()
-                if s.name == "hub run step" and s.trace_id == deliver.root.trace_id
+                if s.name == "hub run step" and s.trace_id == deliver.root.trace_id and s.start_ns < told
             ]
-            assert run_steps, "the chunk's trace carries no `hub run step` span"
-            # The chunk's one trace holds every deliver step's runs; each hangs on its own step's `hub exec`.
+            assert run_steps, "the chunk's trace carries no told `hub run step` span"
+            # The work trace holds every told deliver step's runs; each hangs on its own step's `hub exec`.
             hub_execs = {c.span_id for trace in traces for c in trace.children if c.name == "hub exec"}
             assert {s.parent_span_id for s in run_steps} <= hub_execs
             assert hub_exec.span_id in {s.parent_span_id for s in run_steps}

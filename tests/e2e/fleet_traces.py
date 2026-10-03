@@ -19,6 +19,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -30,7 +31,15 @@ import sqlalchemy
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_ids import ChunkRole, SpanRole, StepKey, chunk_span_id, chunk_trace_id, span_id
+from blizzard.foundation.trace_ids import (
+    ChunkRole,
+    SpanRole,
+    StepKey,
+    chunk_span_id,
+    chunk_trace_id,
+    lifetime_context,
+    span_id,
+)
 from blizzard.hub.domain.tracing import attributes as hub_attr
 from blizzard.runner.composition import RunnerProcess, build_runner_platform_tracing, build_runner_process
 from blizzard.runner.config import RunnerConfig
@@ -52,6 +61,7 @@ _PLACEHOLDER_ENV = {
 }
 _ROOT_ROLES = {"step", "gate"}
 _CHUNK_ROLES = {role.value for role in ChunkRole}
+_ROOTS = {ChunkRole.WORK.value, ChunkRole.LIFETIME.value}
 _WORKER_ROLE = "runner/worker"
 _INVOCATION_ROLE = "runner/invocation"
 
@@ -109,7 +119,7 @@ class ExportedSpan:
 
     @property
     def role(self) -> str:
-        return role_of_name(self.name)
+        return role_of_name(self.name, self.attributes)
 
     @property
     def is_root(self) -> bool:
@@ -225,7 +235,7 @@ def traces_of(spans: Sequence[ExportedSpan]) -> list[StepTrace]:
 
 
 def chunk_level(spans: Sequence[ExportedSpan]) -> list[ExportedSpan]:
-    """The chunk span, its waits and any completion marker in the export."""
+    """The work root, the lifetime trace's spans and any completion marker in the export."""
     return [s for s in spans if s.is_chunk_level]
 
 
@@ -253,7 +263,7 @@ def assert_conforms(spans: Sequence[ExportedSpan]) -> None:
 
     for span in spans:
         try:
-            role = role_of_name(span.name)
+            role = role_of_name(span.name, span.attributes)
         except StopIteration:
             raise AssertionError(f"span name {span.name!r} is not in the dictionary") from None
         where = f"span {span.name!r}"
@@ -263,9 +273,13 @@ def assert_conforms(spans: Sequence[ExportedSpan]) -> None:
         assert resource_keys <= set(span.resource), f"{where}: resource lacks {resource_keys - set(span.resource)}"
         assert span.resource.get("blizzard.trace.schema_version") == d["schema_version"], where
         assert span.status in {"UNSET", "ERROR"}, where
-        assert span.is_root == (role == ChunkRole.CHUNK), (
-            f"{where}: {role} span {'is' if span.is_root else 'is not'} a root"
-        )
+        assert span.is_root == (role in _ROOTS), f"{where}: {role} span {'is' if span.is_root else 'is not'} a root"
+        service = next(e for e in d["spans"] if e["role"] == role).get("service")
+        assert (
+            (span.resource.get("service.name") == service)
+            if service
+            else (span.resource.get("service.name") != hub_attr.CHUNK_SERVICE_NAME)
+        ), f"{where}: service.name {span.resource.get('service.name')!r}"
         for event in span.events:
             assert event.name in d["event_names"], f"{where}: event {event.name!r} is not in the dictionary"
             check_bag(event.attributes, f"event:{event.name}", f"{where} event {event.name!r}")
@@ -280,7 +294,7 @@ def assert_conforms(spans: Sequence[ExportedSpan]) -> None:
 
 def assert_identity(traces: Sequence[StepTrace], *, decision_ids: Sequence[str] = ()) -> None:
     """Each root's ids re-derive from its own chunk id and epoch (and, for a gate, a decision id the caller read
-    off the hub's decisions surface): the chunk's trace id, the chunk span as its parent; every child hangs on
+    off the hub's decisions surface): the chunk's work trace id, the work root as its parent; every child hangs on
     that root in that trace; every link names the derived root of an exported step."""
     for trace in traces:
         root = trace.root
@@ -293,7 +307,9 @@ def assert_identity(traces: Sequence[StepTrace], *, decision_ids: Sequence[str] 
         else:
             key, role = StepKey.attempt(chunk, epoch), SpanRole.STEP
         assert root.trace_id == f"{chunk_trace_id(chunk):032x}", f"{root.name}: trace id is not chunk {chunk}'s"
-        assert root.parent_span_id == f"{chunk_span_id(chunk):016x}", f"{root.name}: parent is not chunk {chunk}'s span"
+        assert root.parent_span_id == f"{chunk_span_id(chunk):016x}", (
+            f"{root.name}: parent is not chunk {chunk}'s work root"
+        )
         assert root.span_id == f"{span_id(key, role):016x}", (
             f"{root.name}: span id does not re-derive from {key.text()}"
         )
@@ -305,29 +321,82 @@ def assert_identity(traces: Sequence[StepTrace], *, decision_ids: Sequence[str] 
             assert link.span_id in root_ids, f"{trace.root.name}: link to {link.span_id} is not an exported root"
 
 
+@dataclass(frozen=True)
+class ChunkTraces:
+    """The two roots a finished chunk was told under."""
+
+    lifetime: ExportedSpan
+    work: ExportedSpan
+
+
 def assert_chunk_trace(
     spans: Sequence[ExportedSpan], chunk_id: str, *, outcome: str, steps: int, waits: Sequence[str] = ("backlog wait",)
-) -> ExportedSpan:
-    """The chunk was told as one trace: a single chunk span with the given outcome, parentless and with the derived
-    ids, ``steps`` step roots as its direct children, its ``waits`` parented on it, and every fleet span of the
-    chunk, runner spans included, in its trace. Returns the chunk span."""
-    trace = f"{chunk_trace_id(chunk_id):032x}"
+) -> ChunkTraces:
+    """The chunk was told as two traces. The work trace has a parentless ``chunk work`` root with the derived ids,
+    ``steps`` step roots as its direct children, no wait and no marker, and a link to the lifetime root. The
+    lifetime trace has a parentless ``chunk`` root with its own derived ids, a span per step linking to that step's
+    root, and the ``waits`` parented on the root. Every lifetime span leaves as ``blizzard-chunk``; every other
+    fleet span of the chunk, runner spans included, is in the work trace."""
+    work_trace, lifetime_trace = f"{chunk_trace_id(chunk_id):032x}", f"{lifetime_context(chunk_id).trace_id:032x}"
     mine = [s for s in spans if s.attributes.get(shared.CHUNK_ID) == chunk_id]
-    assert {s.trace_id for s in mine} == {trace}, (
+    assert {s.trace_id for s in mine} == {work_trace, lifetime_trace}, (
         f"chunk {chunk_id} spans are in traces {sorted({s.trace_id for s in mine})}"
     )
-    (chunk,) = [s for s in mine if s.role == ChunkRole.CHUNK]
-    assert chunk.span_id == f"{chunk_span_id(chunk_id):016x}" and chunk.parent_span_id is None
-    assert chunk.attributes[hub_attr.CHUNK_OUTCOME] == outcome
-    assert chunk.start_ns <= min(s.start_ns for s in mine if s.is_step_root)
-    assert chunk.end_ns >= max(s.end_ns for s in mine if s.is_step_root)
-    roots = [s for s in mine if s.is_step_root]
-    assert len(roots) == steps and {r.parent_span_id for r in roots} == {chunk.span_id}
-    assert chunk.attributes[hub_attr.CHUNK_STEPS] == steps
-    told = sorted(s.name for s in mine if s.is_chunk_level and s.role not in (ChunkRole.CHUNK, ChunkRole.COMPLETED))
-    assert told == sorted(waits), f"chunk-level waits {told}"
-    assert {s.parent_span_id for s in mine if s.is_chunk_level and s.role != ChunkRole.CHUNK} <= {chunk.span_id}
-    return chunk
+    work_spans = [s for s in mine if s.trace_id == work_trace]
+    life_spans = [s for s in mine if s.trace_id == lifetime_trace]
+    (work,) = [s for s in work_spans if s.role == ChunkRole.WORK]
+    assert (work.name, work.span_id, work.parent_span_id) == ("chunk work", f"{chunk_span_id(chunk_id):016x}", None)
+    assert work.attributes[hub_attr.CHUNK_OUTCOME] == outcome and work.attributes[hub_attr.CHUNK_STEPS] == steps
+    assert not [s for s in work_spans if s.is_chunk_level and s.role != ChunkRole.WORK], "chunk-level spans in work"
+    roots = [s for s in work_spans if s.is_step_root]
+    assert len(roots) == steps and {r.parent_span_id for r in roots} == {work.span_id}
+    assert work.start_ns == min(r.start_ns for r in roots) and work.end_ns >= max(r.end_ns for r in roots)
+    root = lifetime_context(chunk_id)
+    assert [(link.trace_id, link.span_id, link.reason) for link in work.links] == [
+        (lifetime_trace, f"{root.span_id:016x}", "lifetime")
+    ]
+
+    (life,) = [s for s in life_spans if s.role == ChunkRole.LIFETIME]
+    assert (life.name, life.span_id, life.parent_span_id) == ("chunk", f"{root.span_id:016x}", None)
+    assert life.attributes[hub_attr.CHUNK_OUTCOME] == outcome and life.attributes[hub_attr.CHUNK_STEPS] == steps
+    assert life.start_ns <= work.start_ns and life.end_ns == work.end_ns
+    assert {s.resource.get("service.name") for s in life_spans} == {hub_attr.CHUNK_SERVICE_NAME}
+    assert hub_attr.CHUNK_SERVICE_NAME not in {s.resource.get("service.name") for s in work_spans}
+    told = [s for s in life_spans if s.role == ChunkRole.STEP]
+    assert len(told) == steps and {s.parent_span_id for s in told} == {life.span_id}
+    by_id = {r.span_id: r for r in roots}
+    for step in told:
+        (link,) = step.links
+        target = by_id.get(link.span_id)
+        assert link.trace_id == work_trace and link.reason == "work" and target is not None, step.name
+        owned = [c for c in work_spans if c.parent_span_id == target.span_id]
+        before = [c.start_ns for c in owned if c.role in ("queue", "claim")]
+        pickup = [c.end_ns for c in owned if c.role == "pickup"]
+        assert step.name == target.attributes[shared.NODE_NAME]
+        assert min([target.start_ns, *before]) <= step.start_ns <= target.start_ns, step.name
+        assert target.end_ns <= step.end_ns <= max([target.end_ns, *pickup]), step.name
+        for key in (
+            hub_attr.WAIT_QUEUE_MS,
+            hub_attr.WAIT_CLAIM_MS,
+            hub_attr.WAIT_ASK_MS,
+            hub_attr.WAIT_PAUSE_MS,
+            hub_attr.WAIT_PICKUP_MS,
+        ):
+            assert step.attributes[key] == target.attributes[key], f"{step.name}: {key}"
+        assert step.attributes[shared.STEP_EPOCH] == target.attributes[shared.STEP_EPOCH]
+        assert step.attributes[hub_attr.STEP_OUTCOME] == target.attributes[hub_attr.STEP_OUTCOME]
+        assert step.attributes[hub_attr.STEP_KIND] == ("gate" if target.role == "gate" else "step")
+    assert {link.span_id for step in told for link in step.links} == set(by_id), "a step root has no lifetime span"
+    ordered = sorted(told, key=lambda s: s.start_ns)
+    assert all(a.end_ns <= b.start_ns for a, b in pairwise(ordered)), "lifetime step spans overlap"
+    waited = sorted(
+        s.name for s in life_spans if s.role not in (ChunkRole.LIFETIME, ChunkRole.STEP, ChunkRole.COMPLETED)
+    )
+    assert waited == sorted(waits), f"chunk-level waits {waited}"
+    assert {s.parent_span_id for s in life_spans if s is not life} == {life.span_id}
+    covered = sorted((s.start_ns, s.end_ns, s.name) for s in life_spans if s is not life)
+    assert all(a[1] <= b[0] for a, b in pairwise(covered)), f"lifetime spans overlap: {covered}"
+    return ChunkTraces(lifetime=life, work=work)
 
 
 # --------------------------------------------------------------------------- #
@@ -455,11 +524,22 @@ _RUNNER_SERVICE = runner_attr.DEFAULT_SERVICE_NAME
 PASSTHROUGH_COMMAND = "runner work-items"
 
 
+def told_until(fleet: Sequence[ExportedSpan]) -> dict[str, int]:
+    """Per trace, the end of the last step root exported so far. A step is told only when it closes, so a platform
+    span that began after this instant belongs to a step still running, whose root has not been told yet."""
+    until: dict[str, int] = {}
+    for span in fleet:
+        if span.is_step_root:
+            until[span.trace_id] = max(until.get(span.trace_id, 0), span.end_ns)
+    return until
+
+
 def assert_platform_nesting(
     fleet: Sequence[ExportedSpan], platform: Sequence[ExportedSpan], *, chained: str = PASSTHROUGH_COMMAND
 ) -> None:
     """Every worker command's span sits in a step trace of ``fleet`` and reaches that step's root through its
-    ancestors; its runner request is its child. A ``chained`` command's runner request carries on to the hub: a
+    ancestors; its runner request is its child. A command that began after the last step root told in its trace is
+    in a step that has not closed, so its root is not exported yet and it is left out. A ``chained`` command's runner request carries on to the hub: a
     runner→hub client span under it, a hub server span under that, and a query under the hub's request."""
     by_id = {(s.trace_id, s.span_id): s for s in (*fleet, *platform)}
     kids: dict[tuple[str, str], list[ExportedSpan]] = {}
@@ -476,7 +556,10 @@ def assert_platform_nesting(
             yield child
             yield from descendants(child)
 
-    commands = [s for s in platform if s.scope == platform_attr.CLI_SCOPE]
+    until = told_until(fleet)
+    commands = [
+        s for s in platform if s.scope == platform_attr.CLI_SCOPE and s.start_ns < until.get(s.trace_id, s.start_ns + 1)
+    ]
     assert commands, "the file holds no worker command span"
     chains = 0
     for command in commands:

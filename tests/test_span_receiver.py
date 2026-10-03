@@ -20,7 +20,7 @@ from blizzard.foundation.platform_tracing.received import (
     decode_otlp,
 )
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_ids import StepKey, chunk_span_id, chunk_trace_id, step_root
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.tracing.receiver import MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
 from blizzard.runner.domain.tracing.receiver_limits import (
@@ -258,6 +258,15 @@ def test_admit_drops_a_span_forging_or_hanging_under_the_chunk_span() -> None:
 @pytest.mark.parametrize("epoch", [0, 1, 2])
 def test_admit_drops_a_span_forging_a_step_root_of_the_lease_epochs(epoch: int) -> None:
     forged = step_root(StepKey.attempt("ch_1", epoch)).span_id
+    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST)
+    assert [s.span_id for s in admission.kept] == [_SPAN_ID]
+    assert admission.dropped == 1
+
+
+@pytest.mark.parametrize("role", [SpanRole.QUEUE, SpanRole.CLAIM])
+@pytest.mark.parametrize("epoch", [0, 2])
+def test_admit_drops_a_span_forging_a_queue_or_claim_wait_of_the_lease_epochs(epoch: int, role: SpanRole) -> None:
+    forged = DerivedContext.of(StepKey.attempt("ch_1", epoch), role).span_id
     admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST)
     assert [s.span_id for s in admission.kept] == [_SPAN_ID]
     assert admission.dropped == 1

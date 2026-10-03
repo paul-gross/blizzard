@@ -1,4 +1,4 @@
-"""A chunk told as a whole: its span, the waits no step owns, and a completion marker.
+"""A chunk told as a whole, in two traces: its work root, and its lifetime trace with the waits no step owns.
 
 Contract: ``docs/deployment/tracing.md`` §Trace and span ids. Every interval derives from the
 fact log, so a replay tells the sweep's ids and instants. Pure: a :class:`StepFacts` in, :class:`SpanRecord` out."""
@@ -10,14 +10,24 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.trace_ids import ChunkRole, chunk_context, chunk_span_id
-from blizzard.foundation.trace_spans import AttributeValue, SpanRecord
+from blizzard.foundation.trace_ids import (
+    ChunkRole,
+    chunk_context,
+    instant_text,
+    lifetime_context,
+    step_root,
+)
+from blizzard.foundation.trace_spans import AttributeValue, LinkRecord, SpanRecord, SpanStatus
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing import attributes as attr
+from blizzard.hub.domain.tracing.assembly import step_dimensions, step_usage, step_waits
 from blizzard.hub.domain.tracing.facts import StepFacts
-from blizzard.hub.domain.tracing.steps import identify_steps
-from blizzard.hub.domain.tracing.summary import folded_cost
+from blizzard.hub.domain.tracing.steps import StepKind, StepOutcome, identify_steps
+from blizzard.hub.domain.tracing.summary import IntervalKind, StepSummary, folded_cost, summarize_step
 from blizzard.hub.domain.work import MigrationSource, UsageTotal
+
+_LINK_WORK = "work"
+_LINK_LIFETIME = "lifetime"
 
 
 class ChunkOutcome(StrEnum):
@@ -104,11 +114,9 @@ def _uncovered(
     return pieces
 
 
-def _pause_waits(facts: StepFacts, finish: datetime, other_waits: list[_Wait]) -> list[_Wait]:
-    """The stretches of a pause that no step and no other chunk-level wait covers, including what is left of a
-    pause that began inside a step once that step closed."""
-    held = [(step.start, step.close.at) for step in identify_steps(facts) if step.close is not None]
-    held += [(wait.start, wait.end) for wait in other_waits]
+def _pause_waits(facts: StepFacts, finish: datetime, held: list[tuple[datetime, datetime]]) -> list[_Wait]:
+    """The stretches of a pause that no step span and no other chunk-level wait covers, including what is left of
+    a pause that began inside a step once that step's span closed."""
     pauses: list[tuple[datetime, datetime]] = []
     began: datetime | None = None
     for pause in sorted(facts.pauses, key=lambda p: p.set_at):
@@ -126,10 +134,40 @@ def _pause_waits(facts: StepFacts, finish: datetime, other_waits: list[_Wait]) -
     ]
 
 
-def _waits(facts: StepFacts, minted: datetime, finish: datetime) -> list[_Wait]:
+def _chunk_waits(facts: StepFacts, minted: datetime, finish: datetime) -> list[_Wait]:
+    """The backlog and escalation waits, each ending no later than the finish."""
     waits = [_Wait(ChunkRole.BACKLOG, "backlog wait", minted, _backlog_end(facts, finish))]
     waits += _escalation_waits(facts, finish)
-    waits += _pause_waits(facts, finish, waits)
+    return [_Wait(w.role, w.name, w.start, min(w.end, finish)) for w in waits]
+
+
+def _step_extents(summaries: list[StepSummary], chunk_waits: list[_Wait]) -> list[tuple[datetime, datetime]]:
+    """What each step's lifetime span covers, in step order. It starts at the earliest of its queue and claim waits,
+    else its own start, but never before the end of a chunk wait that ends by its own start, and never after its own
+    start. It ends at the later of its end and its close, which takes in a gate's decision pickup. Step spans never
+    overlap: a span that would run past the next one's start ends there."""
+    extents: list[tuple[datetime, datetime]] = []
+    for summary in summaries:
+        begins = [i.start for i in summary.intervals if i.kind in (IntervalKind.QUEUE, IntervalKind.CLAIM)]
+        floors = [w.end for w in chunk_waits if w.end <= summary.started_at]
+        if extents:
+            floors.append(extents[-1][1])
+        start = min(max([min([summary.started_at, *begins]), *floors]), summary.started_at)
+        if extents and extents[-1][1] > start:
+            extents[-1] = (extents[-1][0], max(extents[-1][0], start))
+        extents.append((start, max(summary.ended_at, summary.closed_at, start)))
+    return extents
+
+
+def _waits(
+    facts: StepFacts, finish: datetime, chunk_waits: list[_Wait], extents: list[tuple[datetime, datetime]]
+) -> list[_Wait]:
+    """The chunk's own waits, each clipped to what no step span shows, so a wait and a step never overlap."""
+    clipped = [
+        _Wait(w.role, w.name, start, end) for w in chunk_waits for start, end in _uncovered(w.start, w.end, extents)
+    ]
+    held = [*extents, *((w.start, w.end) for w in clipped)]
+    waits = [*clipped, *_pause_waits(facts, finish, held)]
     return [_Wait(w.role, w.name, w.start, min(w.end, finish)) for w in waits if min(w.end, finish) > w.start]
 
 
@@ -161,18 +199,67 @@ def _totals(facts: StepFacts) -> dict[str, AttributeValue]:
     }
 
 
-def assemble_chunk(facts: StepFacts) -> tuple[SpanRecord, ...]:
-    """The chunk span, then its wait spans. An unfinished chunk is refused."""
+def _summaries(facts: StepFacts) -> list[StepSummary]:
+    steps = identify_steps(facts)
+    return [summarize_step(facts, step, steps) for step in steps if step.close is not None]
+
+
+def _finish(facts: StepFacts) -> tuple[ChunkEnd, datetime]:
     end = chunk_end(facts)
     if end is None:
         raise ValueError(f"chunk {facts.chunk_id} is unfinished; only a finished chunk is told as a whole")
+    return end, max(end.at, _minted(facts))
+
+
+def assemble_work(facts: StepFacts) -> tuple[SpanRecord, ...]:
+    """The ``chunk work`` root, from the first step's start to the chunk's finish; empty when no step closed."""
+    end, finish = _finish(facts)
+    summaries = _summaries(facts)
+    if not summaries:
+        return ()
+    start = min(summary.started_at for summary in summaries)
+    return (
+        SpanRecord(
+            context=chunk_context(facts.chunk_id),
+            parent_span_id=None,
+            name="chunk work",
+            start=start,
+            end=max(finish, start),
+            attributes={**_dimensions(facts), attr.CHUNK_OUTCOME: end.outcome.value, **_totals(facts)},
+            links=(LinkRecord(lifetime_context(facts.chunk_id), {attr.LINK_REASON: _LINK_LIFETIME}),),
+        ),
+    )
+
+
+def _lifetime_step(
+    facts: StepFacts, summary: StepSummary, root: SpanRecord, extent: tuple[datetime, datetime]
+) -> SpanRecord:
+    return SpanRecord(
+        context=lifetime_context(facts.chunk_id, ChunkRole.STEP, summary.step_key.text()),
+        parent_span_id=root.context.span_id,
+        name=summary.node_name,
+        start=extent[0],
+        end=extent[1],
+        attributes={
+            **step_dimensions(summary),
+            **step_usage(summary),
+            **step_waits(summary),
+            attr.STEP_KIND: "gate" if summary.kind is StepKind.GATE else "step",
+        },
+        status=SpanStatus.ERROR if summary.outcome is StepOutcome.ESCALATED else SpanStatus.UNSET,
+        links=(LinkRecord(step_root(summary.step_key), {attr.LINK_REASON: _LINK_WORK}),),
+        service_name=attr.CHUNK_SERVICE_NAME,
+    )
+
+
+def assemble_lifetime(facts: StepFacts) -> tuple[SpanRecord, ...]:
+    """The lifetime root, a span per closed step, then the wait spans. An unfinished chunk is refused."""
+    end, finish = _finish(facts)
     minted = _minted(facts)
-    finish = max(end.at, minted)
     backlog_end = _backlog_end(facts, finish)
     dims = _dimensions(facts)
-    chunk = chunk_context(facts.chunk_id)
     root = SpanRecord(
-        context=chunk,
+        context=lifetime_context(facts.chunk_id),
         parent_span_id=None,
         name="chunk",
         start=minted,
@@ -184,19 +271,25 @@ def assemble_chunk(facts: StepFacts) -> tuple[SpanRecord, ...]:
             attr.CHUNK_ACTIVE_MS: _ms(backlog_end, finish),
             **_totals(facts),
         },
+        service_name=attr.CHUNK_SERVICE_NAME,
     )
+    summaries = _summaries(facts)
+    chunk_waits = _chunk_waits(facts, minted, finish)
+    extents = _step_extents(summaries, chunk_waits)
+    steps = [_lifetime_step(facts, summary, root, extent) for summary, extent in zip(summaries, extents, strict=True)]
     waits = [
         SpanRecord(
-            context=chunk_context(facts.chunk_id, wait.role, wait.start),
-            parent_span_id=chunk.span_id,
+            context=lifetime_context(facts.chunk_id, wait.role, instant_text(wait.start)),
+            parent_span_id=root.context.span_id,
             name=wait.name,
             start=wait.start,
             end=wait.end,
             attributes=dims,
+            service_name=attr.CHUNK_SERVICE_NAME,
         )
-        for wait in _waits(facts, minted, finish)
+        for wait in _waits(facts, finish, chunk_waits, extents)
     ]
-    return (root, *waits)
+    return (root, *steps, *waits)
 
 
 def assemble_completion(facts: StepFacts) -> tuple[SpanRecord, ...]:
@@ -206,11 +299,12 @@ def assemble_completion(facts: StepFacts) -> tuple[SpanRecord, ...]:
         raise ValueError(f"chunk {facts.chunk_id} was not hand-completed after a stop")
     return (
         SpanRecord(
-            context=chunk_context(facts.chunk_id, ChunkRole.COMPLETED, at),
-            parent_span_id=chunk_span_id(facts.chunk_id),
+            context=lifetime_context(facts.chunk_id, ChunkRole.COMPLETED, instant_text(at)),
+            parent_span_id=lifetime_context(facts.chunk_id).span_id,
             name="chunk completed",
             start=at,
             end=at,
             attributes={**_dimensions(facts), attr.CHUNK_OUTCOME: ChunkOutcome.DONE.value},
+            service_name=attr.CHUNK_SERVICE_NAME,
         ),
     )

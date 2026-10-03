@@ -4,6 +4,7 @@ trace-contract unit tier and the e2e shape matcher, so neither restates what the
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from functools import cache
 from typing import Any
 
@@ -17,7 +18,11 @@ PARAMETERIZED_NAMES = {
     "gate": "gate <node>",
     "runner/worker": "worker <node>",
     "runner/invocation": "invoke_agent <session>",
+    "chunk/step": "<node>",
 }
+
+#: The attribute only a lifetime step span carries, which names its node rather than a template word.
+STEP_KIND = "blizzard.step.kind"
 
 BARE_NAMES = {"invoke_agent": "runner/invocation"}
 
@@ -30,9 +35,15 @@ def dictionary() -> dict[str, Any]:
     return json.loads((CONTRACT_DIR / "dictionary.json").read_text())
 
 
-def role_of_name(name: str) -> str:
-    """The dictionary role of a span name; a name the dictionary does not publish raises ``StopIteration``."""
+def role_of_name(name: str, attributes: Mapping[str, object] | None = None) -> str:
+    """The dictionary role of a span name; a name the dictionary does not publish raises ``StopIteration``.
+
+    A lifetime step span is named for its node alone, so only its attributes identify it."""
+    if attributes is not None and STEP_KIND in attributes:
+        return "chunk/step"
     for role, template in PARAMETERIZED_NAMES.items():
+        if template.startswith("<"):
+            continue
         if name.startswith(template.split(" ", 1)[0] + " "):
             return role
     if name in BARE_NAMES:

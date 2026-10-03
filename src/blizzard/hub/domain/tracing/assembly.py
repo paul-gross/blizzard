@@ -1,4 +1,4 @@
-"""Assembling one closed step into its finished span records, its root parented on the chunk span.
+"""Assembling one closed step into its finished span records, its root parented on the work root.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace, §Span events,
 §Links, §Status, §Attributes, §GenAI usage and §What never leaves. Pure: a :class:`StepFacts` and a closed
@@ -44,7 +44,7 @@ _ROLES = {
 }
 
 
-def _dimensions(summary: StepSummary) -> dict[str, AttributeValue]:
+def step_dimensions(summary: StepSummary) -> dict[str, AttributeValue]:
     dims: dict[str, AttributeValue] = {
         shared.CHUNK_ID: summary.chunk_id,
         shared.GRAPH_NAME: summary.graph_name,
@@ -72,7 +72,7 @@ def _dimensions(summary: StepSummary) -> dict[str, AttributeValue]:
     return dims
 
 
-def _measures(summary: StepSummary) -> dict[str, AttributeValue]:
+def step_usage(summary: StepSummary) -> dict[str, AttributeValue]:
     return {
         attr.STEP_INPUT_TOKENS: summary.input_tokens,
         attr.STEP_OUTPUT_TOKENS: summary.output_tokens,
@@ -81,12 +81,21 @@ def _measures(summary: StepSummary) -> dict[str, AttributeValue]:
         attr.STEP_COST_USD: summary.folded_cost_usd(),
         attr.STEP_COST_ESTIMATED: summary.cost_estimated_usd is not None,
         attr.STEP_COST_PARTIAL: summary.cost_partial,
+    }
+
+
+def step_waits(summary: StepSummary) -> dict[str, AttributeValue]:
+    return {
         attr.WAIT_QUEUE_MS: summary.wait_queue_ms,
         attr.WAIT_CLAIM_MS: summary.wait_claim_ms,
         attr.WAIT_ASK_MS: summary.wait_ask_ms,
         attr.WAIT_PAUSE_MS: summary.wait_pause_ms,
         attr.WAIT_PICKUP_MS: summary.wait_pickup_ms,
     }
+
+
+def _measures(summary: StepSummary) -> dict[str, AttributeValue]:
+    return {**step_usage(summary), **step_waits(summary)}
 
 
 def _invocation(row: UsageFact, at: datetime) -> EventRecord:
@@ -175,7 +184,7 @@ def assemble_step(facts: StepFacts, step: NodeStep) -> tuple[SpanRecord, ...]:
         raise ValueError(f"step {step.key.text()} is open; only closed steps are assembled")
     steps = identify_steps(facts)
     summary = summarize_step(facts, step, steps)
-    dims = _dimensions(summary)
+    dims = step_dimensions(summary)
     gate = step.kind is StepKind.GATE
     root = SpanRecord(
         context=step_root(step.key),
