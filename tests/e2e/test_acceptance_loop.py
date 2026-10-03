@@ -21,6 +21,7 @@ import httpx
 import pytest
 import uvicorn
 
+from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
@@ -39,7 +40,10 @@ from tests.e2e.fleet_traces import (
     assert_invocations,
     assert_platform_nesting,
     assert_skeleton,
+    documented_decision_wait,
     enroll_runner,
+    fleet_collector,
+    is_fleet,
     planted_lease_tokens,
     runner_sweep,
     stashed_route_tokens,
@@ -315,8 +319,10 @@ def _hub(
     extra_env: Mapping[str, str] | None = None,
     collector: FleetCollector | None = None,
     platform_spans: bool = False,
+    settle_seconds: int = 0,
 ) -> Iterator[httpx.Client]:
-    """A hub daemon over ``hub_dir``. Traced (exporting to ``collector``, sweeping every second with no settle)
+    """A hub daemon over ``hub_dir``. Traced (exporting to ``collector``, sweeping every second, settling for
+    ``settle_seconds``)
     when a usable collector is given — with platform spans on at a zero root sample ratio when
     ``platform_spans``, so only spans parented on a sampled context export; otherwise every inherited ``OTEL_*`` is stripped so a developer's own
     endpoint never receives e2e spans."""
@@ -366,7 +372,7 @@ def _hub(
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
         if export_to:
             overrides["tracing"] = TracingConfig(
-                sweep_seconds=1, settle_seconds=0, platform=platform_spans, platform_sample_ratio=0.0
+                sweep_seconds=1, settle_seconds=settle_seconds, platform=platform_spans, platform_sample_ratio=0.0
             )
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
@@ -524,6 +530,111 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
     # 4e. Git truth — the mock harness's file is present on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"
+
+
+# --------------------------------------------------------------------------- #
+# Scenario: a tail-sampling collector's decision_wait splits a step's trace, or keeps it whole
+
+_HUB_SETTLE_SECONDS = 3
+_SWEEP_SECONDS = 1
+# The longest step this run has: the build and review each take a few seconds.
+_LONGEST_STEP_SECONDS = 15
+_SHORT_DECISION_WAIT_SECONDS = 1
+
+
+@pytest.mark.parametrize("setting", ["short", "documented"])
+def test_a_tail_sampling_decision_wait_splits_or_keeps_the_step_trace(
+    tmp_path: Path, setting: str, subtests: pytest.Subtests
+) -> None:
+    """A collector that keeps a trace only if it holds a step root decides on a trace's first span, long before
+    the hub's root arrives (it waits ``settle_seconds`` for the step to settle): a ``decision_wait`` shorter than
+    that keeps nothing of the step's trace, root included, and the documented one keeps root and platform chain."""
+    wait = (
+        _SHORT_DECISION_WAIT_SECONDS
+        if setting == "short"
+        else documented_decision_wait(
+            settle_seconds=_HUB_SETTLE_SECONDS, sweep_seconds=_SWEEP_SECONDS, longest_step_seconds=_LONGEST_STEP_SECONDS
+        )
+    )
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None:
+        pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    winter_source = _winter_source()
+    if winter_source is None:
+        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
+
+    scratch = tmp_path / "scratch"
+    subprocess.run(
+        [
+            str(bin_dir / "blizzard-mock-fixture"),
+            "reset",
+            "--env",
+            FIXTURE_ENV,
+            "--scratch-root",
+            str(scratch),
+            "--winter-source",
+            str(winter_source),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    workspace = scratch / FIXTURE_ENV / "workspace"
+    origins = scratch / FIXTURE_ENV / "origins"
+    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with (
+        fleet_collector(tmp_path / "collector", decision_wait_seconds=wait) as collector,
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(
+            tmp_path / "hub",
+            forge_port,
+            hub_port,
+            collector=collector,
+            platform_spans=True,
+            settle_seconds=_HUB_SETTLE_SECONDS,
+        ) as hub,
+    ):
+        collector.require()
+        assert (
+            hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(CLAUDE_CODE, probed=True)}).status_code == 201
+        )
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "land a change", "body": "the tail-sampled chunk"})
+        assert issue.status_code == 201, issue.text
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+        config = enroll_runner(hub, _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        planted = tmp_path / "planted"
+        planted.mkdir()
+        fenced = dict(os.environ)
+        fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
+        fenced[PLANT_DIR_VAR] = str(planted)
+        with runner_sweep(config, collector, settle_seconds=_HUB_SETTLE_SECONDS, sweep_seconds=_SWEEP_SECONDS) as sweep:
+            sweep.plant()
+            status = _drive_until_done(config, hub, chunk_id, fenced, process=sweep.process)
+            assert status == "done", f"chunk did not reach done (last status {status!r})"
+            sweep.drain(workers=2)
+
+        # What the sampler was given is the whole trace of every step; what it keeps of it depends on its wait.
+        sent = collector.received_spans(roots=3)
+        sent_platform = [s for s in sent if not is_fleet(s)]
+        assert_platform_nesting([s for s in sent if is_fleet(s)], sent_platform)
+        with subtests.test(msg=setting):
+            if setting == "short":
+                # Decided on the chain's first span, with no root yet, every trace was dropped — and a trace
+                # dropped stays dropped, so the late root went with it.
+                time.sleep(wait + 2)
+                kept = collector.kept_spans()
+                assert not [s for s in kept if s.is_root], "a short decision_wait still kept a step root"
+                assert not [s for s in kept if s.scope == platform_attr.CLI_SCOPE], (
+                    "a short decision_wait still kept the worker commands' spans"
+                )
+            else:
+                assert_platform_nesting(collector.spans(roots=3), collector.platform_spans())
 
 
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:

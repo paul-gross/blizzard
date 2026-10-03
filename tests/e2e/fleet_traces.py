@@ -519,15 +519,24 @@ def enroll_runner(hub: httpx.Client, config: RunnerConfig) -> RunnerConfig:
 # The running collector
 
 
+def documented_decision_wait(*, settle_seconds: int, sweep_seconds: int, longest_step_seconds: int) -> int:
+    """The ``decision_wait`` ``docs/deployment/tracing.md`` (Platform spans, Tail sampling) documents for a
+    collector that tail-samples on a step root: counted from a trace's first span, which is the step's first
+    platform span, so it spans the step, the hub's settle and a sweep, with a second to spare."""
+    return longest_step_seconds + settle_seconds + sweep_seconds + 1
+
+
 class FleetCollector:
     """One collector per test: ``endpoint`` for the hub's ``OTEL_EXPORTER_OTLP_ENDPOINT``, ``spans()`` once the
     scenario's chunk has closed. ``binary`` is ``None`` where no usable collector exists, and then the hub runs
     untraced and :meth:`require` skips the traces subtest."""
 
-    def __init__(self, binary: str | None, workdir: Path) -> None:
+    def __init__(self, binary: str | None, workdir: Path, *, decision_wait_seconds: int | None = None) -> None:
         self.binary = binary
+        self._decision_wait = decision_wait_seconds
         self._workdir = workdir
         self._export = workdir / "traces.jsonl"
+        self._received = workdir / "received.jsonl"
         self._log = workdir / "collector.log"
         self._proc: subprocess.Popen[str] | None = None
         self._port = 0
@@ -555,7 +564,7 @@ class FleetCollector:
         self._port = free_port()
         overlay = self._workdir / "overlay.yaml"
         overlay.write_text(
-            "receivers:\n"
+            self._tail_sampling() + "receivers:\n"
             "  otlp:\n"
             "    protocols:\n"
             "      http:\n"
@@ -563,13 +572,16 @@ class FleetCollector:
             "exporters:\n"
             "  file:\n"
             f"    path: {self._export}\n"
+            f"{self._received_exporter()}"
             "service:\n"
             "  telemetry:\n"
             "    metrics:\n"
             "      level: none\n"
             "  pipelines:\n"
             "    traces:\n"
+            f"{self._processors()}"
             "      exporters: [file]\n"
+            f"{self._received_pipeline()}"
         )
         self._proc = subprocess.Popen(
             [self.binary, f"--config={_DOCUMENTED_CONFIG}", f"--config={overlay}"],
@@ -587,6 +599,43 @@ class FleetCollector:
             time.sleep(0.1)
         raise AssertionError(f"collector did not listen on {self._port}:\n{read_daemon_log(self._log)}")
 
+    def _tail_sampling(self) -> str:
+        """The overlay's ``tail_sampling`` processor, where the run has one: it keeps a trace only if it holds a
+        fleet step root, the shape of the root-keyed policies operators write, so a trace split by its
+        ``decision_wait`` differs in content, not just timing."""
+        if self._decision_wait is None:
+            return ""
+        return (
+            "processors:\n"
+            "  tail_sampling:\n"
+            f"    decision_wait: {self._decision_wait}s\n"
+            "    policies:\n"
+            "      - name: keep-step-roots\n"
+            "        type: ottl_condition\n"
+            "        ottl_condition:\n"
+            "          error_mode: ignore\n"
+            "          span:\n"
+            f"            - 'attributes[\"{hub_attr.STEP_OUTCOME}\"] != nil'\n"
+        )
+
+    def _received_exporter(self) -> str:
+        return "" if self._decision_wait is None else f"  file/received:\n    path: {self._received}\n"
+
+    def _received_pipeline(self) -> str:
+        """A second pipeline over the same receiver with no sampler: what was sent, to read the sampler's work against."""
+        if self._decision_wait is None:
+            return ""
+        return (
+            "    traces/received:\n"
+            "      receivers: [otlp]\n"
+            "      processors: [batch]\n"
+            "      exporters: [file/received]\n"
+        )
+
+    def _processors(self) -> str:
+        """The traces pipeline's processor line: the sampler ahead of the documented ``batch``."""
+        return "" if self._decision_wait is None else "      processors: [tail_sampling, batch]\n"
+
     def stop(self) -> None:
         proc, self._proc = self._proc, None
         if proc is None:
@@ -598,16 +647,22 @@ class FleetCollector:
             proc.kill()
             proc.wait()
 
-    def _read(self) -> list[ExportedSpan]:
-        if not self._export.exists():
+    def _read(self, path: Path | None = None) -> list[ExportedSpan]:
+        path = path or self._export
+        if not path.exists():
             return []
         try:
-            return parse_export(self._export.read_text())
+            return parse_export(path.read_text())
         except json.JSONDecodeError:  # a line the exporter is still writing
             return []
 
-    def _read_fleet(self) -> list[ExportedSpan]:
-        return [s for s in self._read() if is_fleet(s)]
+    def _read_fleet(self, path: Path | None = None) -> list[ExportedSpan]:
+        return [s for s in self._read(path) if is_fleet(s)]
+
+    @property
+    def _arrived(self) -> Path:
+        """Where spans show up first: the unsampled copy where a sampler holds the main file's back."""
+        return self._export if self._decision_wait is None else self._received
 
     @staticmethod
     def _counts(spans: Sequence[ExportedSpan]) -> tuple[int, int]:
@@ -621,7 +676,7 @@ class FleetCollector:
         while time.monotonic() < deadline:
             if drive is not None:
                 drive()
-            if self._counts(self._read_fleet())[1] >= workers:
+            if self._counts(self._read_fleet(self._arrived))[1] >= workers:
                 return
             time.sleep(0.25)
 
@@ -646,6 +701,23 @@ class FleetCollector:
             f"expected {roots} step roots in the collector's file, saw {len(seen)}: {seen}"
         )
         return self._spans
+
+    def received_spans(self, *, roots: int, timeout: float = 60.0) -> list[ExportedSpan]:
+        """Every span the collector received, sampler or no: wait until ``roots`` step roots and the runner ``worker``
+        spans :meth:`await_workers` expects have arrived, then read the unsampled copy."""
+        assert self._decision_wait is not None, "only a tail-sampling collector keeps a copy of what it received"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            seen_roots, seen_workers = self._counts(self._read_fleet(self._received))
+            if seen_roots >= roots and seen_workers >= self._workers:
+                break
+            time.sleep(0.25)
+        return self._read(self._received)
+
+    def kept_spans(self) -> list[ExportedSpan]:
+        """Every span the sampler kept: stop the collector so its file is complete, then read it."""
+        self.stop()
+        return self._read()
 
     def platform_spans(self) -> list[ExportedSpan]:
         """Every non-fleet span in the file, read by the same :meth:`spans` call that completed it."""
@@ -680,8 +752,10 @@ class FleetCollector:
 
 
 @contextlib.contextmanager
-def fleet_collector(workdir: Path) -> Iterator[FleetCollector]:
-    collector = FleetCollector(resolve_collector(), workdir)
+def fleet_collector(workdir: Path, *, decision_wait_seconds: int | None = None) -> Iterator[FleetCollector]:
+    """A collector running the documented config; ``decision_wait_seconds`` puts a tail-sampling stage with that
+    ``decision_wait`` ahead of its ``batch``."""
+    collector = FleetCollector(resolve_collector(), workdir, decision_wait_seconds=decision_wait_seconds)
     if collector.available:
         collector.start()
     try:
