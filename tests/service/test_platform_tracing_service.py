@@ -163,10 +163,12 @@ def _cli_export(trace: int) -> str:
 def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
-    hub_port = _free_port()
+    unreachable_hub_port = _free_port()  # nothing is listening here: the hub never routes the chunk away
     token = "service-lease-token"
-    with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
-        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+    with otlp_sink() as sink:
+        # A reachable hub that does not know ``ch_svc`` would have the runner abandon the seeded lease on its next
+        # tick; an unreachable one leaves the last-known directive standing, so the lease stays active.
+        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
         config.config_path.write_text(config.to_toml())
         env = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
