@@ -146,7 +146,7 @@ def _chunk(chunk_id: str, *, closes_at: int) -> StepFacts:
 
 
 def _ids(window) -> list[str]:  # type: ignore[no-untyped-def]
-    return [c.key.chunk_id for c in window.steps]
+    return [c.key.chunk_id for c in window.closed_steps()]
 
 
 def test_window_keeps_steps_strictly_after_since_and_at_or_before_until() -> None:
@@ -175,5 +175,5 @@ def test_window_holds_back_steps_at_or_past_the_frontier_and_may_pass_to_it() ->
 def test_window_with_nothing_closed_and_no_frontier_stays_put() -> None:
     since = CursorKey(fx.at(3), "ch_a", 1)
     window = select_window([fx.make_facts(**fx.runner_epoch(1, 10))], since, fx.at(20), None, 10)
-    assert window.steps == ()
+    assert window.closed_steps() == ()
     assert window.position == since

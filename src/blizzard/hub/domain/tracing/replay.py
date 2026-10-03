@@ -1,4 +1,4 @@
-"""Replay: tells every step that closed in ``[since, until)`` again, through the live sweep's assembly and ids.
+"""Replay: tells every step that closed and chunk that finished in ``[since, until)`` again, with the live ids.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §Operator surface. It reads through
 :class:`IReadTraceSteps` alone, so it cannot move the cursor, and it records no event: a replay leaves the live
@@ -38,6 +38,7 @@ class ReplayResult:
     batches: int
     dry_run: bool
     failed: bool = False
+    chunks: int = 0
 
 
 class TraceReplay:
@@ -55,20 +56,21 @@ class TraceReplay:
             raise ReplayWindowRefused(f"window is wider than replay_max_window ({self._max_window_seconds} seconds)")
         if not dry_run and self._exporter is None:
             raise ReplayUnavailable("fleet tracing is off; a replay without --dry-run has nowhere to send spans")
-        steps = spans = batches = 0
+        steps = chunks = spans = batches = 0
         position = CursorKey.opening(since)
         while True:
             # The window is half-open: read_window's own bound is inclusive.
             window = read_window(self._steps, position, until - timedelta(microseconds=1), self._batch_limit)
-            if window.steps:
+            if window.items:
                 told = assemble_window(window)
                 if not dry_run and not self._export(told):
-                    return ReplayResult(steps, spans, batches, dry_run, failed=True)
-                steps += len(window.steps)
+                    return ReplayResult(steps, spans, batches, dry_run, failed=True, chunks=chunks)
+                steps += len(window.closed_steps())
+                chunks += len(window.finished_chunks())
                 spans += len(told)
                 batches += 1
             if window.position == position:
-                return ReplayResult(steps, spans, batches, dry_run)
+                return ReplayResult(steps, spans, batches, dry_run, chunks=chunks)
             position = window.position
 
     def _export(self, spans: tuple[SpanRecord, ...]) -> bool:

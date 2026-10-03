@@ -1,4 +1,4 @@
-"""Derived trace and span ids for a step's trace — the cross-daemon id contract.
+"""Derived trace and span ids for a chunk's trace — the cross-daemon id contract.
 
 Ids are derived, never random, so a replay, a later slice and an inline span made elsewhere land in
 the same trace without anything crossing the wire. Contract:
@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 
 # OpenTelemetry's ``TraceFlags.SAMPLED`` bit, carried by every derived context.
 SAMPLED = 0x01
 
-_TRACE_PREFIX = "blizzard-trace/v1/"
+_TRACE_PREFIX = "blizzard-trace/v2/"
 _SPAN_PREFIX = "blizzard-span/v1/"
+_CHUNK_SPAN_PREFIX = "blizzard-chunk-span/v2/"
 _TRACE_BYTES = 16
 _SPAN_BYTES = 8
 
@@ -44,6 +46,16 @@ class RunnerSpanRole(StrEnum):
     PAUSE_PARK = "runner/pause-park"
     OVERLOAD = "runner/overload"
     TAKEOVER = "runner/takeover"
+
+
+class ChunkRole(StrEnum):
+    """A chunk-level span's role: the chunk span, its completion marker, and the waits no step owns."""
+
+    CHUNK = "chunk"
+    COMPLETED = "chunk/completed"
+    BACKLOG = "chunk/backlog-wait"
+    ESCALATION = "chunk/escalation-wait"
+    PAUSE = "chunk/pause-wait"
 
 
 @dataclass(frozen=True)
@@ -79,10 +91,32 @@ def nonzero(digest: bytes) -> bytes:
     return digest[:-1] + b"\x01"
 
 
-def trace_id(key: StepKey) -> int:
-    """The step's 128-bit trace id — the first 16 bytes of ``SHA-256("blizzard-trace/v1/" + key)``."""
-    digest = hashlib.sha256((_TRACE_PREFIX + key.text()).encode("utf-8")).digest()[:_TRACE_BYTES]
+def chunk_trace_id(chunk_id: str) -> int:
+    """The chunk's 128-bit trace id — the first 16 bytes of ``SHA-256("blizzard-trace/v2/" + chunk id)``."""
+    digest = hashlib.sha256((_TRACE_PREFIX + chunk_id).encode("utf-8")).digest()[:_TRACE_BYTES]
     return int.from_bytes(nonzero(digest), "big")
+
+
+def trace_id(key: StepKey) -> int:
+    """A step's trace id: its chunk's, so every step of a chunk lands in one trace."""
+    return chunk_trace_id(key.chunk_id)
+
+
+def instant_text(at: datetime) -> str:
+    """A UTC instant as ``YYYY-MM-DDTHH:MM:SS.ffffffZ``."""
+    return at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def chunk_span_id(chunk_id: str, role: ChunkRole = ChunkRole.CHUNK, at: datetime | None = None) -> int:
+    """A chunk-level span's 64-bit id — the first 8 bytes of
+    ``SHA-256("blizzard-chunk-span/v2/" + chunk id + "/" + role + "/" + instant)``; the chunk span has no instant."""
+    text = f"{_CHUNK_SPAN_PREFIX}{chunk_id}/{role.value}/{instant_text(at) if at is not None else ''}"
+    digest = hashlib.sha256(text.encode("utf-8")).digest()[:_SPAN_BYTES]
+    return int.from_bytes(nonzero(digest), "big")
+
+
+def chunk_context(chunk_id: str, role: ChunkRole = ChunkRole.CHUNK, at: datetime | None = None) -> DerivedContext:
+    return DerivedContext(chunk_trace_id(chunk_id), chunk_span_id(chunk_id, role, at))
 
 
 def span_id(key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = "") -> int:

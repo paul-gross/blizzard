@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
 from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.otlp_sink import OtlpSink, otlp_sink
@@ -118,6 +118,10 @@ def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpS
 
     sweep.sweep()
 
-    roots = [s for s in sink.spans() if s.parent_span_id == b""]
+    spans = sink.spans()
+    steps = [s for s in spans if s.name.startswith("step ")]
     expected = {DerivedContext.of(StepKey.attempt(c, 1), SpanRole.STEP).span_id for c in (moved, stopped)}
-    assert {int.from_bytes(s.span_id, "big") for s in roots} == expected
+    assert {int.from_bytes(s.span_id, "big") for s in steps} == expected
+    [chunk] = [s for s in spans if s.parent_span_id == b""]
+    assert (chunk.name, int.from_bytes(chunk.span_id, "big")) == ("chunk", chunk_span_id(stopped))
+    assert {s.parent_span_id for s in steps} == {chunk_span_id(c).to_bytes(8, "big") for c in (moved, stopped)}

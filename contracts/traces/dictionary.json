@@ -1,9 +1,14 @@
 {
   "attributes": [
     {
-      "meaning": "The chunk the step belongs to.",
+      "meaning": "The chunk the span belongs to.",
       "name": "blizzard.chunk.id",
       "on": [
+        "chunk",
+        "chunk/completed",
+        "chunk/backlog-wait",
+        "chunk/escalation-wait",
+        "chunk/pause-wait",
         "step",
         "gate",
         "queue",
@@ -26,6 +31,11 @@
       "meaning": "The chunk's work items as source-native tokens, such as `acme#42`.",
       "name": "blizzard.chunk.work_refs",
       "on": [
+        "chunk",
+        "chunk/completed",
+        "chunk/backlog-wait",
+        "chunk/escalation-wait",
+        "chunk/pause-wait",
         "step",
         "gate",
         "queue",
@@ -497,6 +507,115 @@
       "type": "int"
     },
     {
+      "meaning": "How the chunk finished: `done` or `stopped`. A `chunk completed` marker reads `done`.",
+      "name": "blizzard.chunk.outcome",
+      "on": [
+        "chunk",
+        "chunk/completed"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "Milliseconds the chunk rested `not_ready` before its first promotion.",
+      "name": "blizzard.chunk.backlog_ms",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Milliseconds from the chunk's first promotion to its finish.",
+      "name": "blizzard.chunk.active_ms",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "How many steps the chunk took, gates included.",
+      "name": "blizzard.chunk.steps",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "How many times the chunk was bounced back.",
+      "name": "blizzard.chunk.bounces",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens the chunk's invocations used, not counting cache.",
+      "name": "blizzard.chunk.input_tokens",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Output tokens the chunk's invocations produced.",
+      "name": "blizzard.chunk.output_tokens",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens the chunk's invocations read from the cache.",
+      "name": "blizzard.chunk.cache_read_tokens",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens the chunk's invocations wrote to the cache.",
+      "name": "blizzard.chunk.cache_create_tokens",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "The chunk's cost in US dollars, including any estimate.",
+      "name": "blizzard.chunk.cost.usd",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "double"
+    },
+    {
+      "meaning": "Whether part of the cost is a subscription estimate rather than a billed amount.",
+      "name": "blizzard.chunk.cost.estimated",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "Whether some invocation reported no cost, so the total is a floor.",
+      "name": "blizzard.chunk.cost.partial",
+      "on": [
+        "chunk"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
       "meaning": "What the invocation was: `spawn`, `resume` or `judge`; a nudge reads `resume`.",
       "name": "blizzard.invocation.kind",
       "on": [
@@ -825,6 +944,49 @@
   ],
   "genai_semconv_version": "1.44.0",
   "ids": {
+    "chunk_span": {
+      "bytes": 8,
+      "instant": "The instant the span begins as UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`; empty for the chunk span itself.",
+      "prefix": "blizzard-chunk-span/v2/",
+      "text": "<prefix><chunk_id>/<role>/<instant>"
+    },
+    "chunk_vectors": [
+      {
+        "chunk_id": "ch_1",
+        "instant": "",
+        "role": "chunk",
+        "span_id": "3df6797481a5fac6",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      },
+      {
+        "chunk_id": "ch_1",
+        "instant": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/completed",
+        "span_id": "434f93a251a84691",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      },
+      {
+        "chunk_id": "ch_1",
+        "instant": "2026-01-01T00:00:00.000000Z",
+        "role": "chunk/backlog-wait",
+        "span_id": "056e7c311fd68bd8",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      },
+      {
+        "chunk_id": "ch_1",
+        "instant": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/escalation-wait",
+        "span_id": "2153247cfe211539",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      },
+      {
+        "chunk_id": "ch_1",
+        "instant": "2026-01-01T00:00:30.000000Z",
+        "role": "chunk/pause-wait",
+        "span_id": "78553aae747499b3",
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
+      }
+    ],
     "discriminators": "The source row's own id for a role that occurs more than once in a step (ask, pause, hub-exec); empty otherwise. A runner span's is the lease id for runner/worker, `<generation>/<kind>` for runner/invocation, and its source row's id for the other runner roles.",
     "flags": "Every derived context is sampled.",
     "hash": "sha256",
@@ -832,6 +994,7 @@
       "attempt": "<chunk_id>/<epoch>",
       "gate": "<chunk_id>/<epoch>/gate/<decision_id>"
     },
+    "parents": "Every step and gate root, and every chunk wait and marker, has the chunk span as its parent; the chunk span is a trace root. A runner worker span's parent is its attempt's step root.",
     "span": {
       "bytes": 8,
       "prefix": "blizzard-span/v1/",
@@ -839,8 +1002,8 @@
     },
     "trace": {
       "bytes": 16,
-      "prefix": "blizzard-trace/v1/",
-      "text": "<prefix><key>"
+      "prefix": "blizzard-trace/v2/",
+      "text": "<prefix><chunk_id>"
     },
     "vectors": [
       {
@@ -851,7 +1014,7 @@
         "kind": "attempt",
         "role": "step",
         "span_id": "88d23b1ca9cc34d2",
-        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       },
       {
         "chunk_id": "ch_1",
@@ -861,7 +1024,7 @@
         "kind": "attempt",
         "role": "ask",
         "span_id": "dda4afb651e1a008",
-        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       },
       {
         "chunk_id": "ch_1",
@@ -872,7 +1035,7 @@
         "kind": "gate",
         "role": "gate",
         "span_id": "43607f0078ab5f54",
-        "trace_id": "02e23e56fc308497307e06c3e01d3360"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       },
       {
         "chunk_id": "ch_1",
@@ -883,7 +1046,7 @@
         "parent_span_id": "88d23b1ca9cc34d2",
         "role": "runner/worker",
         "span_id": "b122cf84fa5df19f",
-        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "zero_rule": "An all-zero digest has its last byte set to 01."
@@ -891,11 +1054,11 @@
   "instrumentation_scopes": [
     {
       "name": "blizzard.hub.fleet_spans",
-      "version": "1"
+      "version": "2"
     },
     {
       "name": "blizzard.runner.runner_spans",
-      "version": "1"
+      "version": "2"
     }
   ],
   "link_reasons": [
@@ -923,79 +1086,79 @@
   "platform": {
     "attributes": [
       {
+        "meaning": "Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified.",
         "name": "blizzard.caller",
-        "type": "string",
-        "meaning": "Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified."
+        "type": "string"
       },
       {
+        "meaning": "The chunk a request's route names.",
         "name": "blizzard.chunk.id",
-        "type": "string",
-        "meaning": "The chunk a request's route names."
+        "type": "string"
       },
       {
+        "meaning": "The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`.",
         "name": "blizzard.cli.command",
-        "type": "string",
-        "meaning": "The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`."
+        "type": "string"
       },
       {
+        "meaning": "The exit code of a hub node's `run:` step.",
         "name": "blizzard.hub.run_step.exit_code",
-        "type": "int",
-        "meaning": "The exit code of a hub node's `run:` step."
+        "type": "int"
       },
       {
+        "meaning": "A hub node's `run:` step's authored name, never its command line; absent when the step authors none.",
         "name": "blizzard.hub.run_step.name",
-        "type": "string",
-        "meaning": "A hub node's `run:` step's authored name, never its command line; absent when the step authors none."
+        "type": "string"
       },
       {
+        "meaning": "The lease a worker's span arrived under, stamped by the runner.",
         "name": "blizzard.lease.id",
-        "type": "string",
-        "meaning": "The lease a worker's span arrived under, stamped by the runner."
+        "type": "string"
       },
       {
+        "meaning": "The runner the span belongs to, or the runner a request authenticated as.",
         "name": "blizzard.runner.id",
-        "type": "string",
-        "meaning": "The runner the span belongs to, or the runner a request authenticated as."
+        "type": "string"
       },
       {
+        "meaning": "The tick step a child span covers.",
         "name": "blizzard.tick.step",
-        "type": "string",
-        "meaning": "The tick step a child span covers."
+        "type": "string"
       },
       {
+        "meaning": "The error class when the CLI's request failed.",
         "name": "error.type",
-        "type": "string",
-        "meaning": "The error class when the CLI's request failed."
+        "type": "string"
       },
       {
+        "meaning": "The HTTP method of the CLI's request to a daemon.",
         "name": "http.request.method",
-        "type": "string",
-        "meaning": "The HTTP method of the CLI's request to a daemon."
+        "type": "string"
       },
       {
+        "meaning": "The status the daemon answered the CLI's request with.",
         "name": "http.response.status_code",
-        "type": "int",
-        "meaning": "The status the daemon answered the CLI's request with."
+        "type": "int"
       },
       {
+        "meaning": "The exit code of the CLI command.",
         "name": "process.exit.code",
-        "type": "int",
-        "meaning": "The exit code of the CLI command."
+        "type": "int"
       },
       {
+        "meaning": "The host the CLI's request went to.",
         "name": "server.address",
-        "type": "string",
-        "meaning": "The host the CLI's request went to."
+        "type": "string"
       },
       {
+        "meaning": "The port the CLI's request went to.",
         "name": "server.port",
-        "type": "int",
-        "meaning": "The port the CLI's request went to."
+        "type": "int"
       },
       {
+        "meaning": "The CLI request's URL, without query string or fragment.",
         "name": "url.full",
-        "type": "string",
-        "meaning": "The CLI request's URL, without query string or fragment."
+        "type": "string"
       }
     ],
     "database_semconv_version": "1.25.0",
@@ -1032,16 +1195,16 @@
       "type": "string"
     }
   ],
-  "schema_version": "1",
+  "schema_version": "2",
   "spans": [
     {
-      "meaning": "One runner or hub attempt at a node, the root of its trace.",
+      "meaning": "One runner or hub attempt at a node, the root of a step, under the chunk span.",
       "name": "step <node>",
       "role": "step",
       "scope": "blizzard.hub.fleet_spans"
     },
     {
-      "meaning": "One human decision at a node, the root of its trace.",
+      "meaning": "One human decision at a node, the root of a step, under the chunk span.",
       "name": "gate <node>",
       "role": "gate",
       "scope": "blizzard.hub.fleet_spans"
@@ -1080,6 +1243,36 @@
       "meaning": "A hub node's run holding its execution slot.",
       "name": "hub exec",
       "role": "hub-exec",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "The chunk from ingest to its first terminal fact, `done` or `stopped`, the root of its trace. Told once, when it finishes.",
+      "name": "chunk",
+      "role": "chunk",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "A stopped chunk hand-completed, a zero-length span at the completion under the chunk span.",
+      "name": "chunk completed",
+      "role": "chunk/completed",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish.",
+      "name": "backlog wait",
+      "role": "chunk/backlog-wait",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "The chunk parked `needs_human`, from the escalation to the requeue, restart, migration restart or lease mint that released it.",
+      "name": "escalation wait",
+      "role": "chunk/escalation-wait",
+      "scope": "blizzard.hub.fleet_spans"
+    },
+    {
+      "meaning": "The chunk paused while no step and no other chunk wait covered it, from the pause (or the close of the step it began in) to the resume.",
+      "name": "pause wait",
+      "role": "chunk/pause-wait",
       "scope": "blizzard.hub.fleet_spans"
     },
     {

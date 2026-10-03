@@ -484,7 +484,11 @@ def build_services(
     )
     trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, config=trace_config)
     trace_status = TraceStatusReader(
-        settings=tracing_settings or TracingSettings("disabled"), status=trace_store, steps=trace_store, clock=clock
+        settings=tracing_settings or TracingSettings("disabled"),
+        status=trace_store,
+        steps=trace_store,
+        clock=clock,
+        replay_max_window=trace_config.replay_max_window,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,

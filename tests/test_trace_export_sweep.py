@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
-from blizzard.foundation.trace_ids import SpanRole, StepKey, span_id
+from blizzard.foundation.trace_ids import SpanRole, StepKey, chunk_span_id, span_id
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import Sweep
@@ -70,7 +70,12 @@ def _closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:
 
 
 def _roots(exporter: InMemoryTraceExporter) -> list[int]:
-    return [s.context.span_id for s in exporter.spans if s.parent_span_id is None]
+    """The step roots told so far — the chunk span is the trace's own root, so a step root is found by name."""
+    return [s.context.span_id for s in exporter.spans if s.name.startswith(("step ", "gate "))]
+
+
+def _chunk_spans(exporter: InMemoryTraceExporter) -> list[int]:
+    return [s.context.span_id for s in exporter.spans if s.name == "chunk"]
 
 
 def _root(chunk_id: str) -> int:
@@ -96,18 +101,36 @@ def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_accepta
     _sweep(hub).sweep()
     moved, stopped = _closed_pair(hub)
     tie = hub.clock.now()
-    first, second = sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1)])
+    keys = sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1), CursorKey.chunk_finished(tie, stopped)])
 
-    for _ in range(6):
+    for _ in range(8):
         _sweep(hub).sweep()
 
-    # One step a batch, in cursor order, each batch's cursor row written after it was accepted.
-    assert [len({s.context.trace_id for s in batch}) for batch in exporter.batches] == [1, 1]
-    assert _roots(exporter) == [_root(first.chunk_id), _root(second.chunk_id)]
+    # One item a batch, in cursor order, each batch's cursor row written after it was accepted.
+    assert [len({s.context.trace_id for s in batch}) for batch in exporter.batches] == [1, 1, 1]
+    assert _roots(exporter) == [_root(k.chunk_id) for k in keys if k.epoch == 1]
+    assert len(_chunk_spans(exporter)) == 1
     newest = _store(hub).newest_cursor()
     assert newest is not None
-    assert newest.position == second
-    assert newest.span_count == len(exporter.batches[1])
+    assert newest.position == keys[-1]
+    assert newest.span_count == len(exporter.batches[2])
+
+
+def test_each_chunk_span_is_told_exactly_once_however_often_the_sweep_runs(tmp_path: Path) -> None:
+    hub, exporter = _hub(tmp_path)
+    _sweep(hub).sweep()
+    _moved, stopped = _closed_pair(hub)
+
+    for _ in range(5):
+        _sweep(hub).sweep()
+        hub.clock.advance(timedelta(seconds=61))
+
+    assert _chunk_spans(exporter) == [chunk_span_id(stopped)]
+    assert len(_roots(exporter)) == 2
+    assert {s.parent_span_id for s in exporter.spans if s.name.startswith("step ")} == {
+        chunk_span_id(stopped),
+        chunk_span_id(_moved),
+    }
 
 
 def test_a_step_inside_the_settle_window_waits(tmp_path: Path) -> None:

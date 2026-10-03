@@ -18,10 +18,10 @@ from blizzard.hub.domain.tracing.window import oldest_unsent
 
 @dataclass(frozen=True)
 class TraceStatus:
-    """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed step the cursor
-    has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure began — the
-    sweep records only the first failure after a success — and ``last_error_ongoing`` whether no export has
-    succeeded since."""
+    """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed step or finished
+    chunk the cursor has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure
+    began — the sweep records only the first failure after a success — and ``last_error_ongoing`` whether no
+    export has succeeded since."""
 
     state: TracingState
     endpoint: str | None
@@ -34,13 +34,21 @@ class TraceStatus:
     last_error_at: datetime | None
     last_error_message: str | None
     last_error_ongoing: bool
+    replay_max_window_seconds: int
 
 
 class TraceStatusReader:
     def __init__(
-        self, *, settings: TracingSettings, status: IReadTraceStatus, steps: IReadTraceSteps, clock: IClock
+        self,
+        *,
+        settings: TracingSettings,
+        status: IReadTraceStatus,
+        steps: IReadTraceSteps,
+        clock: IClock,
+        replay_max_window: int,
     ) -> None:
         self._settings = settings
+        self._replay_max_window = replay_max_window
         self._status = status
         self._steps = steps
         self._clock = clock
@@ -62,6 +70,7 @@ class TraceStatusReader:
             last_error_at=failure.at if failure else None,
             last_error_message=failure.message if failure else None,
             last_error_ongoing=ongoing,
+            replay_max_window_seconds=self._replay_max_window,
         )
 
     def _lag(self, position: CursorKey) -> float | None:

@@ -1,8 +1,8 @@
 """The admission policy for spans a worker sends the runner — what is kept, and what it says once kept.
 
-Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/nesting.md`` §Out of the worker. A span is kept only
-inside the presenting lease's step trace and the allowed scope, rebuilt to carry allowlisted attributes plus who sent
-it, within the caps. Pure over :class:`ReceivedSpan`; the allowlist is a value, so widening it needs no branch here."""
+Contract: ``docs/deployment/tracing.md`` §Worker spans. A span is kept only inside the presenting lease's chunk
+trace and the allowed scope, rebuilt to carry allowlisted attributes plus who sent it. The chunk span's id, a step
+root's and a parent of the chunk span are refused; gate, wait and marker ids cannot be derived. Pure."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, LEASE_ID
 from blizzard.foundation.platform_tracing.received import ReceivedSpan, Scalar
-from blizzard.foundation.trace_ids import StepKey, trace_id
+from blizzard.foundation.trace_ids import StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 
 __all__ = [
@@ -21,7 +21,7 @@ __all__ = [
     "Admission",
     "Allowlist",
     "admit",
-    "attempt_trace_id",
+    "lease_trace_id",
 ]
 
 #: A request body larger than this is refused before it is decoded.
@@ -52,17 +52,22 @@ class Admission:
     dropped: int
 
 
-def attempt_trace_id(lease: LeaseRecord) -> int:
-    """The only trace a worker is handed: its attempt's step trace."""
-    return trace_id(StepKey.attempt(lease.chunk_id, lease.epoch))
+def lease_trace_id(lease: LeaseRecord) -> int:
+    """The only trace a worker is handed: its chunk's."""
+    return chunk_trace_id(lease.chunk_id)
 
 
 def admit(spans: list[ReceivedSpan], lease: LeaseRecord, allowlist: Allowlist) -> Admission:
-    expected = attempt_trace_id(lease)
+    expected = lease_trace_id(lease)
+    chunk_span = chunk_span_id(lease.chunk_id)
+    reserved = {chunk_span, *(step_root(StepKey.attempt(lease.chunk_id, e)).span_id for e in range(lease.epoch + 1))}
     kept = [
         _rebuilt(span, lease, allowlist)
         for span in spans
-        if span.trace_id == expected and (allowlist.scope is None or span.scope_name == allowlist.scope)
+        if span.trace_id == expected
+        and span.span_id not in reserved
+        and span.parent_span_id != chunk_span
+        and (allowlist.scope is None or span.scope_name == allowlist.scope)
     ]
     return Admission(kept=kept, dropped=len(spans) - len(kept))
 

@@ -3863,7 +3863,7 @@
         "type": "object"
       },
       "TraceStatusResponse": {
-        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``\nis the runner's span-receiver tally and is ``None`` on the hub, which has no receiver.",
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter\nerror text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.\n``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the\nwidest window one replay request may cover.",
         "properties": {
           "cursor_at": {
             "anyOf": [
@@ -3977,6 +3977,17 @@
               }
             ],
             "title": "Rejected Value"
+          },
+          "replay_max_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Max Window Seconds"
           },
           "state": {
             "enum": [

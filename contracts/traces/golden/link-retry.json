@@ -29,11 +29,11 @@
     "kind": "INTERNAL",
     "links": [],
     "name": "step build",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "88d23b1ca9cc34d2",
     "start": "2026-01-01T00:00:10Z",
     "status": "UNSET",
-    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   },
   {
     "attributes": {
@@ -70,14 +70,14 @@
           "blizzard.link.reason": "retry"
         },
         "span_id": "88d23b1ca9cc34d2",
-        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+        "trace_id": "1b74f66284990c6da69e0005db74f243"
       }
     ],
     "name": "step build",
-    "parent_span_id": null,
+    "parent_span_id": "3df6797481a5fac6",
     "span_id": "4577b46a05cd43d6",
     "start": "2026-01-01T00:00:50Z",
     "status": "UNSET",
-    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+    "trace_id": "1b74f66284990c6da69e0005db74f243"
   }
 ]

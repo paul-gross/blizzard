@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
@@ -44,7 +45,9 @@ class _Runner:
             leases=self.store, outbound=self.store, exporter=self.exporter, clock=self.clock, config=_CONFIG
         )
         self.replayer = LeaseTraceReplay(leases=self.store, exporter=self.exporter if on else None, config=_CONFIG)
-        self.status = LeaseTraceStatusReader(settings=self.settings, leases=self.store, clock=self.clock)
+        self.status = LeaseTraceStatusReader(
+            settings=self.settings, leases=self.store, clock=self.clock, replay_max_window=_CONFIG.replay_max_window
+        )
         self._n = 0
 
     def close_lease(self) -> str:
@@ -220,3 +223,79 @@ def test_cli_status_and_replay_are_pure_clients(tmp_path: Path, monkeypatch: pyt
     assert "exporting to https://collector.example:4318" in shown.output and "hunter2" not in shown.output
     assert replayed.exit_code == 0, replayed.output
     assert "would tell 1 leases" in replayed.output
+
+
+def _reach_the_runner(runner: _Runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from blizzard.runner.cli import daemon as daemon_module
+
+    def reach(verb: str, directory: str, runner_url: str | None) -> daemon_module.RunnerDaemon:
+        return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")  # type: ignore[arg-type]
+
+    monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
+
+
+def _local(at: datetime) -> str:
+    return at.astimezone().replace(tzinfo=None).isoformat()
+
+
+def test_cli_splits_a_wide_range_into_windows_and_reports_each(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _Runner(tmp_path)
+    runner.close_lease()
+    _reach_the_runner(runner, tmp_path, monkeypatch)
+    until = runner.clock.now() + timedelta(seconds=1)
+    since = until - timedelta(seconds=3600 * 2 + 1800)
+
+    result = CliRunner().invoke(
+        traces_group, ["replay", "--since", _local(since), "--until", _local(until), "--dry-run"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "window 1 of 3" in result.output and "window 3 of 3" in result.output
+    assert "would tell 1 leases" in result.output
+
+
+def test_cli_stops_on_a_failing_window_and_names_where_to_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _Runner(tmp_path)
+    runner.close_lease()
+    runner.exporter.fail = True
+    _reach_the_runner(runner, tmp_path, monkeypatch)
+    until = runner.clock.now() + timedelta(seconds=1)
+    since = until - timedelta(seconds=3600 * 2 + 1800)
+    failing = since + timedelta(seconds=3600 * 2)
+
+    result = CliRunner().invoke(traces_group, ["replay", "--since", _local(since), "--until", _local(until)])
+
+    assert result.exit_code != 0
+    assert "window 3 of 3" in result.output
+    assert f"resume with --since {failing.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output
+
+
+@pytest.mark.parametrize("failure", ["timeout", "unmapped status"])
+def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    from blizzard.runner.cli import daemon as daemon_module
+
+    runner = _Runner(tmp_path)
+    client = _client(runner, tmp_path)
+
+    def post(url: str, **kwargs: object) -> httpx.Response:
+        if failure == "timeout":
+            raise httpx.ReadTimeout("timed out")
+        return httpx.Response(500, json={}, request=httpx.Request("POST", url))
+
+    def reach(verb: str, directory: str, runner_url: str | None) -> daemon_module.RunnerDaemon:
+        return daemon_module.RunnerDaemon(verb, client, "test")  # type: ignore[arg-type]
+
+    monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
+    monkeypatch.setattr(client, "post", post)
+    until = runner.clock.now() + timedelta(seconds=1)
+    since = until - timedelta(seconds=3600 + 1800)
+
+    result = CliRunner().invoke(traces_group, ["replay", "--since", _local(since), "--until", _local(until)])
+
+    assert result.exit_code != 0
+    assert "window 1 of 2" in result.output
+    assert f"resume with --since {since.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output

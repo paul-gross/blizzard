@@ -9,7 +9,8 @@ from typing import Any
 import click
 import httpx
 
-from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.cli.window import replay_windows, resume_since, since_option, until_option
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 
@@ -67,19 +68,43 @@ def traces_status(cli: CliContext) -> None:
 @until_option(required=True)
 @click.option("--dry-run", is_flag=True, default=False, help="Count what would be told; export nothing.")
 def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bool) -> None:
-    """Tell every step that closed in [since, until) again, with the live sweep's span ids. The live cursor
-    does not move, so spans the backend already holds arrive again — it dedupes on their ids. The window is
-    bounded by the hub's replay_max_window."""
-    body = {"since": utc_query_value(since), "until": utc_query_value(until), "dry_run": dry_run}
-    operation = "POST /traces/replay"
-    resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
-    if resp.status_code == httpx.codes.BAD_GATEWAY:
-        failure = resp.json()
-        raise click.ClickException(
-            f"{failure['detail']} (told {failure['steps']} steps, {failure['spans']} spans "
-            f"in {failure['batches']} batches before it stopped)"
-        )
-    cli.check(resp, operation, on_status={409: "tracing is off", 422: "window refused"})
-    result = resp.json()
+    """Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span
+    ids. The live cursor does not move, so spans the backend already holds arrive again — it dedupes on their
+    ids. A range over replay_max_window is told in windows; a failure names the --since to resume from."""
+    status = cli.get("/api/traces/status", "GET /traces/status").json()
+    windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
+    total = {"steps": 0, "chunks": 0, "spans": 0, "batches": 0, "windows": 0}
+    for number, (start, stop) in enumerate(windows, 1):
+        body = {"since": iso_utc(start), "until": iso_utc(stop), "dry_run": dry_run}
+        resume = f"; resume with --since {resume_since(start)}"
+        try:
+            resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
+        except click.ClickException as exc:
+            raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
+        if resp.status_code == httpx.codes.BAD_GATEWAY:
+            failure = resp.json()
+            raise click.ClickException(
+                f"{failure['detail']} (told {failure['steps']} steps, {failure.get('chunks', 0)} chunks, "
+                f"{failure['spans']} spans in {failure['batches']} batches of window {number} of {len(windows)} "
+                f"before it stopped){resume}"
+            )
+        try:
+            cli.check(resp, "POST /traces/replay", on_status={409: "tracing is off", 422: "window refused"})
+        except click.ClickException as exc:
+            raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
+        result = resp.json()
+        for key in ("steps", "chunks", "spans", "batches"):
+            total[key] += result.get(key, 0)
+        total["windows"] = number
+        if len(windows) > 1 and not cli.as_json:
+            click.echo(
+                f"window {number} of {len(windows)} [{iso_utc(start)}, {iso_utc(stop)}): "
+                f"{result['steps']} steps, {result.get('chunks', 0)} chunks, {result['spans']} spans",
+                err=True,
+            )
     verb = "would tell" if dry_run else "told"
-    cli.show_lines(result, f"{verb} {result['steps']} steps, {result['spans']} spans in {result['batches']} batches")
+    cli.show_lines(
+        {**total, "dry_run": dry_run},
+        f"{verb} {total['steps']} steps, {total['chunks']} chunks, {total['spans']} spans "
+        f"in {total['batches']} batches",
+    )

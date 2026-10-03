@@ -1,20 +1,42 @@
 # Tracing
 
-Every step a chunk takes is told as one trace: a root span for the step, child spans for the waits inside or around it,
-and links from each trace to the one before. The hub tells the root and its waits; a runner tells the lease it ran into
-the same trace, under the root (see [Runner spans](#runner-spans)). This page describes the shape of that trace, so a
-backend can be built against it and an operator can read one. The shape is a versioned contract —
+Every chunk is told as one trace, from ingest to its finish: a chunk span on top, a root span under it for each step the
+chunk takes, child spans for the waits inside or around each step, and a link from each step to the one before. The hub
+tells the chunk span, the step roots and their waits; a runner tells the lease it ran into the same trace, under the
+step root (see [Runner spans](#runner-spans)). This page describes the shape of that trace, so a backend can be built
+against it and an operator can read one. The shape is a versioned contract —
 [`contracts/traces/`](../../contracts/traces/README.md) pins it, and
 [`docs/versioning.md`](../versioning.md#the-trace-contract) owns what may change.
 
 ## The shape of a trace
 
-A **step** is one attempt at a node by a runner or the hub, or one human decision at a gate. Each closed step is its own
-trace; an open step is not told until it closes. The root span is `step <node>` for an attempt and `gate <node>` for a
-decision. It carries the step's dimensions, its token and cost totals and its wait totals, and its start and end are the
-step's own.
+A **step** is one attempt at a node by a runner or the hub, or one human decision at a gate. Every step of a chunk is in
+the chunk's trace; an open step is not told until it closes. The root span is `step <node>` for an attempt and
+`gate <node>` for a decision. It carries the step's dimensions, its token and cost totals and its wait totals, and its
+start and end are the step's own. Its parent is the chunk span.
 
-Children hang off the root:
+The **chunk span** is named `chunk` and covers the chunk from ingest to its first terminal fact, `done` or `stopped`.
+Every step root, gate roots included, is its direct child. It carries the outcome (`blizzard.chunk.outcome`), the time
+the chunk rested in the backlog (`blizzard.chunk.backlog_ms`), the time from its first promotion to its finish
+(`blizzard.chunk.active_ms`) and the chunk's totals: steps, bounces, tokens and cost.
+
+- **Told once, at the end.** The hub tells the chunk span when the chunk finishes and never again. Until then a backend
+  shows the chunk's steps under a parent that has not arrived.
+- **A later completion is a marker.** A `stopped` chunk can still be hand-completed, and the later fact decides its
+  status. The chunk span keeps its `stopped` outcome and end; a zero-length `chunk completed` span under it, at the
+  completion instant and carrying the outcome `done`, records the completion.
+- **Waits that belong to the chunk, not a step,** are children of the chunk span, told with it: `backlog wait` while the
+  chunk rests `not_ready`, from ingest to its first promotion, else its first lease, else its finish; `escalation wait`
+  while it sits `needs_human`, from the escalation to the first requeue, restart (including a migration restart) or
+  lease mint after it, or to the finish if nothing did; and `pause wait` while it is paused and nothing else covers it,
+  from the pause to the resume. A pause is clipped around every step root (gates included), the backlog wait and the
+  escalation waits, so what is left of a pause that began inside one starts once that step closed or that wait ended,
+  and a pause can split into several `pause wait` spans. No two chunk-level waits overlap, and none overlaps a step
+  root. A chunk is promoted once, so it has one `backlog wait`.
+
+The only empty space left in a chunk's trace is time nothing accounts for.
+
+Children hang off a step's root:
 
 - the waits before a step — `queue wait`, then `claim` — start before the step does, so the root is not stretched to
   cover them. A chunk that waited a day for a runner reads as a day-long child beside an hour-long step.
@@ -24,7 +46,8 @@ Children hang off the root:
 Events on the root record each harness invocation (`invocation`), each time the hub polled a pending hub step
 (`hub poll pending`) and a bounce (`bounce`). An event's time never falls after the span's end.
 
-A step's root links to the previous step's root, with a `blizzard.link.reason` saying why this trace follows that one:
+A step's root also links to the previous step's root, with a `blizzard.link.reason` saying why this step follows that
+one; the nesting does not carry the reason:
 
 - `next` — The chunk moved on to the next node.
 - `retry` — The previous step ended without moving the chunk, and this one is at the same node.
@@ -36,22 +59,27 @@ A step that ends by escalating has an `ERROR` status; every other span's status 
 
 ## Spans
 
-| Span                        | Role                | What it covers                                                                               |
-| --------------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| `step <node>`               | `step`              | One runner or hub attempt at a node, the root of its trace.                                  |
-| `gate <node>`               | `gate`              | One human decision at a node, the root of its trace.                                         |
-| `queue wait`                | `queue`             | The chunk waiting claimable, pauses excluded.                                                |
-| `claim`                     | `claim`             | From the claim to the runner starting the step.                                              |
-| `ask`                       | `ask`               | A question to a person, from asked to answered.                                              |
-| `pause`                     | `pause`             | The fleet paused during the step.                                                            |
-| `decision pickup`           | `pickup`            | From a person deciding a gate to the decision being picked up.                               |
-| `hub exec`                  | `hub-exec`          | A hub node's run holding its execution slot.                                                 |
-| `worker <node>`             | `runner/worker`     | One runner lease, from its minting to its close, parented to the hub's step root.            |
-| `invoke_agent <session>`    | `runner/invocation` | One harness invocation in the lease; plain `invoke_agent` when the node declares no session. |
-| `parked on ask`             | `runner/ask-park`   | The worker parked on a question until it resumed.                                            |
-| `parked on pause`           | `runner/pause-park` | The worker parked by a fleet pause until it resumed.                                         |
-| `provider overload backoff` | `runner/overload`   | The worker backing off after the provider reported overload.                                 |
-| `takeover`                  | `runner/takeover`   | A person took the worker's session over, until they handed it back.                          |
+| Span                        | Role                    | What it covers                                                                                                                          |
+| --------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `step <node>`               | `step`                  | One runner or hub attempt at a node, the root of a step, under the chunk span.                                                          |
+| `gate <node>`               | `gate`                  | One human decision at a node, the root of a step, under the chunk span.                                                                 |
+| `queue wait`                | `queue`                 | The chunk waiting claimable, pauses excluded.                                                                                           |
+| `claim`                     | `claim`                 | From the claim to the runner starting the step.                                                                                         |
+| `ask`                       | `ask`                   | A question to a person, from asked to answered.                                                                                         |
+| `pause`                     | `pause`                 | The fleet paused during the step.                                                                                                       |
+| `decision pickup`           | `pickup`                | From a person deciding a gate to the decision being picked up.                                                                          |
+| `hub exec`                  | `hub-exec`              | A hub node's run holding its execution slot.                                                                                            |
+| `chunk`                     | `chunk`                 | The chunk from ingest to its first terminal fact, `done` or `stopped`, the root of its trace. Told once, when it finishes.              |
+| `chunk completed`           | `chunk/completed`       | A stopped chunk hand-completed, a zero-length span at the completion under the chunk span.                                              |
+| `backlog wait`              | `chunk/backlog-wait`    | The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish.                                       |
+| `escalation wait`           | `chunk/escalation-wait` | The chunk parked `needs_human`, from the escalation to the requeue, restart, migration restart or lease mint that released it.          |
+| `pause wait`                | `chunk/pause-wait`      | The chunk paused while no step and no other chunk wait covered it, from the pause (or the close of the step it began in) to the resume. |
+| `worker <node>`             | `runner/worker`         | One runner lease, from its minting to its close, parented to the hub's step root.                                                       |
+| `invoke_agent <session>`    | `runner/invocation`     | One harness invocation in the lease; plain `invoke_agent` when the node declares no session.                                            |
+| `parked on ask`             | `runner/ask-park`       | The worker parked on a question until it resumed.                                                                                       |
+| `parked on pause`           | `runner/pause-park`     | The worker parked by a fleet pause until it resumed.                                                                                    |
+| `provider overload backoff` | `runner/overload`       | The worker backing off after the provider reported overload.                                                                            |
+| `takeover`                  | `runner/takeover`       | A person took the worker's session over, until they handed it back.                                                                     |
 
 ## Attributes
 
@@ -63,7 +91,7 @@ marked optional are absent rather than empty when there is nothing to say.
 
 | Attribute                                  | Type       | Meaning                                                                                                                                           |
 | ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blizzard.chunk.id`                        | `string`   | The chunk the step belongs to.                                                                                                                    |
+| `blizzard.chunk.id`                        | `string`   | The chunk the span belongs to.                                                                                                                    |
 | `blizzard.chunk.work_refs`                 | `string[]` | The chunk's work items as source-native tokens, such as `acme#42`.                                                                                |
 | `blizzard.graph.name`                      | `string`   | The name of the graph the chunk was on.                                                                                                           |
 | `blizzard.graph.id`                        | `string`   | The id of that graph version.                                                                                                                     |
@@ -96,6 +124,18 @@ marked optional are absent rather than empty when there is nothing to say.
 | `blizzard.step.wait.ask_ms`                | `int`      | Milliseconds the step spent waiting on a person's answer.                                                                                         |
 | `blizzard.step.wait.pause_ms`              | `int`      | Milliseconds the step spent paused.                                                                                                               |
 | `blizzard.step.wait.pickup_ms`             | `int`      | Milliseconds between a person deciding a gate and the decision being picked up.                                                                   |
+| `blizzard.chunk.outcome`                   | `string`   | How the chunk finished: `done` or `stopped`. A `chunk completed` marker reads `done`.                                                             |
+| `blizzard.chunk.backlog_ms`                | `int`      | Milliseconds the chunk rested `not_ready` before its first promotion.                                                                             |
+| `blizzard.chunk.active_ms`                 | `int`      | Milliseconds from the chunk's first promotion to its finish.                                                                                      |
+| `blizzard.chunk.steps`                     | `int`      | How many steps the chunk took, gates included.                                                                                                    |
+| `blizzard.chunk.bounces`                   | `int`      | How many times the chunk was bounced back.                                                                                                        |
+| `blizzard.chunk.input_tokens`              | `int`      | Input tokens the chunk's invocations used, not counting cache.                                                                                    |
+| `blizzard.chunk.output_tokens`             | `int`      | Output tokens the chunk's invocations produced.                                                                                                   |
+| `blizzard.chunk.cache_read_tokens`         | `int`      | Input tokens the chunk's invocations read from the cache.                                                                                         |
+| `blizzard.chunk.cache_create_tokens`       | `int`      | Input tokens the chunk's invocations wrote to the cache.                                                                                          |
+| `blizzard.chunk.cost.usd`                  | `double`   | The chunk's cost in US dollars, including any estimate.                                                                                           |
+| `blizzard.chunk.cost.estimated`            | `bool`     | Whether part of the cost is a subscription estimate rather than a billed amount.                                                                  |
+| `blizzard.chunk.cost.partial`              | `bool`     | Whether some invocation reported no cost, so the total is a floor.                                                                                |
 | `blizzard.invocation.kind`                 | `string`   | What the invocation was: `spawn`, `resume` or `judge`; a nudge reads `resume`.                                                                    |
 | `blizzard.invocation.input_tokens`         | `int`      | Input tokens, not counting cache.                                                                                                                 |
 | `blizzard.invocation.output_tokens`        | `int`      | Output tokens.                                                                                                                                    |
@@ -135,7 +175,7 @@ where the `blizzard.invocation.*` counts do not.
 ## Resource attributes
 
 The hub's spans are emitted under the instrumentation scope `blizzard.hub.fleet_spans` and a runner's under
-`blizzard.runner.runner_spans`, both at version `1`. The resource carries:
+`blizzard.runner.runner_spans`, both at version `2`. The resource carries:
 
 | Attribute                       | Type     | Meaning                                                                                                                                                            |
 | ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -143,26 +183,32 @@ The hub's spans are emitted under the instrumentation scope `blizzard.hub.fleet_
 | `service.version`               | `string` | The running hub's or runner's version.                                                                                                                             |
 | `blizzard.trace.schema_version` | `string` | The version of this contract.                                                                                                                                      |
 
-`blizzard.trace.schema_version` is `1`. A breaking change to the shape raises it together with the scope version; a
+`blizzard.trace.schema_version` is `2`. A breaking change to the shape raises it together with the scope version; a
 backend that keys on either can tell shapes apart.
 
 ## Trace and span ids
 
-Ids are derived, never random, so the same step always lands in the same trace and a backend can find a step's trace
+Ids are derived, never random, so the same chunk always lands in the same trace and a backend can find a chunk's trace
 without a lookup. A step's key is `<chunk id>/<epoch>` for an attempt and `<chunk id>/<epoch>/gate/<decision id>` for a
 gate.
 
-- The trace id is the first 16 bytes of the SHA-256 of `blizzard-trace/v1/` followed by the key.
-- A span id is the first 8 bytes of the SHA-256 of `blizzard-span/v1/`, the key, `/`, the span's role and `/`, and a
-  discriminator. The discriminator is the source row's own id for a role that can occur more than once in a step (`ask`,
-  `pause`, `hub-exec`) and empty otherwise.
+- The trace id is the first 16 bytes of the SHA-256 of `blizzard-trace/v2/` followed by the chunk id. Every step, gate,
+  runner, platform and worker span of a chunk takes it.
+- A span id is the first 8 bytes of the SHA-256 of `blizzard-span/v1/`, the step's key, `/`, the span's role and `/`,
+  and a discriminator. Keyed on the step, no two spans of a chunk collide. The discriminator is the source row's own id
+  for a role that can occur more than once in a step (`ask`, `pause`, `hub-exec`) and empty otherwise.
 - A runner span's role is prefixed `runner/`, and its discriminator is the lease id for `runner/worker`,
   `<generation>/<kind>` for `runner/invocation`, and the source row's id for the other runner roles.
+- A chunk-level span id is the first 8 bytes of the SHA-256 of `blizzard-chunk-span/v2/`, the chunk id, `/`, the span's
+  role (`chunk`, `chunk/completed`, `chunk/backlog-wait`, `chunk/escalation-wait` or `chunk/pause-wait`), `/`, and the
+  instant the span begins as UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`. The chunk span has no instant, so its text ends
+  `/chunk/`.
 - An all-zero digest has its last byte set to `01`, so an id is never zero.
 - Every span is sampled.
 
-For attempt `ch_1/1`, the trace id is `914265ea3262e40441fa95402ba66e6d` and its root span id is `88d23b1ca9cc34d2`. The
-full set of worked vectors is in [`dictionary.json`](../../contracts/traces/dictionary.json).
+For chunk `ch_1`, the trace id is `1b74f66284990c6da69e0005db74f243` and the chunk span id is `3df6797481a5fac6`; the
+root of its attempt `ch_1/1` is `88d23b1ca9cc34d2`. The full set of worked vectors is in
+[`dictionary.json`](../../contracts/traces/dictionary.json).
 
 ## What never leaves
 
@@ -195,8 +241,8 @@ Adjust the endpoints and the header name to your backends; keep the pipeline sha
 
 ## Runner spans
 
-A runner tells each lease it closes into the trace of the step the lease ran, under the instrumentation scope
-`blizzard.runner.runner_spans` at version `1`. A `worker <node>` span covers the lease, with the lease's invocations,
+A runner tells each lease it closes into the chunk's trace, under the instrumentation scope
+`blizzard.runner.runner_spans` at version `2`. A `worker <node>` span covers the lease, with the lease's invocations,
 parks, overload backoffs and takeovers as its children. The [Spans](#spans) and [Attributes](#attributes) tables list
 them beside the hub's.
 
@@ -213,10 +259,10 @@ them beside the hub's.
   no chunk or lease. A rejected setting is reported once each time the runner starts, and the runner keeps working with
   tracing off.
 
-**Meeting the hub's step.** No message passes between the daemons. Both derive the step's trace id from the chunk and
-epoch, and the `worker` span's parent is the span id the hub derives for that step's root, so a backend shows the
-runner's spans under the hub's step. A runner span id uses the same derivation with its role prefixed `runner/`. If the
-hub has tracing off, the runner's spans still group by trace id under a parent that never arrives.
+**Meeting the hub's step.** No message passes between the daemons. Both derive the trace id from the chunk id, and the
+`worker` span's parent is the span id the hub derives for that step's root, so a backend shows the runner's spans under
+the hub's step. A runner span id uses the same derivation with its role prefixed `runner/`. If the hub has tracing off,
+the runner's spans still group by trace id under a parent that never arrives.
 
 **The gap between them.** The two daemons stamp times with their own clocks, and a runner mints its lease before the hub
 hears of it, so a `worker` span can start before its parent. Neither side clamps to the other. The gap is the start bias
@@ -225,13 +271,13 @@ match the runner's drain cadence points at clock skew between the hosts.
 
 ## Platform spans
 
-Beside the step traces, each daemon can trace its own work: the hub's requests, store queries, outbound calls and sweep
+Beside the chunk traces, each daemon can trace its own work: the hub's requests, store queries, outbound calls and sweep
 passes, and the runner's requests, store queries, hub calls and ticks. These spans tell an operator where a daemon spent
-its time. Most of them form their own traces; the ones made on a step's behalf join that step's trace, as described
-under **Nesting under a step** below. The [Spans](#spans) table does not list them.
+its time. Most of them form their own traces; the ones made on a step's behalf join the chunk's trace under the step's
+root, as described under **Nesting under a step** below. The [Spans](#spans) table does not list them.
 
 - **Turning them on.** Both switches are needed: `platform = true` in the `[tracing]` block of `blizzard-hub.toml` or
-  `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the step traces read.
+  `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the chunk traces read.
   Either alone leaves them off, and a protocol other than `http/protobuf` turns them off too. With them off, a daemon
   installs no tracer provider.
 - **Sampling.** A trace's root, which is a request that arrives with no `traceparent`, a runner tick or a hub sweep
@@ -282,6 +328,8 @@ Spans reach the collector in the order they are made, not the order of the trace
 - **The hub's step root arrives late.** The hub tells a step only once it has closed and `settle_seconds` have passed,
   so the root and its waits arrive at least that long after the step ends, on the next sweep (`sweep_seconds`) after
   that.
+- **The chunk span arrives last.** The hub tells it, with the chunk's waits, only when the chunk finishes, so every step
+  of a chunk is in the backend long before the span that parents them, and a chunk still in flight never has one.
 - **The runner's spans arrive after its own sweep.** A `worker` span and its children leave when the runner's sweep
   tells the lease, `settle_seconds` after it closes, so they arrive after the lease's platform spans.
 
@@ -289,23 +337,19 @@ A trace backend assembles a trace when it is queried, so arrival order changes n
 a trace while spans are still arriving does see it, as the next two paragraphs describe.
 
 **Tail sampling.** A collector stage that waits a bounded time before it decides splits a trace or drops it: whatever
-arrives after the decision is handled as the decision was, or on its own. The `tail_sampling` processor counts its
-`decision_wait` from the first span of a trace, which for a step is its first platform span, and a policy that keeps a
-trace only if it holds the step's root decides long before the root arrives. The `tail_sampling` processor of
-`otelcol-contrib` 0.162.0 then drops the trace, including the root that arrives afterwards. The working settings are
-either of these:
+arrives after the decision is handled as the decision was, or on its own. A chunk's trace grows over the chunk's whole
+lifetime, from its first span to a chunk span that arrives after the last step, which can be days later. No
+`decision_wait` a collector can reasonably hold covers that, so a tail-sampling stage cannot hold a chunk's trace whole.
+Run no tail sampling ahead of this pipeline.
 
-- a `decision_wait` longer than the longest step plus the largest `settle_seconds` plus `sweep_seconds` across the hub
-  and the runners, so the decision comes after the root and the chain are both there;
-- no tail sampling ahead of this pipeline.
+The `tail_sampling` processor counts its `decision_wait` from the first span of a trace, which is its first platform
+span, and a policy that keeps a trace only if it holds the chunk span or a step's root decides long before either
+arrives. The `tail_sampling` processor of `otelcol-contrib` 0.162.0 then drops the trace, including the spans that
+arrive afterwards. A collector that held every span of a trace until the chunk span arrived would need memory for every
+chunk in flight, which has no useful bound.
 
-A collector that holds every span of a trace for that long needs memory for it. At the default `settle_seconds` of 300
-and `sweep_seconds` of 60, that is more than six minutes of every span the daemons send, plus the longest step, and
-`num_traces` must cover the traces started in that time or the processor drops the oldest early. Lower `settle_seconds`
-on the daemons to shrink it.
-
-**Platform spans without fleet spans.** The `platform` switch and the step traces' own export are independent. With
-platform spans on and the step traces off, the spans made on a step's behalf still carry the step's trace id and a
+**Platform spans without fleet spans.** The `platform` switch and the chunk traces' own export are independent. With
+platform spans on and the chunk traces off, the spans made on a step's behalf still carry the chunk's trace id and a
 parent that is never exported, so a backend shows them grouped under a root that is missing. Turn both on.
 
 ### Worker spans
@@ -329,9 +373,12 @@ only while platform tracing is on; with it off the path answers `404`, and a sen
   to a command's own duration, which a service-tier test pins. A failed send is silent and never changes the command's
   output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. The span records the command's names, never an
   argument or option value.
-- **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
-  scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
-  never kept.
+- **What is kept.** A span is kept only if it belongs to the trace of the lease's own chunk and arrives under the scope
+  `blizzard.cli`. It is dropped, and counted, if its span id is the chunk span's or a step root's the hub derives for
+  the lease's chunk at an epoch up to the lease's (its own step's included), or if its parent is the chunk span. The
+  runner cannot derive a gate root, a wait or a marker id, so a span carrying one is kept; a backend that dedupes on
+  span ids can have those shadowed by a worker holding the lease token. Anything else is dropped, and counted. Events,
+  links, trace state and the status message are never kept.
 - **What is rewritten.** The span leaves under the runner's resource with `service.name` set to `blizzard-cli`, whatever
   the sender said. Only the CLI attributes in [Platform attributes](#platform-attributes) are kept, and only with the
   value type listed there; the runner then stamps `blizzard.caller` as `worker` and `blizzard.chunk.id` and
@@ -354,8 +401,9 @@ under the step. With it off, no `OTEL_EXPORTER_*` or `WINTER_OTEL_*` variable re
 names in `env_passthrough` are always withheld.
 
 - **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
-  `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's step are kept, the runner
-  stamps caller, chunk and lease, and every cap and the redacting export apply. The CLI's own spans are unchanged.
+  `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's chunk trace are kept, with
+  the same refusals of the chunk span's and the step roots' ids, the runner stamps caller, chunk and lease, and every
+  cap and the redacting export apply. The CLI's own spans are unchanged.
 - **Naming a program's spans.** The `[tracing.worker_program_services]` table, empty by default, maps an instrumentation
   scope name to the `service.name` its kept spans leave with, for example `winter_cli = "winter-blizzard"`. A scope not
   listed stays `blizzard-worker-program`, and the CLI scope `blizzard.cli` stays `blizzard-cli`. The sender's own
@@ -368,8 +416,8 @@ names in `env_passthrough` are always withheld.
   parameters. Turn this on only for programs you trust with that.
 - **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports to the runner as
   well.
-- **`TRACEPARENT`.** Most SDKs do not read it on their own; a program joins the step's trace only if it is configured
-  to.
+- **`TRACEPARENT`.** Most SDKs do not read it on their own; a program joins the chunk's trace, under the step's root,
+  only if it is configured to.
 
 ### Operator command spans
 
@@ -429,9 +477,9 @@ configures, with no daemon in between.
 - **Endpoint.** The scheme, host and port only. Any userinfo, path, query or fragment in the configured endpoint is
   dropped when the hub starts, and the export headers are never read, so no credential can appear. An endpoint that does
   not parse as a URL shows as a placeholder.
-- **Cursor and lag.** The cursor is how far the sweep has told. Lag is the age of the oldest closed step the cursor has
-  not passed, and is empty when nothing waits; a lag under `settle_seconds` is normal, since a step is held that long
-  before it is told. An idle fleet shows no lag however old the cursor is.
+- **Cursor and lag.** The cursor is how far the sweep has told. Lag is the age of the oldest closed step or finished
+  chunk the cursor has not passed, and is empty when nothing waits; a lag under `settle_seconds` is normal, since a step
+  is held that long before it is told. An idle fleet shows no lag however old the cursor is.
 - **Last export.** When the sweep last told spans, and how many.
 - **Last error.** When the newest failure began, and whether it is ongoing. The sweep records only the first failure
   after a success, so during an outage this is when the outage began; it is not ongoing once an export succeeds. Status
@@ -445,18 +493,43 @@ since the hub has no receiver.
 
 ## Telling a window again
 
-`blizzard hub traces replay --since <t> --until <t>` tells every step that closed in the window again. It is how a
-window the sweep skipped, or a backend that lost spans, is filled in. A `trace-window-skipped` event's `since` and
-`until` paste straight in.
+`blizzard hub traces replay --since <t> --until <t>` tells every step that closed and every chunk that finished in the
+window again. It is how a window the sweep skipped, or a backend that lost spans, is filled in. A `trace-window-skipped`
+event's `since` and `until` paste straight in.
 
-- **Same ids as the live sweep.** A replay assembles spans the way the sweep does, so a step's trace and span ids are
+- **Same ids as the live sweep.** A replay assembles spans the way the sweep does, so a span's trace and span ids are
   the ones it was told under before. A backend that dedupes on those ids sees no duplicates.
 - **The live cursor does not move.** A replay records no event and leaves the sweep's cursor, failure state and backoff
   as they were, so it can run beside a live sweep.
-- **The window is bounded.** It is half-open, from `since` up to but not including `until`. It must be positive, and no
-  wider than `replay_max_window` seconds in the `[tracing]` block; a wider window is refused with the limit named.
-  Replay runs inside the request, so a long window takes a while, and a command line client waits up to ten minutes.
-- **`--dry-run` sends nothing.** It reports the steps, spans and batches the window would tell, and works with tracing
-  off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay.
+- **Chunk spans come with them.** A replay tells the chunk span, the wait spans and any `chunk completed` marker of each
+  chunk that finished in the window, with the ids the sweep uses.
+- **Each request is bounded, a range is not.** A request's window is half-open, from `since` up to but not including
+  `until`. It must be positive, and no wider than `replay_max_window` seconds in the `[tracing]` block; the daemon
+  refuses a wider one with the limit named. The `hub traces replay` and `runner traces replay` commands take any range:
+  they read the limit from the daemon and split the range into consecutive windows of at most that width, printing a
+  line per window to standard error. Replay runs inside each request, so a window takes a while, and a command line
+  client waits up to ten minutes for each. If a window fails, whether the daemon refuses it or the request itself fails
+  or times out, the command stops and names the window and the `--since` value to resume from; the windows before it are
+  told and need not be told again. The resume value is rounded down to the second, and the overlap is deduped by span
+  id.
+- **`--dry-run` sends nothing.** It reports the steps, chunks, spans and batches the window would tell, and works with
+  tracing off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay.
 
 If the exporter refuses a batch, the replay stops and reports what it had told by then.
+
+## Upgrading from trace schema 1
+
+Trace schema 2 puts every span of a chunk in one trace, so every trace id changes. Spans told under schema 1 keep their
+old trace ids and would sit beside the new ones as separate traces, so the backend is rebuilt rather than mixed.
+
+1. Redeploy the hub and every runner on the release that carries schema 2.
+2. Drop or segregate the schema 1 data however your backend allows. A backend with datasets: delete the datasets the
+   fleet wrote (`blizzard-hub`, `blizzard-runner`, `blizzard-cli`, `blizzard-worker-program`, and the dataset of every
+   service name `[tracing.worker_program_services]` maps a program to), keeping the environment and its ingest keys.
+3. Tell the history again. Run `blizzard hub traces replay --since <t> --until <now>`, then
+   `blizzard runner traces replay --dir <runner dir> --since <t> --until <now>` for each runner's store. For the full
+   history, pass a `--since` earlier than the fleet's first chunk, such as the date the fleet started; a window with
+   nothing in it costs one quick request, and `replay_max_window` is a week by default.
+
+Platform, worker CLI, operator CLI and worker-program spans are sent live and never stored, so no replay brings them
+back. Their schema 1 spans cannot be told again; they start again from the deploy.

@@ -18,6 +18,7 @@ from tests.e2e.fleet_traces import (
     FleetCollector,
     InvocationExpect,
     StepExpect,
+    assert_chunk_trace,
     assert_invocations,
     assert_skeleton,
     runner_sweep,
@@ -245,6 +246,15 @@ def test_review_cycle_fails_once_then_delivers(
             )
             assert [t.root.attributes["blizzard.step.visit"] for t in traces] == [1, 1, 2, 2, 1]
             assert [t.root.attributes.get("blizzard.step.choice") for t in traces[:2]] == ["pass", "fail"]
+            # All five steps are one trace: the chunk span from ingest to done on top, a backlog wait under it.
+            spans = fleet_traces.spans(roots=5)
+            chunk = assert_chunk_trace(spans, chunk_id, outcome="done", steps=5)
+            (backlog,) = [s for s in spans if s.name == "backlog wait" and s.parent_span_id == chunk.span_id]
+            first_step = min(s.start_ns for s in spans if s.is_step_root)
+            assert backlog.start_ns == chunk.start_ns and backlog.end_ns <= first_step
+            assert (
+                round((backlog.end_ns - backlog.start_ns) / 1_000_000) == chunk.attributes["blizzard.chunk.backlog_ms"]
+            )
 
         with subtests.test(msg="runner traces"):
             fleet_traces.require()

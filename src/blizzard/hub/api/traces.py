@@ -42,6 +42,7 @@ def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> Tra
         last_error_at=iso_utc(read.last_error_at) if read.last_error_at else None,
         last_error_message=read.last_error_message,
         last_error_ongoing=read.last_error_ongoing,
+        replay_max_window_seconds=read.replay_max_window_seconds,
     )
 
 
@@ -54,7 +55,7 @@ def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> Tra
 def trace_replay(
     request: TraceReplayRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> TraceReplayResponse | JSONResponse:
-    """Tell every step closed in ``[since, until)`` again, inside the request, without moving the live cursor.
+    """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
     A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
     refuses is 502 with the counts it accepted before."""
     try:
@@ -69,6 +70,9 @@ def trace_replay(
             steps=result.steps,
             spans=result.spans,
             batches=result.batches,
+            chunks=result.chunks,
         )
         return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content=failure.model_dump())
-    return TraceReplayResponse(steps=result.steps, spans=result.spans, batches=result.batches, dry_run=result.dry_run)
+    return TraceReplayResponse(
+        steps=result.steps, spans=result.spans, batches=result.batches, dry_run=result.dry_run, chunks=result.chunks
+    )

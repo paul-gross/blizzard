@@ -72,7 +72,8 @@ GRAPHS = {"g1": G1, "g2": G2}
 
 
 def make_facts(**kwargs: object) -> StepFacts:
-    return StepFacts(chunk_id="ch_1", graphs=GRAPHS, pin_graph_id="g1", **kwargs)  # type: ignore[arg-type]
+    fields: dict[str, object] = {"chunk_id": "ch_1", "graphs": GRAPHS, "pin_graph_id": "g1", "minted_at": at(0)}
+    return StepFacts(**{**fields, **kwargs})  # type: ignore[arg-type]
 
 
 def to(graph: str, name: str, seconds: int, epoch: int, **kw: str | None) -> TransitionRecord:

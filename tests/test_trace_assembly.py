@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id
 from blizzard.foundation.trace_spans import SpanKind, SpanRecord, SpanStatus
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
@@ -68,7 +68,7 @@ def test_runner_step_root() -> None:
     assert (root.start, root.end) == (fx.at(10), fx.at(30))
     assert root.kind is SpanKind.INTERNAL
     assert root.status is SpanStatus.UNSET
-    assert root.parent_span_id is None
+    assert root.parent_span_id == chunk_span_id("ch_1")
     assert root.context == DerivedContext.of(StepKey.attempt("ch_1", 1), SpanRole.STEP)
     a = root.attributes
     assert a[shared.CHUNK_ID] == "ch_1"
@@ -519,7 +519,7 @@ def test_planted_content_never_leaves_and_every_key_is_declared() -> None:
 
 def test_resource_defaults_the_service_name_only_when_no_variable_names_one() -> None:
     base = attr.resource_attributes({}, "1.2.3")
-    assert base == {"service.name": "blizzard-hub", "service.version": "1.2.3", "blizzard.trace.schema_version": "1"}
+    assert base == {"service.name": "blizzard-hub", "service.version": "1.2.3", "blizzard.trace.schema_version": "2"}
     assert attr.resource_attributes({"OTEL_SERVICE_NAME": "mine"}, "v")["service.name"] == "mine"
     named = {"OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=prod,service.name=other"}
     assert attr.resource_attributes(named, "v")["service.name"] == "other"

@@ -5318,7 +5318,7 @@
     "traces": {
       "commands": {
         "replay": {
-          "help": "Tell every step that closed in [since, until) again, with the live sweep's span ids. The live cursor\ndoes not move, so spans the backend already holds arrive again \u2014 it dedupes on their ids. The window is\nbounded by the hub's replay_max_window.",
+          "help": "Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span\nids. The live cursor does not move, so spans the backend already holds arrive again \u2014 it dedupes on their\nids. A range over replay_max_window is told in windows; a failure names the --since to resume from.",
           "params": [
             {
               "help": "Only records at/after this instant, read in the caller's own local time.",
@@ -5382,7 +5382,7 @@
             }
           ],
           "path": "hub traces replay",
-          "short_help": "Tell every step that closed in [since, until) again, with the live sweep's span ids."
+          "short_help": "Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span ids."
         },
         "status": {
           "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",

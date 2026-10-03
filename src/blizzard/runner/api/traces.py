@@ -42,6 +42,7 @@ def trace_status(request: Request) -> TraceStatusResponse:
             if read.receiver
             else None
         ),
+        replay_max_window_seconds=read.replay_max_window_seconds,
     )
 
 

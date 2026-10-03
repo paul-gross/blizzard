@@ -2442,12 +2442,10 @@ export type TraceReplayRequest = {
 /**
  * TraceStatusResponse
  *
- * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only —
- * scheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not
- * honor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when
- * nothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no
- * export has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``
- * is the runner's span-receiver tally and is ``None`` on the hub, which has no receiver.
+ * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
+ * error text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.
+ * ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
+ * widest window one replay request may cover.
  */
 export type TraceStatusResponse = {
     /**
@@ -2491,6 +2489,10 @@ export type TraceStatusResponse = {
      * Rejected Value
      */
     rejected_value: string | null;
+    /**
+     * Replay Max Window Seconds
+     */
+    replay_max_window_seconds?: number | null;
     /**
      * State
      */
