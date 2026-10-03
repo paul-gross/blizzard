@@ -29,10 +29,8 @@ class IWorkCloser(Protocol):
     """One configured, credentialed work-source binding's close half."""
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
-        """Close ``pointer`` at the source, idempotently — closing an
-        already-closed item is a clean no-op. ``trace`` names what landed the item, for a
-        source that leaves a note; ``None`` for a chunk with no landed repo. Required, so a
-        caller cannot drop it silently. Raises :class:`WorkItemGoneError`
-        when the item no longer exists, :class:`WorkCloseError` for any other
-        failure."""
+        """Close ``pointer`` at the source, idempotently — closing an already-closed item
+        is a clean no-op. ``trace`` names what landed the item (``None`` when no repo
+        landed); required, so a caller cannot drop it. Raises :class:`WorkItemGoneError`
+        when the item no longer exists, :class:`WorkCloseError` otherwise."""
         ...

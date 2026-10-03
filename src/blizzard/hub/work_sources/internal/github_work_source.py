@@ -203,13 +203,9 @@ class GitHubWorkSource:
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
-        """Leave one trace comment naming what landed the item (unless ``trace`` is
-        ``None``), then ``PATCH`` the issue closed with ``state_reason: completed``. Both
-        are idempotent: the comment carries a hidden per-chunk marker and is posted only
-        when no existing comment has it, and re-closing an already-closed issue is a clean
-        200 no-op — so a re-attempt after a failed PATCH or a crash never double-posts. A
-        404/410 on either call means the item is gone rather than merely unreachable, so
-        it degrades to the terminal :class:`WorkItemGoneError` instead of the retried
+        """Post the marker-deduped trace comment (unless ``trace`` is ``None``), then
+        ``PATCH`` the issue closed. Both are idempotent, so a retry never double-posts. A
+        404/410 on either call is the terminal :class:`WorkItemGoneError`, not the retried
         :class:`WorkCloseError`."""
         try:
             if trace is not None:
