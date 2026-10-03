@@ -28,6 +28,7 @@ from blizzard.hub.domain.registry import (
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 
@@ -381,12 +382,16 @@ class RunnerRegistryStore:
         newest: dict[str, bool] = {}
         for batch in id_batches(runner_ids):
             rows = conn.execute(
-                select(s.runner_pause_facts.c.runner_id, s.runner_pause_facts.c.paused)
-                .where(s.runner_pause_facts.c.runner_id.in_(batch))
-                .order_by(s.runner_pause_facts.c.id)
+                newest_fact_select(
+                    s.runner_pause_facts,
+                    s.runner_pause_facts.c.runner_id,
+                    batch,
+                    s.runner_pause_facts.c.runner_id,
+                    s.runner_pause_facts.c.paused,
+                )
             ).all()
             for row in rows:
-                newest[row.runner_id] = row.paused  # newest-fact-wins: ascending id order overwrites
+                newest[row.runner_id] = row.paused
         result.update(newest)
         return result
 
@@ -407,16 +412,17 @@ class RunnerRegistryStore:
             return result
         for batch in id_batches(runner_ids):
             rows = conn.execute(
-                select(
+                newest_fact_select(
+                    s.runner_lifecycle_facts,
+                    s.runner_lifecycle_facts.c.runner_id,
+                    batch,
                     s.runner_lifecycle_facts.c.runner_id,
                     s.runner_lifecycle_facts.c.retired,
                     s.runner_lifecycle_facts.c.set_at,
                     s.runner_lifecycle_facts.c.set_by,
                 )
-                .where(s.runner_lifecycle_facts.c.runner_id.in_(batch))
-                .order_by(s.runner_lifecycle_facts.c.id)
             ).all()
-            for row in rows:  # newest-fact-wins: ascending id order overwrites
+            for row in rows:
                 result[row.runner_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
         return result
 
@@ -441,17 +447,18 @@ class RunnerRegistryStore:
         newest: dict[str, tuple[bool, str | None, str | None]] = {}
         for batch in id_batches(runner_ids):
             rows = conn.execute(
-                select(
+                newest_fact_select(
+                    s.runner_local_pause_facts,
+                    s.runner_local_pause_facts.c.runner_id,
+                    batch,
                     s.runner_local_pause_facts.c.runner_id,
                     s.runner_local_pause_facts.c.paused,
                     s.runner_local_pause_facts.c.set_by,
                     s.runner_local_pause_facts.c.reason,
                 )
-                .where(s.runner_local_pause_facts.c.runner_id.in_(batch))
-                .order_by(s.runner_local_pause_facts.c.id)
             ).all()
             for row in rows:
-                newest[row.runner_id] = (row.paused, row.set_by, row.reason)  # newest-fact-wins
+                newest[row.runner_id] = (row.paused, row.set_by, row.reason)
         for runner_id, (paused, set_by, reason) in newest.items():
             result[runner_id] = (True, set_by, reason) if paused else (False, None, None)
         return result

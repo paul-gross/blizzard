@@ -34,6 +34,7 @@ from blizzard.hub.domain.graph import (
     SessionDecl,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,
@@ -334,12 +335,16 @@ class GraphStore:
         newest: dict[str, bool] = {}
         for batch in id_batches(graph_ids):
             rows = conn.execute(
-                select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired)
-                .where(graph_lifecycle_facts.c.graph_id.in_(batch))
-                .order_by(graph_lifecycle_facts.c.id)
+                newest_fact_select(
+                    graph_lifecycle_facts,
+                    graph_lifecycle_facts.c.graph_id,
+                    batch,
+                    graph_lifecycle_facts.c.graph_id,
+                    graph_lifecycle_facts.c.retired,
+                )
             ).all()
             for row in rows:
-                newest[row.graph_id] = row.retired  # newest-fact-wins: ascending id order overwrites
+                newest[row.graph_id] = row.retired
         return {graph_id for graph_id, retired in newest.items() if retired}
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
