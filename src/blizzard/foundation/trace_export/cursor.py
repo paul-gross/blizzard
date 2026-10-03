@@ -1,5 +1,5 @@
 """The pure decisions that move a daemon's trace export cursor — every instant arrives as an argument.
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §The cursor and §Delivery semantics."""
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §The cursor and §Delivery semantics."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """The admission policy for spans a worker sends the runner — what is kept, and what it says once kept.
 
-Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md`` §Out of the worker. A span is kept only
+Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/nesting.md`` §Out of the worker. A span is kept only
 inside the presenting lease's step trace and the allowed scope, rebuilt to carry allowlisted attributes plus who sent
 it, within the caps. Pure over :class:`ReceivedSpan`; the allowlist is a value, so widening it needs no branch here."""
 

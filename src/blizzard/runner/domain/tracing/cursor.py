@@ -1,6 +1,6 @@
 """The runner's trace export cursor key.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/emission.md`` §The cursor."""
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/emission.md`` §The cursor."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """The platform attribute both daemons stamp, and the helper that stamps them on the request's span.
 
-Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/instrumentation.md`` §Attributes."""
+Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Attributes."""
 
 from __future__ import annotations
 

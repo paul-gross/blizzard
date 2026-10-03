@@ -1,8 +1,8 @@
 """The input bundle for lease assembly — one closed lease's rows from every table its spans are built from.
 
-Declares only the columns the runner span contract reads, never a content column: no question text, check command
-or output, process id, path, git declaration or stdout ever enters, so none can leave
-(``blizzard-product:/plans/tracing/runner-spans/spec/spans.md`` §What never leaves). Hydrating it is the store's job."""
+Declares only the columns the runner span contract reads, never a content column: no question text, check command or
+output, process id, path, git declaration or stdout ever enters, so none can leave. Hydrating it is the store's job.
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md`` §What never leaves."""
 
 from __future__ import annotations
 

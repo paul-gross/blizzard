@@ -1,4 +1,4 @@
-"""The hub's trace export cursor key (``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §The cursor)."""
+"""Trace export cursor key (``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §The cursor)."""
 
 from __future__ import annotations
 

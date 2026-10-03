@@ -1,6 +1,6 @@
 """The trace export sweep: tells closed node steps, in cursor order, to the configured exporter.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §What a sweep does,
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §What a sweep does,
 §The cursor and §Delivery semantics. Every collaborator is injected, so :meth:`TraceExportSweep.sweep`
 is one complete, directly-callable pass (``bzh:steppable-loop``)."""
 

@@ -1,6 +1,6 @@
 """The operator's read of runner tracing: on or off, where it exports, the cursor and its lag, what last failed.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/emission.md`` §Operator surface, reporting the
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/emission.md`` §Operator surface, reporting the
 same fields as the hub's. Everything here is a fact the sweep left in the store or the settings parsed at start
 (``bzh:facts-not-status``), so it survives a restart and needs no reach into the sweep. The clock is injected;
 no write is possible."""

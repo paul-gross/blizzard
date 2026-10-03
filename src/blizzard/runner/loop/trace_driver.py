@@ -1,6 +1,6 @@
 """The lease-trace sweep's own daemon thread in ``runner host`` — never the tick's, never ``runner tick``'s.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/emission.md`` §Where it runs."""
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/emission.md`` §Where it runs."""
 
 from __future__ import annotations
 

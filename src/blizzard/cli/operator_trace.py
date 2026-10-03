@@ -3,7 +3,7 @@
 The operator counterpart of ``WorkerSession``: with an OTLP endpoint configured and no worker identity,
 the command is one span, its ``traceparent`` rides its requests, and it is posted as the command ends.
 Nothing of the emitter loads until a span exists. Contract:
-``blizzard-product:/plans/tracing/platform-spans/spec/instrumentation.md``."""
+``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md``."""
 
 from __future__ import annotations
 

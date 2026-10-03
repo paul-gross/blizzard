@@ -1,6 +1,6 @@
 """Assembling one closed step into its finished span records.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace, §Span events,
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace, §Span events,
 §Links, §Status, §Attributes, §GenAI usage and §What never leaves. Pure: a :class:`StepFacts` and a closed
 :class:`NodeStep` in, an ordered tuple of :class:`SpanRecord` out — root first — with no clock, env read or I/O."""
 

@@ -1,6 +1,6 @@
 """The lease trace sweep: tells closed leases, in cursor order, to the configured exporter.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/emission.md`` §Where it runs, §When a lease is
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/emission.md`` §Where it runs, §When a lease is
 told and §The cursor, deferring to fleet-spans for the cursor's rules. Every collaborator is injected, so
 :meth:`LeaseTraceSweep.sweep` is one complete, directly-callable pass (``bzh:steppable-loop``)."""
 

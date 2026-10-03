@@ -1,6 +1,6 @@
 """The operator's read of fleet tracing: on or off, where it exports, the cursor and its lag, what last failed.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §Operator surface. Everything
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §Operator surface. Everything
 here is a fact the sweep left in the store or the settings parsed at start (``bzh:facts-not-status``), so it
 survives a restart and needs no reach into the sweep. The clock is injected; no write is possible."""
 

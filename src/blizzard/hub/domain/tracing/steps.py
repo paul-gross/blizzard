@@ -1,6 +1,6 @@
 """Step identification and closing — which steps a chunk's facts hold, and how each ended.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Steps and §Closing a step.
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Steps and §Closing a step.
 Pure: a :class:`StepFacts` in, an ordered tuple of :class:`NodeStep` out."""
 
 from __future__ import annotations

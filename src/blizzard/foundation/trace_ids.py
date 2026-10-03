@@ -2,7 +2,7 @@
 
 Ids are derived, never random, so a replay, a later slice and an inline span made elsewhere land in
 the same trace without anything crossing the wire. Contract:
-``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Identity. The ``v1`` prefixes are the
+``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Identity. The ``v1`` prefixes are the
 contract version; changing the derivation is breaking."""
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class SpanRole(StrEnum):
 class RunnerSpanRole(StrEnum):
     """A runner span's role within a lease's slice of its step's trace.
 
-    Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/spans.md``."""
+    Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md``."""
 
     WORKER = "runner/worker"
     INVOCATION = "runner/invocation"
@@ -97,7 +97,7 @@ def span_id(key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = 
 
 def step_traceparent(chunk_id: str, epoch: int) -> str:
     """The W3C ``traceparent`` of a step's root span — what a worker's environment carries so its
-    commands nest inside the step. Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md``."""
+    commands nest inside the step. Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/nesting.md``."""
     root = DerivedContext.of(StepKey.attempt(chunk_id, epoch), SpanRole.STEP)
     return format_traceparent(root.trace_id, root.span_id, root.trace_flags)
 

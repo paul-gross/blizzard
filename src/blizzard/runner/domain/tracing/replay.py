@@ -1,6 +1,6 @@
 """Replay: tells every lease that closed in ``[since, until)`` again, through the live sweep's assembly and ids.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/emission.md`` §Operator surface. It reads through
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/emission.md`` §Operator surface. It reads through
 :class:`IReadLeaseTraces` alone, so it cannot move the cursor, and it records no latch: a replay leaves the live
 sweep's cursor, latch and backoff as they were."""
 

@@ -1,6 +1,6 @@
 """Replay: tells every step that closed in ``[since, until)`` again, through the live sweep's assembly and ids.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §Operator surface. It reads through
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §Operator surface. It reads through
 :class:`IReadTraceSteps` alone, so it cannot move the cursor, and it records no event: a replay leaves the live
 sweep's cursor, latch and backoff as they were."""
 

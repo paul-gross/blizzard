@@ -1,6 +1,6 @@
 """The closed steps of a window — what a sweep tells after its cursor, and what a replay tells between two instants.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §What a sweep does and §The cursor.
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §What a sweep does and §The cursor.
 A step's close is known only from :func:`identify_steps` over its chunk's whole facts, so the window
 reads candidate chunks by closing-fact time, hydrates them whole, and selects in the domain."""
 

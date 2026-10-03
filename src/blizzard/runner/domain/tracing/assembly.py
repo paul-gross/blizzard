@@ -1,8 +1,8 @@
 """Assembling one closed lease into its finished span records.
 
-Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/spans.md``, ids and GenAI usage per fleet-spans §Identity
-and §GenAI usage. Pure: a :class:`LeaseTraceFacts` in, an ordered tuple of :class:`SpanRecord` out — ``worker`` first,
-then its children by start — with no clock, env read or I/O."""
+Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md``, ids and GenAI usage per fleet-spans
+§Identity and §GenAI usage. Pure: a :class:`LeaseTraceFacts` in, an ordered tuple of :class:`SpanRecord` out —
+``worker`` first, then its children by start — with no clock, env read or I/O."""
 
 from __future__ import annotations
 

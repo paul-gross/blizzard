@@ -1,7 +1,7 @@
 """Finished span records — the output shape both daemons' trace assembly produces.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace and
-``blizzard-product:/plans/tracing/runner-spans/spec/spans.md``.
+Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace and
+``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md``.
 Frozen and free of any OpenTelemetry type; mapping to SDK span data happens at the exporter seam."""
 
 from __future__ import annotations
