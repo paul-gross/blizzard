@@ -190,7 +190,34 @@ SELECT * FROM read_json_auto('<directory>/steps/v1/*/*.ndjson.gz', format = 'new
 ```
 
 For Parquet, `SELECT * FROM read_parquet('<directory>/steps/v1/*/*.parquet')`. Wrap the dictionary's newest-copy view
-around that relation, and group by `node_name` and the day of `ended_at` for cost by node by day.
+around that relation. Both recipes below read that view as `steps_newest`, and a station is a graph and a node name.
+
+Cost by node by day, billed and estimated kept apart as the spend surface keeps them. NDJSON carries money as a string,
+so the recipe reads it as a decimal; Parquet already is one:
+
+<!-- recipe:cost-by-node-by-day -->
+
+```sql
+SELECT graph_name, node_name, CAST(ended_at AS DATE) AS day,
+       sum(CAST(cost_billed_usd AS DECIMAL(18, 9))) AS billed_usd,
+       sum(CAST(cost_estimated_usd AS DECIMAL(18, 9))) AS estimated_usd
+FROM steps_newest
+GROUP BY graph_name, node_name, day
+ORDER BY day, graph_name, node_name
+```
+
+The slowest station of the week, by mean step duration over the steps that ended in the last seven days, gates included:
+
+<!-- recipe:slowest-station-of-the-week -->
+
+```sql
+SELECT graph_name, node_name, avg(duration_ms) AS mean_duration_ms
+FROM steps_newest
+WHERE ended_at >= now() - INTERVAL 7 DAY
+GROUP BY graph_name, node_name
+ORDER BY mean_duration_ms DESC
+LIMIT 1
+```
 
 ### Object storage with `rclone`
 
