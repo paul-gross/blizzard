@@ -1,6 +1,4 @@
-"""The fact-egress cursor's fact table, and a ``(recorded_at, id)`` index on ``usage_facts`` for the
-sweep's read of usage past a position. It supersedes ``ix_usage_facts_recorded_at``, which its leading
-column serves.
+"""The fact-egress cursor's fact table, and a ``(recorded_at, id)`` usage index superseding ``recorded_at``.
 
 Revision ID: 20261003_0900_egress_cursor
 Revises: 20261001_1000_trace_cursor
