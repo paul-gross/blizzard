@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
 
 import { type KitAsyncStateValue, asyncState } from 'fleet';
-import { injectQueryFilters } from '../route-state';
+import { injectQueryFilters } from '../core/route-state';
 import { EventsView } from './events-view';
 import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 

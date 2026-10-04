@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { detachChunkApiChunksChunkIdDetachPost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { chunkDetachMutationKey } from '../../mutation-keys';
+import { chunkDetachMutationKey } from '../../core/mutation-keys';
 
 /** Forcibly detach a chunk from its runner — the board's counterpart of
  * `blizzard hub detach`. Not requeue: it writes no supersession fact and

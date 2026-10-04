@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type BacklogPeekResponse, type QueuePeekResponse, repositionBacklogApiBacklogPositionPost, repositionQueueApiQueuePositionPost, hubBacklogKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { repositionBacklogMutationKey, repositionQueueMutationKey } from '../../mutation-keys';
+import { repositionBacklogMutationKey, repositionQueueMutationKey } from '../../core/mutation-keys';
 
 /** Move a chunk to sit immediately after `afterChunkId` — `null` is the very top
  * of the list. Shared by both {@link injectRepositionQueueMutation} (the ready

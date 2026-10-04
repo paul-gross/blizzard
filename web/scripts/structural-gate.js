@@ -526,7 +526,7 @@ function assertInvalidateReturnedDetectorWorks() {
 }
 
 // `setQueryData` writes the cache directly — a predictable outcome renders from a pending
-// mutation's own variables instead (`fleet/src/lib/mutation-pending/`), never a guess written
+// mutation's own variables instead (`fleet/src/lib/core/mutation-pending/`), never a guess written
 // into the cache, so this is forbidden everywhere in production code, not just inside the
 // hook that owns the mutation: a *consumer* of a mutation hook (a container calling
 // `.mutate(vars, { onMutate: ... })`, say) can write the cache just as easily as the hook
@@ -548,7 +548,7 @@ const ON_MUTATE = /\bonMutate\s*:/g;
  * A site that should keep `onMutate` — a reasoned exemption per entry, the
  * `REAL_TIMER_EXEMPT_FILES` idiom:
  *
- * - `runner/src/app/identity/auth.query.ts`'s `injectRunnerLogoutMutation` uses `onMutate`
+ * - `runner/src/app/core/identity/auth.query.ts`'s `injectRunnerLogoutMutation` uses `onMutate`
  *   only to flip a local in-flight signal (`logoutInFlightSignal.set(true)`) — no
  *   `setQueryData`, no snapshot/rollback of query data, so it's not the cache-write
  *   pattern this sweep forbids.

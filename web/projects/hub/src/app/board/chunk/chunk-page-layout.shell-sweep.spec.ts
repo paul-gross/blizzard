@@ -61,7 +61,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
         'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
         '1. Code trace: the mutation already invalidates both query keys.\n' +
         '2. Live browser test: the board updated within 500ms.\n\n' +
-        'The failing path is web/projects/fleet/src/lib/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
+        'The failing path is web/projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
         'How should I proceed?',
       options: [],
       epoch: 2,

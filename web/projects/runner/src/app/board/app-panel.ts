@@ -2,10 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-list/chunk-status';
-import { injectRunnerLeasesQuery } from '../status/leases.query';
+import { injectRunnerLeasesQuery } from '../core/leases.query';
 import { LocalPanelLayout } from './app-panel-layout';
 import { LocalPanelMobile } from './app-panel-mobile';
-import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
  * machine-side status, pre-folded so the layout needs no second read. `leases`
@@ -38,8 +38,8 @@ export interface MachineChunkRow {
  * Owns no header state: the shared header's connection cell and
  * live stat cells used to be folded here and threaded down as inputs to
  * {@link LocalPanelLayout}. Both the desktop header and the mobile titlebar
- * moved to the app root (`../../runner/src/app/nav/app-header.ts`,
- * `../../runner/src/app/nav/mobile-titlebar.ts`), so they now inject
+ * moved to the app root (`../../runner/src/app/shell/nav/app-header.ts`,
+ * `../../runner/src/app/shell/nav/mobile-titlebar.ts`), so they now inject
  * {@link injectRunnerDashboardQuery} themselves rather than reading it off
  * this container — TanStack dedupes the extra injection, so it costs no
  * extra request.
@@ -57,7 +57,7 @@ export class LocalPanel {
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
    * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
    * doesn't carry it. The persistent mobile bottom tab bar lives at the app
-   * root now (`../../runner/src/app/nav/mobile-tab-bar.ts`), not
+   * root now (`../../runner/src/app/shell/nav/mobile-tab-bar.ts`), not
    * here, so it survives navigating to `/events` where this component isn't
    * mounted at all. The viewport override itself lives behind each shell's
    * own header menu (`KitMenu`, mobile polish feedback item 5) — the app

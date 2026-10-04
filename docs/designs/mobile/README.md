@@ -7,7 +7,7 @@ components each screen reuses versus what is net-new.
 The architectural direction the sheets assume: **one app per surface, adaptive shells over shared guts** — no separate
 mobile app, no whole-tree fork at the root, no pure-CSS reflow of the desktop board. A `ViewportService` (CDK
 `BreakpointObserver` + manual override) drives page-level shell selection via `@defer`; leaf components, queries, the
-SSE spine, and the design tokens (`web/projects/fleet/src/lib/design/tokens.css`) are shared verbatim.
+SSE spine, and the design tokens (`web/projects/fleet/src/lib/core/design/tokens.css`) are shared verbatim.
 
 | Sheet                                          | Flows                                                                                                                                                       |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |

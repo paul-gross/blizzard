@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { type SubscriptionRow, LocalSubscriptionsView } from './app-subscriptions-view';
-import { injectRunnerDashboardQuery } from './status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
 const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, string>> = {

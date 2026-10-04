@@ -14,7 +14,7 @@ import {
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import { MachineDetailView } from './chunk-detail-view';
-import { injectRunnerDashboardQuery } from '../../status/status.query';
+import { injectRunnerDashboardQuery } from '../../core/status.query';
 import type { MachineChunkStatus } from '../chunk-list/chunk-status';
 import { MachineDetailHeader } from './machine-detail-header';
 

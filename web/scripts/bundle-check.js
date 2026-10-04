@@ -37,7 +37,7 @@ const HUB_MAIN = 'projects/hub/src/main.ts';
 /** Forbidden initial-chunk module patterns, each a predicate over a metafile-relative path
  * (forward slashes, no leading `./`, e.g. `projects/hub/src/app/gardening/garden-page.ts`). */
 const FORBIDDEN = [
-  { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk-detail/') },
+  { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
   { name: 'hub chunk-dock/', test: (f) => f.startsWith('projects/hub/src/app/board/chunk-dock/') },
   { name: 'hub gardening/', test: (f) => f.startsWith('projects/hub/src/app/gardening/') },
   { name: 'hub graphs/', test: (f) => f.startsWith('projects/hub/src/app/graphs/') },
@@ -54,7 +54,7 @@ const FORBIDDEN = [
 const REPORT_AREAS = [
   { name: '@angular/core', test: (f) => f.startsWith('node_modules/@angular/core/') },
   { name: '@angular/cdk', test: (f) => f.startsWith('node_modules/@angular/cdk/') },
-  { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk-detail/') },
+  { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
   { name: '@angular/router', test: (f) => f.startsWith('node_modules/@angular/router/') },
   { name: 'hub gardening/', test: (f) => f.startsWith('projects/hub/src/app/gardening/') },
   { name: 'fleet kit/', test: (f) => f.startsWith('projects/fleet/src/lib/kit/') },
@@ -154,9 +154,9 @@ function assertBundleCompositionDetectorWorks() {
     inputs: {
       [HUB_MAIN]: {
         bytes: 10,
-        imports: [{ path: 'projects/hub/src/app/app.ts', kind: 'import-statement' }],
+        imports: [{ path: 'projects/hub/src/app/shell/app.ts', kind: 'import-statement' }],
       },
-      'projects/hub/src/app/app.ts': {
+      'projects/hub/src/app/shell/app.ts': {
         bytes: 10,
         imports: [
           { path: 'projects/hub/src/app/gardening/garden-page.ts', kind: 'import-statement' }, // must-catch
@@ -184,7 +184,7 @@ function assertBundleCompositionDetectorWorks() {
     throw new Error('bundle-composition detector false-positived on a non-forbidden fleet module');
   }
   const hit = violations.find((v) => v.file === 'projects/hub/src/app/gardening/garden-page.ts');
-  if (hit?.importer !== 'projects/hub/src/app/app.ts') {
+  if (hit?.importer !== 'projects/hub/src/app/shell/app.ts') {
     throw new Error(`bundle-composition detector attributed the wrong importer: ${hit?.importer}`);
   }
 }

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@a
 import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { LocalInfoView } from './app-info-view';
-import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
  * The hub-link panel **container** — the discovery mock's "hub · outbound only,

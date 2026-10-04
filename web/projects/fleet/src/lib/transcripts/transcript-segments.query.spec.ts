@@ -7,7 +7,7 @@ import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
 import * as runnerApi from '../api/runner';
 import { client as runnerClient } from '../api/runner/client.gen';
-import { type TranscriptPlane, hubChunkKey } from '../query-keys';
+import { type TranscriptPlane, hubChunkKey } from '../core/query-keys';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import {

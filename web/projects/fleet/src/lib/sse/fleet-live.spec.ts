@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../query-keys';
+import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../core/query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
 import { FleetLiveUpdates, INVALIDATION_COALESCE_WINDOW_MS } from './fleet-live';
 

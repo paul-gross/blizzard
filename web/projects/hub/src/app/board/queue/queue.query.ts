@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type BacklogPeekEntry, type QueuePeekEntry, getBacklogApiBacklogGet, getQueueApiQueueGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubBacklogKey, hubQueueKey } from 'fleet';
-import { DRAIN_LIMIT, drainPages } from '../../paginated-read';
+import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 
 /**
  * Hub `GET /api/queue` read — the ready queue in the hub's explicit reorder +

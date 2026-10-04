@@ -201,7 +201,7 @@ also_copy = [
     "docs/deployment/opencode-compatibility.md",
     "docs/deployment/worker-spawn.md",
     "docs/deployment/findings-and-proposals.md",
-    "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts",
+    "web/projects/fleet/src/lib/chunk/chunk-detail/chunk-escalation.ts",
     "web/angular.json",
     "src/blizzard/hub/system_artifacts/garden/finding-format.md",
     "src/blizzard/hub/system_artifacts/garden/proposal-format.md",

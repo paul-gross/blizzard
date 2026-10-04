@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton } from 'fleet';
 
-import { localPauseMutationKey } from '../live/mutation-keys';
-import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../status/status.query';
+import { localPauseMutationKey } from '../core/mutation-keys';
+import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../core/status.query';
 
 /**
  * The runner top bar's pause/unpause control — the local brake's

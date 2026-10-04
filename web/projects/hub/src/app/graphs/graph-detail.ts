@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { type GraphNodeView, type GraphSessionView, type GraphView, errorMessage, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, injectPendingMutationVariables, asyncState } from 'fleet';
-import { hasPermission, injectMeQuery } from '../auth/me.query';
-import { graphLifecycleMutationKey } from '../mutation-keys';
+import { hasPermission, injectMeQuery } from '../core/auth/me.query';
+import { graphLifecycleMutationKey } from '../core/mutation-keys';
 import { GraphDetailHeader } from './graph-detail-header';
 import { GraphDetailLifecycle } from './graph-detail-lifecycle';
 import { GraphDiagramView } from './graph-diagram-view';

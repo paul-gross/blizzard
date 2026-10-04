@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FleetLiveUpdates, STATUS_TONE, ageMs, asyncState, asyncStateOf, compactRef, injectNowSignal, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
-import { injectHubBoardChunksQuery } from '../chunks/chunks.query';
+import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectHubChunkCountsQuery } from '../chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../health/health.query';
 import { injectHubQueueQuery } from '../queue/queue.query';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
-import { injectHubRunnersQuery } from '../../fleet/runners.query';
+import { injectHubRunnersQuery } from '../../runners/runners.query';
 
-import { startOfLocalDayIso } from '../../local-day';
+import { startOfLocalDayIso } from '../../core/local-day';
 import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNextRow, type Vitals } from './glance-view';
 
 /**

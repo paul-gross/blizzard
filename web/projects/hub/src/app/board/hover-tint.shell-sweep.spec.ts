@@ -56,7 +56,7 @@ function channelDelta(a: string, b: string): number {
  * builder exposes for exactly this) and injects it as a `<style>` element itself.
  */
 async function loadDesignTokens(): Promise<void> {
-  const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
   const styleEl = document.createElement('style');
   styleEl.textContent = css;
   document.head.appendChild(styleEl);

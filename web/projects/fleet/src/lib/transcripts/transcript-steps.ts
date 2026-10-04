@@ -1,5 +1,5 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { nodeStepKey } from '../node-step';
+import { nodeStepKey } from '../core/node-step';
 
 /**
  * One node-history step's transcript-segment group — joined to
