@@ -1396,7 +1396,7 @@ def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_pat
     assert values == [None]
 
 
-_SECRETS_PARENT = "20261003_1300_hub_transcript_segment_spawn_cwd"
+_SECRETS_PARENT = "20261003_1400_escalation_cause"
 
 
 def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:

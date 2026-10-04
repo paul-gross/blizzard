@@ -1,7 +1,7 @@
 """secrets, secret_lifecycle_facts — the write-only secret store, created ``checkfirst``.
 
 Revision ID: 20261004_1000_hub_secrets
-Revises: 20261003_1300_hub_transcript_segment_spawn_cwd
+Revises: 20261003_1400_escalation_cause
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from alembic import op
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 
 revision: str = "20261004_1000_hub_secrets"
-down_revision: str | None = "20261003_1300_hub_transcript_segment_spawn_cwd"
+down_revision: str | None = "20261003_1400_escalation_cause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
