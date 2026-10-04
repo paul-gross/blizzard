@@ -35,6 +35,8 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         at: datetime,
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
+        cause: str | None,
+        detail: str | None,
     ) -> int | FenceRefusal:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
         until something supersedes it — behind the write fence (``bzh:epoch-fencing``); a
@@ -52,7 +54,15 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         ...
 
     def record_bounce_escalation(
-        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        epoch: int,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
     ) -> bool:
         """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically and
         idempotently. The hub lease and the escalation fact land in one transaction, guarded

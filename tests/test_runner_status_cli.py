@@ -22,6 +22,7 @@ from click.testing import CliRunner
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -334,3 +335,74 @@ def test_status_prints_the_local_pause_reason_on_the_brake_line(
 
     assert result.exit_code == 0, result.output
     assert "paused [local] — usage limit: claude_code" in result.output
+
+
+def _seed_escalation(store: SqlAlchemyRunnerStore, *, reason: str) -> None:
+    store.record_lease(
+        NewLease(
+            lease_id="lease_9",
+            chunk_id="ch_9",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="runner-local",
+            retries_max=0,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(lease_id="lease_9", chunk_id="ch_9", node_id="nd_build", reason=reason, closed_at=_NOW)
+
+
+def _record_daemon_paths(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    paths: list[str] = []
+    original = RunnerDaemon.get
+
+    def recording(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
+        paths.append(path)
+        return original(self, path, params=params)
+
+    monkeypatch.setattr(RunnerDaemon, "get", recording)
+    return paths
+
+
+@pytest.mark.component
+def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _seed_escalation(_store(root), reason="no-acceptable-harness-mint")
+    paths = _record_daemon_paths(monkeypatch)
+
+    with _serve_local_api(root) as (_, tcp_url):
+        health = httpx.get(f"{tcp_url}/api/harness-health").json()["items"]
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "/api/harness-health" in paths
+    lines = result.output.splitlines()
+    block = lines[lines.index("    cause: no-acceptable-harness") :]
+    assert health
+    for item in health:
+        availability = "available" if item["available"] else "unavailable"
+        assert f"    harness {item['harness_id']}: {availability}, cause={item['cause'] or 'none'}" in block
+
+
+@pytest.mark.component
+def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _seed_escalation(_store(root), reason="escalated")
+    paths = _record_daemon_paths(monkeypatch)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "escalations (1):" in result.output
+    assert "/api/harness-health" not in paths
+    assert "harness " not in result.output
+    assert "cause:" not in result.output

@@ -117,6 +117,7 @@ class EscalationView:
     harness_id: str | None = None
     harness_version: str | None = None
     wrapped_takeover_command: str | None = None
+    cause: str | None = None
 
 
 @dataclass(frozen=True)
@@ -289,6 +290,7 @@ class RunnerStatusService:
                     harness_id=escalation.harness_id,
                     harness_version=escalation.harness_version,
                     wrapped_takeover_command=wrapped,
+                    cause=escalation.cause,
                 )
             )
         return views

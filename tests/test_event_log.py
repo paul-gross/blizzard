@@ -175,23 +175,47 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
 
     # ch_a: escalation, nothing after it -> OPEN.
     store.escalations.record_escalation(
-        "ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_a",
+        epoch=1,
+        takeover_command="cd a && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     # ch_b: escalation then a LATER lease mint -> superseded (closed).
     store.escalations.record_escalation(
-        "ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_b",
+        epoch=1,
+        takeover_command="cd b && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     seed_lease(engine, "ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
     store.escalations.record_escalation(
-        "ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_c",
+        epoch=1,
+        takeover_command="cd c && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     with store.exclusive.locked(["ch_c"]) as handle:
         store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
     store.escalations.record_escalation(
-        "ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_d",
+        epoch=1,
+        takeover_command="cd d && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     clock.instant = _at(20)
     with store.exclusive.locked(["ch_d"]) as handle:
@@ -216,7 +240,13 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.
     store.escalations.record_escalation(
-        "ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_f",
+        epoch=1,
+        takeover_command="cd f && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     store.movement.record_transition(
         transition_id="tr_f1",
@@ -256,7 +286,13 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
         store = chunk_stores(engine, FixedClock(_T0))
         for i in range(n):
             store.escalations.record_escalation(
-                f"ch_{i}", epoch=1, takeover_command="cd a && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+                f"ch_{i}",
+                epoch=1,
+                takeover_command="cd a && resume",
+                at=_at(10),
+                admission=EpochAdmission.AT_OR_ABOVE,
+                cause=None,
+                detail=None,
             )
         return store, engine
 

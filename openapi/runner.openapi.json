@@ -889,6 +889,28 @@
       "ChunkEscalationView": {
         "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"
@@ -1628,6 +1650,17 @@
       "EscalationView": {
         "description": "One parked escalation, carrying its literal takeover command \u2014 ``GET /api/escalations``.",
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"

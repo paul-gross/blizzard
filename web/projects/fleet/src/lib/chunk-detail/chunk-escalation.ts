@@ -38,6 +38,17 @@ export class ChunkEscalation {
   /** The chunk's open escalation, if it currently needs a human takeover. */
   protected readonly escalation = computed<ChunkEscalationView | null>(() => this.detail().escalation ?? null);
 
+  /** The opening sentence, chosen by cause: a recognized cause reads as prose, an
+   * unrecognized one renders its raw value, and an absent one names no actor. */
+  protected readonly causeSentence = computed<string>(() => {
+    const esc = this.escalation();
+    if (!esc) return '';
+    const cause = esc.cause;
+    if (!cause) return `Escalated (epoch ${esc.epoch}).`;
+    const sentence = CAUSE_SENTENCES[cause] ?? `Escalated: ${cause}`;
+    return `${sentence} (epoch ${esc.epoch}).`;
+  });
+
   /** Whether the escalation carries a runner-composed wrapped command — the
    * primary form once present. */
   protected readonly hasWrapped = computed<boolean>(() => !!this.escalation()?.wrapped_takeover_command);
@@ -63,3 +74,16 @@ export class ChunkEscalation {
     this.copyFlash.copy(command);
   }
 }
+
+/** The sentence each recognized escalation cause opens with, ahead of ` (epoch N).`.
+ * The hub-authored causes (`bounce-cap`, `migration-target-unresolvable`) name no
+ * worker — no worker was involved. The wire carries the cause as an open string, so an
+ * unrecognized value renders raw. */
+const CAUSE_SENTENCES: Readonly<Record<string, string>> = {
+  'retries-exhausted': 'The worker exhausted its retries',
+  'owner-unresolvable': "The runner could not resolve the chunk's owner",
+  'no-acceptable-harness': 'No acceptable harness was available for the chunk',
+  'spend-cap': 'The worker hit its spend cap',
+  'bounce-cap': 'The chunk reached its bounce cap',
+  'migration-target-unresolvable': "The chunk's migration target could not be resolved",
+};

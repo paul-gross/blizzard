@@ -1053,6 +1053,14 @@ export type ChunkDetail = {
  */
 export type ChunkEscalationView = {
     /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -2163,6 +2171,14 @@ export type EnvelopeChoice = {
  * ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``.
  */
 export type EscalationReport = {
+    /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Detail
+     */
+    detail?: string | null;
     /**
      * Epoch
      */

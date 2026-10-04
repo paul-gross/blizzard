@@ -14,6 +14,7 @@ from datetime import timedelta
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -536,17 +537,21 @@ class HubNodeExecutor:
         if facts is not None and facts.bounces_over_cap(cap):
             # Hub-authored escalation, no runner runtime dir to compose a wrapped
             # takeover command from — leaves wrapped_takeover_command at its store default.
+            crossed = f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces"
             self._escalations.record_bounce_escalation(
-                chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
+                chunk.chunk_id,
+                epoch=hub_epoch,
+                runner_id=_HUB_RUNNER_ID,
+                takeover_command="",
+                at=now,
+                cause=EscalationCause.BOUNCE_CAP,
+                detail=crossed,
             )
             return HubRunResult(
                 outcome_choice=HUB_DEFAULT_FAILURE_CHOICE,
                 to_node_name="",
                 wrote_transition=False,
-                detail=(
-                    f"poll_timeout exceeded — bounce cap ({cap}) crossed after "
-                    f"{facts.bounce_count()} bounces, escalated"
-                ),
+                detail=f"poll_timeout exceeded — {crossed}, escalated",
             )
         artifact = ArtifactRow(
             kind=ArtifactKind.ASSET,
@@ -645,14 +650,21 @@ class HubNodeExecutor:
                 if facts is not None and facts.bounces_over_cap(cap):
                     # Hub-authored escalation, no runner runtime dir to compose a wrapped
                     # takeover command from — leaves wrapped_takeover_command at its store default.
+                    crossed = f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces"
                     self._escalations.record_bounce_escalation(
-                        chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
+                        chunk.chunk_id,
+                        epoch=hub_epoch,
+                        runner_id=_HUB_RUNNER_ID,
+                        takeover_command="",
+                        at=now,
+                        cause=EscalationCause.BOUNCE_CAP,
+                        detail=crossed,
                     )
                     return HubRunResult(
                         outcome_choice=choice,
                         to_node_name="",
                         wrote_transition=False,
-                        detail=f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces, escalated",
+                        detail=f"{crossed}, escalated",
                     )
                 envelope_artifact = ArtifactRow(
                     kind=ArtifactKind.ASSET,

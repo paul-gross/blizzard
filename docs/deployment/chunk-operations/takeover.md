@@ -60,6 +60,11 @@ neither the permission mode nor the identity env: it runs at the harness's inter
 copyable command; the raw string is demoted to a collapsed unwrapped-fallback disclosure, present only when the
 escalation carries one.
 
+Above the commands, the board's escalation panel states why the chunk escalated — a sentence chosen by the escalation's
+cause, followed by its one-line detail. A hub-authored cause (`bounce-cap`, `migration-target-unresolvable`) never names
+a worker, and an escalation with no recorded cause reads as a neutral "Escalated" naming no actor. `blizzard runner
+status` prints, beneath a `no-acceptable-harness` escalation, each harness's id, availability, and health cause.
+
 Which commands an escalation carries, and whether its session is reachable through takeover at all, is owned by
 blizzard-context's
 [`domain/humans/escalation.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/humans/escalation.md).

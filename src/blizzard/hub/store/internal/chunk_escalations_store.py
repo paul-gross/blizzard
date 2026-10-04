@@ -40,7 +40,13 @@ class ChunkEscalationsStore:
         candidates = self._escalation_candidates(self._newest_escalation_per_chunk())
         facts_by_id = self._facts.load_facts_for(candidates)
         return [
-            EscalationOpen(chunk_id=chunk_id, recorded_at=open_.recorded_at, takeover_command=open_.takeover_command)
+            EscalationOpen(
+                chunk_id=chunk_id,
+                recorded_at=open_.recorded_at,
+                takeover_command=open_.takeover_command,
+                cause=open_.cause,
+                detail=open_.detail,
+            )
             for chunk_id in candidates
             if (facts := facts_by_id.get(chunk_id)) is not None and (open_ := facts.open_escalation()) is not None
         ]
@@ -56,6 +62,8 @@ class ChunkEscalationsStore:
         at: datetime,
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
+        cause: str | None,
+        detail: str | None,
     ) -> int | FenceRefusal:
         with self._store.write("record_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
@@ -69,6 +77,8 @@ class ChunkEscalationsStore:
                     takeover_command=takeover_command,
                     wrapped_takeover_command=wrapped_takeover_command,
                     decision_id=decision_id,
+                    cause=cause,
+                    detail=detail,
                     recorded_at=at,
                 )
             )
@@ -98,7 +108,15 @@ class ChunkEscalationsStore:
             return True
 
     def record_bounce_escalation(
-        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        epoch: int,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
     ) -> bool:
         """Escalate a bounce-capped chunk **atomically and idempotently** (#64).
 
@@ -117,7 +135,12 @@ class ChunkEscalationsStore:
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
                 s.escalations.insert().values(
-                    chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at
+                    chunk_id=chunk_id,
+                    epoch=epoch,
+                    takeover_command=takeover_command,
+                    cause=cause,
+                    detail=detail,
+                    recorded_at=at,
                 )
             )
             return True

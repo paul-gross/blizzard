@@ -32,6 +32,7 @@ class EscalationRecord:
     #: read off ``lease_spawns`` beside ``harness_id``. ``None`` when the generation
     #: recorded none.
     harness_version: str | None = None
+    cause: str | None = None
 
     @property
     def session(self) -> SessionReference | None:  # ast-grep-ignore: bzh:property-delegates

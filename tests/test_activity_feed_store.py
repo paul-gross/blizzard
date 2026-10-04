@@ -262,7 +262,13 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     store.escalations.record_escalation(
-        "ch_1", epoch=1, takeover_command="cd x && resume", at=_at(1), admission=EpochAdmission.AT_OR_ABOVE
+        "ch_1",
+        epoch=1,
+        takeover_command="cd x && resume",
+        at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"

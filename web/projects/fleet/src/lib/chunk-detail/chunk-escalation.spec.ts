@@ -217,4 +217,50 @@ describe('ChunkEscalation', () => {
     expect(button?.textContent).toContain('Copy');
     expect(button?.textContent).not.toContain('Copied');
   });
+
+  describe('cause sentence', () => {
+    async function causeOf(cause: string | null, detail: string | null) {
+      const fixture = await render({ ...WRAPPED_DETAIL, escalation: { ...WRAPPED_DETAIL.escalation!, cause, detail } });
+      const el = fixture.nativeElement as HTMLElement;
+      return {
+        sentence: el.querySelector('[data-testid="escalation-cause"]')?.textContent?.trim(),
+        detail: el.querySelector('[data-testid="escalation-detail"]')?.textContent?.trim() ?? null,
+      };
+    }
+
+    it('renders a hub-authored cause without mentioning a worker', async () => {
+      const { sentence, detail } = await causeOf('bounce-cap', 'bounced 5 times at review');
+      expect(sentence).toBe('The chunk reached its bounce cap (epoch 3).');
+      expect(sentence?.toLowerCase()).not.toContain('worker');
+      expect(detail).toBe('bounced 5 times at review');
+    });
+
+    it('renders a runner cause with its detail', async () => {
+      const { sentence, detail } = await causeOf('retries-exhausted', 'judge failed 3 attempts');
+      expect(sentence).toBe('The worker exhausted its retries (epoch 3).');
+      expect(detail).toBe('judge failed 3 attempts');
+    });
+
+    it('renders a neutral sentence naming no actor when the cause is absent', async () => {
+      const { sentence, detail } = await causeOf(null, null);
+      expect(sentence).toBe('Escalated (epoch 3).');
+      expect(detail).toBeNull();
+    });
+
+    it('renders an unrecognized cause as its raw value', async () => {
+      const { sentence } = await causeOf('future-cause', null);
+      expect(sentence).toBe('Escalated: future-cause (epoch 3).');
+    });
+
+    it('renders the cause sentence in the raw-only and no-command branches too', async () => {
+      for (const base of [RAW_ONLY_DETAIL, NO_COMMAND_DETAIL]) {
+        TestBed.resetTestingModule();
+        const fixture = await render({ ...base, escalation: { ...base.escalation!, cause: 'migration-target-unresolvable' } });
+        const el = fixture.nativeElement as HTMLElement;
+        expect(el.querySelector('[data-testid="escalation-cause"]')?.textContent).toContain(
+          "The chunk's migration target could not be resolved (epoch 3).",
+        );
+      }
+    });
+  });
 });

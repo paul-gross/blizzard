@@ -139,7 +139,13 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     _mint(store, "ch_needs")
     store.queue.record_promote("ch_needs", at=_T0)
     store.escalations.record_escalation(
-        "ch_needs", epoch=1, takeover_command="cmd", at=_T0, admission=EpochAdmission.AT_OR_ABOVE
+        "ch_needs",
+        epoch=1,
+        takeover_command="cmd",
+        at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
 
     _mint(store, "ch_paused")

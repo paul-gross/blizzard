@@ -281,6 +281,8 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
     escalation = detail["escalation"]
     assert escalation["wrapped_takeover_command"] == ""
     assert "mint a graph named `ghost`" in escalation["takeover_command"]
+    assert escalation["cause"] == "migration-target-unresolvable"
+    assert escalation["detail"] == "cross-graph target graph `ghost` names no enabled graph"
 
 
 def test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one(tmp_path: Path) -> None:

@@ -219,6 +219,8 @@ class ChunkEscalationView(BaseModel):
     epoch: int
     takeover_command: str
     wrapped_takeover_command: str = ""
+    cause: str | None = None
+    detail: str | None = None
 
 
 class TransitionView(BaseModel):

@@ -120,8 +120,8 @@ the delta that set actually published — added, observed, and gone, kept as thr
 described from the finding row its id names: an added entry that predates the finding-id-linkage this read relies on
 renders with no matched finding id rather than a guessed one, and an observed entry whose id names no row renders by
 that id alone rather than with blank class, locus and summary fields. A run whose outcome is `needs_human` also carries
-the escalating node's name and its takeover command(s) — the hub records no reason an escalated run stopped, only where
-it stopped and how to resume it.
+the escalating node's name and its takeover command(s) — the run view carries no reason an escalated run stopped, only
+where it stopped and how to resume it; the reason is the cause and detail on the chunk's own escalation.
 
 The hub board's Gardening tab renders both reads from its own Runs sub-tab: the run list beside the selected run's own
 delta, the selection riding the URL. Each row states its routine, scope, mode, outcome and the counts its sets summed

@@ -504,7 +504,30 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "harness_version": None,
         # No runner dir is injected here, so the runner cannot compose the wrapped verb.
         "wrapped_takeover_command": None,
+        "cause": None,
     }
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(
+    ("reason", "cause"),
+    [
+        ("owner-unresolvable-mint", "owner-unresolvable"),
+        ("no-acceptable-harness-mint", "no-acceptable-harness"),
+        ("escalated", None),
+    ],
+)
+def test_an_escalation_derives_its_cause_from_the_closure_reason(
+    tmp_path: Path, reason: str, cause: str | None
+) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason=reason, closed_at=_NOW)
+
+    with TestClient(app) as client:
+        items = client.get("/api/escalations").json()["items"]
+
+    assert [item["cause"] for item in items] == [cause]
 
 
 @pytest.mark.component

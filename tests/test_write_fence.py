@@ -441,6 +441,8 @@ def test_the_store_returns_the_refusal_and_writes_nothing(tmp_path: Path) -> Non
         admission=EpochAdmission.AT_OR_ABOVE,
         takeover_command="x",
         at=hub.clock.now(),
+        cause=None,
+        detail=None,
     )
 
     assert refused == FenceRefusal.stale(1, latest=2)

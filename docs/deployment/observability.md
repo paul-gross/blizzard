@@ -30,8 +30,9 @@ that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves
 **Unhealthy** is distinct from unavailable: a bound harness with every capability wired can still fail its own computed
 health — a missing binary, an incompatible or unknown observed version, failed authentication, a `config_conflict` (an
 ambient setting that defeats the runner's own wiring), an unmapped configured tier, or a recorded selftest failure, all
-visible with their cause in this runner's own `GET /api/harness-health` diagnostics, never in this escalation. The chunk
-escalates in place rather than minting under the runner's default harness; with no session ever spawned, the escalation
+visible with their cause in this runner's own `GET /api/harness-health` diagnostics. The escalation's cause is
+`no-acceptable-harness`, and its detail names each attempted harness and why it was skipped; `blizzard runner status`
+prints each harness's id, availability, and health cause beneath such an escalation. The chunk escalates in place rather than minting under the runner's default harness; with no session ever spawned, the escalation
 carries no takeover command either.
 
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation

@@ -1388,6 +1388,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(48),
         wrapped_takeover_command="wrapped-resume",
         admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     write.escalations.record_escalation(
         chunk_escalation_2,
@@ -1396,6 +1398,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(49),
         wrapped_takeover_command="wrapped-resume",
         admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
 
     # --- questions -----------------------------------------------------------------------------

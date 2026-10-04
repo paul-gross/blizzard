@@ -328,6 +328,8 @@ class ChunkView:
             epoch=escalation.epoch,
             takeover_command=escalation.takeover_command,
             wrapped_takeover_command=escalation.wrapped_takeover_command,
+            cause=escalation.cause,
+            detail=escalation.detail,
         )
 
     def _pause(self) -> PauseView | None:
