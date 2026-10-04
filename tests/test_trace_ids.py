@@ -128,3 +128,27 @@ def test_step_traceparent_is_the_derived_step_root() -> None:
 def test_a_step_root_is_the_gate_role_for_a_gate_key_and_the_step_role_otherwise() -> None:
     assert step_root(_GATE) == DerivedContext.of(_GATE, SpanRole.GATE)
     assert step_root(_ATTEMPT) == DerivedContext.of(_ATTEMPT, SpanRole.STEP)
+
+
+def test_step_key_constructors_set_the_decision_only_for_a_gate() -> None:
+    assert StepKey.attempt("ch_1", 3) == StepKey("ch_1", 3, None)
+    assert StepKey.gate("ch_1", 3, "dec_9") == StepKey("ch_1", 3, "dec_9")
+    assert StepKey.attempt("ch_1", 3).decision_id is None
+    assert StepKey.gate("ch_1", 3, "dec_9").decision_id == "dec_9"
+
+
+def test_the_gate_keys_span_ids_are_fixed_vectors_that_differ_from_the_attempts() -> None:
+    # printf 'blizzard-span/v1/ch_1/3/gate/dec_9/gate/' | sha256sum | cut -c1-16
+    assert span_id(StepKey.gate("ch_1", 3, "dec_9"), SpanRole.GATE) == int("0e4141c938522145", 16)
+    assert span_id(_GATE, SpanRole.GATE) != span_id(_ATTEMPT, SpanRole.GATE)
+    assert span_id(_GATE, SpanRole.STEP) != span_id(_ATTEMPT, SpanRole.STEP)
+
+
+@pytest.mark.parametrize("key", [_ATTEMPT, _GATE], ids=["attempt", "gate"])
+@pytest.mark.parametrize("role", list(SpanRole))
+def test_a_derived_context_equals_the_standalone_trace_and_span_ids(key: StepKey, role: SpanRole) -> None:
+    context = DerivedContext.of(key, role, "d_1")
+
+    assert context.trace_id == trace_id(key)
+    assert context.span_id == span_id(key, role, "d_1")
+    assert DerivedContext.of(key, role) == DerivedContext(trace_id(key), span_id(key, role))

@@ -19,6 +19,11 @@ pytestmark = pytest.mark.unit
         ("git@github.com:paul-gross/blizzard", "github.com", "paul-gross", "blizzard"),
         ("https://github.com/paul-gross/blizzard.git", "github.com", "paul-gross", "blizzard"),
         ("https://github.com/paul-gross/blizzard/", "github.com", "paul-gross", "blizzard"),
+        ("https://github.com/paul-gross/blizzard.git/", "github.com", "paul-gross", "blizzard"),
+        ("https://github.com/paul-gross/blizzard///", "github.com", "paul-gross", "blizzard"),
+        # A leading slash on the path — after the scheme's authority or the scp colon — is not a segment.
+        ("git@github.com:/paul-gross/blizzard.git", "github.com", "paul-gross", "blizzard"),
+        ("ssh://git@github.com//paul-gross/blizzard.git", "github.com", "paul-gross", "blizzard"),
         ("ssh://git@github.com/paul-gross/blizzard.git", "github.com", "paul-gross", "blizzard"),
         # Credentials in the URL are not part of the host.
         ("https://user:tok@git.example.test/team/svc.git", "git.example.test", "team", "svc"),

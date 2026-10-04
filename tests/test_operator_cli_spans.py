@@ -242,7 +242,7 @@ def test_a_hung_endpoint_gives_up_at_the_cap_and_changes_neither_output_nor_exit
         listener.close()
 
     assert (hung.exit_code, hung.output) == (plain.exit_code, plain.output)
-    assert elapsed < cli_spans.OPERATOR_SEND_CAP_SECONDS + 0.5
+    assert cli_spans.OPERATOR_SEND_CAP_SECONDS * 0.9 <= elapsed < cli_spans.OPERATOR_SEND_CAP_SECONDS + 0.5
 
 
 def test_the_destination_is_the_signal_endpoint_verbatim_or_the_base_plus_the_traces_path() -> None:
@@ -278,3 +278,145 @@ def test_a_root_span_has_a_trace_of_its_own_and_hex_ids() -> None:
     assert len(payload["spanId"]) == 16
     assert "parentSpanId" not in payload
     assert span.traceparent == f"00-{payload['traceId']}-{payload['spanId']}-01"
+
+
+def _clocked(wall: int = 5_000, ticks: tuple[int, ...] = (0, 0, 40)) -> cli_spans.Clock:
+    monotonic = iter(ticks)
+    return cli_spans.Clock(wall_ns=lambda: wall, monotonic_ns=lambda: next(monotonic))
+
+
+def test_a_root_span_carries_its_service_name_times_and_no_chunk_or_lease_attribute() -> None:
+    span = cli_spans.CliSpan.root("hub chunk list", service_name="ops-laptop", clock=_clocked())
+    span.finish(0)
+
+    body = span.payload()["resourceSpans"][0]
+    payload = body["scopeSpans"][0]["spans"][0]
+
+    assert body["resource"]["attributes"] == [{"key": "service.name", "value": {"stringValue": "ops-laptop"}}]
+    assert (payload["startTimeUnixNano"], payload["endTimeUnixNano"]) == ("5000", "5040")
+    assert [a["key"] for a in payload["attributes"]] == ["blizzard.cli.command", "process.exit.code"]
+    assert "status" not in payload
+
+
+def test_an_unfinished_span_ends_where_it_started() -> None:
+    span = cli_spans.CliSpan.root("hub chunk list", clock=_clocked(ticks=(0, 0)))
+
+    payload = span.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+
+    assert payload["endTimeUnixNano"] == payload["startTimeUnixNano"] == "5000"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "url"),
+    [
+        ("http://c:4318//", "http://c:4318/v1/traces"),
+        ("http://c:4318///", "http://c:4318/v1/traces"),
+        ("http://c:4318/base/", "http://c:4318/base/v1/traces"),
+    ],
+)
+def test_every_trailing_slash_of_the_general_endpoint_is_dropped_before_the_traces_path(
+    endpoint: str, url: str
+) -> None:
+    destination = OtlpDestination.of({"OTEL_EXPORTER_OTLP_ENDPOINT": endpoint})
+
+    assert destination is not None and destination.url == url
+
+
+def test_the_signal_endpoint_keeps_its_trailing_slash() -> None:
+    destination = OtlpDestination.of({"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://t/x/"})
+
+    assert destination is not None and destination.url == "http://t/x/"
+
+
+def test_a_signal_header_beats_the_same_general_header_and_a_blank_signal_setting_defers() -> None:
+    both = OtlpDestination.of(
+        {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://c",
+            "OTEL_EXPORTER_OTLP_HEADERS": "a=general,b=general",
+            "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "a=signal",
+        }
+    )
+    blank = OtlpDestination.of(
+        {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://c",
+            "OTEL_EXPORTER_OTLP_HEADERS": "a=general",
+            "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "  ",
+        }
+    )
+
+    assert both is not None and dict(both.headers) == {"a": "signal"}
+    assert blank is not None and dict(blank.headers) == {"a": "general"}
+
+
+@pytest.mark.parametrize(
+    ("exc", "code"),
+    [
+        (click.exceptions.Exit(3), 3),
+        (click.exceptions.Exit(), 0),
+        (click.ClickException("x"), 1),
+        (click.UsageError("x"), 2),
+        (click.Abort(), 1),
+        (SystemExit(4), 4),
+        (SystemExit(0), 0),
+        (SystemExit(None), 0),
+        (SystemExit("a message"), 1),
+        (ValueError("x"), 1),
+        (KeyboardInterrupt(), 1),
+    ],
+)
+def test_the_exit_code_of_an_exception_is_the_one_click_would_end_the_process_with(
+    exc: BaseException, code: int
+) -> None:
+    assert operator_trace.exit_code_of(exc) == code
+
+
+def _grouped() -> click.Group:
+    @click.group(cls=operator_trace.OperatorGroup, lazy={}, trace_root="hub")
+    def group() -> None: ...
+
+    @group.command("ok")
+    def ok() -> None:
+        click.echo("done")
+
+    @group.command("boom")
+    def boom() -> None:
+        raise RuntimeError("planted failure")
+
+    @group.command("quit")
+    def quit_() -> None:
+        raise SystemExit(3)
+
+    return group
+
+
+def _exit_attribute(span: dict) -> dict:
+    return next(a for a in span["attributes"] if a["key"] == "process.exit.code")["value"]
+
+
+@pytest.mark.parametrize(
+    ("command", "code", "status"), [("ok", "0", None), ("boom", "1", {"code": 2}), ("quit", "3", {"code": 2})]
+)
+def test_the_operator_trace_records_the_exit_code_its_command_ends_in(
+    monkeypatch: pytest.MonkeyPatch, command: str, code: str, status: dict | None
+) -> None:
+    collector = _Collector()
+    _bind(monkeypatch, collector)
+
+    CliRunner().invoke(_grouped(), [command], env=_OPERATOR_ENV)
+
+    [span] = collector.spans()
+    assert span["name"] == f"hub {command}"
+    assert _exit_attribute(span) == {"intValue": code}
+    assert span.get("status") == status
+
+
+def test_the_operator_trace_returns_the_commands_value_and_finishes_once() -> None:
+    trace = operator_trace.OperatorTrace("hub", {})
+    finished: list[int] = []
+    trace.finish = finished.append  # type: ignore[method-assign]
+
+    assert trace.run(lambda: "value") == "value"
+    with pytest.raises(SystemExit):
+        trace.run(lambda: (_ for _ in ()).throw(SystemExit(5)))
+
+    assert finished == [0, 5]

@@ -10,6 +10,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 
 import httpx
 import pytest
@@ -299,3 +300,147 @@ def test_the_module_set_after_import_is_the_same_with_tracing_on_and_off() -> No
     off = _loaded({"BLIZZARD_TRACEPARENT": "", "BLIZZARD_RUNNER_URL": ""})
     assert on == off
     assert "blizzard.foundation.cli_spans" not in on
+
+
+class _Post:
+    """A Poster that records the call it is handed and answers a canned status."""
+
+    def __init__(self, status: object = 200) -> None:
+        self.status = status
+        self.calls: list[dict] = []
+        self.daemon: bool | None = None
+
+    def post(self, url: str, *, content: bytes, headers: Mapping[str, str], timeout: float) -> object:
+        import threading
+
+        self.daemon = threading.current_thread().daemon
+        self.calls.append({"url": url, "content": content, "headers": dict(headers), "timeout": timeout})
+        return type("Response", (), {"status_code": self.status})()
+
+
+def _open_span() -> cli_spans.CliSpan:
+    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask")  # type: ignore[arg-type]
+    span.finish(0)
+    return span
+
+
+def test_the_send_posts_json_with_the_callers_headers_the_url_verbatim_and_the_cap_as_timeout() -> None:
+    poster = _Post()
+
+    finished = cli_spans.send(
+        poster,
+        "http://runner:1/v1/traces/",
+        _open_span(),
+        headers={"X-Blizzard-Lease-Token": "tok"},
+        cap=0.7,
+        environ={},
+    )
+
+    assert finished is True
+    [call] = poster.calls
+    assert call["url"] == "http://runner:1/v1/traces/"
+    assert call["headers"] == {"Content-Type": "application/json", "X-Blizzard-Lease-Token": "tok"}
+    assert call["timeout"] == 0.7
+    assert json.loads(call["content"])["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["name"] == "runner ask"
+    assert b", " not in call["content"] and b": " not in call["content"]
+
+
+def test_the_send_runs_on_a_daemon_thread_so_a_hung_post_cannot_hold_the_process() -> None:
+    poster = _Post()
+
+    cli_spans.send(poster, "http://runner:1", _open_span(), headers={}, environ={})
+
+    assert poster.daemon is True
+
+
+@pytest.mark.parametrize(("status", "reported"), [(399, False), (400, True), (404, True), (500, True)])
+def test_a_status_of_400_or_more_is_a_failure_reported_only_under_debug(
+    capsys: pytest.CaptureFixture[str], status: int, reported: bool
+) -> None:
+    cli_spans.send(_Post(status), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"})
+
+    assert (f"trace send failed (the receiver answered {status})" in capsys.readouterr().err) is reported
+
+
+def test_a_failure_is_silent_without_the_debug_flag_and_a_non_integer_status_is_no_failure(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cli_spans.send(_Post(500), "http://runner:1", _open_span(), headers={}, environ={})
+    cli_spans.send(_Post("500"), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"})
+
+    assert capsys.readouterr().err == ""
+
+
+def test_a_post_that_raises_is_swallowed_and_named_under_debug(capsys: pytest.CaptureFixture[str]) -> None:
+    class Failing:
+        def post(self, url: str, **kwargs: object) -> object:
+            raise ConnectionError("refused")
+
+    finished = cli_spans.send(
+        Failing(), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"}
+    )
+
+    assert finished is True
+    assert "blizzard: trace send failed (ConnectionError: refused)" in capsys.readouterr().err
+
+
+def test_a_post_that_outlasts_the_cap_is_abandoned_and_reported(capsys: pytest.CaptureFixture[str]) -> None:
+    import threading
+
+    release = threading.Event()
+
+    class Hung:
+        def post(self, url: str, **kwargs: object) -> object:
+            release.wait(5)
+            return None
+
+    try:
+        started = time.monotonic()
+        finished = cli_spans.send(
+            Hung(), "http://runner:1", _open_span(), headers={}, cap=0.05, environ={"BLIZZARD_TRACE_DEBUG": "1"}
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        release.set()
+
+    assert finished is False
+    assert 0.04 <= elapsed < 1
+    assert "no answer within 50 ms" in capsys.readouterr().err
+
+
+def test_an_open_span_carries_its_chunk_lease_and_start_time_and_parent() -> None:
+    wall, ticks = iter([7_000]), iter([100, 100, 130])
+    clock = cli_spans.Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(ticks))
+    parent = parse_traceparent(_PARENT)
+    assert parent is not None
+
+    span = cli_spans.CliSpan.open(parent, "runner ask", chunk_id="ch_1", lease_id="lease_9", clock=clock)
+    span.finish(2)
+
+    payload = span.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+    attributes = {a["key"]: a["value"] for a in payload["attributes"]}
+    assert attributes["blizzard.chunk.id"] == {"stringValue": "ch_1"}
+    assert attributes["blizzard.lease.id"] == {"stringValue": "lease_9"}
+    assert attributes["process.exit.code"] == {"intValue": "2"}
+    assert (payload["startTimeUnixNano"], payload["endTimeUnixNano"]) == ("7000", "7030")
+    assert payload["parentSpanId"] == _PARENT_SPAN
+    assert payload["traceId"] == _TRACE
+    assert payload["status"] == {"code": 2}
+
+
+def test_a_zero_random_id_is_replaced_by_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_spans.secrets, "randbits", lambda _bits: 0)
+
+    root = cli_spans.CliSpan.root("hub chunk list")
+    child = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask")  # type: ignore[arg-type]
+
+    assert (root.trace_id, root.span_id) == (1, 1)
+    assert child.span_id == 1
+
+
+def test_a_nonzero_random_id_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_spans.secrets, "randbits", lambda bits: (1 << bits) - 1)
+
+    root = cli_spans.CliSpan.root("hub chunk list")
+
+    assert (root.trace_id, root.span_id) == ((1 << 128) - 1, (1 << 64) - 1)

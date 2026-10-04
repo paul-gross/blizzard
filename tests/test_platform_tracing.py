@@ -8,11 +8,22 @@ import sys
 
 import httpx
 import pytest
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import Event, ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import Decision
-from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, set_span_in_context
+from opentelemetry.sdk.util.instrumentation import InstrumentationScope
+from opentelemetry.trace import (
+    Link,
+    NonRecordingSpan,
+    SpanContext,
+    SpanKind,
+    Status,
+    StatusCode,
+    TraceFlags,
+    set_span_in_context,
+)
 from sqlalchemy import create_engine, text
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate_caller
@@ -104,6 +115,65 @@ def _span(attributes: dict[str, str]) -> ReadableSpan:
     return ReadableSpan(name="GET /x", context=SpanContext(1, 2, is_remote=False), attributes=attributes)
 
 
+def test_the_redacting_stage_copies_every_other_span_field_unchanged() -> None:
+    inner = InMemorySpanExporter()
+    parent = SpanContext(1, 9, is_remote=True)
+    original = ReadableSpan(
+        name="GET /x",
+        context=SpanContext(1, 2, is_remote=False),
+        parent=parent,
+        resource=Resource({"service.name": "svc"}),
+        attributes={"url.full": "https://hub.example/x?token=planted", "kept": "yes"},
+        events=(Event("boom", {"k": "v"}, 15),),
+        links=(Link(SpanContext(1, 3, is_remote=False)),),
+        kind=SpanKind.CLIENT,
+        status=Status(StatusCode.ERROR, "failed"),
+        start_time=100,
+        end_time=250,
+        instrumentation_scope=InstrumentationScope("scope.name", "7"),
+    )
+
+    RedactingExporter(inner).export([original])
+
+    (exported,) = inner.get_finished_spans()
+    for field in (
+        "name",
+        "context",
+        "parent",
+        "resource",
+        "events",
+        "links",
+        "kind",
+        "status",
+        "start_time",
+        "end_time",
+        "instrumentation_scope",
+    ):
+        assert getattr(exported, field) == getattr(original, field), field
+    assert dict(exported.attributes or {}) == {"url.full": "https://hub.example/x", "kept": "yes"}
+
+
+def test_the_built_pipeline_stamps_its_resource_on_every_span() -> None:
+    exporter = InMemorySpanExporter()
+    handle = build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=1.0),
+        _ENDPOINT,
+        resource={"service.name": "blizzard-test", "deployment.environment": "unit"},
+        scope="blizzard.test",
+        scope_version="2",
+        exporter=exporter,
+    )
+    with handle.tracer.root("tick"):
+        pass
+    handle.shutdown(5)
+
+    (span,) = exporter.get_finished_spans()
+    assert span.resource.attributes["service.name"] == "blizzard-test"
+    assert span.resource.attributes["deployment.environment"] == "unit"
+    assert span.instrumentation_scope is not None
+    assert (span.instrumentation_scope.name, span.instrumentation_scope.version) == ("blizzard.test", "2")
+
+
 def test_the_redacting_stage_strips_a_planted_query_token() -> None:
     inner = InMemorySpanExporter()
     planted = {
@@ -131,6 +201,8 @@ def test_the_redacting_stage_strips_a_planted_query_token() -> None:
         ("POST", "/v1/traces", True),
         ("GET", "/v1/traces", True),
         ("POST", "/api/otlp/v1/traces", True),
+        ("POST", "/v1/traces/", True),
+        ("post", "/api/heartbeat", True),
         ("GET", "/api/heartbeat", False),
         ("POST", "/api/runners/r1/heartbeat", False),
         ("GET", "/api/chunks/ch_1", False),
