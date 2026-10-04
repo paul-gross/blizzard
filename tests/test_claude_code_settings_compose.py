@@ -97,6 +97,29 @@ def test_each_collision_names_its_json_path(operator: dict[str, Any], path: str)
     assert caught.value.json_path == path
 
 
+@pytest.mark.parametrize(
+    ("operator", "path", "reason"),
+    [
+        ({"disableAllHooks": True}, "disableAllHooks", "would silence the runner's heartbeat and session-end hooks"),
+        (
+            {"permissions": {"defaultMode": "plan"}},
+            "permissions.defaultMode",
+            "the runner's [harness] autonomy owns the permission mode",
+        ),
+        (
+            {"permissions": {"disableBypassPermissionsMode": True}},
+            "permissions.disableBypassPermissionsMode",
+            "conflicts with the resolved bypassPermissions permission mode",
+        ),
+    ],
+)
+def test_each_flag_collision_states_its_reason(operator: dict[str, Any], path: str, reason: str) -> None:
+    with pytest.raises(SettingsCollision) as caught:
+        _compose(operator, "bypassPermissions")
+
+    assert (caught.value.json_path, caught.value.reason) == (path, reason)
+
+
 def test_disable_bypass_only_collides_under_bypass_permissions() -> None:
     operator = {"permissions": {"disableBypassPermissionsMode": "disable"}}
 

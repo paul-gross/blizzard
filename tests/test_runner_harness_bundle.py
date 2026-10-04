@@ -15,8 +15,10 @@ from click.testing import CliRunner
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness import bundle as bundle_module
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, plugin_identity
 from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from tests.harness_sections import sections
@@ -79,6 +81,52 @@ def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_pa
         publish_harness_bundle(bundle, runtime, sections=sections(OpenCodeSection(worker_config_path=str(missing))))
     assert raised.value.path == missing
     assert published_snapshot(runtime) == first.path.resolve()
+
+
+def _claude_code_bundle(tmp_path: Path, operator: dict[str, object]) -> Path:
+    settings = tmp_path / "bundle" / "claude-code" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps(operator))
+    return settings
+
+
+@pytest.mark.unit
+def test_publish_composes_the_runner_wiring_into_the_snapshot_and_names_the_source_on_collision(
+    tmp_path: Path,
+) -> None:
+    settings = _claude_code_bundle(tmp_path, {"model": "opus"})
+    bundle = settings.parent.parent
+
+    composed = json.loads((publish_harness_bundle(bundle, tmp_path).path / "claude-code" / "settings.json").read_text())
+    assert composed["model"] == "opus"
+    assert "SessionEnd" in composed["hooks"]
+    assert composed["disableAllHooks"] is False
+
+    settings.write_text(json.dumps({"disableAllHooks": True}))
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, tmp_path)
+    assert raised.value.path == settings
+
+
+@pytest.mark.unit
+def test_publish_composes_under_the_given_autonomy_and_section_permission_mode(tmp_path: Path) -> None:
+    settings = _claude_code_bundle(tmp_path, {"permissions": {"disableBypassPermissionsMode": True}})
+    bundle = settings.parent.parent
+
+    with pytest.raises(HarnessBundleError) as dangerous:
+        publish_harness_bundle(bundle, tmp_path)
+    assert dangerous.value.path == settings
+    normal = publish_harness_bundle(bundle, tmp_path, autonomy=Autonomy.Normal)
+    composed = json.loads((normal.path / "claude-code" / "settings.json").read_text())
+    assert composed["permissions"]["disableBypassPermissionsMode"] is True
+    with pytest.raises(HarnessBundleError) as overridden:
+        publish_harness_bundle(
+            bundle,
+            tmp_path,
+            autonomy=Autonomy.Normal,
+            sections=sections(ClaudeCodeSection(permission_mode="bypassPermissions")),
+        )
+    assert overridden.value.path == settings
 
 
 def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
@@ -174,6 +222,16 @@ def test_config_dir_expands_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 def test_relative_config_dir_names_key_and_toml(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path, "rel/dir")
     with pytest.raises(ConfigError, match=r"\[harness\] config_dir.*rel/dir.*blizzard-runner\.toml"):
+        RunnerConfig.load(runtime)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ['""', "5"])
+def test_an_empty_or_non_string_config_dir_is_not_a_path_string(tmp_path: Path, value: str) -> None:
+    runtime = _runtime(tmp_path)
+    path = runtime / CONFIG_FILENAME
+    path.write_text(path.read_text().replace("[harness]\n", f"[harness]\nconfig_dir = {value}\n", 1))
+    with pytest.raises(ConfigError, match="config_dir must be a non-empty path string"):
         RunnerConfig.load(runtime)
 
 

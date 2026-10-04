@@ -257,6 +257,19 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch,
 
 
 @pytest.mark.unit
+def test_spawn_omits_settings_without_a_bundle_or_settings_path(
+    monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture(spawn_executor)
+
+    adapter.spawn(envelope, preamble, session_hint="sid").await_identity(0)
+
+    assert "--settings" not in captured["cmd"]
+
+
+@pytest.mark.unit
 def test_spawn_stamps_process_start_time_from_the_injected_probe(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:

@@ -6,14 +6,17 @@ exercised here against minimal in-memory fakes, no I/O."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.elicitation import ElicitationRecord
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.overload import (
     BACKOFF_CAP_SECONDS,
     BACKOFF_LIMIT,
@@ -21,6 +24,13 @@ from blizzard.runner.domain.overload import (
     backing_off_facts,
     backoff_delay,
 )
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.overload import classify_judge_overload, classify_worker_overload
+from tests.runner_fakes import FakeHarness
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -190,3 +200,25 @@ def test_multiple_open_facts_key_the_result_by_lease_id() -> None:
     elicitations = _FakeElicitations({})
     result = backing_off_facts(facts, liveness, elicitations)
     assert set(result) == {"lease_1", "lease_2"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("classify", [classify_worker_overload, classify_judge_overload])
+def test_overload_is_classified_by_the_sessions_own_harness(
+    classify: Callable[[LoopContext, LeaseRecord, str, Sequence[str]], ProviderOverload | None],
+) -> None:
+    overload = ProviderOverload(detail="529")
+    handle = WorkerHandle(session_id="s", pid=1, process_start_time="start", pgid=1)
+    registry = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=handle, verdict=None, overload=overload)),
+            OPENCODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=handle, verdict=None)),
+        }
+    )
+    ctx = cast(LoopContext, SimpleNamespace(harnesses=registry))
+
+    def on(harness_id: str) -> LeaseRecord:
+        return cast(LeaseRecord, SimpleNamespace(session=SessionReference(harness_id, "s")))
+
+    assert classify(ctx, on(CLAUDE_CODE_HARNESS_ID), "out", ["line"]) == overload
+    assert classify(ctx, on(OPENCODE_HARNESS_ID), "out", ["line"]) is None
