@@ -29,20 +29,31 @@ def spend_group() -> None:
     """Worker: read one of the spend summaries."""
 
 
-def _window_params(since: datetime, until: datetime | None) -> dict[str, str]:
+def _window_params(since: datetime, until: datetime | None, by_name: bool = False) -> dict[str, str]:
     since_value = utc_query_value(since)
     assert since_value is not None  # --since is a required option
     params = {"since": since_value}
     until_value = utc_query_value(until)
     if until_value is not None:
         params["until"] = until_value
+    if by_name:
+        params["by_name"] = "true"
     return params
 
 
-def _read(verb: str, path: str, since: datetime, until: datetime | None) -> None:
+_by_name_option = click.option(
+    "--by-name",
+    is_flag=True,
+    help="Fold each node's or graph's per-mint rows into one row per name; a node's key is <graph>/<node>.",
+)
+
+
+def _read(verb: str, path: str, since: datetime, until: datetime | None, by_name: bool = False) -> None:
     worker = WorkerCall.of(verb)
     resp = worker.get(
-        worker.leased(f"analytics/{path}"), failure=f"could not read {path}", params=_window_params(since, until)
+        worker.leased(f"analytics/{path}"),
+        failure=f"could not read {path}",
+        params=_window_params(since, until, by_name),
     )
     click.echo(resp.text)
 
@@ -74,22 +85,25 @@ def counts_agent_types(since: datetime, until: datetime | None) -> None:
 @counts_group.command("nodes")
 @since_option(required=True)
 @until_option()
-def counts_nodes(since: datetime, until: datetime | None) -> None:
+@_by_name_option
+def counts_nodes(since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: occurrence counts by node over the window, as JSON."""
-    _read("analytics counts nodes", "counts/nodes", since, until)
+    _read("analytics counts nodes", "counts/nodes", since, until, by_name)
 
 
 @spend_group.command("nodes")
 @since_option(required=True)
 @until_option()
-def spend_nodes(since: datetime, until: datetime | None) -> None:
+@_by_name_option
+def spend_nodes(since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: usage/cost rollups by node over the window, as JSON."""
-    _read("analytics spend nodes", "spend/nodes", since, until)
+    _read("analytics spend nodes", "spend/nodes", since, until, by_name)
 
 
 @spend_group.command("graphs")
 @since_option(required=True)
 @until_option()
-def spend_graphs(since: datetime, until: datetime | None) -> None:
+@_by_name_option
+def spend_graphs(since: datetime, until: datetime | None, by_name: bool) -> None:
     """Worker: usage/cost rollups by graph over the window, as JSON."""
-    _read("analytics spend graphs", "spend/graphs", since, until)
+    _read("analytics spend graphs", "spend/graphs", since, until, by_name)

@@ -78,6 +78,22 @@ class CountRow:
 
     key: str
     count: int
+    graph_name: str | None = None
+    node_name: str | None = None
+
+
+def fold_counts_by_name(rows: list[CountRow]) -> list[CountRow]:
+    """Fold node-keyed rows minted apart into one row per ``(graph_name, node_name)``,
+    keyed ``<graph_name>/<node_name>`` and ordered like the store's own: count descending,
+    key ascending. A row whose names are unresolved passes through under its id key."""
+    folded: dict[tuple[str | None, str | None, str], int] = {}
+    for row in rows:
+        named = row.graph_name is not None and row.node_name is not None
+        key = f"{row.graph_name}/{row.node_name}" if named else row.key
+        ident = (row.graph_name, row.node_name, key) if named else (None, None, key)
+        folded[ident] = folded.get(ident, 0) + row.count
+    out = [CountRow(key=k, count=n, graph_name=g, node_name=nn) for (g, nn, k), n in folded.items()]
+    return sorted(out, key=lambda r: (-r.count, r.key))
 
 
 class IReadAnalyticsEventQueries(Protocol):

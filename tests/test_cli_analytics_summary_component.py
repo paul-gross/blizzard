@@ -36,6 +36,9 @@ with (repo_root() / "openapi/hub.openapi.json").open() as _f:
 #: buffered-route params (cursor/limit) are compared separately from the filter set.
 _PAGINATION_PARAMS = {"cursor", "limit"}
 
+#: The roll-up toggle the node and graph routes declare; the operator summary does not offer it.
+_ROLLUP_PARAMS = {"by_name"}
+
 
 def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None:
     headers = _cookie(token)
@@ -63,7 +66,7 @@ def _invoke(*args: str) -> Result:
 
 def test_the_applicability_table_matches_the_openapi_declared_params() -> None:
     for dataset, spec in _DATASETS.items():
-        declared = {p["name"] for p in _OPENAPI["paths"][spec.path]["get"]["parameters"]}
+        declared = {p["name"] for p in _OPENAPI["paths"][spec.path]["get"]["parameters"]} - _ROLLUP_PARAMS
         table_filters = spec.filters
         assert table_filters == declared - _PAGINATION_PARAMS, dataset
         assert (declared & _PAGINATION_PARAMS) == (_PAGINATION_PARAMS if spec.paginated else set()), dataset
@@ -100,16 +103,22 @@ def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path, monk
     _relay(hub, token, monkeypatch)
 
     by_kind = _invoke("counts-nodes", "--kind", "file_read", "--json")
-    assert json.loads(by_kind.output)["counts"] == [{"key": "nd_build", "count": 1}]
+    assert json.loads(by_kind.output)["counts"] == [
+        {"key": "nd_build", "count": 1, "graph_name": None, "node_name": None}
+    ]
 
     by_tool = _invoke("counts-agent-types", "--tool", "Agent", "--json")
     assert json.loads(by_tool.output)["counts"] == []  # main-lane spawn: agent_type unset
 
     by_node = _invoke("counts-skills", "--node", "nd_build", "--json")
-    assert json.loads(by_node.output)["counts"] == [{"key": "wf-commit", "count": 1}]
+    assert json.loads(by_node.output)["counts"] == [
+        {"key": "wf-commit", "count": 1, "graph_name": None, "node_name": None}
+    ]
 
     by_prefix = _invoke("counts-files", "--subject-prefix", "src/", "--json")
-    assert json.loads(by_prefix.output)["counts"] == [{"key": "src/a.py", "count": 1}]
+    assert json.loads(by_prefix.output)["counts"] == [
+        {"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}
+    ]
 
     by_stale_version = _invoke("counts-files", "--extractor-version", "stale-version", "--json")
     assert json.loads(by_stale_version.output)["counts"] == []

@@ -41,6 +41,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_filtered_stmt": m._filtered_stmt(select(s.transcript_events), _CRITERIA),
         "_events_stmt": m._events_stmt(_CRITERIA, cursor="7", limit=200),
         "_counts_stmt": m._counts_stmt(_CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
+        "_counts_by_node_stmt": m._counts_by_node_stmt(_CRITERIA),
     }
 
 

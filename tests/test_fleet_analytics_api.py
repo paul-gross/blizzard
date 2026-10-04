@@ -219,6 +219,18 @@ def test_same_rows_as_the_operator_route(tmp_path: Path, suffix: str) -> None:
     assert fleet.json()[key] != []  # a window covering the seed proves the window reaches the query
 
 
+@pytest.mark.parametrize("suffix", ["counts/nodes", "spend/nodes", "spend/graphs"])
+def test_by_name_rows_equal_the_operator_route(tmp_path: Path, suffix: str) -> None:
+    hub, chunk_id = _seeded_hub(tmp_path)
+    params = {"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z", "by_name": "true"}
+
+    fleet = hub.client.get(_fleet_path(chunk_id, suffix), params=params)
+    operator = hub.client.get(_OPERATOR_PATH[suffix], params=params)
+
+    assert fleet.status_code == 200, fleet.text
+    assert fleet.json() == operator.json()
+
+
 @pytest.mark.parametrize("suffix", _ROUTES)
 def test_a_window_excluding_the_seed_returns_no_rows(tmp_path: Path, suffix: str) -> None:
     """The window demonstrably reaches the query, not just the run-context gate."""

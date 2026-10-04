@@ -15,6 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.analytics import named_key
 
 pytestmark = pytest.mark.unit
 
@@ -347,3 +348,11 @@ def test_an_unknown_dataset_is_rejected() -> None:
 
     assert result.exit_code != 0
     assert "not-a-real-dataset" in result.output
+
+
+def test_named_key_prints_the_names_beside_an_id_and_not_beside_a_rolled_up_name() -> None:
+    assert named_key({"key": "nd_1", "graph_name": "adv", "node_name": "build"}) == "nd_1 (adv/build)"
+    assert named_key({"key": "gr_1", "graph_name": "adv", "node_name": None}) == "gr_1 (adv)"
+    assert named_key({"key": "adv/build", "graph_name": "adv", "node_name": "build"}) == "adv/build"
+    assert named_key({"key": "nd_gone", "graph_name": None, "node_name": None}) == "nd_gone"
+    assert named_key({"key": "src/a.py"}) == "src/a.py"

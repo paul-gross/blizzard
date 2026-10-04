@@ -181,7 +181,10 @@ export type AnalyticsChunkSpendView = {
  *
  * One grouping key and how many events fell under it. ``key`` names
  * whichever dimension this response is grouped by — a file path, a skill name, an
- * agent type, or a node id.
+ * agent type, or a node id. ``graph_name`` and ``node_name`` name what a node-keyed row
+ * counts: null on the files, skills, and agent-types dimensions, which have no graph or
+ * node, and null where the node id no longer resolves. Under ``by_name`` the row is the
+ * roll-up of every minted id sharing the name pair, and ``key`` is ``<graph_name>/<node_name>``.
  */
 export type AnalyticsCountView = {
     /**
@@ -189,9 +192,17 @@ export type AnalyticsCountView = {
      */
     count: number;
     /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
      * Key
      */
     key: string;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
 };
 
 /**
@@ -401,7 +412,11 @@ export type AnalyticsSpendResponse = {
  * One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
  * served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
  * row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
- * summed row carried one.
+ * summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an
+ * id no longer resolves and ``node_name`` always null on a graph row: a node row names the node's
+ * own graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can
+ * disagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is
+ * ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph.
  */
 export type AnalyticsSpendView = {
     /**
@@ -425,6 +440,10 @@ export type AnalyticsSpendView = {
      */
     estimated_cost_usd?: number | null;
     /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -432,6 +451,10 @@ export type AnalyticsSpendView = {
      * Key
      */
     key: string;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
     /**
      * Output Tokens
      */
@@ -6620,6 +6643,10 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          */
         subject_prefix?: string | null;
         /**
+         * By Name
+         */
+        by_name?: boolean;
+        /**
          * Graph Id
          */
         graph_id?: string | null;
@@ -7155,6 +7182,10 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
     path?: never;
     query?: {
         /**
+         * By Name
+         */
+        by_name?: boolean;
+        /**
          * Graph Id
          */
         graph_id?: string | null;
@@ -7196,6 +7227,10 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * By Name
+         */
+        by_name?: boolean;
         /**
          * Graph Id
          */
@@ -8825,6 +8860,10 @@ export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNode
     };
     query: {
         /**
+         * By Name
+         */
+        by_name?: boolean;
+        /**
          * Since
          */
         since: string;
@@ -8903,6 +8942,10 @@ export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraph
     };
     query: {
         /**
+         * By Name
+         */
+        by_name?: boolean;
+        /**
          * Since
          */
         since: string;
@@ -8941,6 +8984,10 @@ export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesG
         chunk_id: string;
     };
     query: {
+        /**
+         * By Name
+         */
+        by_name?: boolean;
         /**
          * Since
          */

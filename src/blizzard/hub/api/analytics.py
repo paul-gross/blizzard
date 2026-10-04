@@ -30,6 +30,7 @@ from blizzard.hub.domain.analytics.operational import (
     OperationalCriteria,
     OutcomeStats,
     SpendStats,
+    fold_spend_by_name,
 )
 from blizzard.hub.domain.analytics.queries import (
     CountRow,
@@ -37,6 +38,7 @@ from blizzard.hub.domain.analytics.queries import (
     EventQueryCriteria,
     EventRecord,
     IReadAnalyticsEventQueries,
+    fold_counts_by_name,
 )
 from blizzard.wire.analytics import (
     AnalyticsChunkSpendResponse,
@@ -278,7 +280,12 @@ def _events_response(page: EventPage) -> AnalyticsEventsResponse:
 def counts_response(rows: list[CountRow]) -> AnalyticsCountsResponse:
     """Shared with the fleet router's own analytics reads, not this
     module's alone."""
-    return AnalyticsCountsResponse(counts=[AnalyticsCountView(key=row.key, count=row.count) for row in rows])
+    return AnalyticsCountsResponse(
+        counts=[
+            AnalyticsCountView(key=row.key, count=row.count, graph_name=row.graph_name, node_name=row.node_name)
+            for row in rows
+        ]
+    )
 
 
 @router.get("/events", response_model=AnalyticsEventsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
@@ -367,11 +374,14 @@ def counts_by_node(
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by node id, across every kind matching the filters.
-    ``node_id`` is not offered: it would select a single group, not narrow the count."""
+    ``node_id`` is not offered: it would select a single group, not narrow the count.
+    ``by_name`` folds the per-mint rows into one per ``<graph_name>/<node_name>``."""
     criteria = scope.criteria(kind=kind, tool=tool, subject_prefix=subject_prefix)
-    return counts_response(services.analytics_events.counts_by_node(criteria))
+    rows = services.analytics_events.counts_by_node(criteria)
+    return counts_response(named_counts(rows, by_name))
 
 
 # --- operational datasets: durations, spend, outcomes -----------
@@ -424,29 +434,50 @@ def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
                 cost_usd=s.total.cost_usd,
                 cost_partial=s.total.cost_partial,
                 estimated_cost_usd=s.total.estimated_cost_usd,
+                graph_name=s.graph_name,
+                node_name=s.node_name,
             )
             for s in stats
         ]
     )
 
 
+def named_counts(rows: list[CountRow], by_name: bool) -> list[CountRow]:
+    """Shared with the fleet router, so both route families fold identically."""
+    return fold_counts_by_name(rows) if by_name else rows
+
+
+def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
+    """Shared with the fleet router, so both route families fold identically."""
+    return fold_spend_by_name(stats) if by_name else stats
+
+
 @router.get("/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
 def spend_by_node(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Annotated[HubServices, Depends(get_services)],
+    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
-    ``GET /api/spend`` publishes."""
-    return spend_response(services.operational_analytics.spend_by_node(operational_criteria(scope)))
+    ``GET /api/spend`` publishes. ``by_name`` folds the per-mint rows into one per
+    ``<graph_name>/<node_name>``."""
+    return spend_response(
+        named_spend(services.operational_analytics.spend_by_node(operational_criteria(scope)), by_name)
+    )
 
 
 @router.get("/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
 def spend_by_graph(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Annotated[HubServices, Depends(get_services)],
+    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
-    today."""
-    return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(scope)))
+    today. ``by_name`` folds the per-mint rows into one per graph name."""
+    return spend_response(
+        named_spend(services.operational_analytics.spend_by_graph(operational_criteria(scope)), by_name)
+    )
 
 
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
