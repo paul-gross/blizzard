@@ -53,7 +53,7 @@ entry: build
 #   gate   the cold-eyes review, on the basic tier. No `rotate:` block: a gate is only
 #          ever reached through `fresh:gate`, so its head is minted every entry and
 #          rotation never applies.
-#   retro  the closing retrospective, on the advanced tier and fresh every entry, so no
+#   retro  the closing retrospective, on the basic tier and fresh every entry, so no
 #          `rotate:` block either. A bare `resume` declares no model, so a retrospective
 #          that minted instead of resuming ran on whatever the harness defaulted to; this
 #          pool pins the tier every entry instead.
@@ -76,7 +76,7 @@ sessions:
   gate:
     model: ["blizzard:basic"]
   retro:
-    model: ["blizzard:advanced"]
+    model: ["blizzard:basic"]
 
 nodes:
   build:
