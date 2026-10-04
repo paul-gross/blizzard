@@ -6,7 +6,7 @@ import { injectRunnerRows, type RunnerRow } from './runner-rows';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 
-import { FleetView } from './fleet-view';
+import { RunnersView } from './runners-view';
 
 /**
  * The `/fleet` route — the hub's mobile Fleet tab. Mounted only at mobile
@@ -16,21 +16,21 @@ import { FleetView } from './fleet-view';
  * A container (`bzh:frontend-container-presentational`): it folds the
  * registry + chunks reads via {@link injectRunnerRows}, owns the pause
  * mutation and the `runner:pause` permission read, and forwards both to the
- * presentational {@link FleetView}, which owns the phone-width markup. The
+ * presentational {@link RunnersView}, which owns the phone-width markup. The
  * pending/error handling here mirrors `RunnerPanel` — the desktop half of the
  * same brake (`bzh:frontend-pending-override`).
  */
 @Component({
-  selector: 'app-fleet-page',
+  selector: 'app-runners-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetView],
-  templateUrl: './fleet-page.html',
+  imports: [RunnersView],
+  templateUrl: './runners-page.html',
   // A routed page fills the router outlet area, same as `GlanceBoard`'s own
-  // `:host` — `FleetView`'s `:host { height: 100% }` needs this to resolve
+  // `:host` — `RunnersView`'s `:host { height: 100% }` needs this to resolve
   // against.
-  styleUrl: './fleet-page.css',
+  styleUrl: './runners-page.css',
 })
-export class FleetPage {
+export class RunnersPage {
   private readonly pauseMutation = injectRunnerPauseMutation();
   private readonly meQuery = injectMeQuery();
 
@@ -38,7 +38,7 @@ export class FleetPage {
    * (`runner:pause`, admin-tier). */
   protected readonly canPause = computed(() => hasPermission(this.meQuery.data(), 'runner:pause'));
 
-  /** Whether retired runners are listed — off by default; the chip in {@link FleetView} flips it. */
+  /** Whether retired runners are listed — off by default; the chip in {@link RunnersView} flips it. */
   protected readonly showRetired = signal(false);
 
   /** The registry rows and their async state, from the shared {@link injectRunnerRows} fold. */
@@ -52,7 +52,7 @@ export class FleetPage {
    * `RunnerPanel`'s own `pendingPauses`). */
   private readonly pendingPauses = injectPendingMutationVariables<RunnerPauseVars>(runnerPauseMutationKey);
 
-  /** {@link pendingPauses}, as the bare runner ids {@link FleetView} checks each row
+  /** {@link pendingPauses}, as the bare runner ids {@link RunnersView} checks each row
    * against — the per-row disable that keeps a sibling row's toggle enabled while
    * only the one tapped disables. */
   protected readonly pendingRunnerIds = computed<readonly string[]>(() =>

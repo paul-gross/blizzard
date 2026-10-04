@@ -45,11 +45,11 @@ export const routes: Routes = [
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },
   // The mobile Fleet tab, mobile-only by `canMatch`. A desktop-width hit on
   // this path (a shared link opened on a laptop, or a live viewport flip)
-  // redirects to `board` instead of mounting a desktop-only `FleetPage`.
+  // redirects to `board` instead of mounting a desktop-only `RunnersPage`.
   {
     path: 'fleet',
     canMatch: [matchesMobileViewport],
-    loadComponent: () => import('../runners/fleet-page').then((m) => m.FleetPage),
+    loadComponent: () => import('../runners/runners-page').then((m) => m.RunnersPage),
   },
   { path: 'fleet', redirectTo: 'board' },
   // The gardening tab — a top-level peer of board/graphs/events, not a

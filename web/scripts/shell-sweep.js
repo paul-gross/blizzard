@@ -210,7 +210,7 @@
  *     session declaration table's six columns (the Harnesses column sitting between
  *     Model and Effort): all six genuinely sit side by side with no column overlap
  *     or table overflow, at 800px, graph detail's own width.
- *   - projects/hub/src/app/runners/fleet-view.shell-sweep.spec.ts — the hub's mobile
+ *   - projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts — the hub's mobile
  *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
  *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
  *     slot bar, and a grouped subscription pace bar with a long name stays inside its
@@ -281,7 +281,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-view.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },

@@ -39,8 +39,10 @@
  *
  * Also the package-layers sweep (`bzh:frontend-package-layers`), with no exemption list: each
  * project's source root is cut into folder units, and `LAYERED_PROJECTS` declares as data which
- * units each may import. It fails an import outside the table, a file in no declared unit, a
- * relative import into another project, and a cycle in a table.
+ * units each may import. An edge is an import, a `styleUrl`/`styleUrls`/`templateUrl`, or a CSS
+ * `@import`. It fails an edge outside the table, a file in no declared unit, a relative import
+ * into another project, a file in the root importing its own package entry (save a spec taking
+ * the spec-support entry), and a cycle in a table.
  *
  * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
  * `bzh:frontend-containers-compose`), with no exemption list: in a `@Component` class that calls a
@@ -745,16 +747,64 @@ const LAYERED_PROJECTS = [
 
 const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g;
 
+const COMPONENT_RESOURCE_KEYS = new Set(['styleUrl', 'styleUrls', 'templateUrl']);
+
+/**
+ * Every component resource path `source` names — the string literals under a `styleUrl`,
+ * `styleUrls`, or `templateUrl` key, which Angular resolves relative to the file the way it
+ * resolves an import.
+ *
+ * @param {string} source
+ * @returns {string[]}
+ */
+function componentResourcePaths(source) {
+  const sf = ts.createSourceFile('resource-scan.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  /** @type {string[]} */
+  const paths = [];
+  /** @param {ts.Node} node */
+  const visit = (node) => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) &&
+      COMPONENT_RESOURCE_KEYS.has(node.name.text)
+    ) {
+      const values = ts.isArrayLiteralExpression(node.initializer) ? node.initializer.elements : [node.initializer];
+      for (const value of values) {
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) paths.push(value.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return paths;
+}
+
 /**
  * Every module specifier `source` names: static and type-only imports, `export … from`,
- * dynamic `import()`, and CSS `@import`.
+ * dynamic `import()`, a component's `styleUrl`/`styleUrls`/`templateUrl`, and CSS `@import`.
+ * A template names none.
  *
  * @param {string} file
  * @param {string} source
  */
 function importSpecifiers(file, source) {
+  if (file.endsWith('.html')) return [];
   if (file.endsWith('.css')) return [...source.matchAll(CSS_IMPORT)].map((m) => m[1]);
-  return ts.preProcessFile(source, true, true).importedFiles.map((f) => f.fileName);
+  return [
+    ...ts.preProcessFile(source, true, true).importedFiles.map((f) => f.fileName),
+    ...componentResourcePaths(source),
+  ];
+}
+
+/**
+ * Whether bare `specifier` names one of `project`'s own package entries (`fleet`,
+ * `fleet/shell`, …).
+ *
+ * @param {LayeredProject} project
+ * @param {string} specifier
+ */
+function namesOwnEntry(project, specifier) {
+  return specifier === project.name || specifier.startsWith(`${project.name}/`);
 }
 
 /**
@@ -853,7 +903,16 @@ function packageLayerViolations(projects, files) {
       lines.push(`  ${file}: in no unit — the root holds only declared unit folders`);
     }
     for (const specifier of importSpecifiers(file, source)) {
-      if (!specifier.startsWith('.')) continue;
+      if (!specifier.startsWith('.')) {
+        // A file inside the source root reaching its own package entry steps around the table;
+        // only a spec may take the spec-support entry that way.
+        if (!underRoot || !namesOwnEntry(project, specifier)) continue;
+        const specEntry = project.specSupport !== null && specifier === `${project.name}/${project.specSupport}`;
+        if (!(specEntry && file.endsWith('.spec.ts'))) {
+          lines.push(`  ${file}: imports its own package entry '${specifier}' — import the unit relatively`);
+        }
+        continue;
+      }
       const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
       const targetProject = base.split('/')[0];
       if (base.startsWith('../') || !projectNames.has(targetProject)) continue;
@@ -894,8 +953,35 @@ function assertPackageLayersDetectorWorks() {
     ['app/src/app/core/key.ts', 'export const key = 1;\n'],
     ['app/src/app/testing/stub.ts', 'export const stub = 1;\n'],
     ['app/src/app/alpha/a.ts', "import { b } from '../beta/b';\n"], // must-catch: undeclared alpha → beta
-    ['app/src/app/beta/b.ts', "import { key } from '../core/key';\nexport { a } from '../alpha/a';\n"], // must-pass
-    ['app/src/app/beta/b.spec.ts', "import { stub } from '../testing/stub';\n"], // must-pass: spec → spec support
+    // must-catch: alpha → beta through a component's stylesheet and template
+    [
+      'app/src/app/alpha/a-view.ts',
+      "@Component({ styleUrls: ['./a-view.css', '../beta/b.css'], templateUrl: '../beta/b.html' })\n",
+    ],
+    ['app/src/app/alpha/a-view.css', ':host { display: block; }\n'],
+    // must-catch: a file in the root reaching its own package entries; only a spec may take the spec-support one
+    [
+      'app/src/app/alpha/self.ts',
+      "import { b } from 'app';\nimport { s } from 'app/shell';\nimport { stub } from 'app/testing';\n",
+    ],
+    [
+      'app/src/app/beta/b.ts',
+      "import { key } from '../core/key';\nimport { Component } from '@angular/core';\n" +
+        "import 'apple-pie';\nexport { a } from '../alpha/a';\n",
+    ], // must-pass: kernel, third-party, and a package whose name only begins with the project's
+    ['app/src/app/beta/b.css', ':host { display: block; }\n'],
+    ['app/src/app/beta/b.html', '<p>b</p>\n'],
+    // must-pass: a stylesheet in the kernel, a template in the unit
+    ['app/src/app/beta/b-card.ts', "@Component({ styleUrl: '../core/host.css', templateUrl: './b-card.html' })\n"],
+    ['app/src/app/beta/b-card.html', '<p>card</p>\n'],
+    ['app/src/app/core/host.css', ':host { display: block; }\n'],
+    // must-pass: spec → spec support, relatively and through the spec-support entry
+    [
+      'app/src/app/beta/b.spec.ts',
+      "import { stub } from '../testing/stub';\nimport { stub as viaEntry } from 'app/testing';\n",
+    ],
+    // must-pass: outside the root, the entry is the way in
+    ['app/src/public-api.spec.ts', "import { b } from 'app';\n"],
     ['app/src/app/shell/app.ts', "const routes = [() => import('../beta/b')];\n"], // must-pass: declared, dynamic
     ['app/src/app/stray.ts', 'export const stray = 1;\n'], // must-catch: a file in no unit
     ['app/src/app/gamma/g.ts', 'export const g = 1;\n'], // must-catch: an undeclared folder
@@ -909,13 +995,28 @@ function assertPackageLayersDetectorWorks() {
     'app/src/app/stray.ts: in no unit',
     'app/src/app/gamma/g.ts: in no unit',
     'app/src/app/core/far.ts: imports',
+    "app/src/app/alpha/a-view.ts: alpha → beta ('../beta/b.css')",
+    "app/src/app/alpha/a-view.ts: alpha → beta ('../beta/b.html')",
+    "app/src/app/alpha/self.ts: imports its own package entry 'app'",
+    "app/src/app/alpha/self.ts: imports its own package entry 'app/shell'",
+    "app/src/app/alpha/self.ts: imports its own package entry 'app/testing'",
   ];
   for (const needle of mustCatch) {
     if (!lines.some((line) => line.includes(needle))) {
       throw new Error(`package-layers detector missed ${needle} (found: ${JSON.stringify(lines)})`);
     }
   }
-  const mustPass = ['beta/b.ts:', 'beta/b.spec.ts:', 'shell/app.ts:'];
+  const mustPass = [
+    'beta/b.ts:',
+    'beta/b.css:',
+    'beta/b.html:',
+    'beta/b-card',
+    'core/host.css:',
+    'beta/b.spec.ts:',
+    'shell/app.ts:',
+    'public-api.spec.ts:',
+    'a-view.css:',
+  ];
   for (const needle of mustPass) {
     if (lines.some((line) => line.includes(needle))) {
       throw new Error(`package-layers detector false-positived on ${needle} (found: ${JSON.stringify(lines)})`);
@@ -1018,7 +1119,7 @@ function main() {
   /** @type {Map<string, string>} */
   const layeredFiles = new Map();
   for (const project of LAYERED_PROJECTS) {
-    for (const file of walk(path.join(PROJECTS_DIR, project.name, 'src'), ['.ts', '.css'])) {
+    for (const file of walk(path.join(PROJECTS_DIR, project.name, 'src'), ['.ts', '.css', '.html'])) {
       layeredFiles.set(path.relative(PROJECTS_DIR, file).split(path.sep).join('/'), fs.readFileSync(file, 'utf8'));
     }
   }

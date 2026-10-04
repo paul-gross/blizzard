@@ -11,13 +11,13 @@ import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows'
  * injects no query or mutation, so a spec drives it with plain inputs.
  */
 @Component({
-  selector: 'app-fleet-view',
+  selector: 'app-runners-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, SubscriptionPaceGroup],
-  templateUrl: './fleet-view.html',
-  styleUrl: './fleet-view.css',
+  templateUrl: './runners-view.html',
+  styleUrl: './runners-view.css',
 })
-export class FleetView {
+export class RunnersView {
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
 

@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 import { hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { FleetPage } from './fleet-page';
+import { RunnersPage } from './runners-page';
 
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not
  * the admin-tier `runner:pause`. */
@@ -44,22 +44,22 @@ const CHUNKS = [
 
 /**
  * The mobile Fleet page's container half, exercised through the real
- * `/api/runners` + `/api/chunks` reads rather than through `FleetView`'s
+ * `/api/runners` + `/api/chunks` reads rather than through `RunnersView`'s
  * inputs directly, since this is the seam that folds them
  * (`injectRunnerRows`) and wires the pause mutation.
  */
-describe('FleetPage (mobile Fleet screen)', () => {
+describe('RunnersPage (mobile Fleet screen)', () => {
   let stub: RequestClientStub;
 
   async function render() {
     await TestBed.configureTestingModule({
-      imports: [FleetPage],
+      imports: [RunnersPage],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(FleetPage);
+    const fixture = TestBed.createComponent(RunnersPage);
     await settle(fixture);
     return fixture;
   }
