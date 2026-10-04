@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -26,11 +27,10 @@ from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import SkippedHarness
-from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.runner.loop.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.wire.facts import EVENT_RECORDED
 from blizzard.wire.sse_runner import LeaseChangeCause
@@ -70,6 +70,9 @@ _OWNER_UNRESOLVABLE: EventLogKind = "owner-unresolvable"
 _NO_ACCEPTABLE_HARNESS: EventLogKind = "no-acceptable-harness"
 
 
+class AttemptContext(SpawnContext, Protocol): ...
+
+
 @dataclass(frozen=True)
 class Attempt:
     """One minted lease, and the moves that end it — fail (which requeues or escalates),
@@ -78,7 +81,7 @@ class Attempt:
     Which move a caller takes is decided by the node's retry budget, by whether the hub still
     routes this chunk here, and by whether its fence rose; each records its own closure."""
 
-    ctx: LoopContext
+    ctx: AttemptContext
     lease: Lease
 
     def _kill_process(self) -> None:

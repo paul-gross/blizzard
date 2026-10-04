@@ -4,25 +4,32 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.runner.domain.requeue import IReadRequeueRepository
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
+    IWorkspaceProvider,
     WorkspaceAcquisitionError,
 )
-from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.environments.repository import (
+    EnvBinding,
+    IWriteEnvironmentRepository,
+    group_bindings_by_chunk,
+)
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.runner.loop.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
 from blizzard.wire.route import RouteClaim
+from blizzard.wire.runner import RunnerCapability
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -36,6 +43,28 @@ _CP_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; r
 _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
 
 
+class ClaimStores(SpawnStores, Protocol):
+    @property
+    def environments(self) -> IWriteEnvironmentRepository: ...
+    @property
+    def requeue(self) -> IReadRequeueRepository: ...
+
+
+class ClaimConfig(SpawnConfig, Protocol):
+    @property
+    def queue_strict(self) -> bool: ...
+
+
+class ClaimContext(SpawnContext, Protocol):
+    @property
+    def stores(self) -> ClaimStores: ...
+    @property
+    def config(self) -> ClaimConfig: ...
+    @property
+    def provider(self) -> IWorkspaceProvider: ...
+    def capability_snapshot(self) -> tuple[RunnerCapability, ...]: ...
+
+
 @dataclass
 class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
@@ -43,11 +72,11 @@ class ReadyQueue:
     one peek's own snapshot, holding at most one entry when a capability-asserting runner
     peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
 
-    ctx: LoopContext
+    ctx: ClaimContext
     _entries: list[QueuePeekEntry] = field(default_factory=list)
 
     @classmethod
-    def peeked(cls, ctx: LoopContext) -> ReadyQueue:
+    def peeked(cls, ctx: ClaimContext) -> ReadyQueue:
         request = QueuePeekRequest(
             capabilities=list(ctx.capability_snapshot()),
             # The same knob `_next` reach-ahead already honors locally, sent per call
@@ -208,7 +237,7 @@ class InterruptedClaims:
     Before FILL peeks new work, recover a node entry ADVANCE will not make, or release
     an orphan. A strictly newer hub epoch belongs to ADVANCE."""
 
-    ctx: LoopContext
+    ctx: ClaimContext
 
     def reconcile(self, *, braked: bool = False) -> None:
         """``braked`` — either pause brake is engaged: the reclaim arm, the only one that makes a

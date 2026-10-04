@@ -14,12 +14,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.leases import LeaseState
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
+from blizzard.runner.domain.asks import IReadAskRepository
+from blizzard.runner.domain.elicitation import IReadElicitationRepository
 from blizzard.runner.domain.leases.liveness import (
     IReadLeaseLivenessRepository,
     IWriteLeaseLivenessRepository,
@@ -37,13 +39,9 @@ from blizzard.runner.domain.leases.session import (
     IReadLeaseSessionRepository,
     IWriteLeaseSessionRepository,
 )
-from blizzard.runner.domain.overload import backing_off_facts
-from blizzard.runner.environments.repository import group_bindings_by_chunk
+from blizzard.runner.domain.overload import IReadOverloadRepository, backing_off_facts
+from blizzard.runner.environments.repository import IReadEnvironmentRepository, group_bindings_by_chunk
 from blizzard.runner.harness.identity import SessionReference
-
-if TYPE_CHECKING:
-    # Deferred: ``runner/stores.py`` composes this module's own Protocol.
-    from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
@@ -305,18 +303,28 @@ class LocalLeaseService:
     """Derive every active lease's state at read time — the panel's list.
 
     A status the store never stores. Spans leases, asks (parked) and environments
-    (bindings), so it holds the :class:`~blizzard.runner.stores.RunnerReadStores` bundle
-    — verified read-only over it, so it takes the narrowed bundle."""
+    (bindings)."""
 
     def __init__(
         self,
-        stores: RunnerReadStores,
         clock: IClock,
         process: IProcessProbe,
+        *,
+        lease_record: IReadLeaseRecordRepository,
+        liveness: IReadLeaseLivenessRepository,
+        asks: IReadAskRepository,
+        environments: IReadEnvironmentRepository,
+        overload: IReadOverloadRepository,
+        elicitations: IReadElicitationRepository,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
         recent_limit: int = RECENT_LEASE_LIMIT,
     ) -> None:
-        self._stores = stores
+        self._lease_record = lease_record
+        self._liveness = liveness
+        self._asks = asks
+        self._environments = environments
+        self._overload = overload
+        self._elicitations = elicitations
         self._clock = clock
         self._process = process
         self._stale_after = stale_after
@@ -330,17 +338,17 @@ class LocalLeaseService:
         bindings come from one :meth:`~IReadEnvironmentRepository.held_bindings` read
         grouped by chunk — no remaining per-lease reads."""
         now = self._clock.now()
-        parked = self._stores.asks.parked_lease_ids()
-        backing_off = backing_off_facts(self._stores.overload, self._stores.liveness, self._stores.elicitations)
-        leases = self._stores.lease_record.list_active_leases()
-        facts_by_lease = self._stores.liveness.liveness_facts([lease.lease_id for lease in leases])
-        bindings_by_chunk = group_bindings_by_chunk(self._stores.environments.held_bindings())
+        parked = self._asks.parked_lease_ids()
+        backing_off = backing_off_facts(self._overload, self._liveness, self._elicitations)
+        leases = self._lease_record.list_active_leases()
+        facts_by_lease = self._liveness.liveness_facts([lease.lease_id for lease in leases])
+        bindings_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
         activities: list[LeaseActivity] = []
         for lease in leases:
             facts = facts_by_lease.get(lease.lease_id)
             last_heartbeat = facts.latest_heartbeat if facts is not None else None
             liveness = Liveness.of(
-                self._stores.liveness,
+                self._liveness,
                 lease,
                 heartbeat=last_heartbeat,
                 spawn=facts.latest_spawn if facts is not None else None,
@@ -380,7 +388,7 @@ class LocalLeaseService:
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
             )
-            for record in self._stores.lease_record.list_closed_leases(self._recent_limit)
+            for record in self._lease_record.list_closed_leases(self._recent_limit)
         ]
 
     def _is_alive(self, lease: Lease) -> bool:

@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,

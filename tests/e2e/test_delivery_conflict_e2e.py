@@ -18,7 +18,7 @@ import pytest
 
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import (
     PLANT_DIR_VAR,
     PLANT_LEASE_TOKEN_SCRIPT,

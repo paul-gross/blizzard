@@ -12,16 +12,22 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
+from blizzard.runner.environments.repository import (
+    EnvBinding,
+    IReadEnvironmentRepository,
+    group_bindings_by_chunk,
+)
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
+    IHarnessTranscriptSource,
     LateToolOutput,
     NormalizedTurn,
     SidechainConversation,
@@ -29,17 +35,44 @@ from blizzard.runner.harness.transcript import (
     TranscriptBatch,
     TranscriptPosition,
 )
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.outbound import OutboundContext, OutboundFacts, OutboundStores
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-from blizzard.runner.transcripts.ledger import TranscriptSegmentState
+from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository, TranscriptSegmentState
 
 _log = get_logger("blizzard.runner.loop")
 
 _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
 
 
-def resolve_record_max_bytes(ctx: LoopContext) -> int:
+class TranscriptPumpStores(OutboundStores, Protocol):
+    @property
+    def environments(self) -> IReadEnvironmentRepository: ...
+    @property
+    def transcript_ledger(self) -> IWriteTranscriptLedgerRepository: ...
+
+
+class TranscriptPumpConfig(Protocol):
+    @property
+    def transcripts_ship(self) -> bool: ...
+    @property
+    def transcript_record_max_bytes(self) -> int | None: ...
+    @property
+    def transcript_chunk_max_bytes(self) -> int | None: ...
+    @property
+    def workspace_root(self) -> str: ...
+
+
+class TranscriptPumpContext(OutboundContext, Protocol):
+    @property
+    def stores(self) -> TranscriptPumpStores: ...
+    @property
+    def config(self) -> TranscriptPumpConfig: ...
+    @property
+    def transcripts_wired(self) -> bool: ...
+    def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
+
+
+def resolve_record_max_bytes(ctx: TranscriptPumpContext) -> int:
     """The configured per-record cap, or the module default — shared by
     every producer and consumer of a rendered record's byte size."""
     configured = ctx.config.transcript_record_max_bytes
@@ -132,7 +165,7 @@ class TranscriptPump:
     """Advances every live segment one tick's worth forward — the lane's only producer
     of transcript records."""
 
-    ctx: LoopContext
+    ctx: TranscriptPumpContext
 
     @property
     def _record_max_bytes(self) -> int:

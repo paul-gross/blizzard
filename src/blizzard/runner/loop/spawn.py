@@ -6,20 +6,31 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import step_traceparent
-from blizzard.runner.domain.artifacts import PinnedGraphArtifact
-from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
+from blizzard.runner.auth.tokens import IWriteTokenRepository
+from blizzard.runner.domain.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
+from blizzard.runner.domain.asks import IWriteAskRepository
+from blizzard.runner.domain.elicitation import IWriteElicitationRepository
+from blizzard.runner.domain.escalations import IReadEscalationRepository
+from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind, IWriteInvocationBoundaryRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
+    IWriteLeaseLivenessRepository,
+    IWriteLeaseRecordRepository,
+    IWriteLeaseResumeIntentRepository,
+    IWriteLeaseSessionRepository,
     Lease,
     NewLease,
     WorkRefStamp,
 )
+from blizzard.runner.domain.pause import IWritePauseRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import (
@@ -31,12 +42,20 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.loop.capability_snapshot import default_harness_id
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.chunk_status_cache import IChunkViews
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
+from blizzard.runner.loop.env_release import EnvironmentRelease
+from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.session import ResumedSession, SkippedHarness
+from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
+from blizzard.runner.loop.transcript_pump import TranscriptPumpConfig, TranscriptPumpContext, TranscriptPumpStores
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
+from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
@@ -85,6 +104,87 @@ class MintedLease:
     compaction_window: str | None
 
 
+class SpawnStores(TranscriptPumpStores, Protocol):
+    @property
+    def lease_record(self) -> IWriteLeaseRecordRepository: ...
+    @property
+    def liveness(self) -> IWriteLeaseLivenessRepository: ...
+    @property
+    def resume_intent(self) -> IWriteLeaseResumeIntentRepository: ...
+    @property
+    def session(self) -> IWriteLeaseSessionRepository: ...
+    @property
+    def asks(self) -> IWriteAskRepository: ...
+    @property
+    def elicitations(self) -> IWriteElicitationRepository: ...
+    @property
+    def escalations(self) -> IReadEscalationRepository: ...
+    @property
+    def graph_artifacts(self) -> IWriteGraphArtifactRepository: ...
+    @property
+    def invocation_boundaries(self) -> IWriteInvocationBoundaryRepository: ...
+    @property
+    def pause(self) -> IWritePauseRepository: ...
+    @property
+    def tokens(self) -> IWriteTokenRepository: ...
+    @property
+    def workspace_prompt(self) -> IReadWorkspacePromptRepository: ...
+
+
+class SpawnConfig(TranscriptPumpConfig, Protocol):
+    @property
+    def default_retries_max(self) -> int: ...
+    @property
+    def local_api_url(self) -> str: ...
+    @property
+    def platform_tracing(self) -> bool: ...
+    @property
+    def runner_dir(self) -> str: ...
+    @property
+    def runner_id(self) -> str: ...
+    @property
+    def runner_prompt(self) -> str: ...
+    @property
+    def worker_program_tracing(self) -> bool: ...
+    @property
+    def workspace_id(self) -> str: ...
+    @property
+    def workspace_prompt(self) -> str: ...
+
+
+class SpawnProcess(Protocol):
+    @property
+    def process(self) -> IProcessProbe: ...
+    @property
+    def worker_files(self) -> WorkerStdoutFiles: ...
+    @property
+    def worker_scratch(self) -> WorkerScratchDirs: ...
+    @property
+    def elicitation_files(self) -> ElicitationFiles: ...
+
+
+class SpawnContext(SpawnProcess, TranscriptPumpContext, Protocol):
+    @property
+    def stores(self) -> SpawnStores: ...
+    @property
+    def config(self) -> SpawnConfig: ...
+    @property
+    def chunk_views(self) -> IChunkViews: ...
+    @property
+    def env_release(self) -> EnvironmentRelease: ...
+    @property
+    def harness_selector(self) -> HarnessSelector: ...
+    @property
+    def harnesses(self) -> IHarnessRegistry: ...
+    @property
+    def hub(self) -> IHubClient: ...
+    @property
+    def sessions(self) -> SessionResolver: ...
+    @property
+    def tracer(self) -> IPlatformTracer: ...
+    def resolve_boundary_start(self, session: SessionReference, workdir: str | None) -> tuple[str | None, bool]: ...
+
+
 @dataclass(frozen=True)
 class Spawner:
     """Every path that puts a worker process behind a lease: the fresh, fresh-epoch spawn, and
@@ -93,7 +193,7 @@ class Spawner:
     The local-pause brake is checked here, before any mutation — so a suppressed
     start writes no fact, kills no pid and mints no lease."""
 
-    ctx: LoopContext
+    ctx: SpawnContext
 
     def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
         """True — and logged once — when the runner's own brake blocks this start.

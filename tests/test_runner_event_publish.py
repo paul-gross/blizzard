@@ -520,9 +520,13 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
     _seed_lease(store, retries_max=2)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = TakeoverService(
-        make_stores(store),
         FixedClock(_NOW),
         FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://x",
         workspace_root="",
         harnesses=HarnessRegistry(
@@ -556,9 +560,13 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
     _seed_lease(store, retries_max=2)  # active, live worker
     probe = FakeProbe(alive={(100, "start-100")})
     service = TakeoverService(
-        make_stores(store),
         FixedClock(_NOW),
         probe,
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://x",
         workspace_root="",
         harnesses=HarnessRegistry(

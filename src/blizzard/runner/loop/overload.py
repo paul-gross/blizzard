@@ -8,18 +8,22 @@ after a bounded, growing wait, spending no retry and bumping no epoch. Imports n
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Protocol
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.overload import BACKOFF_LIMIT, InvocationKind, backoff_delay
+from blizzard.runner.domain.overload import BACKOFF_LIMIT, InvocationKind, IWriteOverloadRepository, backoff_delay
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessProviderOverload
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 
 __all__ = [
+    "OverloadContext",
+    "OverloadStores",
     "classify_judge_overload",
     "classify_worker_overload",
     "record_judge_overload",
@@ -30,8 +34,24 @@ __all__ = [
 _log = get_logger("blizzard.runner.loop")
 
 
+class OverloadStores(Protocol):
+    @property
+    def overload(self) -> IWriteOverloadRepository: ...
+
+
+class OverloadContext(Protocol):
+    @property
+    def stores(self) -> OverloadStores: ...
+    @property
+    def clock(self) -> IClock: ...
+    @property
+    def events(self) -> IRunnerEventPublisher | None: ...
+    @property
+    def harnesses(self) -> IHarnessRegistry: ...
+
+
 def classify_worker_overload(
-    ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]
+    ctx: OverloadContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
@@ -46,7 +66,7 @@ def classify_worker_overload(
     return harness.classify_provider_overload(output, lines)
 
 
-def record_worker_overload(ctx: LoopContext, lease: Lease, overload: ProviderOverload, *, generation: int) -> bool:
+def record_worker_overload(ctx: OverloadContext, lease: Lease, overload: ProviderOverload, *, generation: int) -> bool:
     """Record this worker generation's overload fact. Returns ``True`` iff the lease should
     now back off in place — ``False`` on the streak's fall-through, where the caller
     proceeds on today's ordinary path (a worker judged as usual)."""
@@ -56,7 +76,7 @@ def record_worker_overload(ctx: LoopContext, lease: Lease, overload: ProviderOve
 
 
 def classify_judge_overload(
-    ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]
+    ctx: OverloadContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
     """This generation's own judge elicitation, classified over its already-read output and
     transcript range (judge boundary to tail, shared with usage-limit classification)
@@ -71,7 +91,7 @@ def classify_judge_overload(
 
 
 def record_judge_overload(
-    ctx: LoopContext, lease: Lease, overload: ProviderOverload, *, generation: int, invocation_identity: str
+    ctx: OverloadContext, lease: Lease, overload: ProviderOverload, *, generation: int, invocation_identity: str
 ) -> bool:
     """Record this judge elicitation's overload fact. Returns ``True`` iff the lease should
     now back off in place — ``False`` on the streak's fall-through, where the caller
@@ -81,7 +101,7 @@ def record_judge_overload(
     )
 
 
-def reset_if_streak_open(ctx: LoopContext, lease: Lease) -> None:
+def reset_if_streak_open(ctx: OverloadContext, lease: Lease) -> None:
     """Close an open streak on a clean exit — written only when one is actually open,
     so a lease that has never overloaded never gains a reset row of its own."""
     if ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch) > 0:
@@ -89,7 +109,7 @@ def reset_if_streak_open(ctx: LoopContext, lease: Lease) -> None:
 
 
 def _record(
-    ctx: LoopContext,
+    ctx: OverloadContext,
     lease: Lease,
     overload: ProviderOverload,
     *,
@@ -140,7 +160,7 @@ def _record(
     return backing_off
 
 
-def _overload_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessProviderOverload | None:
+def _overload_adapter(ctx: OverloadContext, session: SessionReference) -> IHarnessProviderOverload | None:
     """This session's provider-overload classifier, resolved through the registry's own
     ``provider_overload`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has

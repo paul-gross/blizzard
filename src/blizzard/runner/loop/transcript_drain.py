@@ -10,14 +10,19 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.hub import HubClientError, IHubClient
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump, resolve_record_max_bytes
+from blizzard.runner.loop.transcript_pump import (
+    TRUNCATION_REASON_SEVERITY,
+    TranscriptPump,
+    TranscriptPumpConfig,
+    TranscriptPumpContext,
+    resolve_record_max_bytes,
+)
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentState,
@@ -59,6 +64,18 @@ _MAX_SECONDS_PER_RUN = 5.0
 _PUMP_BUDGET_FRACTION = 0.5
 
 
+class TranscriptDrainConfig(TranscriptPumpConfig, Protocol):
+    @property
+    def runner_id(self) -> str: ...
+
+
+class TranscriptDrainContext(TranscriptPumpContext, Protocol):
+    @property
+    def config(self) -> TranscriptDrainConfig: ...
+    @property
+    def hub(self) -> IHubClient: ...
+
+
 @dataclass(frozen=True)
 class TranscriptDrain:
     """The transcript lane's pump-then-flush — registered directly in ``tick``, never
@@ -66,7 +83,7 @@ class TranscriptDrain:
     between the pump and the flush below (the pump alone cannot starve the flush);
     ships every closure's final marker regardless of ``[transcripts] ship``."""
 
-    ctx: LoopContext
+    ctx: TranscriptDrainContext
 
     def run(self) -> None:
         # Not last in `tick` — an uncaught raise must not skip a later step.

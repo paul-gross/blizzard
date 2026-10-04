@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -14,11 +15,11 @@ from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.leases.closure import FAILED, PARKED, TRANSITIONED
 from blizzard.runner.domain.outbound import BufferedFact
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.held_chunk import HeldChunk
+from blizzard.runner.loop.attempt import Attempt, AttemptContext
+from blizzard.runner.loop.held_chunk import HeldChunk, HeldChunkContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND
+from blizzard.runner.loop.spawn import SpawnConfig
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -44,11 +45,21 @@ _CP_AFTER_CLOSURE = crashpoint(
 )
 
 
+class DrainConfig(SpawnConfig, Protocol):
+    @property
+    def chunk_cap_usd(self) -> float | None: ...
+
+
+class DrainContext(AttemptContext, HeldChunkContext, Protocol):
+    @property
+    def config(self) -> DrainConfig: ...
+
+
 @dataclass(frozen=True)
 class OutboundDrain:
     """The single flusher for this runner's store-and-forward buffer."""
 
-    ctx: LoopContext
+    ctx: DrainContext
 
     def run(self) -> None:
         # An uncaught raise would escape through `Pull` and skip Fill and Advance.

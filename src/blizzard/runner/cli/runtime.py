@@ -31,8 +31,8 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
-from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from blizzard.runner.loop.trace_driver import TraceSweepDriver
+from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores

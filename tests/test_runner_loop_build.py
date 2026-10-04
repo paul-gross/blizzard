@@ -16,7 +16,7 @@ import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import blizzard.runner.app as runner_app
-import blizzard.runner.loop.build as loop_build
+import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -42,8 +42,8 @@ from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSecti
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
@@ -421,7 +421,7 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
     graph = build_runner_process(config)
     ticked: list[object] = []
     instrumented: list[httpx.Client | httpx.AsyncClient] = []
-    monkeypatch.setattr(loop_build, "tick", lambda ctx: ticked.append(ctx.tracer))
+    monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.append(ctx.tracer))
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
         LoopWiring.of(config).tick_once(process=graph)

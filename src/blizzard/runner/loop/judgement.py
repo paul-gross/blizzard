@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -21,8 +22,7 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.dormant import DormantSession
+from blizzard.runner.loop.dormant import DormantContext, DormantSession
 from blizzard.runner.loop.git_commits import DeclaredCommits
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
@@ -79,16 +79,19 @@ _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion b
 ELICITATION_STALENESS_THRESHOLD = timedelta(minutes=15)
 
 
-def _elicitation_stale(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
+class JudgementContext(DormantContext, Protocol): ...
+
+
+def _elicitation_stale(ctx: JudgementContext, elicitation: PendingElicitation) -> bool:
     return ctx.clock.now() - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD
 
 
-def _elicitation_alive(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
+def _elicitation_alive(ctx: JudgementContext, elicitation: PendingElicitation) -> bool:
     pid, start_time = elicitation.pid, elicitation.process_start_time or ""
     return pid is not None and ctx.process.is_alive(pid, start_time)
 
 
-def elicitation_still_pending(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
+def elicitation_still_pending(ctx: JudgementContext, elicitation: PendingElicitation) -> bool:
     """Read-only mirror of `Judgement.collect`'s own early-return condition, for a caller that
     wants to know whether `collect` would trivially early-return WITHOUT paying for a
     `Judgement` — the hub envelope fetch and binding read `Judgement.of` unconditionally
@@ -107,13 +110,13 @@ class Judgement:
     """One exited worker's node-step, judged — its declared commits confirmed, its ``checks:``
     run, a verdict elicited from the dead session, and the completion buffered."""
 
-    ctx: LoopContext
+    ctx: JudgementContext
     lease: Lease
     envelope: NodeEnvelope
     bindings: list[EnvBinding]
 
     @classmethod
-    def of(cls, ctx: LoopContext, lease: Lease) -> Judgement | None:
+    def of(cls, ctx: JudgementContext, lease: Lease) -> Judgement | None:
         """This exit's judgement, or ``None`` when there is nothing to judge this tick — no
         bound environment, or a hub that could not hand over the envelope to judge against."""
         bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)

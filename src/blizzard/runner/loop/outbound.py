@@ -6,14 +6,17 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.asks import OpenAsk
 from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.outbound import event_payload
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.domain.outbound import IWriteOutboundRepository, event_payload
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.facts import (
@@ -32,12 +35,28 @@ _EVENT_COMMAND_FAILED: EventLogKind = "command-failed"
 _EVENT_TRANSCRIPT_TRUNCATED: EventLogKind = "transcript-truncated"
 
 
+class OutboundStores(Protocol):
+    @property
+    def outbound(self) -> IWriteOutboundRepository: ...
+    @property
+    def tokens(self) -> IReadTokenRepository: ...
+
+
+class OutboundContext(Protocol):
+    @property
+    def stores(self) -> OutboundStores: ...
+    @property
+    def clock(self) -> IClock: ...
+    @property
+    def events(self) -> IRunnerEventPublisher | None: ...
+
+
 @dataclass(frozen=True)
 class OutboundFacts:
     """Every fact this runner sends the hub — one method per kind, each rendering its own
     payload into the single store-and-forward buffer PULL drains in FIFO order."""
 
-    ctx: LoopContext
+    ctx: OutboundContext
 
     def lease_minted(self, chunk_id: str, lease_id: str, *, epoch: int, at: datetime) -> None:
         """Buffered ahead of any completion minted under it: the drain is strict FIFO, and this

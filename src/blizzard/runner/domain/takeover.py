@@ -16,8 +16,12 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.foundation.roles import dto
+from blizzard.runner.auth.tokens import IWriteTokenRepository
+from blizzard.runner.domain.asks import IReadAskRepository
+from blizzard.runner.domain.elicitation import IWriteElicitationRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import Lease
+from blizzard.runner.domain.outbound import IWriteOutboundRepository
 from blizzard.runner.domain.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -28,9 +32,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
-    # Deferred: ``runner/stores.py`` composes this module's own Protocol.
     from blizzard.runner.environments.repository import EnvBinding
-    from blizzard.runner.stores import RunnerStores
 
 # What a takeover forwards from the identity env. Nothing else leaves the
 # daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
@@ -220,22 +222,29 @@ class OpenedTakeover:
 class TakeoverService:
     """Composition-root-wired: the clock, harness registry, and process probe.
 
-    Spans five concepts (takeover, asks, outbound, tokens, elicitations), so it holds the
-    :class:`~blizzard.runner.stores.RunnerStores` bundle — the chunk-keyed reads
-    (environments, leases) are resolved at the edge instead (``bzh:domain-takes-objects``)."""
+    The chunk-keyed reads (environments, leases) are resolved at the edge
+    (``bzh:domain-takes-objects``)."""
 
     def __init__(
         self,
-        stores: RunnerStores,
         clock: IClock,
         process: IOwnedProcessControl,
         *,
+        takeover: IWriteTakeoverRepository,
+        asks: IReadAskRepository,
+        outbound: IWriteOutboundRepository,
+        tokens: IWriteTokenRepository,
+        elicitations: IWriteElicitationRepository,
         local_api_url: str,
         harnesses: IHarnessLifecycleRegistry,
         workspace_root: str,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
-        self._stores = stores
+        self._takeover = takeover
+        self._asks = asks
+        self._outbound = outbound
+        self._tokens = tokens
+        self._elicitations = elicitations
         self._workspace_root = workspace_root
         self._clock = clock
         self._harnesses = harnesses
@@ -256,15 +265,10 @@ class TakeoverService:
         workdir = scope.bindings[0].workdir
 
         active = scope.active_lease
-        live = active is not None and active.lease_id not in self._stores.asks.parked_lease_ids()
+        live = active is not None and active.lease_id not in self._asks.parked_lease_ids()
         if live and not force:
             raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
-        if (
-            live
-            and force
-            and active is not None
-            and active.lease_id in self._stores.outbound.pending_submission_lease_ids()
-        ):
+        if live and force and active is not None and active.lease_id in self._outbound.pending_submission_lease_ids():
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
         reference: Lease | None = active if active is not None else scope.latest_lease_with_session
@@ -281,7 +285,7 @@ class TakeoverService:
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
         # every loop step's open-takeover skip — before anything is killed or returned.
-        self._stores.takeover.record_takeover(
+        self._takeover.record_takeover(
             takeover_id=takeover_id,
             chunk_id=chunk_id,
             lease_id=reference.lease_id,
@@ -296,7 +300,7 @@ class TakeoverService:
         if live and active is not None:
             # The fence bump: reported like a fresh lease mint, so the killed worker's
             # buffered completion lands on a stale epoch.
-            seq = self._stores.outbound.enqueue_outbound(
+            seq = self._outbound.enqueue_outbound(
                 kind=LEASE_MINTED,
                 chunk_id=chunk_id,
                 lease_id=None,
@@ -313,7 +317,7 @@ class TakeoverService:
             # A taken-over chunk's lease is skipped by every loop step from here on (Advance,
             # Reap alike), so an in-flight elicitation would otherwise leak forever uncollected
             # and unkilled — killed here, the one path that closes it out.
-            elicitation = self._stores.elicitations.in_flight_elicitation(active.lease_id, active.epoch)
+            elicitation = self._elicitations.in_flight_elicitation(active.lease_id, active.epoch)
             if elicitation is not None:
                 kill_owned_process(
                     self._process,
@@ -321,7 +325,7 @@ class TakeoverService:
                     process_start_time=elicitation.process_start_time,
                     pgid=elicitation.pgid,
                 )
-                self._stores.elicitations.clear_elicitation(active.lease_id, active.epoch)
+                self._elicitations.clear_elicitation(active.lease_id, active.epoch)
 
         # Read the reference lease's stamps rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
@@ -335,7 +339,7 @@ class TakeoverService:
         # A resume inherits no spawn env, so identity must be handed over.
         # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
         lease_token, token_hash = LeaseToken.mint()
-        self._stores.tokens.record_lease_token(reference.lease_id, token_hash, now)
+        self._tokens.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
             environments=[
                 AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in scope.bindings
@@ -372,6 +376,6 @@ class TakeoverService:
             raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {scope.chunk_id} is not open")
         if record is None:
             return
-        self._stores.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
+        self._takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
             self._events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")

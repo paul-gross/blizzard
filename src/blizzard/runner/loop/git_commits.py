@@ -3,18 +3,37 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
-from blizzard.runner.domain.git_commit_declaration import GitCommitDeclaration
+from blizzard.runner.domain.git_commit_declaration import (
+    GitCommitDeclaration,
+    IReadGitCommitDeclarationRepository,
+)
 from blizzard.runner.domain.leases import Lease
+from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
-from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.outbound import OutboundContext, OutboundFacts, OutboundStores
+from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.wire.completion import SubmittedArtifact
 
 Key = tuple[str, str]
+
+
+class GitCommitsStores(OutboundStores, Protocol):
+    @property
+    def git_commit_declarations(self) -> IReadGitCommitDeclarationRepository: ...
+
+
+class GitCommitsContext(OutboundContext, Protocol):
+    @property
+    def stores(self) -> GitCommitsStores: ...
+    @property
+    def provider(self) -> IWorkspaceProvider: ...
+    @property
+    def worktree_git(self) -> IWorktreeGit: ...
 
 
 @dataclass
@@ -25,7 +44,7 @@ class DeclaredCommits:
     Never mutates git or infers branches from residue. Invalid declarations produce
     ``command-failed`` events."""
 
-    ctx: LoopContext
+    ctx: GitCommitsContext
     lease: Lease
     bindings: list[EnvBinding]
     _resolved: dict[Key, GitCommitDeclaration] = field(default_factory=dict)

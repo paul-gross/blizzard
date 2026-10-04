@@ -28,7 +28,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from tests.e2e.fleet_traces import (
     PLANT_DIR_VAR,

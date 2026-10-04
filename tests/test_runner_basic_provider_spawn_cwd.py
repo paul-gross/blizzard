@@ -19,7 +19,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.runner_fakes import FakeHub, make_store
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)

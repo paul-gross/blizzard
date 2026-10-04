@@ -44,9 +44,13 @@ def _app_with_takeover(
         else HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)})
     )
     service = TakeoverService(
-        make_stores(store),
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspace_root="",
         harnesses=resolved_harnesses,

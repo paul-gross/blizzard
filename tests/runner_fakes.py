@@ -46,7 +46,6 @@ from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
@@ -60,6 +59,7 @@ from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore

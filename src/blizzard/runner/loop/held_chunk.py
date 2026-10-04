@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.runner.loop.spawn import Environments, SpawnContext, Spawner
 from blizzard.wire.chunk import ChunkDecisionStatusView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
@@ -18,12 +18,15 @@ from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
 _log = get_logger("blizzard.runner.loop")
 
 
+class HeldChunkContext(SpawnContext, Protocol): ...
+
+
 @dataclass(frozen=True)
 class HeldChunk:
     """A chunk this runner holds environments for, driven one move at a time — by the hub's
     answer to an applied step, or by polling when no lease is active."""
 
-    ctx: LoopContext
+    ctx: HeldChunkContext
     chunk_id: str
 
     def apply(self, outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, bindings: list[EnvBinding]) -> None:

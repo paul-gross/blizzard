@@ -38,7 +38,6 @@ from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
-    make_stores,
     runner_store_errors,
 )
 
@@ -287,9 +286,13 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
     )
     service = TakeoverService(
-        make_stores(store),
         FixedClock(_NOW),
         FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspace_root="",
         harnesses=registry,

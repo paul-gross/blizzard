@@ -41,7 +41,6 @@ from tests.runner_fakes import (
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
-    make_read_stores,
     runner_store_errors,
 )
 
@@ -359,8 +358,14 @@ def test_a_full_tick_is_flat_across_1_and_10_held_chunks_with_no_lease(tmp_path:
 def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> RunnerStatusService:
     probe = FakeProbe()
     return RunnerStatusService(
-        make_read_stores(store),
         FixedClock(_NOW),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
         runner_id="r1",
         workspace_id="ws1",
         max_agents=10,

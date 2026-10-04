@@ -95,8 +95,8 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
-from blizzard.runner.loop.build import ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -431,8 +431,18 @@ def _wire_hosted_app(
     process = graph.process
     events = graph.events
     platform_tracing = graph.platform_tracing
+    read_stores = RunnerReadStores.of(runner_stores)
     # ``stale_after`` is left at its default so the two readers never desync (#28).
-    leases = LocalLeaseService(stores=RunnerReadStores.of(runner_stores), clock=clock, process=process)
+    leases = LocalLeaseService(
+        clock,
+        process,
+        lease_record=read_stores.lease_record,
+        liveness=read_stores.liveness,
+        asks=read_stores.asks,
+        environments=read_stores.environments,
+        overload=read_stores.overload,
+        elicitations=read_stores.elicitations,
+    )
     # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = startup.enter_context(
@@ -456,8 +466,14 @@ def _wire_hosted_app(
         workspace_root=spawn_root,
     )
     runner_status = RunnerStatusService(
-        stores=RunnerReadStores.of(runner_stores),
-        clock=clock,
+        clock,
+        pause=read_stores.pause,
+        lease_record=read_stores.lease_record,
+        outbound=read_stores.outbound,
+        environments=read_stores.environments,
+        asks=read_stores.asks,
+        takeover=read_stores.takeover,
+        escalations=read_stores.escalations,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
@@ -469,9 +485,13 @@ def _wire_hosted_app(
         runner_dir=str(config.root),
     )
     takeover = TakeoverService(
-        runner_stores,
         clock,
         process,
+        takeover=runner_stores.takeover,
+        asks=runner_stores.asks,
+        outbound=runner_stores.outbound,
+        tokens=runner_stores.tokens,
+        elicitations=runner_stores.elicitations,
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
@@ -505,7 +525,7 @@ def _wire_hosted_app(
         runner_status=runner_status,
         trace_status=LeaseTraceStatusReader(
             settings=graph.trace_settings,
-            leases=RunnerReadStores.of(runner_stores).lease_traces,
+            leases=read_stores.lease_traces,
             clock=clock,
             receiver=graph.receiver_counter,
             replay_max_window=config.tracing.replay_max_window,

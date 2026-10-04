@@ -12,18 +12,20 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.pause import PauseService
+from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.harness.adapter import IHarnessUsageLimits
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.usage import UsageLimit
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.attempt import Attempt, AttemptContext
+from blizzard.runner.loop.spawn import SpawnStores
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -41,7 +43,26 @@ _CP_JUDGE_AFTER_BRAKE = crashpoint(
 )
 
 
-def classify_worker_usage_limit(ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]) -> UsageLimit | None:
+class DeclaredSubscription(Protocol):
+    @property
+    def slug(self) -> str: ...
+
+
+class UsageLimitStores(SpawnStores, Protocol):
+    @property
+    def usage(self) -> IReadUsageRepository: ...
+
+
+class UsageLimitContext(AttemptContext, Protocol):
+    @property
+    def stores(self) -> UsageLimitStores: ...
+    @property
+    def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
+
+
+def classify_worker_usage_limit(
+    ctx: UsageLimitContext, lease: Lease, output: str, lines: Sequence[str]
+) -> UsageLimit | None:
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
     range, shared with its provider-overload classification so neither pays for the other's
@@ -55,7 +76,7 @@ def classify_worker_usage_limit(ctx: LoopContext, lease: Lease, output: str, lin
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_worker(ctx: LoopContext, lease: Lease, limit: UsageLimit) -> None:
+def engage_and_park_worker(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit) -> None:
     """Engage the brake for a limited worker generation, then park the lease in place —
     the worker has already exited, so there is nothing to kill."""
     session = lease.session
@@ -72,7 +93,9 @@ def engage_and_park_worker(ctx: LoopContext, lease: Lease, limit: UsageLimit) ->
     )
 
 
-def classify_judge_usage_limit(ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]) -> UsageLimit | None:
+def classify_judge_usage_limit(
+    ctx: UsageLimitContext, lease: Lease, output: str, lines: Sequence[str]
+) -> UsageLimit | None:
     """This generation's own judge elicitation, classified over its already-read output and
     transcript range (judge boundary to tail, shared with provider-overload classification)
     — ``None`` when not usage-limited."""
@@ -85,7 +108,7 @@ def classify_judge_usage_limit(ctx: LoopContext, lease: Lease, output: str, line
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_judge(ctx: LoopContext, lease: Lease, limit: UsageLimit) -> None:
+def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit) -> None:
     """Engage the brake for a limited judge elicitation, then park the lease in place (the
     process has already exited — nothing to kill). The elicitation record is left standing,
     on purpose: :meth:`~blizzard.runner.loop.dormant.DormantSession.on_unpause` reads it back
@@ -107,20 +130,20 @@ def engage_and_park_judge(ctx: LoopContext, lease: Lease, limit: UsageLimit) -> 
     )
 
 
-def _engage(ctx: LoopContext, harness_id: str, limit: UsageLimit) -> None:
+def _engage(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> None:
     reason = _reason(ctx, harness_id, limit)
     PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(
         ctx.config.runner_id, by="usage-limit", reason=reason
     )
 
 
-def _reason(ctx: LoopContext, harness_id: str, limit: UsageLimit) -> str:
+def _reason(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> str:
     resets_at = limit.resets_at or _fallback_reset(ctx)
     suffix = f" (resets {_minute_precision(resets_at)})" if resets_at is not None else ""
     return f"usage limit: {harness_id}{suffix}"
 
 
-def _fallback_reset(ctx: LoopContext) -> datetime | None:
+def _fallback_reset(ctx: UsageLimitContext) -> datetime | None:
     """The soonest future reset among every declared subscription's own latest-sampled
     windows at or past 100% utilization — no harness-to-subscription mapping, just
     what every declared subscription itself last reported. ``None`` when nothing exhausted
@@ -141,7 +164,7 @@ def _minute_precision(value: datetime) -> str:
     return as_utc(value).strftime("%Y-%m-%dT%H:%MZ")
 
 
-def _usage_limit_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessUsageLimits | None:
+def _usage_limit_adapter(ctx: UsageLimitContext, session: SessionReference) -> IHarnessUsageLimits | None:
     """This session's usage-limit classifier, resolved through the registry's own
     ``usage_limits`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has

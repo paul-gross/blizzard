@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.asks import OpenAsk
+from blizzard.runner.domain.attachments import IReadAttachmentRepository
+from blizzard.runner.domain.checks import IWriteCheckRepository
 from blizzard.runner.domain.elicitation import PendingElicitation
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import Lease
@@ -21,11 +24,15 @@ from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.checks import ICheckRunner
+from blizzard.runner.loop.git_commits import GitCommitsContext, GitCommitsStores
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.overload import OverloadContext, OverloadStores
 from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
-from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.loop.spawn import SpawnConfig, Spawner
+from blizzard.runner.loop.usage import UsageRecorder
+from blizzard.runner.loop.usage_limit import UsageLimitContext, UsageLimitStores
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -56,6 +63,29 @@ _CP_WAKE_AFTER_BOUNDARY = crashpoint(
 )
 
 
+class DormantStores(UsageLimitStores, GitCommitsStores, OverloadStores, Protocol):
+    @property
+    def attachments(self) -> IReadAttachmentRepository: ...
+    @property
+    def checks(self) -> IWriteCheckRepository: ...
+
+
+class DormantConfig(SpawnConfig, Protocol):
+    @property
+    def gates(self) -> tuple[str, ...]: ...
+
+
+class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, Protocol):
+    @property
+    def stores(self) -> DormantStores: ...
+    @property
+    def config(self) -> DormantConfig: ...
+    @property
+    def usage(self) -> UsageRecorder: ...
+    @property
+    def check_runner(self) -> ICheckRunner | None: ...
+
+
 @dataclass(frozen=True)
 class DormantSession:
     """A lease with no live worker but a session still resumable under it — parked on a
@@ -64,7 +94,7 @@ class DormantSession:
     Every wake here rewrites only ``pid``/``process_start_time``: same lease, same epoch, same
     session, so **no retry is consumed** by going dormant and coming back."""
 
-    ctx: LoopContext
+    ctx: DormantContext
     lease: Lease
 
     def resume_on_unmet_produces(self, message: str, bindings: list[EnvBinding]) -> None:

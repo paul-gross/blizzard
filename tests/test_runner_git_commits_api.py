@@ -22,7 +22,7 @@ from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationSe
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
