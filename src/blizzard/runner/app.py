@@ -506,15 +506,15 @@ def _wire_hosted_app(
         events=events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
-    attachments = AttachmentService(runner_stores.attachments, clock, tokens=runner_stores.tokens)
+    attachments = AttachmentService(runner_stores.attachments, clock)
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare.
     git_commit_declarations = GitCommitDeclarationService(
         runner_stores.git_commit_declarations,
         clock,
         workspace_provider,
-        tokens=runner_stores.tokens,
         environments=runner_stores.environments,
+        outbound=runner_stores.outbound,
     )
     jti_cache = JtiCacheRepository(connections, clock)
     # The real, network-reaching hub client — only `host` wires one.

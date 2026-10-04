@@ -979,7 +979,8 @@ export type EnvironmentListResponse = {
  *
  * One environment in the runner's configured pool — ``GET /api/environments``.
  * ``chunk_id``/``held_since`` are present only while the environment
- * is currently bound; an unused pool environment carries both as ``None``.
+ * is currently bound; an unused pool environment carries both as ``None``. ``held`` is the
+ * runner's own reading of whether a chunk holds it, so no client re-derives it.
  */
 export type EnvironmentView = {
     /**
@@ -990,6 +991,10 @@ export type EnvironmentView = {
      * Environment Id
      */
     environment_id: string;
+    /**
+     * Held
+     */
+    held?: boolean;
     /**
      * Held Since
      */
@@ -1350,6 +1355,8 @@ export type GitCommitDeclarationRequest = {
  * GitCommitDeclarationResponse
  *
  * ``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably.
+ * ``note`` is set when it lands but rides no completion — declared against the closed
+ * reference lease an open takeover names.
  */
 export type GitCommitDeclarationResponse = {
     /**
@@ -1360,6 +1367,10 @@ export type GitCommitDeclarationResponse = {
      * Lease Id
      */
     lease_id: string;
+    /**
+     * Note
+     */
+    note?: string | null;
     /**
      * Recorded
      */

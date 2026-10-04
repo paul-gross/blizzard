@@ -116,6 +116,15 @@ def resolve_session_secret(env_name: str) -> bytes:
     return decoded
 
 
+def effective_autonomy_source(sections: HarnessSections, shared_key_set: bool) -> str:
+    """Where the effective autonomy posture comes from: the first binding's legacy override key,
+    else `[harness] autonomy` when the key is set, else `"default"`."""
+    overrides = [override for s in sections if (override := s.autonomy_override()) is not None]
+    if overrides:
+        return overrides[0]
+    return "[harness] autonomy" if shared_key_set else "default"
+
+
 def _parse_autonomy(value: object, path: Path) -> Autonomy:
     """The ``[harness] autonomy`` value; absent resolves to :attr:`Autonomy.Dangerous`."""
     if value is None:
@@ -462,6 +471,8 @@ class RunnerConfig:
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
     #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
     autonomy: Autonomy = Autonomy.Dangerous
+    #: Where :attr:`autonomy`'s posture comes from: a binding's legacy override, `[harness] autonomy`, or `"default"`.
+    autonomy_source: str = "default"
     #: `[harness] config_dir`, the operator-owned harness-config bundle; `None` is no bundle.
     harness_config_dir: Path | None = None
     #: Every harness binding's own config section, in catalog order.
@@ -1005,6 +1016,7 @@ class RunnerConfig:
         harness_sections = HarnessSections.parse(raw, root=root, path=path)
         harness = Table.of(raw.get("harness"))
         autonomy = _parse_autonomy(harness.body.get("autonomy"), path)
+        autonomy_source = effective_autonomy_source(harness_sections, "autonomy" in harness.body)
         harness_config_dir = _parse_harness_config_dir(harness.body.get("config_dir"), root, path)
         provider = raw.get("workspace_provider", "winter")
         if provider not in WORKSPACE_PROVIDERS:
@@ -1033,6 +1045,7 @@ class RunnerConfig:
             workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
             harness_sections=harness_sections,
             autonomy=autonomy,
+            autonomy_source=autonomy_source,
             harness_config_dir=harness_config_dir,
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),

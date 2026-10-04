@@ -19,19 +19,21 @@ from blizzard.runner.operator.requeue import RequeueScope
 
 def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:
     """The chunk-keyed facts :meth:`~blizzard.runner.operator.requeue.RequeueService.requeue`
-    reads: whether the chunk carries an open takeover, and its open escalation, if any."""
+    reads: whether the chunk carries an open takeover, its open escalation, if any, and the
+    environments it holds on this runner."""
     stores = RunnerWiring.of(request).read_stores()
     return RequeueScope(
         chunk_id=chunk_id,
         open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id),
         open_escalation=stores.escalations.open_escalation_for_chunk(chunk_id),
+        held_environment_ids=tuple(b.environment_id for b in stores.environments.bindings_for_chunk(chunk_id)),
     )
 
 
 def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpenScope:
     """The chunk-keyed facts :meth:`~blizzard.runner.lifecycle.takeover.TakeoverService.open`
-    reads: the open takeover, the held bindings, the active and latest leases, and the
-    fence-epoch floor."""
+    reads: the open takeover, the held bindings, the active and latest leases, the
+    fence-epoch floor, and whether a runner requeue of the chunk is pending."""
     stores = RunnerWiring.of(request).read_stores()
     return TakeoverOpenScope(
         chunk_id=chunk_id,
@@ -40,6 +42,7 @@ def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpe
         active_lease=stores.lease_record.active_lease_for_chunk(chunk_id),
         latest_lease_with_session=stores.lease_record.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=stores.lease_record.latest_epoch(chunk_id),
+        requeue_pending=chunk_id in stores.requeue.pending_requeue_chunk_ids(),
     )
 
 

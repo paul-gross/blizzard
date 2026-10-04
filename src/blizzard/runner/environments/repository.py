@@ -1,34 +1,88 @@
-"""The environment-binding repository seam.
+"""The environment-binding model and its repository seam.
 
-Chunk→env binding, release, and tenure facts — an *held* env is one whose binding has
-no release fact (``bzh:facts-not-status``)."""
+Chunk→env binding, release, and tenure facts — a *held* env is one whose binding has
+no release fact (``bzh:facts-not-status``). The rules over those facts — who may bind an
+env, and at what instant a release is stamped — are pure functions here; the claim and
+release orchestration reads the clock and the held bindings, and writes what they decide."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import ClassVar, Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "EnvBinding",
+    "EnvironmentHeldError",
     "IReadEnvironmentRepository",
     "IWriteEnvironmentRepository",
     "group_bindings_by_chunk",
+    "release_instants",
+    "require_unheld",
 ]
 
+EnvironmentHolding = Literal["free", "held"]
 
-@dto
+
+class EnvironmentHeldError(RuntimeError):
+    """A chunk tried to bind an environment another chunk still holds."""
+
+    def __init__(self, environment_id: str, holder_chunk_id: str) -> None:
+        super().__init__(f"environment {environment_id!r} is still held by chunk {holder_chunk_id!r}")
+        self.environment_id = environment_id
+        self.holder_chunk_id = holder_chunk_id
+
+
+@domain_model
 @dataclass(frozen=True)
 class EnvBinding:
-    """A chunk→env binding fact."""
+    """A chunk→env binding fact: an environment is held by at most one chunk at a time.
+
+    ``free`` -> ``held`` by binding (:func:`require_unheld` refuses one another chunk holds); ``held`` ->
+    ``free`` by releasing (:func:`release_instants`), a no-op on an already-free environment."""
 
     chunk_id: str
     environment_id: str
     workdir: str
     bound_at: datetime
+
+    #: Each holding -> the holdings an environment may move to from it.
+    TRANSITIONS: ClassVar[Mapping[EnvironmentHolding, frozenset[EnvironmentHolding]]] = {
+        "free": frozenset({"held"}),
+        "held": frozenset({"free"}),
+    }
+
+    def release_instant(self, now: datetime) -> datetime:
+        """The instant a release of this binding is stamped: ``now``, never earlier than the
+        binding itself — a release stamped before ``bound_at`` (a clock stepped back) would not
+        supersede the binding, leaving it held forever."""
+        return max(now, self.bound_at)
+
+
+def require_unheld(chunk_id: str, environment_ids: Iterable[str], held: Sequence[EnvBinding]) -> None:
+    """Refuse to let ``chunk_id`` bind any of ``environment_ids`` that another chunk holds in
+    ``held`` (:class:`EnvironmentHeldError`)."""
+    holders = {binding.environment_id: binding.chunk_id for binding in held if binding.chunk_id != chunk_id}
+    for environment_id in environment_ids:
+        holder = holders.get(environment_id)
+        if holder is not None:
+            raise EnvironmentHeldError(environment_id, holder)
+
+
+def release_instants(
+    held: Sequence[EnvBinding], environment_ids: Iterable[str], now: datetime
+) -> list[tuple[str, datetime]]:
+    """The release to record for each of ``held`` (one chunk's held bindings) whose environment is
+    in ``environment_ids``, in ``held``'s order: its environment id and
+    :meth:`EnvBinding.release_instant`. An environment with no held binding gets none — its
+    release is already done."""
+    wanted = set(environment_ids)
+    return [
+        (binding.environment_id, binding.release_instant(now)) for binding in held if binding.environment_id in wanted
+    ]
 
 
 def group_bindings_by_chunk(bindings: Sequence[EnvBinding]) -> dict[str, list[EnvBinding]]:

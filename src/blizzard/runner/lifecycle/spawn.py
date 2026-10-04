@@ -50,11 +50,18 @@ from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.model import (
+    MintOwnerSource,
+    escalation_mint_admitted,
+    mint_owner_source,
+    next_lease_epoch,
+    resolved_retries_max,
+)
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
-from blizzard.runner.throttle.pause import IWritePauseRepository
-from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind, IWriteInvocationBoundaryRepository
+from blizzard.runner.throttle.pause import IWritePauseRepository, RunnerBrakes
+from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository, spawn_boundary_kind
 from blizzard.runner.transcripts.transcript_pump import (
     TranscriptPumpConfig,
     TranscriptPumpContext,
@@ -199,12 +206,18 @@ class Spawner:
 
     ctx: SpawnContext
 
-    def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
-        """True — and logged once — when the runner's own brake blocks this start.
+    def brakes(self) -> RunnerBrakes:
+        """This runner's two brakes, read together."""
+        runner_id = self.ctx.config.runner_id
+        pause = self.ctx.stores.pause
+        return RunnerBrakes(local=pause.local_paused(runner_id), hub=pause.hub_paused(runner_id))
 
-        Reads ``local_paused`` only. Which call sites must consult it is held mechanically by
+    def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
+        """True — and logged once — when the runner's brakes block this start.
+
+        Which call sites must consult it is held mechanically by
         ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
-        if not self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
+        if self.brakes().starts_processes:
             return False
         _log.info(
             "spawn suppressed — locally paused",
@@ -234,11 +247,12 @@ class Spawner:
             return
         # A pool rotation's replacement or a retry (`Attempt.requeue`) mints under its own prior
         # owner — neither a selection candidate; only fresh work reaches the selector or its no-set fallback.
-        if resume_from is not None:
+        source = mint_owner_source(resume_from, harness_id, envelope.node)
+        if source is MintOwnerSource.RESUME and resume_from is not None:
             owner = resume_from.harness_id
-        elif harness_id is not None:
+        elif source is MintOwnerSource.EXPLICIT and harness_id is not None:
             owner = harness_id
-        elif envelope.node.session_harnesses:
+        elif source is MintOwnerSource.SELECT:
             selection = self.ctx.harness_selector.select(envelope.node)
             if selection.harness_id is None:
                 self.escalate_no_acceptable_harness(
@@ -272,13 +286,12 @@ class Spawner:
         )
         # The invocation boundary: a fresh spawn opens on the beginning sentinel; a
         # `resume_from` continuation of an EXISTING session is a `resume`, reading its tail.
-        kind: InvocationBoundaryKind
+        kind = spawn_boundary_kind(resumed=resume_from is not None)
         if resume_from is not None:
-            kind = "resume"
             workdir = environments[0].workdir if environments else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir)
         else:
-            kind, start_position, start_unreadable = "spawn", None, False
+            start_position, start_unreadable = None, False
         self.ctx.stores.invocation_boundaries.record_boundary_open(
             lease_id=lease.lease_id,
             chunk_id=chunk_id,
@@ -343,13 +356,15 @@ class Spawner:
             # A real, durably-provisional process — kill it and mark it unidentified;
             # the lease stays OPEN until REAP's sweep closes it via `Attempt.fail` (a retry).
             self.ctx.process.kill_group(pending.pgid)
-            self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
+            failed_at = self.ctx.clock.now()
+            self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=failed_at)
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,
                 lease_id=lease.lease_id,
                 node_name=envelope.node.node_name,
                 command="await worker identity",
                 stderr_tail=str(exc),
+                at=failed_at,
             )
             raise HarnessSpawnError(str(exc)) from exc
         _CP_AFTER_IDENTITY.reached()  # identity known; not yet the authoritative record
@@ -404,7 +419,7 @@ class Spawner:
         `blizzard-context:/architecture/crash-correctness/runner.md`."""
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
-        if self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id) is not None:
+        if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it
         now = self.ctx.clock.now()
         resumed = self.ctx.sessions.resumption(session)
@@ -434,7 +449,7 @@ class Spawner:
         from a fresh mint's exhausted selection and a retry whose recorded owner fell out of the set."""
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
-        if self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id) is not None:
+        if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it
         now = self.ctx.clock.now()
         minted = self._mint(chunk_id, envelope, resume=None, harness_id=None, at=now, retries_max=0)
@@ -508,14 +523,10 @@ class Spawner:
         acceptable set resolved, so it resolves no stamps and records no mint owner."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
-        epoch = max(self.ctx.stores.lease_record.latest_epoch(chunk_id), envelope.epoch) + 1
+        epoch = next_lease_epoch(self.ctx.stores.lease_record.latest_epoch(chunk_id), envelope.epoch)
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
-        resolved_retries_max = (
-            retries_max
-            if retries_max is not None
-            else (node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max)
-        )
+        budget = resolved_retries_max(retries_max, node.retries_max, self.ctx.config.default_retries_max)
         model, effort, compaction_window = (
             self.ctx.sessions.session_stamps(node, resume, harness_id=harness_id)
             if harness_id is not None
@@ -540,7 +551,7 @@ class Spawner:
                 node_name=node.node_name,
                 epoch=epoch,
                 runner_id=self.ctx.config.runner_id,
-                retries_max=resolved_retries_max,
+                retries_max=budget,
                 session_name=node.session_name,
                 resolved_model=model,
                 resolved_effort=effort,

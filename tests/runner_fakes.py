@@ -48,7 +48,13 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
-from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.runner.hub.client import (
+    ChunkEndedError,
+    ChunkNotFoundError,
+    HubClientError,
+    IHubClient,
+    RouteClaimOutcome,
+)
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
@@ -407,6 +413,8 @@ class FakeHub:
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
         # one of these — it simply omits it from the returned mapping.
         self.not_found: set[str] = set()
+        # chunk ids `get_envelope` and `rekey_route_token` refuse 409 as ended.
+        self.ended: set[str] = set()
         self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
@@ -488,6 +496,8 @@ class FakeHub:
         self.get_envelope_calls.append(chunk_id)
         if chunk_id in self.not_found:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
+        if chunk_id in self.ended:
+            raise ChunkEndedError(f"chunk {chunk_id} ended", detail="chunk has ended")
         return self.envelopes[chunk_id]
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
@@ -555,6 +565,8 @@ class FakeHub:
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         if chunk_id in self.not_found:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
+        if chunk_id in self.ended:
+            raise ChunkEndedError(f"chunk {chunk_id} ended", detail="chunk has ended")
         if self.down:
             raise HubClientError("fake hub is down")
         self.rekey_calls.append(chunk_id)

@@ -29,6 +29,7 @@ def _environment_list(service: RunnerStatusService) -> EnvironmentListResponse:
                 environment_id=slot.environment_id,
                 chunk_id=slot.chunk_id,
                 held_since=iso_utc(slot.held_since) if slot.held_since is not None else None,
+                held=slot.is_held(),
             )
             for slot in service.environments()
         ]

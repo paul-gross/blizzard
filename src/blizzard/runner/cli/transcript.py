@@ -11,7 +11,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import ensure_current_revision
-from blizzard.runner.transcripts.transcript_backfill import TranscriptReshipError
+from blizzard.runner.transcripts.backfill import TranscriptReshipError
 
 
 @click.group("transcript")

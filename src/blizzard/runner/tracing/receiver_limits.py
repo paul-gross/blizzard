@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 
 __all__ = [
     "BUCKET_CAPACITY",
     "BUCKET_REFILL_PER_SECOND",
+    "Bucket",
     "ReceiverBounds",
     "ReceiverCount",
     "ReceiverCounter",
@@ -25,6 +26,32 @@ __all__ = [
 BUCKET_CAPACITY = 1000
 #: Items per second a lease's bucket refills.
 BUCKET_REFILL_PER_SECOND = 50.0
+
+
+@domain_model
+@dataclass(frozen=True)
+class Bucket:
+    """One lease's token bucket: its ``level`` as of ``at``. Refills at ``refill_per_second``
+    up to ``capacity``; every instant is the caller's."""
+
+    level: float
+    at: datetime
+
+    @classmethod
+    def full(cls, capacity: int, now: datetime) -> Bucket:
+        return cls(float(capacity), now)
+
+    def refilled(self, now: datetime, *, capacity: int, refill_per_second: float) -> Bucket:
+        return Bucket(min(float(capacity), self.level + (now - self.at).total_seconds() * refill_per_second), now)
+
+    def take(self, n: int) -> Bucket | None:
+        """The bucket after taking ``n`` items, or ``None`` when they do not fit — a request
+        larger than the level never fits."""
+        return None if n > self.level else Bucket(self.level - n, self.at)
+
+    def idle(self, now: datetime, *, capacity: int, refill_per_second: float) -> bool:
+        """Idle for a full refill: indistinguishable from a new, full bucket."""
+        return (now - self.at).total_seconds() >= capacity / refill_per_second
 
 
 @dto
@@ -79,24 +106,26 @@ class SpanRateLimiter:
         self._capacity = capacity
         self._refill = refill_per_second
         self._lock = threading.Lock()
-        self._buckets: dict[str, tuple[float, datetime]] = {}
+        self._buckets: dict[str, Bucket] = {}
 
-    def take(self, lease_id: str, spans: int) -> bool:
-        """Whether ``spans`` items fit this lease's bucket now, taking them if so. A request larger than the bucket
-        holds never fits."""
-        now = self._clock.now()
+    def take(self, lease_id: str, spans: int, *, now: datetime | None = None) -> bool:
+        """Whether ``spans`` items fit this lease's bucket at ``now`` (the clock's, when omitted),
+        taking them if so. A request larger than the bucket holds never fits."""
+        when = now if now is not None else self._clock.now()
         with self._lock:
-            self._evict_idle(now)
-            level, at = self._buckets.get(lease_id, (float(self._capacity), now))
-            level = min(float(self._capacity), level + (now - at).total_seconds() * self._refill)
-            if spans > level:
-                self._buckets[lease_id] = (level, now)
-                return False
-            self._buckets[lease_id] = (level - spans, now)
-            return True
+            self._evict_idle(when)
+            bucket = self._buckets.get(lease_id, Bucket.full(self._capacity, when)).refilled(
+                when, capacity=self._capacity, refill_per_second=self._refill
+            )
+            taken = bucket.take(spans)
+            self._buckets[lease_id] = taken if taken is not None else bucket
+            return taken is not None
 
     def _evict_idle(self, now: datetime) -> None:
-        full_refill = self._capacity / self._refill
-        idle = [key for key, (_, at) in self._buckets.items() if (now - at).total_seconds() >= full_refill]
+        idle = [
+            key
+            for key, bucket in self._buckets.items()
+            if bucket.idle(now, capacity=self._capacity, refill_per_second=self._refill)
+        ]
         for key in idle:
             del self._buckets[key]

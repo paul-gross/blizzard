@@ -319,3 +319,36 @@ def test_close_boundaries_for_lease_leaves_other_leases_untouched() -> None:
 
     assert store.open_boundaries_for_lease("lease_1") == []
     assert len(store.open_boundaries_for_lease("lease_2")) == 1
+
+
+def test_advance_on_a_closed_boundary_is_a_no_op() -> None:
+    """A closed marker's history is final: an advance after its lease closed writes nothing,
+    so ``current_start`` still answers the marker's own start."""
+    store = make_store("sqlite://")
+    _open_judge(store)
+    store.close_boundaries_for_lease("lease_1", reason="completed", at=_T0.replace(hour=1))
+
+    store.record_boundary_advance(
+        lease_id="lease_1",
+        generation=1,
+        kind="judge",
+        superseded_invocation="el-1",
+        start_position="pos-late",
+        advanced_at=_T0.replace(hour=2),
+    )
+
+    current = store.current_start("lease_1", 1, "judge")
+    assert current is not None
+    assert (current.start_position, current.at) == ("pos-original", _T0)
+
+
+def test_open_after_close_keeps_the_closed_marker() -> None:
+    store = make_store("sqlite://")
+    _open_judge(store)
+    store.close_boundaries_for_lease("lease_1", reason="completed", at=_T0.replace(hour=1))
+
+    _open_judge(store, position="pos-reopened")
+
+    boundary = store.boundary("lease_1", 1, "judge")
+    assert boundary is not None
+    assert (boundary.start_position, boundary.closed_reason) == ("pos-original", "completed")

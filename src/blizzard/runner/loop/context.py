@@ -137,6 +137,12 @@ class ResolvedSubscription:
     sampler: ISubscriptionSampler | None
     renewer: ICredentialRenewer | None
 
+    @property
+    def samplable(self) -> ISubscriptionSampler | None:
+        """The sampler to attempt, or ``None`` for a declaration its provider binds no sampler
+        to: it stays declared and unsampled, with no attempt row, since no sampler failed."""
+        return self.sampler
+
 
 class ICloseableUsageHttpClient(Protocol):
     """Owns the shared, lazily-built HTTP client every declared subscription's sampler draws

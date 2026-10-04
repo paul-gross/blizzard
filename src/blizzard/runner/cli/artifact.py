@@ -18,7 +18,7 @@ def artifact_group() -> None:
     The lease binding is ambient: every verb acts on the worker's own lease, resolved
     from the spawn environment — none takes a flag naming another chunk. ``--scope`` picks node
     scope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.
-    ``create`` *stages* a submission, published on completion (#169)."""
+    ``create`` *stages* a submission, published on completion."""
 
 
 @dto
@@ -38,18 +38,11 @@ class ArtifactEntry:
         return summary
 
 
-#: Why each read-only scope refuses a write — named so the refusal states the domain fact,
-#: not just the word "read-only".
-_READ_ONLY_SCOPE_REASON = {
-    ArtifactScope.GRAPH.value: "a graph's declarations are baked at mint",
-    ArtifactScope.SYSTEM.value: "a system artifact is published by blizzard itself",
-}
-
-
 def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
-    """``create``/``commit``/``staged`` are node-scope only; refuses using
-    ``_READ_ONLY_SCOPE_REASON``'s table (``blizzard-context:/standards/worker-nodes/declarations.md``)."""
-    reason = _READ_ONLY_SCOPE_REASON.get(scope or "")
+    """``create``/``commit``/``staged`` are node-scope only; refuses with the scope's own
+    :attr:`~blizzard.foundation.artifacts.ArtifactScope.read_only_reason`
+    (``blizzard-context:/standards/worker-nodes/declarations.md``)."""
+    reason = ArtifactScope(scope).read_only_reason if scope else None
     if reason is not None:
         raise click.ClickException(f"artifact {verb}: {scope} scope is read-only — {reason}")
 
@@ -205,7 +198,7 @@ def artifact_get(
         click.echo(resp.text)
         return
     artifact = resp.json()
-    if artifact.get("kind") == ArtifactKind.GIT_COMMIT:
+    if not ArtifactKind(artifact["kind"]).carries_content():
         raise click.ClickException(
             f"artifact get: {name!r} is a git-commit artifact — it has no content (drop --content to read its ref)"
         )
@@ -315,10 +308,13 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
     if environment_id is not None:
         body["environment_id"] = environment_id
-    worker.post(
+    resp = worker.post(
         worker.leased("git-commits"),
         failure=f"could not record {repo!r}",
         rejected=f"{repo!r} rejected",
         json_body=body,
     )
     click.echo(f"recorded {repo!r} at {branch!r} ({commit_sha})")
+    note = resp.json().get("note")
+    if note:
+        click.echo(note)

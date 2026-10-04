@@ -15,8 +15,8 @@ from blizzard.runner.transcripts.archived_repository import (
     ArchivedTranscriptStatus,
     IReadArchivedTranscriptRepository,
 )
-from blizzard.runner.transcripts.internal.projected_transcript_repository import MAX_TURNS
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
+from blizzard.runner.transcripts.repository import MAX_TURNS, recent_window
 from blizzard.wire.transcript_segment import LeaseTranscriptView
 
 _log = get_logger("blizzard.runner.transcripts.archived")
@@ -74,8 +74,7 @@ class HttpArchivedTranscriptRepository:
             return _answer("empty")
         # The same recency cap the local read applies, deliberately shared rather than
         # re-chosen: one panel renders both homes, so both must bound the payload alike.
-        capped = len(view.turns) > MAX_TURNS
-        window = view.turns[-MAX_TURNS:] if capped else view.turns
+        window, capped = recent_window(view.turns, max_turns=MAX_TURNS)
         return ArchivedTranscript(
             status="found",
             turns=[to_turn(turn, i) for i, turn in enumerate(window)],

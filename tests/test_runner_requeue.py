@@ -50,6 +50,7 @@ def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-un
         chunk_id=chunk_id,
         open_takeover=store.open_takeover_for_chunk(chunk_id),
         open_escalation=store.open_escalation_for_chunk(chunk_id),
+        held_environment_ids=tuple(b.environment_id for b in store.bindings_for_chunk(chunk_id)),
     )
 
 

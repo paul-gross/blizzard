@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
@@ -23,6 +23,34 @@ _log = get_logger("blizzard.runner.trace_export")
 
 class ReplayWindowRefused(ValueError):
     """The window is inverted, empty, or wider than ``replay_max_window``."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class ReplayWindow:
+    """A half-open replay window ``[since, until)`` no wider than the configured maximum."""
+
+    since: datetime
+    until: datetime
+
+    @classmethod
+    def of(cls, since: datetime, until: datetime, *, max_window_seconds: float) -> ReplayWindow:
+        """The window, or :class:`ReplayWindowRefused` when it is inverted, empty, or too wide."""
+        if until <= since:
+            raise ReplayWindowRefused("until must be after since")
+        if until - since > timedelta(seconds=max_window_seconds):
+            raise ReplayWindowRefused(f"window is wider than replay_max_window ({max_window_seconds} seconds)")
+        return cls(since=since, until=until)
+
+    @property
+    def opening(self) -> LeaseCursorKey:
+        """The read position before the window's first lease."""
+        return LeaseCursorKey.opening(self.since)
+
+    @property
+    def last_inclusive(self) -> datetime:
+        """The read's own inclusive upper bound — the instant just before ``until``."""
+        return self.until - timedelta(microseconds=1)
 
 
 class ReplayUnavailable(Exception):
@@ -47,20 +75,15 @@ class LeaseTraceReplay:
         self._leases = leases
         self._exporter = exporter
         self._batch_limit = config.batch_limit
-        self._max_window = timedelta(seconds=config.replay_max_window)
         self._max_window_seconds = config.replay_max_window
 
     def replay(self, since: datetime, until: datetime, *, dry_run: bool) -> ReplayResult:
-        if until <= since:
-            raise ReplayWindowRefused("until must be after since")
-        if until - since > self._max_window:
-            raise ReplayWindowRefused(f"window is wider than replay_max_window ({self._max_window_seconds} seconds)")
+        window = ReplayWindow.of(since, until, max_window_seconds=self._max_window_seconds)
         if not dry_run and self._exporter is None:
             raise ReplayUnavailable("runner tracing is off; a replay without --dry-run has nowhere to send spans")
         leases = spans = batches = 0
-        position = LeaseCursorKey.opening(since)
-        # The window is half-open: the read's own bound is inclusive.
-        last = until - timedelta(microseconds=1)
+        position = window.opening
+        last = window.last_inclusive
         while True:
             keys = self._leases.closed_leases_after(position, last, self._batch_limit)
             if not keys:

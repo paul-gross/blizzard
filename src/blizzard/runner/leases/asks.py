@@ -1,25 +1,38 @@
 """The worker ask/park repository seam.
 
-A dormant lease reads as parked either on an unanswered question or on an operator
-pause (:mod:`~blizzard.runner.throttle.pause`); :meth:`IReadAskRepository.parked_lease_ids`
-is their union, read by every collaborator that only needs "is this lease dormant"."""
+:meth:`IReadAskRepository.parked_lease_ids` unions the leases parked on an unanswered question or an
+operator pause. :func:`check_askable` accepts an ask against the active lease whatever it is doing, and
+a newer unforwarded ask supersedes the older (:func:`unshadowed`); an ask against an open takeover's
+closed reference lease is refused (:class:`AskOnClosedLease`), as nothing would ever forward it."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from enum import StrEnum
+from types import MappingProxyType
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, Id
 from blizzard.foundation.roles import dto
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
-if TYPE_CHECKING:
-    from blizzard.runner.leases import Lease
-
-__all__ = ["AskService", "IReadAskRepository", "IWriteAskRepository", "OpenAsk", "QuestionPark"]
+__all__ = [
+    "ASK_TRANSITIONS",
+    "AskOnClosedLease",
+    "AskService",
+    "AskState",
+    "IReadAskRepository",
+    "IWriteAskRepository",
+    "OpenAsk",
+    "QuestionPark",
+    "check_askable",
+    "unshadowed",
+]
 
 
 @dto
@@ -59,6 +72,57 @@ class QuestionPark:
     parked_at: datetime
 
 
+class AskState(StrEnum):
+    """Where one ask stands. Derived from facts, never stored (``bzh:facts-not-status``):
+    unforwarded until a park fact names its question, forwarded until a park resume does."""
+
+    UNFORWARDED = "unforwarded"
+    FORWARDED = "forwarded"
+    ANSWERED = "answered"
+    SUPERSEDED = "superseded"
+
+
+#: The states one ask may move to from each; only an unforwarded ask is superseded (:func:`unshadowed`).
+ASK_TRANSITIONS: Mapping[AskState, frozenset[AskState]] = MappingProxyType(
+    {
+        AskState.UNFORWARDED: frozenset({AskState.FORWARDED, AskState.SUPERSEDED}),
+        AskState.FORWARDED: frozenset({AskState.ANSWERED}),
+        AskState.ANSWERED: frozenset(),
+        AskState.SUPERSEDED: frozenset(),
+    }
+)
+
+
+class AskOnClosedLease(Exception):
+    """The ask names the closed reference lease an open takeover holds — the API edge maps
+    this to ``409``."""
+
+
+def check_askable(worker: WorkerLease) -> None:
+    """Pass when ``worker`` may record an ask, else raise :class:`AskOnClosedLease`."""
+    if not worker.accepts(WorkerVerb.ASK):
+        raise AskOnClosedLease(
+            f"lease {worker.lease.lease_id} is closed — an ask against a takeover's reference lease is never forwarded"
+        )
+
+
+def unshadowed(asks_newest_first: Iterable[OpenAsk], *, forwarded: Iterable[str]) -> list[OpenAsk]:
+    """``asks_newest_first`` without the unforwarded asks a newer unforwarded ask on the
+    same lease supersedes — the same "newest" :meth:`IReadAskRepository.unforwarded_ask`
+    forwards. ``forwarded`` names the question ids already forwarded and parked; those asks
+    always stay. Order is preserved."""
+    parked = set(forwarded)
+    seen: set[str] = set()
+    kept: list[OpenAsk] = []
+    for ask in asks_newest_first:
+        if ask.question_id not in parked:
+            if ask.lease_id in seen:
+                continue
+            seen.add(ask.lease_id)
+        kept.append(ask)
+    return kept
+
+
 class IReadAskRepository(Protocol):
     """Read-only ask/park queries (held by read-path edges)."""
 
@@ -88,11 +152,10 @@ class IReadAskRepository(Protocol):
         ...
 
     def open_asks(self) -> list[OpenAsk]:
-        """Every ask with no answer yet — forwarded-and-parked or still unforwarded.
+        """Every ask with no answer yet — forwarded-and-parked or still unforwarded — newest first.
 
-        An ask is open while its ``question_id`` carries no
-        :meth:`~IWriteAskRepository.record_park_resume`, whether or not it has been
-        forwarded up yet."""
+        An ask is open while its ``question_id`` carries no :meth:`~IWriteAskRepository.record_park_resume`,
+        except an unforwarded ask a newer unforwarded ask on its lease supersedes (:func:`unshadowed`)."""
         ...
 
 
@@ -132,10 +195,12 @@ class AskService:
         self._clock = clock
         self._events = events
 
-    def record_ask(self, lease: Lease, *, question: str, options: list[str]) -> str:
-        """Record a worker's ask against its lease, minting the question id.
-
-        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
+    def record_ask(self, worker: WorkerLease, *, question: str, options: list[str]) -> str:
+        """Record a worker's ask against its lease, minting the question id, or raise
+        :class:`AskOnClosedLease`. ``worker`` is already resolved by the caller
+        (``bzh:domain-takes-objects``)."""
+        check_askable(worker)
+        lease = worker.lease
         question_id = Id.mint(QUESTION_PREFIX, self._clock).value
         self._store.record_ask(
             lease_id=lease.lease_id,

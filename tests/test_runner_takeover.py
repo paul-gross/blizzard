@@ -26,7 +26,8 @@ from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease, WorkerLease
+from blizzard.runner.leases.asks import AskService
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import (
@@ -163,6 +164,25 @@ def test_takeover_opens_over_an_ask_parked_chunk(tmp_path, workspace_root, expec
     assert record.fence_epoch is None  # nothing live to fence
     assert "ch_1" in store.open_takeover_chunk_ids()
     assert store.pending_outbound() == []  # no fence bump enqueued — a dormant lease needs none
+
+
+def test_a_takeover_session_may_ask_on_the_still_active_parked_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The takeover's session asks against the active lease it resumed, still parked on its
+    earlier question: accepted, and it is the lease's newest unforwarded ask."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    _service(store).open(_open_scope(store), force=False)
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    question_id = AskService(store, FixedClock(_NOW)).record_ask(
+        WorkerLease(lease=lease, active=True), question="which way?", options=[]
+    )
+
+    ask = store.unforwarded_ask("lease_1")
+    assert ask is not None
+    assert ask.question_id == question_id
 
 
 def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -500,6 +520,43 @@ def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path) -> None:  
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
+def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A takeover holds its reference lease and anything up to its fence, not the chunk forever:
+    a lease a later re-claim minted above both is the loop's again."""
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=2,
+        opened_at=_NOW,
+    )
+    _seed_lease(store, lease="lease_2", epoch=3, pid=200, session="sess-b")
+    probe = FakeProbe(alive={(200, "start-200")})
+    clock = FixedClock(_NOW + HEARTBEAT_STALENESS_THRESHOLD * 2)  # long stale
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=3, route_runner_id="r1"
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=3)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=probe,
+        clock=clock,
+    )
+
+    Reap(ctx).run()
+
+    assert store.active_lease("lease_2") is None  # reaped like any stalled worker
+
+
 def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
@@ -525,7 +582,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
     assert store.active_lease("lease_1") is not None  # left exactly as it was
 
 
-def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     # A gate-parked chunk: a held binding, no active lease (its lease already closed
     # "parked"), and an open takeover over it.
@@ -540,8 +597,8 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
         opened_at=_NOW,
     )
     hub = FakeHub()
-    # Scripted DONE: if the guard failed to skip, `_advance_held_chunk` would poll this
-    # and release the binding — an observable side effect the assertion below catches.
+    # Scripted DONE: an open takeover suppresses only the session-starting moves, so an ended
+    # chunk still gives its binding back.
     hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
         status=ChunkStatus.DONE,
@@ -559,8 +616,8 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
 
     Advance(ctx).run()
 
-    assert provider.released == []
-    assert store.held_environment_ids() == ["e1"]
+    assert provider.released == ["e1"]
+    assert store.held_environment_ids() == []
 
 
 # `InterruptedClaims.reconcile`'s deliberate absence of an open-takeover skip.

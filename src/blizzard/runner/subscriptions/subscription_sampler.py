@@ -8,12 +8,13 @@ composition. :attr:`ExternalSubscriptionUsageWindow.utilization_pct` is **0-100,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.store.utc import as_utc
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 __all__ = [
@@ -27,6 +28,8 @@ __all__ = [
     "SampleMiss",
     "SampleMissReason",
     "SubscriptionSource",
+    "credential_lapsed",
+    "sample_due",
 ]
 
 # The Anthropic provider-sampler binding's own selector value — distinct
@@ -41,7 +44,7 @@ ANTHROPIC_DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials
 PROVIDER_OPENAI = "openai"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
     """One rate-limit window's utilization, as the provider's own account reports it.
@@ -53,6 +56,10 @@ class ExternalSubscriptionUsageWindow:
     utilization_pct: float
     resets_at: datetime
     window_seconds: int
+
+    def exhausted_pending(self, now: datetime) -> bool:
+        """Fully used, with its reset still ahead of ``now`` — a window still holding a limit."""
+        return self.utilization_pct >= 100.0 and self.resets_at > now
 
 
 @dto
@@ -119,3 +126,14 @@ class ISubscriptionSampler(Protocol):
         unreachable endpoint, an unparseable response — carrying its own closed-set
         reason. Never a raise: the sample is best-effort."""
         ...
+
+
+def sample_due(last_attempt_at: datetime | None, now: datetime, interval_seconds: int) -> bool:
+    """A declared subscription samples once its own interval has passed since its last attempt,
+    or at once when it was never attempted."""
+    return last_attempt_at is None or now - last_attempt_at >= timedelta(seconds=interval_seconds)
+
+
+def credential_lapsed(expires_at: datetime, now: datetime) -> bool:
+    """A credential at or past its own expiry has lapsed, so sampling spends no request on it."""
+    return as_utc(expires_at) <= as_utc(now)

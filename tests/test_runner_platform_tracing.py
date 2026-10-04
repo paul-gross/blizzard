@@ -489,7 +489,7 @@ def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_ano
 def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_attributes_late_in_a_wide_span(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from blizzard.runner.api import otlp_receiver
+    from blizzard.runner.tracing import receiver as otlp_receiver
 
     admitted: list[list[str]] = []
     real_admit = otlp_receiver.admit

@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -16,7 +17,7 @@ from blizzard.runner.leases import (
     Lease,
     PoolHead,
 )
-from blizzard.wire.envelope import TIER_PREFIX, NodeConfig
+from blizzard.wire.envelope import TIER_PREFIX, NodeConfig, RotatePolicyView
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -35,7 +36,7 @@ class ResumeTarget:
     owner_unresolvable: tuple[SessionReference, UnknownHarnessError | UnavailableHarnessError] | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResumedSession:
     """The session a spawn resumes, bound to its newest recorded lease — one value, so no
@@ -49,6 +50,14 @@ class ResumedSession:
         """The operator-visible raw session id the recorded owner issued, whichever owner
         that is."""
         return self.session.session_id
+
+    def inherited_stamps(self) -> tuple[str | None, str | None, str | None]:
+        """The (model, effort, compaction_window) a resume runs under: all three inherited from the
+        resumed session's own recorded lease. **The stamp describes the session, not the
+        preference** — an inherited ``None``, or no recorded lease at all, stays unknown."""
+        if self.lease is None:
+            return (None, None, None)
+        return (self.lease.resolved_model, self.lease.resolved_effort, self.lease.resolved_compaction_window)
 
 
 @dataclass(frozen=True)
@@ -108,9 +117,7 @@ class SessionResolver:
         all three from the resumed session's own recorded lease, riding ``resume`` from
         :meth:`resumption` — and an inherited ``None`` stays *unknown*."""
         if resume is not None:
-            if resume.lease is None:
-                return (None, None, None)
-            return (resume.lease.resolved_model, resume.lease.resolved_effort, resume.lease.resolved_compaction_window)
+            return resume.inherited_stamps()
         harness = self.harnesses.model_resolution(harness_id)
         model = harness.resolve_model(node.session_model)
         return (
@@ -164,40 +171,31 @@ class SessionResolver:
         # Model drift first: the one check that needs no telemetry, and an edited declaration
         # should rotate regardless of how much context the old head accumulated.
         resolved = harness.resolve_model(node.session_model) if node.session_model else None
-        if resolved is not None and head.resolved_model is not None and head.resolved_model != resolved:
+        if model_drifted(head.resolved_model, resolved):
             return "model-drift", None
 
         rotate = node.session_rotate
         if rotate is None:
             return None, None  # the declaration bounds nothing
-
         needs_transcript = rotate.max_context_tokens is not None or rotate.max_transcript_bytes is not None
-        # An unresolvable transcript source is just another unreadable signal below: no
-        # binding (or an off transcripts lane) leaves those checks unmeasured, not forced.
+        # An unresolvable transcript source leaves its checks unmeasured, not forced; each signal is read
+        # only when its own bound is declared.
         source = self._resolve_transcript_source(head.session) if needs_transcript and self.transcripts_wired else None
-
-        if rotate.max_context_tokens is not None and source is not None:
-            # The transcript, never the usage facts: only it records per-turn prompt sizes, and
-            # a usage row's cumulative figure is not this quantity (`Record.context_tokens`).
-            tokens = source.context_tokens(head.session_id, spawn_cwd=spawn_cwd)
-            if tokens is not None and tokens > rotate.max_context_tokens:
-                return "max_context_tokens", None
-
+        # The transcript, never the usage facts: only it records per-turn prompt sizes, and
+        # a usage row's cumulative figure is not this quantity (`Record.context_tokens`).
+        tokens = (
+            source.context_tokens(head.session_id, spawn_cwd=spawn_cwd)
+            if source is not None and rotate.max_context_tokens is not None
+            else None
+        )
         # A count is never an unknown — it is the number of rows that exist.
-        if (
-            rotate.max_invocations is not None
-            and self.leases.session_invocation_count(head.session) > rotate.max_invocations
-        ):
-            return "max_invocations", None
-
-        if rotate.max_transcript_bytes is not None and source is not None:
-            # `size_bytes` returns `None` for an unreadable transcript — treated as unknown,
-            # never a zero that would make the threshold silently inert.
-            size = source.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
-            if size is not None and size > rotate.max_transcript_bytes:
-                return "max_transcript_bytes", None
-
-        return None, None
+        invocations = self.leases.session_invocation_count(head.session) if rotate.max_invocations is not None else None
+        size = (
+            source.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
+            if source is not None and rotate.max_transcript_bytes is not None
+            else None
+        )
+        return rotation_breach(rotate, context_tokens=tokens, invocations=invocations, transcript_bytes=size), None
 
     def _unresolvable_owner(self, harness_id: str) -> UnknownHarnessError | UnavailableHarnessError | None:
         """Whether ``harness_id`` resolves right now — ``None`` when it does, else the
@@ -262,12 +260,9 @@ class HarnessSelector:
         is skipped and recorded. A single member skips the model check only
         when nothing in ``node.session_model`` is an authored (``blizzard:``-namespaced) tier;
         an authored tier this harness cannot map is never silently substituted (worker-spawn.md)."""
-        members = node.session_harnesses
-        strict = bool(node.session_model) and (
-            len(members) > 1 or any(preference.startswith(TIER_PREFIX) for preference in node.session_model)
-        )
+        strict = selection_is_strict(node)
         skipped: list[SkippedHarness] = []
-        for harness_id in members:
+        for harness_id in node.session_harnesses:
             try:
                 adapter = self.harnesses.model_resolution(harness_id)
             except UnknownHarnessError:
@@ -276,12 +271,61 @@ class HarnessSelector:
             except UnavailableHarnessError:
                 skipped.append(SkippedHarness(harness_id, "unavailable"))
                 continue
-            health = self.health.get(harness_id) if self.health is not None else None
-            if health is not None and not health.available:
-                skipped.append(SkippedHarness(harness_id, "unhealthy"))
-                continue
-            if strict and adapter.resolve_model_strict(node.session_model) is None:
-                skipped.append(SkippedHarness(harness_id, "no-authored-tier"))
+            healthy = self.health is None or reported_health(harness_id, self.health.get(harness_id)).available
+            reason = member_skip_reason(
+                healthy=healthy,
+                maps_authored_tier=not strict or adapter.resolve_model_strict(node.session_model) is not None,
+            )
+            if reason is not None:
+                skipped.append(SkippedHarness(harness_id, reason))
                 continue
             return HarnessSelection(harness_id=harness_id, skipped=tuple(skipped))
         return HarnessSelection(harness_id=None, skipped=tuple(skipped))
+
+
+def selection_is_strict(node: NodeConfig) -> bool:
+    """Whether selection checks each member can map the node's model: a model preference set
+    across several members, or one naming an authored (``blizzard:``-namespaced) tier — a tier a
+    harness cannot map is never silently substituted."""
+    members = node.session_harnesses
+    return bool(node.session_model) and (
+        len(members) > 1 or any(preference.startswith(TIER_PREFIX) for preference in node.session_model)
+    )
+
+
+def member_skip_reason(*, healthy: bool, maps_authored_tier: bool) -> str | None:
+    """Why a resolvable acceptable-set member is passed over — health first, then the model
+    check — or ``None`` when it may serve the mint."""
+    if not healthy:
+        return "unhealthy"
+    if not maps_authored_tier:
+        return "no-authored-tier"
+    return None
+
+
+def model_drifted(head_model: str | None, resolved: str | None) -> bool:
+    """A pool head rotates when the node now resolves to a different known model than the head
+    recorded; an unknown on either side is not drift."""
+    return resolved is not None and head_model is not None and head_model != resolved
+
+
+def rotation_breach(
+    rotate: RotatePolicyView, *, context_tokens: int | None, invocations: int | None, transcript_bytes: int | None
+) -> str | None:
+    """The first rotation bound a pool head has gone over, in declared order, or ``None``. An
+    unreadable signal (``None``) is never a breach — never a zero that would make its bound inert."""
+    if (
+        rotate.max_context_tokens is not None
+        and context_tokens is not None
+        and context_tokens > rotate.max_context_tokens
+    ):
+        return "max_context_tokens"
+    if rotate.max_invocations is not None and invocations is not None and invocations > rotate.max_invocations:
+        return "max_invocations"
+    if (
+        rotate.max_transcript_bytes is not None
+        and transcript_bytes is not None
+        and transcript_bytes > rotate.max_transcript_bytes
+    ):
+        return "max_transcript_bytes"
+    return None

@@ -14,10 +14,10 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
-from blizzard.runner.harness.admission import classify_offline
-from blizzard.runner.harness.admission import version_admitted as harness_version_admitted
+from blizzard.runner.harness.admission import admission_verdict
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
-from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
+from blizzard.runner.harness.offline_compatibility import classify_offline
+from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository, selftest_failed
 
 _log = get_logger("blizzard.runner.harness.health_cache")
 
@@ -100,20 +100,13 @@ class HarnessHealthCache:
         supported_version = probe.supported_version()
         normalized_version = probe.normalize_version(observed_version)
         classifies_offline = probe.classifies_offline()
-        # Membership against the range is this caller's job; `None` here means nothing
-        # observed, distinct from a non-member, and a `None` `supported_version` means no range.
-        version_admitted = (
-            None
-            if normalized_version is None
-            else supported_version is not None and harness_version_admitted(normalized_version, supported_version)
-        )
         conflicts = probe.config_conflicts()
         result = evaluate_harness_health(
             HarnessHealthEvidence(
                 harness_id=harness_id,
                 binary_present=probe.binary_present(),
                 version_declared=supported_version is not None,
-                version_admitted=version_admitted,
+                version_admitted=admission_verdict(normalized_version, supported_version),
                 version_classification=(
                     classify_offline(harness_id, normalized_version, supported_version)
                     if supported_version is not None and classifies_offline
@@ -121,7 +114,7 @@ class HarnessHealthCache:
                 ),
                 authenticated=probe.probe_authentication(),
                 unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),
-                selftest_failed=(latest.status == "failed") if latest is not None else None,
+                selftest_failed=selftest_failed(latest),
                 corpus_backed=classifies_offline,
                 degradations=probe.declared_degradations(),
                 config_conflicts=conflicts,

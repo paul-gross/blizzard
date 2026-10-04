@@ -12,6 +12,7 @@ adapters underneath; this package re-exports them as the single import surface a
 
 from __future__ import annotations
 
+from collections.abc import Container, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -20,7 +21,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.leases import LeaseState
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.environments.repository import IReadEnvironmentRepository, group_bindings_by_chunk
+from blizzard.runner.environments.repository import EnvBinding, IReadEnvironmentRepository, group_bindings_by_chunk
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
@@ -42,10 +43,12 @@ from blizzard.runner.leases.session import (
     IReadLeaseSessionRepository,
     IWriteLeaseSessionRepository,
 )
+from blizzard.runner.leases.worker_lease import WORKER_VERBS, WorkerLease, WorkerLeaseStanding, WorkerVerb
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
     "RECENT_LEASE_LIMIT",
+    "WORKER_VERBS",
     "ClosedLease",
     "ClosedLeaseActivity",
     "IProcessProbe",
@@ -65,6 +68,9 @@ __all__ = [
     "NewLease",
     "PoolHead",
     "WorkRefStamp",
+    "WorkerLease",
+    "WorkerLeaseStanding",
+    "WorkerVerb",
     "as_utc",
 ]
 
@@ -186,16 +192,6 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 RECENT_LEASE_LIMIT = 20
 
 
-class _Unread:
-    """The "caller did not supply a heartbeat" sentinel for :meth:`Liveness.of`.
-
-    A distinct type rather than ``None``, because ``None`` is itself a meaningful value
-    there — a lease that has never beaten — and the two must not collapse."""
-
-
-_UNREAD = _Unread()
-
-
 @domain_model
 @dataclass(frozen=True)
 class Liveness:
@@ -207,21 +203,11 @@ class Liveness:
     last_activity: datetime
 
     @classmethod
-    def of(
-        cls,
-        store: IReadLeaseLivenessRepository,
-        lease: Lease,
-        *,
-        heartbeat: datetime | None | _Unread = _UNREAD,
-        spawn: datetime | None | _Unread = _UNREAD,
-    ) -> Liveness:
-        """Read the lease's activity facts, taking an already-read ``heartbeat``/``spawn``
-        if either is offered — a bulk caller pre-reads both via
-        :meth:`~IReadLeaseLivenessRepository.liveness_facts` and passes them through, so
-        this classmethod issues no store call of its own at all."""
-        beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
-        spawned = store.latest_spawn(lease.lease_id) if isinstance(spawn, _Unread) else spawn
-        facts = (beat, spawned)
+    def of(cls, lease: Lease, *, heartbeat: datetime | None, spawn: datetime | None) -> Liveness:
+        """The baseline from the lease's mint and its already-read activity facts. ``None``
+        is a meaningful value for either fact — a lease that has never beaten, or never
+        spawned — and leaves the mint (or the other fact) as the baseline."""
+        facts = (heartbeat, spawn)
         return cls(max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)]))
 
     def stale(self, now: datetime, *, threshold: timedelta = HEARTBEAT_STALENESS_THRESHOLD) -> bool:
@@ -235,7 +221,7 @@ class Liveness:
 # --- Derived lease state — the panel's read model ----------------
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseActivity:
     """An active lease with the facts its state derives from, plus its binding — the panel's read model.
@@ -250,6 +236,36 @@ class LeaseActivity:
     environment_id: str | None = None
     workdir: str | None = None
     last_heartbeat_at: datetime | None = None
+
+    @classmethod
+    def of(
+        cls,
+        lease: Lease,
+        *,
+        facts: LeaseLivenessFacts | None,
+        parked_ids: Container[str],
+        backing_off: Container[str],
+        bindings: Sequence[EnvBinding],
+        alive: bool,
+        now: datetime,
+        stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
+    ) -> LeaseActivity:
+        """Assemble ``lease``'s activity from facts already read: its liveness facts (``None``
+        when it has none yet), the parked and backing-off lease ids, its chunk's held bindings
+        (the first is the one the panel shows), and whether its process probes alive."""
+        heartbeat = facts.latest_heartbeat if facts is not None else None
+        liveness = Liveness.of(lease, heartbeat=heartbeat, spawn=facts.latest_spawn if facts is not None else None)
+        binding = bindings[0] if bindings else None
+        return cls(
+            lease=lease,
+            parked=lease.lease_id in parked_ids,
+            alive=alive,
+            stale=liveness.stale(now, threshold=stale_after),
+            backing_off=lease.lease_id in backing_off,
+            environment_id=binding.environment_id if binding else None,
+            workdir=binding.workdir if binding else None,
+            last_heartbeat_at=heartbeat,
+        )
 
     @property
     def state(self) -> LeaseState:
@@ -343,32 +359,19 @@ class LocalLeaseService:
         leases = self._lease_record.list_active_leases()
         facts_by_lease = self._liveness.liveness_facts([lease.lease_id for lease in leases])
         bindings_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
-        activities: list[LeaseActivity] = []
-        for lease in leases:
-            facts = facts_by_lease.get(lease.lease_id)
-            last_heartbeat = facts.latest_heartbeat if facts is not None else None
-            liveness = Liveness.of(
-                self._liveness,
+        return [
+            LeaseActivity.of(
                 lease,
-                heartbeat=last_heartbeat,
-                spawn=facts.latest_spawn if facts is not None else None,
+                facts=facts_by_lease.get(lease.lease_id),
+                parked_ids=parked,
+                backing_off=backing_off,
+                bindings=bindings_by_chunk.get(lease.chunk_id, []),
+                alive=self._is_alive(lease),
+                now=now,
+                stale_after=self._stale_after,
             )
-            alive = self._is_alive(lease)
-            bindings = bindings_by_chunk.get(lease.chunk_id, [])
-            binding = bindings[0] if bindings else None
-            activities.append(
-                LeaseActivity(
-                    lease=lease,
-                    parked=lease.lease_id in parked,
-                    alive=alive,
-                    stale=liveness.stale(now, threshold=self._stale_after),
-                    backing_off=lease.lease_id in backing_off,
-                    environment_id=binding.environment_id if binding else None,
-                    workdir=binding.workdir if binding else None,
-                    last_heartbeat_at=last_heartbeat,
-                )
-            )
-        return activities
+            for lease in leases
+        ]
 
     def list_recent(self) -> list[LeaseActivity | ClosedLeaseActivity]:
         """Active leases, then the most recently closed — the panel's list.

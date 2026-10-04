@@ -7,19 +7,15 @@ Lease-token authenticated; everything received is untrusted, and
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 
-from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES, CLI_SCOPE
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
     PROTOBUF_CONTENT_TYPE,
     OtlpDecodeError,
-    ReceivedDataPoint,
-    ReceivedLogRecord,
-    ReceivedSpan,
     decode_logs,
     decode_metrics,
     decode_otlp,
@@ -30,35 +26,12 @@ from blizzard.foundation.platform_tracing.received import (
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.harness.harness_telemetry_plan import (
-    CLAUDE_CODE_LOGS_SCOPE,
-    CLAUDE_CODE_METRICS_SCOPE,
-    CLAUDE_CODE_SCOPES,
-    CLAUDE_CODE_SERVICE_NAME,
-    CLAUDE_CODE_TRACING_SCOPE,
-)
 from blizzard.runner.leases import Lease
-from blizzard.runner.tracing.receiver import (
-    MAX_BODY_BYTES,
-    Admission,
-    Allowlist,
-    admit,
-    admit_data_points,
-    admit_log_records,
-)
-from blizzard.runner.tracing.receiver_limits import ReceiverBounds
+from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
+from blizzard.runner.tracing.receiving import RateExceeded, ReceiverOff
 
 router = APIRouter(include_in_schema=False)
 
-#: ``service.name`` on every span a worker's CLI sends, whatever its own resource said.
-CLI_SERVICE_NAME = "blizzard-cli"
-
-#: ``service.name`` on every other worker program's spans, kept only under ``[tracing] worker_programs``.
-PROGRAM_SERVICE_NAME = "blizzard-worker-program"
-
-_CLI_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
-_PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
-_CLAUDE_CODE_ALLOWLIST = Allowlist(scope=CLAUDE_CODE_TRACING_SCOPE, attributes=None, stamp_runner=True)
 _ENCODINGS = (JSON_CONTENT_TYPE, PROTOBUF_CONTENT_TYPE)
 
 
@@ -70,40 +43,11 @@ async def receive_traces(request: Request) -> Response:
     naming the spans refused. Under ``harness_telemetry`` Claude Code's tracing scope is kept too."""
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
-    platform_tracing = wiring.platform_tracing()
-    if not platform_tracing.enabled:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="platform tracing is off")
+    receiver = wiring.telemetry_receiver()
+    _on(receiver.require_traces)
     content_type, body = await _checked_body(request)
     spans = await _decoded(decode_otlp, body, content_type)
-    config = wiring.maybe_config()
-    programs = config is not None and config.tracing.worker_programs
-    harness = config is not None and config.tracing.harness_telemetry
-    mapped = config.tracing.worker_program_services if config is not None else {}
-    claude = [span for span in spans if harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE]
-    rest = [span for span in spans if not (harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE)]
-    claude_admission = admit(claude, lease, _CLAUDE_CODE_ALLOWLIST)
-    # Each span is admitted once, against its own allowlist: a CLI span's declared attributes must not be cut by
-    # the wildcard's cap before the CLI allowlist sees them.
-    cli_spans = [span for span in rest if programs and span.scope_name == CLI_SCOPE]
-    program_spans = [span for span in rest if not (programs and span.scope_name == CLI_SCOPE)]
-    admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
-    # The CLI's spans keep their declared attributes; only a third-party program's attributes pass wholesale.
-    cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST)
-    cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == CLI_SCOPE)]
-    others = [span for span in admission.kept if programs]
-    accepted = len(admission.kept) + len(cli_admission.kept)
-    dropped = claude_admission.dropped + admission.dropped + cli_admission.dropped
-    kept = len(claude_admission.kept) + accepted
-    counter = wiring.receiver_counter()
-    claude_counter = wiring.claude_trace_counter()
-    if kept and not wiring.span_limiter().take(lease.lease_id, kept):
-        counter.record(accepted=0, dropped=len(rest))
-        _refuse_rate(claude_counter.record, len(claude), "span rate exceeded")
-    for service_name, group in _by_service_name([*claude_admission.kept, *others], mapped).items():
-        await run_in_threadpool(platform_tracing.forward, group, service_name)
-    await run_in_threadpool(platform_tracing.forward, cli, CLI_SERVICE_NAME)
-    claude_counter.record(accepted=len(claude_admission.kept), dropped=claude_admission.dropped)
-    counter.record(accepted=accepted, dropped=admission.dropped + cli_admission.dropped)
+    dropped = await _received(receiver.receive_spans, lease, spans)
     return Response(content=encode_export_response(dropped, content_type), media_type=content_type)
 
 
@@ -113,21 +57,13 @@ async def receive_metrics(request: Request) -> Response:
     platform tracing and ``harness_telemetry`` are both on, and the rate counts data points. Only Claude Code's
     metrics scope is kept, and a summary point is refused. Otherwise 200, naming the data points refused."""
     wiring = RunnerWiring.of(request)
-    lease = await _harness_lease(request, wiring)
+    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
+    receiver = wiring.telemetry_receiver()
+    _on(receiver.require_harness_telemetry)
     content_type, body = await _checked_body(request)
     decoded = await _decoded(decode_metrics, body, content_type)
-    admitted = admit_data_points(decoded.points, lease, CLAUDE_CODE_METRICS_SCOPE)
-    admission = Admission(kept=admitted.kept, dropped=admitted.dropped + decoded.unsupported)
-    await _forward(
-        wiring.metric_bounds(),
-        lease,
-        admission,
-        received=len(decoded.points) + decoded.unsupported,
-        forward=wiring.received_telemetry().forward_metrics,
-        scope=CLAUDE_CODE_METRICS_SCOPE,
-        mapped=_mapped_services(wiring),
-    )
-    return Response(content=rejected_data_points(admission.dropped, content_type), media_type=content_type)
+    dropped = await _received(receiver.receive_metrics, lease, decoded)
+    return Response(content=rejected_data_points(dropped, content_type), media_type=content_type)
 
 
 @router.post("/v1/logs")
@@ -135,57 +71,29 @@ async def receive_logs(request: Request) -> Response:
     """Receive one OTLP logs export, refused as :func:`receive_metrics` refuses, the rate counting log records.
     Only Claude Code's events scope is kept. Otherwise 200, naming the log records refused."""
     wiring = RunnerWiring.of(request)
-    lease = await _harness_lease(request, wiring)
+    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
+    receiver = wiring.telemetry_receiver()
+    _on(receiver.require_harness_telemetry)
     content_type, body = await _checked_body(request)
     records = await _decoded(decode_logs, body, content_type)
-    admission = admit_log_records(records, lease, CLAUDE_CODE_LOGS_SCOPE)
-    await _forward(
-        wiring.log_bounds(),
-        lease,
-        admission,
-        received=len(records),
-        forward=wiring.received_telemetry().forward_logs,
-        scope=CLAUDE_CODE_LOGS_SCOPE,
-        mapped=_mapped_services(wiring),
-    )
-    return Response(content=rejected_log_records(admission.dropped, content_type), media_type=content_type)
+    dropped = await _received(receiver.receive_logs, lease, records)
+    return Response(content=rejected_log_records(dropped, content_type), media_type=content_type)
 
 
-async def _harness_lease(request: Request, wiring: RunnerWiring) -> Lease:
-    """The presenting lease, once the receiver is known to be on: 404 unless platform tracing and
-    ``harness_telemetry`` both are."""
-    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
-    config = wiring.maybe_config()
-    if not (wiring.platform_tracing().enabled and config is not None and config.tracing.harness_telemetry):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="harness telemetry is off")
-    return lease
+def _on(require: Callable[[], None]) -> None:
+    try:
+        require()
+    except ReceiverOff as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
 
 
-async def _forward[T: (ReceivedDataPoint, ReceivedLogRecord)](
-    bounds: ReceiverBounds,
-    lease: Lease,
-    admission: Admission[T],
-    *,
-    received: int,
-    forward: Callable[[Sequence[T], str], None],
-    scope: str,
-    mapped: Mapping[str, str],
-) -> None:
-    """Charge the lease's budget for what admission kept, then forward it under its service name."""
-    if admission.kept and not bounds.limiter.take(lease.lease_id, len(admission.kept)):
-        _refuse_rate(bounds.counter.record, received, "rate exceeded")
-    await run_in_threadpool(forward, admission.kept, mapped.get(scope, CLAUDE_CODE_SERVICE_NAME))
-    bounds.counter.record(accepted=len(admission.kept), dropped=admission.dropped)
-
-
-def _mapped_services(wiring: RunnerWiring) -> Mapping[str, str]:
-    config = wiring.maybe_config()
-    return config.tracing.worker_program_services if config is not None else {}
-
-
-def _refuse_rate(record: Callable[..., None], dropped: int, detail: str) -> None:
-    record(accepted=0, dropped=dropped)
-    raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail, headers={"Retry-After": "1"})
+async def _received[T](receive: Callable[[Lease, T], int], lease: Lease, items: T) -> int:
+    try:
+        return await run_in_threadpool(receive, lease, items)
+    except RateExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=exc.detail, headers={"Retry-After": "1"}
+        ) from exc
 
 
 async def _checked_body(request: Request) -> tuple[str, bytes]:
@@ -202,14 +110,6 @@ async def _decoded[T](decode: Callable[[bytes, str], T], body: bytes, content_ty
         return await run_in_threadpool(decode, body, content_type)
     except OtlpDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-def _by_service_name(spans: Sequence[ReceivedSpan], mapped: Mapping[str, str]) -> dict[str, list[ReceivedSpan]]:
-    groups: dict[str, list[ReceivedSpan]] = {}
-    for span in spans:
-        default = CLAUDE_CODE_SERVICE_NAME if span.scope_name in CLAUDE_CODE_SCOPES else PROGRAM_SERVICE_NAME
-        groups.setdefault(mapped.get(span.scope_name, default), []).append(span)
-    return groups
 
 
 def _lease_for_token(wiring: RunnerWiring, token: str | None) -> Lease:

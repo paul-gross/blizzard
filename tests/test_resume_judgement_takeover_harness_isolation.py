@@ -17,10 +17,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry, UnknownHarnessError
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
-from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
+from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverOwnerUnresolvable, TakeoverService
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
@@ -395,7 +395,7 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     assert opened_a.command == "cd /ws/lease_a && claude --resume shared-dispatch-session"
     assert harness_a.resume_command_config == [(None, None)]
 
-    with pytest.raises(UnknownHarnessError):
+    with pytest.raises(TakeoverOwnerUnresolvable):
         service.open(_open_scope(store, "ch_b"), force=False)
 
     # No takeover was ever recorded for the failed chunk — the fact-before-command ordering

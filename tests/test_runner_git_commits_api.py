@@ -21,7 +21,10 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
+    RIDES_NO_COMPLETION_NOTE,
+    GitCommitDeclarationService,
+)
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
@@ -35,7 +38,7 @@ _PROVIDER = FakeProvider({"e1": "/ws/e1"})
 def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, tokens=store, environments=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
     return create_app(config, runner_stores=make_stores(store), git_commit_declarations=service), store
 
 
@@ -71,7 +74,7 @@ def test_503_when_declaration_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, tokens=store, environments=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, git_commit_declarations=service)
@@ -236,7 +239,7 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, tokens=store, environments=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
     app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
@@ -263,7 +266,7 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, tokens=store, environments=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
     app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
@@ -335,3 +338,45 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     finally:
         hosted.close()
         graph.close()
+
+
+@pytest.mark.component
+def test_409_once_the_leases_outcome_is_buffered(tmp_path: Path) -> None:
+    """A declaration after the node-step's outcome is buffered would be recorded and never
+    submitted — refused instead, and nothing is written."""
+    app, store = _app_with_declarations(tmp_path)
+    _seed_lease(store)
+    store.enqueue_outbound(
+        kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
+    with TestClient(app) as client:
+        resp = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    assert "lease lease_1's outcome is already buffered" in resp.json()["detail"]
+    assert store.git_commit_declarations_for_lease("lease_1") == {}
+
+
+@pytest.mark.component
+def test_a_declaration_against_a_closed_takeover_lease_says_it_rides_no_completion(tmp_path: Path) -> None:
+    app, store = _app_with_declarations(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    takeover_token = "the-takeover-token"
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": takeover_token}
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["note"] == RIDES_NO_COMPLETION_NOTE
+    assert ("e1", "toy-api") in store.git_commit_declarations_for_lease("lease_1")

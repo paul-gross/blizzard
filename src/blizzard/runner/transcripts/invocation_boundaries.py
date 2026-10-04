@@ -7,19 +7,26 @@ the runner plane (``bzh:runner-plane-transcript-reads``)."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 
 __all__ = [
+    "BOUNDARY_TRANSITIONS",
     "WORKER_STARTING_KINDS",
+    "BoundaryState",
+    "BoundaryTransition",
     "IReadInvocationBoundaryRepository",
     "IWriteInvocationBoundaryRepository",
     "InvocationBoundary",
     "InvocationBoundaryKind",
     "InvocationBoundaryStart",
+    "boundary_transition_applies",
+    "spawn_boundary_kind",
+    "worker_boundary_open",
 ]
 
 #: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume``.
@@ -28,13 +35,27 @@ InvocationBoundaryKind = Literal["spawn", "resume", "judge", "nudge"]
 #: Worker-starting kinds, tried in order (``"judge"`` excluded) — shared with the invariant checker.
 WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
+#: Where one ``(lease, generation, kind)`` marker stands: never opened, open, or closed.
+BoundaryState = Literal["absent", "open", "closed"]
 
-@dto
+#: The writes a marker ever takes: its one open, an advance past a judge's start, its closure.
+BoundaryTransition = Literal["open", "advance", "close"]
+
+#: The transitions that write from each state; a marker opens once ever and a closed marker's history is final.
+BOUNDARY_TRANSITIONS: dict[BoundaryState, frozenset[BoundaryTransition]] = {
+    "absent": frozenset({"open"}),
+    "open": frozenset({"advance", "close"}),
+    "closed": frozenset(),
+}
+
+
+@domain_model
 @dataclass(frozen=True)
 class InvocationBoundary:
     """One invocation's durable start marker — its true start, never rewritten. ``start_position``
     is the opaque ``TranscriptPosition.token`` minted just before launch, or ``None`` — a fresh
-    session's own beginning sentinel; ``start_unreadable`` marks a failed tail read instead."""
+    session's own beginning sentinel; ``start_unreadable`` marks a failed tail read instead.
+    :data:`BOUNDARY_TRANSITIONS` declares which writes it takes from which state."""
 
     lease_id: str
     chunk_id: str
@@ -47,6 +68,34 @@ class InvocationBoundary:
     closed_at: datetime | None
     closed_reason: str | None
     start_unreadable: bool = False
+
+    @property
+    def state(self) -> BoundaryState:
+        """``"closed"`` once its lease's closure stamped it, else ``"open"``."""
+        return self._state()
+
+    def _state(self) -> BoundaryState:
+        return "closed" if self.closed_at is not None else "open"
+
+
+def boundary_transition_applies(boundary: InvocationBoundary | None, transition: BoundaryTransition) -> bool:
+    """Whether ``transition`` writes over ``boundary`` (``None`` — never opened) per
+    :data:`BOUNDARY_TRANSITIONS`; ``False`` is the declared no-op."""
+    state: BoundaryState = "absent" if boundary is None else boundary.state
+    return transition in BOUNDARY_TRANSITIONS[state]
+
+
+def worker_boundary_open(boundaries: Iterable[InvocationBoundary], generation: int) -> bool:
+    """Whether some worker-starting kind (:data:`WORKER_STARTING_KINDS`) already holds an open
+    boundary at ``generation`` — one worker-starting boundary per generation, so a wake never
+    opens a second beside a nudge's own."""
+    return any(b.generation == generation and b.kind in WORKER_STARTING_KINDS and b.state == "open" for b in boundaries)
+
+
+def spawn_boundary_kind(*, resumed: bool) -> InvocationBoundaryKind:
+    """The boundary kind a spawn opens: ``"resume"`` when it continues an existing session,
+    else ``"spawn"`` on the fresh session's beginning sentinel."""
+    return "resume" if resumed else "spawn"
 
 
 @dto

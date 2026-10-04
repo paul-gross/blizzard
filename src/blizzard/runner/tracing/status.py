@@ -17,7 +17,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings, TracingSt
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.receiver_limits import ReceiverCount, ReceiverCounter
-from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
+from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, LeaseTraceExportFailure
 from blizzard.runner.tracing.sweep import FAILED_MESSAGE
 
 
@@ -85,7 +85,7 @@ class LeaseTraceStatusReader:
         cursor = self._leases.newest_trace_cursor()
         exported = self._leases.newest_export_cursor()
         failure = self._leases.newest_export_failure()
-        ongoing = failure is not None and self._leases.newest_trace_latch() == "trace-export-failed"
+        ongoing = export_failure_ongoing(failure, self._leases.newest_trace_latch() if failure is not None else None)
         return LeaseTraceStatus(
             state=self._settings.state,
             endpoint=self._settings.endpoint,
@@ -117,4 +117,18 @@ class LeaseTraceStatusReader:
     def _lag(self, position: LeaseCursorKey) -> float | None:
         now = self._clock.now()
         oldest = self._leases.oldest_unsent_lease(position, now)
-        return max((now - oldest.at).total_seconds(), 0.0) if oldest is not None else None
+        return cursor_lag(oldest.at if oldest is not None else None, now)
+
+
+def export_failure_ongoing(failure: LeaseTraceExportFailure | None, newest_latch: str | None) -> bool:
+    """Whether the newest export failure still stands: one was recorded and no export has
+    succeeded since — the newest latch is still the failure's own."""
+    return failure is not None and newest_latch == "trace-export-failed"
+
+
+def cursor_lag(oldest_unsent_at: datetime | None, now: datetime) -> float | None:
+    """The age in seconds of the oldest closed lease the cursor has not passed — never
+    negative, and ``None`` when nothing waits."""
+    if oldest_unsent_at is None:
+        return None
+    return max((now - oldest_unsent_at).total_seconds(), 0.0)

@@ -2672,6 +2672,31 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch)
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("token_held", [True, False], ids=["envelope-read", "token-rekey"])
+def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(tmp_path, token_held):  # type: ignore[no-untyped-def]
+    """An ended chunk is terminal like an unknown one: the binding is released and the next
+    tick has nothing left to retry, rather than the generic hub-error retry."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    if token_held:
+        store.set_route_token("ch_1", token="tok", at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=1
+    )
+    hub.ended.add("ch_1")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+    assert store.held_environment_ids() == []
+    assert harness.spawns == []
+    envelope_reads = list(hub.get_envelope_calls)
+    Fill(ctx).run()
+    assert hub.get_envelope_calls == envelope_reads
+
+
+@pytest.mark.unit
 def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     # A chunk held at a hub node: a binding but no active lease.
@@ -3347,6 +3372,34 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
 
 
 @pytest.mark.unit
+def test_cost_cap_escalation_reads_open_locally(tmp_path):  # type: ignore[no-untyped-def]
+    """The spend-cap escalation is derivable here like any other: the capped lease closes
+    escalated with its cause recorded, so requeue, the panel, and the escalation-mint guard see it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Pull(ctx).run()
+
+    escalation = store.open_escalation_for_chunk("ch_1")
+    assert escalation is not None and escalation.cause == "spend-cap"
+
+
+@pytest.mark.unit
 def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # type: ignore[no-untyped-def]
     """A cap park with no `runner_dir` configured composes the raw fallback normally but
     leaves the wrapped command empty, same as any other `Attempt.escalate` caller — there is no
@@ -3381,9 +3434,8 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # typ
 
 @pytest.mark.unit
 def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  # type: ignore[no-untyped-def]
-    """A cap park is not a failed attempt: the closed lease reads `transitioned`, not
-    `escalated`/`failed`, and the next node's attempt count stays at zero — a later
-    resume mints its first real attempt at that node, not a second one."""
+    """A cap park is not a failed attempt: the next node's attempt count stays at zero — a
+    later resume mints its first real attempt at that node, not a second one."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()

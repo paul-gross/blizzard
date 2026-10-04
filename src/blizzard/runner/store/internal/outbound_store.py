@@ -6,7 +6,12 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import and_, func, select
 
-from blizzard.runner.hub.outbound_buffer import BufferedFact, IWriteOutboundRepository, OutboundFactEntry
+from blizzard.runner.hub.outbound_buffer import (
+    SUBMISSION_KINDS,
+    BufferedFact,
+    IWriteOutboundRepository,
+    OutboundFactEntry,
+)
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
 
@@ -24,7 +29,7 @@ class OutboundStore:
         stmt = select(outbound_buffer.c.lease_id).where(
             and_(
                 outbound_buffer.c.acked_at.is_(None),
-                outbound_buffer.c.kind.in_(("completion.submitted", "decision.submitted")),
+                outbound_buffer.c.kind.in_(SUBMISSION_KINDS),
                 outbound_buffer.c.lease_id.is_not(None),
             )
         )
@@ -78,12 +83,17 @@ class OutboundStore:
         return int(key[0]) if key is not None else 0
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        with self._store.begin() as conn:
-            conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
+        self.ack_outbound_batch([seq], acked_at=acked_at)
 
     def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
+        # Only a pending row takes the ack (`OUTBOUND_TRANSITIONS`): an acked one keeps its
+        # first `acked_at`.
         with self._store.begin() as conn:
-            conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq.in_(seqs)).values(acked_at=acked_at))
+            conn.execute(
+                outbound_buffer.update()
+                .where(and_(outbound_buffer.c.seq.in_(seqs), outbound_buffer.c.acked_at.is_(None)))
+                .values(acked_at=acked_at)
+            )
 
     def prune_outbound(self, *, now: datetime) -> int:
         cutoff = now - _OUTBOUND_RETENTION_WINDOW

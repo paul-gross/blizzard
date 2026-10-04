@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
+from blizzard.runner.harness.selftest_result import (
+    IWriteSelfTestResultRepository,
+    LatestSelfTestResult,
+    SelfTestTerminalStatus,
+)
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import selftest_results
 
@@ -38,7 +43,8 @@ class SelfTestResultStore:
         row = rows[0]
         return LatestSelfTestResult(
             harness_id=harness_id,
-            status=str(row.status),
+            # The column holds only what `record_selftest_result` wrote, typed terminal on the way in.
+            status=cast(SelfTestTerminalStatus, str(row.status)),
             error=str(row.error) if row.error is not None else None,
             recorded_at=row.recorded_at,
         )
@@ -47,7 +53,7 @@ class SelfTestResultStore:
         self,
         *,
         harness_id: str,
-        status: str,
+        status: SelfTestTerminalStatus,
         error: str | None,
         recorded_at: datetime,
     ) -> None:

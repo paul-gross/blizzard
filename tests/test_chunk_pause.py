@@ -21,12 +21,14 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
 from blizzard.wire.chunk import ChunkStatusView, PauseView
+from blizzard.wire.envelope import ApplyOutcome
 from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED, USAGE_RECORDED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
@@ -753,3 +755,28 @@ def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_tear
     assert probe.interrupted_groups == [] and probe.killed_groups == []
     assert store.in_flight_elicitation("lease_1", 1) == elicitation
     assert _usage_payloads(store) == []
+
+
+def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(tmp_path):  # type: ignore[no-untyped-def]
+    """A paused chunk starts no worker on the apply arm: the binding is held, and FILL's adopt of
+    the running chunk at the runner's own epoch enters the node once the pause lifts."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.envelopes["ch_1"] = next_env
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = _make_ctx(store, hub, harness, FakeProbe())
+
+    HeldChunk(ctx, "ch_1").apply(ApplyOutcome.NEXT, next_env, store.bindings_for_chunk("ch_1"))
+
+    assert harness.spawns == []
+    assert store.held_environment_ids() == ["e1"]
+
+    hub.chunks["ch_1"] = _running_chunk()
+    Fill(_make_ctx(store, hub, harness, FakeProbe())).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "review"

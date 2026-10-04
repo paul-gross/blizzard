@@ -105,10 +105,11 @@ class IWriteLeaseRecordRepository(IReadLeaseRecordRepository, Protocol):
         closed_at: datetime,
         event_kind: str | None = None,
         event_payload: str | None = None,
+        escalation_cause: str | None = None,
     ) -> int | None:
         """Close a lease — a clean transition or a failure/escalation.
 
-        When ``event_kind``/``event_payload`` are given, the event is
-        enqueued to the outbound buffer **in the same transaction** as the closure —
-        the two land together or not at all; return its seq, ``None`` when no event."""
+        When ``event_kind``/``event_payload`` are given, the event is enqueued to the outbound buffer **in
+        the same transaction** as the closure; returns its seq, ``None`` when no event.
+        ``escalation_cause`` records why an escalating closure escalated, durably beside it."""
         ...

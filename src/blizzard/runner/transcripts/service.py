@@ -7,43 +7,22 @@ chunk-scoped segment reads resolve locally too, through that same session-file r
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from blizzard.foundation.roles import dto
-from blizzard.foundation.transcripts import TranscriptProvenance
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.leases import IReadLeaseRecordRepository, Lease
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
+from blizzard.runner.transcripts.home import (
+    ResolvedSegmentContent,
+    ResolvedTranscript,
+    home_is_local,
+    segment_window,
+    session_start_cursor,
+)
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentState
-from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript, Turn
+from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript
 
-
-@dto
-@dataclass(frozen=True)
-class ResolvedTranscript:
-    """A lease's transcript, resolved to a home. ``provenance`` and
-    ``hub_unreachable`` carry straight onto their wire-field namesakes
-    (``wire.transcript.TranscriptResponse``, the fields' own doc home)."""
-
-    transcript: Transcript
-    provenance: TranscriptProvenance
-    hub_unreachable: bool
-
-
-@dto
-@dataclass(frozen=True)
-class ResolvedSegmentContent:
-    """One segment's resolved content, read straight from its session file — never
-    from the ledger's own shipped-turn accounting, which only bounds the index read.
-    ``turns`` is ``[]`` with ``available=False`` when the session file is gone; a caller
-    renders that as ``truncated=True, turns=[]`` (the wire model has no unavailability field)."""
-
-    final: bool
-    available: bool
-    truncated: bool
-    turns: list[Turn]
+__all__ = ["ResolvedSegmentContent", "ResolvedTranscript", "TranscriptService"]
 
 
 class TranscriptService:
@@ -75,41 +54,28 @@ class TranscriptService:
             return None
         if lease.session_id is None:
             # Minted at FILL, spawn-return not yet recorded — the agent has not started a
-            # session yet, on either side. Ordinary, not an error.
-            transcript = Transcript(session_id=None, available=False, reason="spawning", turns=[], truncated=False)
-            return ResolvedTranscript(transcript=transcript, provenance="local", hub_unreachable=False)
+            # session yet, on either side.
+            return ResolvedTranscript.local(Transcript.spawning())
         # Resolve even when the archived copy may answer: the persisted owner governs this
         # concrete session's transcript, and an archive must not conceal an absent owner.
         session = lease.session
         assert session is not None
         self._transcripts.transcript_repository(session.harness_id)
 
-        if self._leases.active_lease(lease_id) is not None or self._transcript_ledger.has_unshipped_transcript_content(
-            lease.chunk_id
+        # The unshipped-content probe runs only for a closed lease, as the short-circuit reads it.
+        lease_active = self._leases.active_lease(lease_id) is not None
+        if home_is_local(
+            lease_active=lease_active,
+            unshipped=not lease_active and self._transcript_ledger.has_unshipped_transcript_content(lease.chunk_id),
         ):
-            # Local until acked (AC1): an open lease, and a closed one whose chunk still
-            # holds unshipped turns — the hub's copy would be a prefix of the file's.
-            local = self._read_local(lease)
-            return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=False)
+            return ResolvedTranscript.local(self._read_local(lease))
 
-        # Closed and fully acked: the hub is the home. A refusal, an empty index, and
-        # a turn-less "found" all fall back to local exactly alike.
+        # Closed and fully acked: the hub is the home, the file its fallback.
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
-        if archived.status == "found" and archived.turns:
-            transcript = Transcript(
-                session_id=lease.session_id,
-                available=True,
-                reason=None,
-                turns=archived.turns,
-                truncated=archived.truncated,
-            )
-            return ResolvedTranscript(transcript=transcript, provenance="archived", hub_unreachable=False)
-
-        local = self._read_local(lease)
-        # Only a *not_found* local read becomes the hub-unreachable state: `unreadable` has
-        # its own panel row, and masking that fault behind "we couldn't ask" hides it.
-        hub_unreachable = archived.status == "unreachable" and local.reason == "not_found"
-        return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=hub_unreachable)
+        resolved = ResolvedTranscript.from_archive(lease.session_id, archived)
+        if resolved is not None:
+            return resolved
+        return ResolvedTranscript.local_fallback(self._read_local(lease), archived)
 
     def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         """The chunk's segment ledger rows, straight off the store — open or
@@ -126,31 +92,13 @@ class TranscriptService:
         segment = self._transcript_ledger.transcript_segment(segment_id)
         if segment is None or segment.chunk_id != chunk_id:
             return None
-        start_cursor = self._session_start(chunk_id, segment)
+        start_cursor = session_start_cursor(segment, self._transcript_ledger.transcript_segments_for_chunk(chunk_id))
         spawn_cwd = self._spawn_cwd(chunk_id)
         local = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=start_cursor)
-        final = segment.finalized_at is not None
-        if not local.available:
-            return ResolvedSegmentContent(final=final, available=False, truncated=True, turns=[])
-        turns = local.turns
-        truncated = local.truncated or segment.truncated_reason is not None
-        if final and segment.cursor is not None:
+        tail = None
+        if local.available and segment.final and segment.cursor is not None:
             tail = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=segment.cursor)
-            if tail.available:
-                turns = turns[: max(0, len(turns) - len(tail.turns))]
-                truncated = truncated or tail.truncated
-        return ResolvedSegmentContent(final=final, available=True, truncated=truncated, turns=turns)
-
-    def _session_start(self, chunk_id: str, segment: TranscriptSegmentState) -> str | None:
-        """This segment's own read start within its session file — a same-session resume
-        (``record_spawn``'s cursor carry-forward) chains several segments over one file, so
-        the window starts where the chronologically preceding sibling left off; the first
-        segment of its session has no start bound."""
-        siblings = [
-            s for s in self._transcript_ledger.transcript_segments_for_chunk(chunk_id) if s.session == segment.session
-        ]
-        index = next(i for i, s in enumerate(siblings) if s.segment_id == segment.segment_id)
-        return siblings[index - 1].cursor if index > 0 else None
+        return segment_window(segment, local, tail)
 
     def _read_local(self, lease: Lease) -> Transcript:
         assert lease.session_id is not None

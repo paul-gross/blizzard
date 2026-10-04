@@ -294,9 +294,8 @@ export const getChunkAsksApiLeasesLeaseIdAsksGet = <ThrowOnError extends boolean
  *
  * Record a worker's ask against its lease, minting the question id.
  *
- * Token-authorized like every other worker verb: activeness alone would admit
- * an open takeover's closed reference lease too, so the presented token is the only
- * credential that actually gates this route.
+ * Token-authorized like every other worker verb, since activeness alone would admit an open takeover's
+ * closed reference lease too. ``409`` when the lease is that closed reference lease.
  */
 export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
     url: '/api/leases/{lease_id}/asks',

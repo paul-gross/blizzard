@@ -1597,7 +1597,7 @@
         "type": "object"
       },
       "EnvironmentView": {
-        "description": "One environment in the runner's configured pool \u2014 ``GET /api/environments``.\n``chunk_id``/``held_since`` are present only while the environment\nis currently bound; an unused pool environment carries both as ``None``.",
+        "description": "One environment in the runner's configured pool \u2014 ``GET /api/environments``.\n``chunk_id``/``held_since`` are present only while the environment\nis currently bound; an unused pool environment carries both as ``None``. ``held`` is the\nrunner's own reading of whether a chunk holds it, so no client re-derives it.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -1613,6 +1613,11 @@
           "environment_id": {
             "title": "Environment Id",
             "type": "string"
+          },
+          "held": {
+            "default": false,
+            "title": "Held",
+            "type": "boolean"
           },
           "held_since": {
             "anyOf": [
@@ -2222,7 +2227,7 @@
         "type": "object"
       },
       "GitCommitDeclarationResponse": {
-        "description": "``POST /api/leases/{lease_id}/git-commits`` \u2014 the declaration landed durably.",
+        "description": "``POST /api/leases/{lease_id}/git-commits`` \u2014 the declaration landed durably.\n``note`` is set when it lands but rides no completion \u2014 declared against the closed\nreference lease an open takeover names.",
         "properties": {
           "environment_id": {
             "title": "Environment Id",
@@ -2231,6 +2236,17 @@
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "recorded": {
             "title": "Recorded",
@@ -6604,7 +6620,7 @@
         ]
       },
       "post": {
-        "description": "Record a worker's ask against its lease, minting the question id.\n\nToken-authorized like every other worker verb: activeness alone would admit\nan open takeover's closed reference lease too, so the presented token is the only\ncredential that actually gates this route.",
+        "description": "Record a worker's ask against its lease, minting the question id.\n\nToken-authorized like every other worker verb, since activeness alone would admit an open takeover's\nclosed reference lease too. ``409`` when the lease is that closed reference lease.",
         "operationId": "record_ask_api_leases__lease_id__asks_post",
         "parameters": [
           {

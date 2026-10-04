@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Annotated, Literal
 from urllib.parse import parse_qs, quote
 
@@ -17,7 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
@@ -28,7 +26,14 @@ from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
-from blizzard.runner.auth.session import CALLBACK_PATH, SESSION_TTL, CookieNames, RunnerSession, SessionCookie
+from blizzard.runner.auth.session import (
+    CALLBACK_PATH,
+    SESSION_TTL,
+    CookieNames,
+    RunnerSession,
+    SessionCookie,
+    resolve_human_session,
+)
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 
 _log = get_logger("blizzard.runner.auth")
@@ -39,14 +44,6 @@ _BOUNCE_COOKIE_MAX_AGE = 600  # 10 minutes — generous for a slow hub/provider 
 
 #: Origins a browser treats as potentially trustworthy whatever the scheme, so ``Secure`` holds over plain http.
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-
-#: The implicit identity every request resolves to when the hub runs no IdP surface to bounce to.
-_IMPLICIT_SESSION = RunnerSession(
-    username="operator",
-    role=Role.SUPERUSER,
-    issued_at=datetime.fromtimestamp(0, tz=UTC),
-    expires_at=datetime.fromtimestamp(2**31 - 1, tz=UTC),
-)
 
 
 @dto
@@ -107,14 +104,14 @@ class HumanLane:
 
     @property
     def session(self) -> RunnerSession | None:  # ast-grep-ignore: bzh:property-delegates
-        """The presented session, or ``None`` when this lane is gated and none validly rode along.
-        Two cases grant the implicit identity outright, whatever cookie came with them: a
-        **unix-socket peer** (``request.client is None``, whose access control is the socket file's
-        permissions) and an **ungated hub**."""
-        if self.request.client is None:
-            return _IMPLICIT_SESSION
-        if not self.gated:
-            return _IMPLICIT_SESSION
+        """The resolved session (:func:`~blizzard.runner.auth.session.resolve_human_session`), or
+        ``None`` when this lane is gated and none validly rode along. A unix-socket peer is
+        ``request.client is None``."""
+        return resolve_human_session(
+            socket_peer=self.request.client is None, gated=lambda: self.gated, presented=self._presented
+        )
+
+    def _presented(self) -> RunnerSession | None:
         cookie = self.request.cookies.get(self.request.app.state.cookie_names.session)
         if cookie is None:
             return None

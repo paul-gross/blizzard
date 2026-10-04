@@ -2,36 +2,51 @@
 each harness's most recently completed selftest run — its terminal status and when it was
 recorded. Latest-wins-per-``harness_id`` (``bzh:facts-not-status``): a completed run is a
 definite occurrence at a definite time, superseded only by the next run for the same
-harness. :meth:`~blizzard.runner.selftest.service.SelfTestService._finish` is the one write
-site; the run's own per-check detail lives only in its in-memory ``SelfTestRun`` — nothing
+harness. :meth:`~blizzard.runner.selftest.model.SelfTestRun.result_record` builds the one record
+written; the run's own per-check detail lives only in its in-memory ``SelfTestRun`` — nothing
 durable reads it back, so it rides no further than that."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "IReadSelfTestResultRepository",
     "IWriteSelfTestResultRepository",
     "LatestSelfTestResult",
+    "SelfTestTerminalStatus",
+    "selftest_failed",
 ]
 
+#: A concluded selftest run's status — the only statuses ever recorded; a still-``"running"`` run never is.
+SelfTestTerminalStatus = Literal["passed", "failed"]
 
-@dto
+
+@domain_model
 @dataclass(frozen=True)
 class LatestSelfTestResult:
-    """A harness's most recently completed selftest run. ``status`` is one of
-    :data:`~blizzard.runner.selftest.model.SelfTestStatus`'s terminal values
-    (``"passed"``/``"failed"``) — a still-``"running"`` run is never recorded."""
+    """A harness's most recently completed selftest run, with its terminal status."""
 
     harness_id: str
-    status: str
+    status: SelfTestTerminalStatus
     error: str | None
     recorded_at: datetime
+
+    def failed(self) -> bool:
+        """Whether this run withholds the harness's availability: only a recorded failure
+        does, and it keeps withholding — across a harness version change too — until a later
+        passing run supersedes it."""
+        return self.status == "failed"
+
+
+def selftest_failed(latest: LatestSelfTestResult | None) -> bool | None:
+    """The health evaluator's selftest evidence: ``None`` when the harness never completed a
+    run on this runner (unresolved, never itself a failure), else :meth:`LatestSelfTestResult.failed`."""
+    return latest.failed() if latest is not None else None
 
 
 class IReadSelfTestResultRepository(Protocol):
@@ -53,7 +68,7 @@ class IWriteSelfTestResultRepository(IReadSelfTestResultRepository, Protocol):
         self,
         *,
         harness_id: str,
-        status: str,
+        status: SelfTestTerminalStatus,
         error: str | None,
         recorded_at: datetime,
     ) -> None:

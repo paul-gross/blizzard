@@ -7,7 +7,7 @@ design (``bzh:repository-split``) — the separate outbound lane does the writin
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -69,6 +69,16 @@ class Turn:
     truncated: bool
 
 
+#: Keep only the most recent this-many top-level turns — one cap for both the local and the archived read.
+MAX_TURNS = 1000
+
+
+def recent_window[T](turns: Sequence[T], *, max_turns: int = MAX_TURNS) -> tuple[list[T], bool]:
+    """The newest ``max_turns`` of ``turns``, and whether that cut any."""
+    capped = len(turns) > max_turns
+    return list(turns[-max_turns:] if capped else turns), capped
+
+
 @dto
 @dataclass(frozen=True)
 class Transcript:
@@ -82,6 +92,11 @@ class Transcript:
     reason: TranscriptUnavailable | None
     turns: list[Turn]
     truncated: bool
+
+    @classmethod
+    def spawning(cls) -> Transcript:
+        """A lease minted but not yet spawned: no session on either side yet — ordinary, not an error."""
+        return cls(session_id=None, available=False, reason="spawning", turns=[], truncated=False)
 
 
 class IReadTranscriptRepository(Protocol):

@@ -26,6 +26,7 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.throttle.pause import PauseService
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import (
@@ -1789,3 +1790,44 @@ def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp
     assert harness.spawns == []
     assert store.held_environment_ids() == []
     assert provider.released != []
+
+
+# --- Operator pause/start over the standing brake ------------------------
+
+
+def _local_pause_reports(store):  # type: ignore[no-untyped-def]
+    return [f for f in store.pending_outbound() if f.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED)]
+
+
+def test_an_operator_pause_over_a_reasoned_brake_keeps_the_reason_and_reports_nothing(tmp_path):  # type: ignore[no-untyped-def]
+    """An operator's pause over a usage-limit or spend brake writes nothing: the standing reason
+    survives locally and no second report reaches the hub."""
+    store = _store(tmp_path)
+    service = PauseService(store, FixedClock(_NOW))
+    service.engage("r1", by="usage-limit", reason="usage limit: claude-code")
+
+    service.set_local_pause("r1", paused=True, by="operator")
+
+    assert store.local_paused("r1") is True
+    assert store.local_pause_reason("r1") == "usage limit: claude-code"
+    reports = _local_pause_reports(store)
+    assert len(reports) == 1
+    assert json.loads(reports[0].payload)["reason"] == "usage limit: claude-code"
+
+
+def test_a_repause_and_a_start_when_released_write_nothing(tmp_path):  # type: ignore[no-untyped-def]
+    """Setting the brake to the state it already holds writes no fact and no report."""
+    store = _store(tmp_path)
+    service = PauseService(store, FixedClock(_NOW))
+
+    service.set_local_pause("r1", paused=False, by="operator")
+    assert _local_pause_reports(store) == []
+
+    service.set_local_pause("r1", paused=True, by="operator")
+    service.set_local_pause("r1", paused=True, by="operator")
+    assert [f.kind for f in _local_pause_reports(store)] == [RUNNER_LOCALLY_PAUSED]
+
+    service.set_local_pause("r1", paused=False, by="operator")
+    service.set_local_pause("r1", paused=False, by="operator")
+    assert [f.kind for f in _local_pause_reports(store)] == [RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED]
+    assert store.local_paused("r1") is False

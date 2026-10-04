@@ -6,20 +6,14 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.leases.closure import ESCALATION_MINT, ESCALATION_REASONS, NO_ACCEPTABLE_HARNESS_MINT
+from blizzard.runner.leases.closure import ESCALATION_REASONS, cause_of
 from blizzard.runner.leases.escalations import IWriteEscalationRepository, ParkedEscalation
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
 
 _log = get_logger("blizzard.runner.store")
-
-_MINT_CAUSES: dict[str, str] = {
-    ESCALATION_MINT: EscalationCause.OWNER_UNRESOLVABLE,
-    NO_ACCEPTABLE_HARNESS_MINT: EscalationCause.NO_ACCEPTABLE_HARNESS,
-}
 
 
 class EscalationStore:
@@ -73,6 +67,7 @@ class EscalationStore:
                 lease_closures.c.node_id,
                 lease_closures.c.closed_at,
                 lease_closures.c.reason,
+                lease_closures.c.escalation_cause,
                 leases.c.epoch,
                 leases.c.session_id,
                 leases.c.harness_id,
@@ -105,7 +100,7 @@ class EscalationStore:
             resolved_model=r.resolved_model,
             resolved_effort=r.resolved_effort,
             harness_version=r.harness_version,
-            cause=_MINT_CAUSES.get(str(r.reason)),
+            cause=cause_of(str(r.reason), r.escalation_cause),
         )
 
 

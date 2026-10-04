@@ -57,11 +57,13 @@ class RunnerStatusView(BaseModel):
 class EnvironmentView(BaseModel):
     """One environment in the runner's configured pool — ``GET /api/environments``.
     ``chunk_id``/``held_since`` are present only while the environment
-    is currently bound; an unused pool environment carries both as ``None``."""
+    is currently bound; an unused pool environment carries both as ``None``. ``held`` is the
+    runner's own reading of whether a chunk holds it, so no client re-derives it."""
 
     environment_id: str
     chunk_id: str | None = None
     held_since: str | None = None
+    held: bool = False
 
 
 class EnvironmentListResponse(BaseModel):

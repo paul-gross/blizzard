@@ -24,6 +24,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ISubscriptionSampler,
     SampleMiss,
     SampleMissReason,
+    credential_lapsed,
 )
 
 _log = get_logger("blizzard.runner.harness")
@@ -169,7 +170,7 @@ class OpenAISubscriptionSampler:
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         expires_at = parse_jwt_expiry(access_token)
-        if expires_at is not None and expires_at <= self._clock.now():
+        if expires_at is not None and credential_lapsed(expires_at, self._clock.now()):
             _log.warning(
                 "external subscription usage sample failed: access token expired",
                 path=self._credentials_path,

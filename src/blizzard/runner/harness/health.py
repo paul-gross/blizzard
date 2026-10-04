@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.compatibility import CompatibilityClassification, CompatibilityProbe
 
 
@@ -73,7 +73,7 @@ class HarnessHealthEvidence:
     config_conflicts: tuple[str, ...] = ()
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessHealthResult:
     """One evaluation's outcome: whether the binding is available, the single cause —
@@ -85,6 +85,20 @@ class HarnessHealthResult:
     available: bool
     cause: HarnessHealthCause | None
     degradations: tuple[DeclaredDegradation, ...]
+
+    @classmethod
+    def unprobed(cls, harness_id: str) -> HarnessHealthResult:
+        """The health a binding reports before any evaluation has run for it: available, with
+        no cause and no degradations. Health fails open — a binding is never withheld for
+        lack of evidence, only for evidence against it."""
+        return cls(harness_id=harness_id, available=True, cause=None, degradations=())
+
+
+def reported_health(harness_id: str, result: HarnessHealthResult | None) -> HarnessHealthResult:
+    """The health every reader reports for ``harness_id``: its last evaluation when one ran,
+    else :meth:`HarnessHealthResult.unprobed`. The one owner of the fail-open reading — the
+    diagnostics route, the registration push, and session-harness selection all defer here."""
+    return result if result is not None else HarnessHealthResult.unprobed(harness_id)
 
 
 def evaluate_harness_health(evidence: HarnessHealthEvidence) -> HarnessHealthResult:
@@ -131,4 +145,5 @@ __all__ = [
     "HarnessHealthEvidence",
     "HarnessHealthResult",
     "evaluate_harness_health",
+    "reported_health",
 ]

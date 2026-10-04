@@ -7,6 +7,7 @@ abandons past its staleness bound, and every lease-closing path kills what it le
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,9 +17,14 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.elicitation import (
+    ELICITATION_STALENESS_THRESHOLD,
+    ElicitationNotRecorded,
+    ElicitationVerb,
+)
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
-from blizzard.runner.lifecycle.judgement.judgement import ELICITATION_STALENESS_THRESHOLD
+from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.steps import Advance
 from tests.runner_fakes import (
     FakeHarness,
@@ -356,3 +362,74 @@ def test_preempt_kills_the_in_flight_elicitation(tmp_path):  # type: ignore[no-u
 
     assert elicitation.pgid in probe.killed_groups
     assert store.in_flight_elicitation("lease_1", 1) is None
+
+
+def test_started_on_an_absent_record_is_refused_by_the_store(tmp_path):  # type: ignore[no-untyped-def]
+    """No record stands for the pair: filling in a pid would silently write nothing and
+    leave a judge the runner cannot track, so the store refuses instead."""
+    store = _store(tmp_path)
+    with pytest.raises(ElicitationNotRecorded) as refused:
+        store.record_elicitation_started("lease_1", 1, pid=100, process_start_time="start-100", pgid=100)
+    assert refused.value.verb is ElicitationVerb.STARTED
+    assert store.in_flight_elicitation("lease_1", 1) is None
+
+
+def test_relaunch_on_an_absent_record_is_refused_by_the_store(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    with pytest.raises(ElicitationNotRecorded) as refused:
+        store.record_elicitation_relaunch("lease_1", 1, output_path="/tmp/x.1.elicitation")
+    assert refused.value.verb is ElicitationVerb.RELAUNCH
+    assert store.in_flight_elicitation("lease_1", 1) is None
+
+
+def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """The record vanishes between the launch row and the started write: the store's refusal
+    reaches `_elicit`'s kill-and-raise, so the judge it just launched is group-killed."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe()
+    ctx = _ctx(store, harness=harness, probe=probe)
+    started = store.record_elicitation_started
+
+    def _cleared_first(lease_id, epoch, **kwargs):  # type: ignore[no-untyped-def]
+        store.clear_elicitation(lease_id, epoch)
+        started(lease_id, epoch, **kwargs)
+
+    monkeypatch.setattr(store, "record_elicitation_started", _cleared_first)
+
+    with pytest.raises(ElicitationNotRecorded):
+        Advance(ctx).run()
+
+    assert probe.killed_groups == [8888]
+    assert store.in_flight_elicitation("lease_1", 1) is None
+
+
+def test_a_judge_resume_launches_over_the_standing_record_and_sweeps_its_files(tmp_path):  # type: ignore[no-untyped-def]
+    """A launch over a standing record is legal and restarts the bound; the prior record's
+    output files — every attempt it relaunched into — are swept before it is replaced."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    clock = FixedClock(_NOW + ELICITATION_STALENESS_THRESHOLD + timedelta(minutes=5))
+    ctx = _ctx(store, harness=harness, probe=FakeProbe(), clock=clock)
+    files = ctx.elicitation_files
+    first, second = files.output_path("lease_1", 1, attempt=0), files.output_path("lease_1", 1, attempt=1)
+    store.record_elicitation_launch("lease_1", 1, output_path=first, at=_NOW)
+    store.record_elicitation_relaunch("lease_1", 1, output_path=second)
+    for path in (first, second):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("usage limit reached")
+
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    judgement = Judgement.of(ctx, lease)
+    assert judgement is not None
+    judgement.resume()
+
+    record = store.in_flight_elicitation("lease_1", 1)
+    assert record is not None
+    assert (record.relaunch_count, record.first_launched_at.replace(tzinfo=UTC)) == (0, clock.now())
+    assert not os.path.exists(second)
+    assert harness.judge_output_paths == [first]  # relaunched fresh into attempt 0
+    assert not record.stale(clock.now())

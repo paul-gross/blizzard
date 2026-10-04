@@ -37,7 +37,12 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository, TranscriptSegmentState
+from blizzard.runner.transcripts.ledger import (
+    IWriteTranscriptLedgerRepository,
+    TranscriptSegmentState,
+    TruncationReason,
+)
+from blizzard.runner.transcripts.shipping import PumpOutcome, after_window, plan_window, pre_read
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -93,39 +98,6 @@ _PUMP_LEASE_MAX_ITERATIONS = 1000
 #: The sidechain link route this pump resolves: the agent-id join, made
 #: across a window boundary out of the segment's own persisted map rather than in-window.
 LATE_AGENT_ID_LINK = "agent-id-late"
-
-#: Never-silent reasons — only `_CHUNK_BUDGET_EXCEEDED` latches `stop_transcript_segment_shipping`.
-_RECORD_CAP_EXCEEDED = "record_cap_exceeded"
-_RECORD_UNSHIPPABLE = "record_unshippable"
-_CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
-
-#: This tick's own source read came back incomplete (`TranscriptBatch.truncated`/`.sidechain_truncated`).
-_SOURCE_READ_TRUNCATED = "source_read_truncated"
-
-#: A lease-closure pump that could not fully catch up with the source before the shared
-#: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
-_LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
-
-#: The same loss on the backfill's own drain — named apart because no lease
-#: closure is involved, ranked alike because the content is gone either way.
-BACKFILL_INCOMPLETE = "backfill_incomplete"
-
-#: Explicit worst-of ranking, mildest first — see `mark_transcript_record_truncated`.
-#: Public: `transcripts/transcript_drain.py` extends it with its own `HUB_CAPPED` reason.
-TRUNCATION_REASON_SEVERITY: dict[str, int] = {
-    _SOURCE_READ_TRUNCATED: 0,
-    _RECORD_CAP_EXCEEDED: 1,
-    _RECORD_UNSHIPPABLE: 2,
-    _LEASE_CLOSURE_INCOMPLETE: 3,
-    BACKFILL_INCOMPLETE: 3,
-}
-
-#: `_pump_one`'s outcome — see its own docstring for each value.
-_PumpOutcome = Literal["caught_up", "incomplete", "not_attempted", "stuck"]
-_CAUGHT_UP: _PumpOutcome = "caught_up"
-_INCOMPLETE: _PumpOutcome = "incomplete"
-_NOT_ATTEMPTED: _PumpOutcome = "not_attempted"
-_STUCK: _PumpOutcome = "stuck"
 
 
 @domain_model
@@ -214,7 +186,7 @@ class TranscriptPump:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
                 for remaining in segments[i:]:
-                    self._mark_record_truncated(remaining, _LEASE_CLOSURE_INCOMPLETE)
+                    self._mark_record_truncated(remaining, TruncationReason.LEASE_CLOSURE_INCOMPLETE)
                 return
             self.drain_segment(
                 segment.segment_id,
@@ -229,7 +201,7 @@ class TranscriptPump:
         segment_id: str,
         *,
         deadline: datetime | None,
-        incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE,
+        incomplete_reason: TruncationReason = TruncationReason.LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
         bindings_by_chunk: dict[str, list[EnvBinding]] | None = None,
@@ -237,7 +209,8 @@ class TranscriptPump:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
         ``True`` iff the source was read to its end: a caller that closes the segment out
-        must not do so on ``False``, or content it never read is sealed away."""
+        must not do so on ``False``, or content it never read is sealed away. A finalized
+        segment takes no content: ``False`` without a read."""
         if budget is None:
             budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         if shipped is None or bindings_by_chunk is None:
@@ -252,16 +225,18 @@ class TranscriptPump:
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
+            if not segment.accepts_content:
+                return False  # sealed by its final marker — nothing more ever ships for it
             outcome = self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
-            if outcome == _CAUGHT_UP:
-                return True  # caught up — nothing more to gain from reading again right now
-            if outcome in (_NOT_ATTEMPTED, _STUCK):
-                # Retrying gains nothing for either outcome — mark and stop.
-                self._mark_record_truncated(segment, incomplete_reason)
-                return False
-            if deadline is not None and self.ctx.clock.now() >= deadline:
-                self._mark_record_truncated(segment, incomplete_reason)
-                return False
+            deadline_passed = outcome == "incomplete" and deadline is not None and self.ctx.clock.now() >= deadline
+            match after_window(outcome, deadline_passed=deadline_passed):
+                case "read_to_end":
+                    return True
+                case "incomplete":
+                    self._mark_record_truncated(segment, incomplete_reason)
+                    return False
+                case "continue":
+                    pass
         # The safety valve: a source that never reports `complete=True` across this many
         # reads is misbehaving — stop and mark, rather than spin forever.
         segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -293,9 +268,9 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: dict[str, list[EnvBinding]],
-    ) -> _PumpOutcome:
+    ) -> PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
-        ``_NOT_ATTEMPTED`` on a caught exception — a raising segment must
+        ``"not_attempted"`` on a caught exception — a raising segment must
         not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
         caught-up either, or whatever the source held finalizes with no truncation trace."""
         try:
@@ -306,7 +281,7 @@ class TranscriptPump:
                 segment_id=segment.segment_id,
                 session_id=segment.session_id,
             )
-            return _NOT_ATTEMPTED
+            return "not_attempted"
 
     def _pump_one(
         self,
@@ -315,23 +290,26 @@ class TranscriptPump:
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: dict[str, list[EnvBinding]],
-    ) -> _PumpOutcome:
-        """Advance ``segment`` one read window forward. ``_NOT_ATTEMPTED``:
-        nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
-        since a finalizing segment gets no later tick to make up a read it never took.
-        ``_STUCK``: read, but the cursor didn't move — same treatment; see that branch's
-        own comment. Otherwise ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete``."""
-        if segment.shipping_stopped_reason is not None:
-            return _CAUGHT_UP  # permanently stopped past the per-chunk budget
+    ) -> PumpOutcome:
+        """Advance ``segment`` one read window forward. ``"not_attempted"`` (nothing read) and ``"stuck"``
+        (the cursor didn't move) are incomplete to ``pump_lease``, since a finalizing segment gets no later
+        tick; otherwise ``"caught_up"``/``"incomplete"`` from ``batch.complete``.
+        :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
         chunk_max_bytes = self._chunk_max_bytes
         budget_before = shipped.before(segment.chunk_id)
-        if budget_before >= chunk_max_bytes:
-            self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
-            return _CAUGHT_UP
-        outstanding = budget.bytes
-        if outstanding >= MAX_BUFFERED_BYTES:
-            # Transient backpressure, not a latch — self-clears once the drain catches up.
-            return _NOT_ATTEMPTED
+        gate = pre_read(
+            segment,
+            chunk_shipped_bytes=budget_before,
+            chunk_max_bytes=chunk_max_bytes,
+            outstanding_bytes=budget.bytes,
+            max_buffered_bytes=MAX_BUFFERED_BYTES,
+        )
+        if gate.action == "stop":
+            assert gate.stop_reason is not None
+            self._stop_shipping(segment, gate.stop_reason)
+        if gate.action != "read":
+            assert gate.outcome is not None
+            return gate.outcome
 
         bindings = bindings_by_chunk.get(segment.chunk_id, [])
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
@@ -349,13 +327,13 @@ class TranscriptPump:
                 reason="unavailable" if isinstance(exc, UnavailableHarnessError) else "unknown",
                 detail=str(exc),
             )
-            return _NOT_ATTEMPTED
+            return "not_attempted"
         since = TranscriptPosition(segment.cursor) if segment.cursor is not None else None
         batch = source.turns_since(segment.session_id, spawn_cwd=spawn_cwd, since=since)
         if not batch.available:
-            return _NOT_ATTEMPTED  # source unavailable this tick — retry from the same cursor next time
+            return "not_attempted"  # source unavailable this tick — retry from the same cursor next time
         if batch.truncated or batch.sidechain_truncated:
-            self._mark_record_truncated(segment, _SOURCE_READ_TRUNCATED)
+            self._mark_record_truncated(segment, TruncationReason.SOURCE_READ_TRUNCATED)
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
         # This segment's whole accumulated map, plus whatever this window just named — the
         # link the LATE branches below resolve against.
@@ -364,8 +342,18 @@ class TranscriptPump:
         # the warning is emitted, so a raise before it cannot latch an unwarned agent.
         dropped_sidechains = [sc.agent_id for sc in batch.unlinked_sidechains if _parent_of(sc, parents) is None]
 
-        if not (batch.turns or batch.late_tool_outputs or _linkable(batch, parents)):
-            if new_cursor != segment.cursor:
+        has_content = bool(batch.turns or batch.late_tool_outputs or _linkable(batch, parents))
+        if not has_content:
+            plan = plan_window(
+                cursor=segment.cursor,
+                new_cursor=new_cursor,
+                has_content=False,
+                total_bytes=0,
+                chunk_shipped_bytes=budget_before,
+                chunk_max_bytes=chunk_max_bytes,
+                complete=batch.complete,
+            )
+            if plan.action == "advance_cursor":
                 assert new_cursor is not None
                 self.ctx.stores.transcript_ledger.advance_transcript_cursor(
                     segment.segment_id,
@@ -376,11 +364,20 @@ class TranscriptPump:
                 )
             if dropped_sidechains:
                 self._warn_sidechains_dropped(segment, dropped_sidechains)
-            return _CAUGHT_UP if batch.complete else _INCOMPLETE
+            return plan.outcome
 
         # Content present, so the cursor must advance past it or the same turns re-ship every
-        # tick. A conditional, not an `assert`: `python -O` would strip the guard away.
-        if new_cursor is None or new_cursor == segment.cursor:
+        # tick. Planned before any record is built: a stuck window builds nothing.
+        stuck = plan_window(
+            cursor=segment.cursor,
+            new_cursor=new_cursor,
+            has_content=True,
+            total_bytes=0,
+            chunk_shipped_bytes=0,
+            chunk_max_bytes=chunk_max_bytes,
+            complete=batch.complete,
+        )
+        if stuck.action == "stuck":
             _log.error(
                 "transcript pump: turns present but cursor did not advance — skipping segment this tick",
                 segment_id=segment.segment_id,
@@ -390,9 +387,10 @@ class TranscriptPump:
             # latch below means it never warns at all.
             if dropped_sidechains:
                 self._warn_sidechains_dropped(segment, dropped_sidechains)
-            # Genuine loss, not caught-up — `_CAUGHT_UP` here would finalize the
+            # Genuine loss, not caught-up — `"caught_up"` here would finalize the
             # segment at lease closure with no truncation trace (see `_pump_one`'s own docstring).
-            return _STUCK
+            return stuck.outcome
+        assert new_cursor is not None
 
         turn_range_start = segment.shipped_turns
         built = _build_records(
@@ -405,13 +403,23 @@ class TranscriptPump:
         payloads = [json.dumps(record) for record in records]
         total_bytes = sum(len(p.encode("utf-8")) for p in payloads)
 
-        if budget_before + total_bytes > chunk_max_bytes:
+        plan = plan_window(
+            cursor=segment.cursor,
+            new_cursor=new_cursor,
+            has_content=True,
+            total_bytes=total_bytes,
+            chunk_shipped_bytes=budget_before,
+            chunk_max_bytes=chunk_max_bytes,
+            complete=batch.complete,
+        )
+        if plan.action == "stop":
             # All-or-nothing: every record here advances the SAME cursor write, so
             # shipping only some would silently lose the rest's turns forever.
-            self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
+            assert plan.stop_reason is not None
+            self._stop_shipping(segment, plan.stop_reason)
             if dropped_sidechains:  # this branch already read a real batch
                 self._warn_sidechains_dropped(segment, dropped_sidechains)
-            return _CAUGHT_UP
+            return plan.outcome
 
         self.ctx.stores.transcript_ledger.record_transcript_deltas(
             segment_id=segment.segment_id,
@@ -432,22 +440,22 @@ class TranscriptPump:
         # Order here does not matter: the store keeps the worse of the two
         # by the explicit severity each call carries, not by which call happened last.
         if any_shrunk:
-            self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
+            self._mark_record_truncated(segment, TruncationReason.RECORD_CAP_EXCEEDED)
         if any_unshippable:
-            self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
+            self._mark_record_truncated(segment, TruncationReason.RECORD_UNSHIPPABLE)
         if dropped_sidechains:
             self._warn_sidechains_dropped(segment, dropped_sidechains)
-        return _CAUGHT_UP if batch.complete else _INCOMPLETE
+        return plan.outcome
 
     def _stop_shipping(self, segment: TranscriptSegmentState, reason: str) -> None:
         changed = self.ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)
 
-    def _mark_record_truncated(self, segment: TranscriptSegmentState, reason: str) -> None:
+    def _mark_record_truncated(self, segment: TranscriptSegmentState, reason: TruncationReason) -> None:
         # Latched per (segment, reason) by the store — see its own docstring.
         changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
-            segment.segment_id, reason=reason, severity=TRUNCATION_REASON_SEVERITY[reason]
+            segment.segment_id, reason=reason, severity=reason.severity
         )
         if changed:
             self._warn(segment, reason)
@@ -796,7 +804,7 @@ def _shrink_to_cap(record: dict[str, Any], record_max_bytes: int = TRANSCRIPT_RE
     until the serialized record fits the per-record cap. Never drops a turn: every
     shrinkable field is cut proportionally to its share of the overshoot, not just the single
     largest one, so a batch with many oversized fields converges in a few passes (a
-    still-over-cap result is the caller's own :data:`_RECORD_UNSHIPPABLE`)."""
+    still-over-cap result is the caller's own :attr:`TruncationReason.RECORD_UNSHIPPABLE`)."""
     for _ in range(_SHRINK_MAX_PASSES):
         size = len(json.dumps(record).encode("utf-8"))
         if size <= record_max_bytes:

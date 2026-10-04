@@ -18,16 +18,17 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.harness.transcript import ToolCall as HarnessToolCall
 from blizzard.runner.transcripts.repository import (
+    MAX_TURNS,
     IReadTranscriptRepository,
     Sidechain,
     ToolCall,
     Transcript,
     Turn,
+    recent_window,
 )
 
-#: Keep only the most recent this-many top-level turns — an unlinked sidechain's synthetic
-#: top-level turn (:func:`_unlinked_turn`) is appended after this cap, uncounted.
-MAX_TURNS = 1000
+#: An unlinked sidechain's synthetic top-level turn (:func:`_unlinked_turn`) is appended
+#: after :data:`~blizzard.runner.transcripts.repository.MAX_TURNS`'s cap, uncounted.
 
 #: Cap a tool call's serialized input before it degrades to a raw string (:class:`CappedToolCall`).
 MAX_BLOCK_CHARS = 1024 * 1024
@@ -138,8 +139,7 @@ class ProjectedTranscriptRepository:
         if not batch.available:
             return Transcript(session_id=session_id, available=False, reason=batch.reason, turns=[], truncated=False)
 
-        turns_truncated = len(batch.turns) > MAX_TURNS
-        kept = batch.turns[-MAX_TURNS:] if turns_truncated else batch.turns
+        kept, turns_truncated = recent_window(batch.turns, max_turns=MAX_TURNS)
         projected = [_turn(t, i) for i, t in enumerate(kept)]
         start = len(projected)
         projected.extend(_unlinked_turn(sc, start + i) for i, sc in enumerate(batch.unlinked_sidechains))

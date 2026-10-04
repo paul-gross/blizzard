@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
-from blizzard.runner.environments.repository import IWriteEnvironmentRepository
+from blizzard.runner.environments.repository import IWriteEnvironmentRepository, release_instants
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 
 
@@ -27,11 +27,13 @@ class EnvironmentRelease:
 
         A released lease's worker stdout/stderr is left in place — only
         `Retention`'s own age-based sweep prunes it, on a much longer clock."""
-        now = self.clock.now()
-        for binding in self.environments.bindings_for_chunk(chunk_id):
-            self.provider.release(binding.environment_id)
-            self.environments.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
-            self._publish_released(chunk_id, binding.environment_id)
+        held = self.environments.bindings_for_chunk(chunk_id)
+        for environment_id, released_at in release_instants(
+            held, [binding.environment_id for binding in held], self.clock.now()
+        ):
+            self.provider.release(environment_id)
+            self.environments.record_release(chunk_id=chunk_id, environment_id=environment_id, released_at=released_at)
+            self._publish_released(chunk_id, environment_id)
 
     def release_binding(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
         """Undo a just-recorded binding whose claim never landed — release the fact and the env.
@@ -39,10 +41,18 @@ class EnvironmentRelease:
         The binding is written before the hub claim, so a claim that fails to send or loses the
         race must retract both the local binding fact and the provider allocation, leaving the
         chunk exactly as if it had never been touched (it stays ``ready``)."""
-        now = self.clock.now()
+        released = dict(
+            release_instants(
+                self.environments.bindings_for_chunk(chunk_id), [a.environment_id for a in acquired], self.clock.now()
+            )
+        )
         for a in acquired:
-            self.environments.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
-            self._publish_released(chunk_id, a.environment_id)
+            released_at = released.get(a.environment_id)
+            if released_at is not None:
+                self.environments.record_release(
+                    chunk_id=chunk_id, environment_id=a.environment_id, released_at=released_at
+                )
+                self._publish_released(chunk_id, a.environment_id)
             self.provider.release(a.environment_id)
 
     def _publish_released(self, chunk_id: str, environment_id: str) -> None:

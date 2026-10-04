@@ -13,9 +13,9 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.federation import require_human_api
-from blizzard.runner.api.lease_scope import authorized_lease
+from blizzard.runner.api.lease_scope import authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
+from blizzard.runner.leases.asks import AskOnClosedLease, IReadAskRepository, OpenAsk
 from blizzard.wire.runner_status import AskListResponse, AskView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -40,13 +40,17 @@ class AskResponse(BaseModel):
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
     """Record a worker's ask against its lease, minting the question id.
 
-    Token-authorized like every other worker verb: activeness alone would admit
-    an open takeover's closed reference lease too, so the presented token is the only
-    credential that actually gates this route."""
-    lease = authorized_lease(lease_id, request)
-    question_id = (
-        RunnerWiring.of(request).asks().record_ask(lease, question=request_body.question, options=request_body.options)
-    )
+    Token-authorized like every other worker verb, since activeness alone would admit an open takeover's
+    closed reference lease too. ``409`` when the lease is that closed reference lease."""
+    worker = authorized_worker_lease(lease_id, request)
+    try:
+        question_id = (
+            RunnerWiring.of(request)
+            .asks()
+            .record_ask(worker, question=request_body.question, options=request_body.options)
+        )
+    except AskOnClosedLease as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return AskResponse(recorded=True, question_id=question_id, lease_id=lease_id)
 
 

@@ -7,11 +7,12 @@ no fact of its own, so it is derived from how stale ``hub_contact_at`` reads aga
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.environments.repository import (
     EnvBinding,
     IReadEnvironmentRepository,
@@ -21,10 +22,10 @@ from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, Unavaila
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
-from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.escalations import IReadEscalationRepository, resume_workdir
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, TakeoverCommand
-from blizzard.runner.throttle.pause import IReadPauseRepository
+from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
@@ -43,7 +44,7 @@ __all__ = [
 HUB_CONTACT_STALENESS_THRESHOLD = timedelta(minutes=5)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PauseState:
     """The pause brake's two independent surfaces, plus their effective OR.
@@ -58,8 +59,19 @@ class PauseState:
     effective: bool
     local_reason: str | None
 
+    @classmethod
+    def of(cls, *, local: bool, hub: bool, local_reason: str | None) -> PauseState:
+        """The two brakes as read, their effective state, and the local reason — kept only
+        while the local brake is engaged."""
+        return cls(
+            local=local,
+            hub=hub,
+            effective=RunnerBrakes(local=local, hub=hub).effective,
+            local_reason=local_reason if local else None,
+        )
 
-@dto
+
+@domain_model
 @dataclass(frozen=True)
 class Capacities:
     """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
@@ -68,8 +80,14 @@ class Capacities:
     used: int
     free: int
 
+    @classmethod
+    def of(cls, *, max_agents: int, used: int) -> Capacities:
+        """``used`` of ``max_agents`` slots; ``free`` never reads below zero, even when more
+        leases are active than the configured maximum allows."""
+        return cls(max_agents=max_agents, used=used, free=max(max_agents - used, 0))
 
-@dto
+
+@domain_model
 @dataclass(frozen=True)
 class HubConnectivity:
     """Hub reachability, derived from staleness, plus the outbound backlog depth.
@@ -81,6 +99,21 @@ class HubConnectivity:
     reachable: bool
     last_contact_at: datetime | None
     buffer_depth: int
+
+    @classmethod
+    def of(
+        cls,
+        *,
+        endpoint: str,
+        contact_at: datetime | None,
+        buffer_depth: int,
+        now: datetime,
+        threshold: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
+    ) -> HubConnectivity:
+        """Reachable when the last successful contact is no older than ``threshold`` as of
+        ``now``; never reachable before a first contact."""
+        reachable = contact_at is not None and (now - contact_at) <= threshold
+        return cls(endpoint=endpoint, reachable=reachable, last_contact_at=contact_at, buffer_depth=buffer_depth)
 
 
 @dto
@@ -98,7 +131,7 @@ class RunnerStatusSummary:
     gates: tuple[str, ...] = ()
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EnvironmentSlot:
     """One environment in the runner's configured pool. Every pool
@@ -108,6 +141,42 @@ class EnvironmentSlot:
     environment_id: str
     chunk_id: str | None
     held_since: datetime | None
+
+    def is_held(self) -> bool:
+        """Whether a chunk holds this environment now — the one reading of "held" every
+        surface shows, rather than each re-deriving it from ``chunk_id``."""
+        return self.chunk_id is not None
+
+    @classmethod
+    def pool_view(cls, env_pool: Sequence[str], held_bindings: Sequence[EnvBinding]) -> list[EnvironmentSlot]:
+        """The full configured pool, joined against the held bindings, in pool order.
+
+        A bound environment never silently vanishes: each extra binding on a pool id (``environment_id``
+        is not unique) gets its own row after the slot, and a binding off the pool is appended at the end."""
+        held_by_env: dict[str, list[EnvBinding]] = {}
+        for binding in held_bindings:
+            held_by_env.setdefault(binding.environment_id, []).append(binding)
+        slots: list[EnvironmentSlot] = []
+        for env_id in env_pool:
+            bindings = held_by_env.get(env_id, [])
+            primary = bindings[0] if bindings else None
+            slots.append(
+                cls(
+                    environment_id=env_id,
+                    chunk_id=primary.chunk_id if primary else None,
+                    held_since=primary.bound_at if primary else None,
+                )
+            )
+            slots.extend(cls._held(extra) for extra in bindings[1:])
+        pool = set(env_pool)
+        for env_id, bindings in held_by_env.items():
+            if env_id not in pool:
+                slots.extend(cls._held(binding) for binding in bindings)
+        return slots
+
+    @classmethod
+    def _held(cls, binding: EnvBinding) -> EnvironmentSlot:
+        return cls(environment_id=binding.environment_id, chunk_id=binding.chunk_id, held_since=binding.bound_at)
 
 
 @dto
@@ -195,21 +264,17 @@ class RunnerStatusService:
         local_paused = self._pause.local_paused(self._runner_id)
         hub_paused = self._pause.hub_paused(self._runner_id)
         local_reason = self._pause.local_pause_reason(self._runner_id) if local_paused else None
-        used = len(self._lease_record.list_active_leases())
-        contact_at = self._pause.hub_contact_at(self._runner_id)
-        reachable = contact_at is not None and (self._clock.now() - contact_at) <= self._contact_staleness
         return RunnerStatusSummary(
             runner_id=self._runner_id,
             workspace_id=self._workspace_id,
-            pause=PauseState(
-                local=local_paused, hub=hub_paused, effective=local_paused or hub_paused, local_reason=local_reason
-            ),
-            capacities=Capacities(max_agents=self._max_agents, used=used, free=max(self._max_agents - used, 0)),
-            hub=HubConnectivity(
+            pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
+            capacities=Capacities.of(max_agents=self._max_agents, used=len(self._lease_record.list_active_leases())),
+            hub=HubConnectivity.of(
                 endpoint=self._hub_url,
-                reachable=reachable,
-                last_contact_at=contact_at,
+                contact_at=self._pause.hub_contact_at(self._runner_id),
                 buffer_depth=self._outbound.pending_outbound_count(),
+                now=self._clock.now(),
+                threshold=self._contact_staleness,
             ),
             last_tick_at=self._pause.last_daemon_liveness(),
             gates=self._gates,
@@ -220,40 +285,7 @@ class RunnerStatusService:
         A bound environment never silently vanishes: a binding whose id has fallen out of
         the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
         ``environment_id`` — so does every extra binding past the first on one id."""
-        held_by_env: dict[str, list[EnvBinding]] = {}
-        for binding in self._environments.held_bindings():
-            held_by_env.setdefault(binding.environment_id, []).append(binding)
-        slots = []
-        for env_id in self._env_pool:
-            bindings = held_by_env.get(env_id, [])
-            primary = bindings[0] if bindings else None
-            slots.append(
-                EnvironmentSlot(
-                    environment_id=env_id,
-                    chunk_id=primary.chunk_id if primary else None,
-                    held_since=primary.bound_at if primary else None,
-                )
-            )
-            for extra in bindings[1:]:
-                slots.append(
-                    EnvironmentSlot(
-                        environment_id=extra.environment_id,
-                        chunk_id=extra.chunk_id,
-                        held_since=extra.bound_at,
-                    )
-                )
-        pool = set(self._env_pool)
-        for env_id, bindings in held_by_env.items():
-            if env_id not in pool:
-                for binding in bindings:
-                    slots.append(
-                        EnvironmentSlot(
-                            environment_id=binding.environment_id,
-                            chunk_id=binding.chunk_id,
-                            held_since=binding.bound_at,
-                        )
-                    )
-        return slots
+        return EnvironmentSlot.pool_view(self._env_pool, self._environments.held_bindings())
 
     def open_asks(self) -> list[OpenAsk]:
         return self._asks.open_asks()
@@ -276,27 +308,24 @@ class RunnerStatusService:
         for escalation in self._escalations.open_escalations():
             resume_command = ""
             session = escalation.session
-            if session is not None:
-                bindings = held_by_chunk.get(escalation.chunk_id, [])
-                if bindings:
-                    # Composed from the escalation's own stamps, not a fresh
-                    # resolution: the operator lands in the configuration it ran with.
-                    try:
-                        resume_command = self._harnesses.lifecycle(session.harness_id).resume_command(
-                            SpawnCwd.of_session(self._workspace_root, bindings[0].workdir),
-                            session.session_id,
-                            model=escalation.resolved_model,
-                            effort=escalation.resolved_effort,
-                        )
-                    except (UnknownHarnessError, UnavailableHarnessError):
-                        # The escalation remains visible under its recorded owner, but cannot
-                        # offer a command this runner cannot compose.
-                        resume_command = ""
+            workdir = resume_workdir(session, held_by_chunk.get(escalation.chunk_id, []))
+            if session is not None and workdir is not None:
+                # Composed from the escalation's own stamps, not a fresh
+                # resolution: the operator lands in the configuration it ran with.
+                try:
+                    resume_command = self._harnesses.lifecycle(session.harness_id).resume_command(
+                        SpawnCwd.of_session(self._workspace_root, workdir),
+                        session.session_id,
+                        model=escalation.resolved_model,
+                        effort=escalation.resolved_effort,
+                    )
+                except (UnknownHarnessError, UnavailableHarnessError):
+                    # The escalation remains visible under its recorded owner, but cannot
+                    # offer a command this runner cannot compose.
+                    resume_command = ""
             # Composed under the conditions `escalate` uses: a resume command exists and the runner dir is known.
-            wrapped = (
-                TakeoverCommand(escalation.chunk_id, self._runner_dir).wrapped
-                if resume_command and self._runner_dir
-                else None
+            wrapped = TakeoverCommand.wrapped_for(
+                escalation.chunk_id, resume_command=resume_command, runner_dir=self._runner_dir
             )
             views.append(
                 EscalationView(

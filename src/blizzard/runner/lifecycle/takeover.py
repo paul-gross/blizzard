@@ -9,19 +9,23 @@ from __future__ import annotations
 
 import json
 import shlex
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessLifecycleRegistry
+from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.leases import Lease
@@ -29,6 +33,7 @@ from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
@@ -40,6 +45,7 @@ _IDENTITY_PREFIX = "BLIZZARD_"
 _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
 
 __all__ = [
+    "TAKEOVER_TRANSITIONS",
     "ChunkNotTakeable",
     "IReadTakeoverRepository",
     "IWriteTakeoverRepository",
@@ -47,20 +53,72 @@ __all__ = [
     "OpenTakeover",
     "OpenedTakeover",
     "SubmissionPending",
+    "TakeoverAdmission",
     "TakeoverCloseScope",
     "TakeoverCommand",
+    "TakeoverError",
     "TakeoverOpenScope",
+    "TakeoverOwnerUnresolvable",
     "TakeoverService",
+    "TakeoverState",
+    "TakeoverVerb",
+    "admit_takeover",
+    "bounded_takeover_env",
+    "takeover_closing",
 ]
 
 
-@dto
+class TakeoverState(StrEnum):
+    """Where a chunk stands with respect to takeovers."""
+
+    #: No takeover is open over the chunk.
+    NONE = "none"
+    #: A person holds the chunk's session.
+    OPEN = "open"
+
+
+class TakeoverVerb(StrEnum):
+    OPEN = "open"
+    #: End the open takeover the caller names.
+    END_OWN = "end-own"
+    #: End a takeover id that is not the open one.
+    END_OTHER = "end-other"
+
+
+class TakeoverVerdict(StrEnum):
+    APPLY = "apply"
+    NO_OP = "no-op"
+    REFUSE = "refuse"
+
+
+#: Which takeover verbs are legal from which state; ending when none is open is a no-op.
+TAKEOVER_TRANSITIONS: Mapping[TakeoverState, Mapping[TakeoverVerb, TakeoverVerdict]] = MappingProxyType(
+    {
+        TakeoverState.NONE: MappingProxyType(
+            {
+                TakeoverVerb.OPEN: TakeoverVerdict.APPLY,
+                TakeoverVerb.END_OWN: TakeoverVerdict.NO_OP,
+                TakeoverVerb.END_OTHER: TakeoverVerdict.NO_OP,
+            }
+        ),
+        TakeoverState.OPEN: MappingProxyType(
+            {
+                TakeoverVerb.OPEN: TakeoverVerdict.REFUSE,
+                TakeoverVerb.END_OWN: TakeoverVerdict.APPLY,
+                TakeoverVerb.END_OTHER: TakeoverVerdict.REFUSE,
+            }
+        ),
+    }
+)
+
+
+@domain_model
 @dataclass(frozen=True)
 class OpenTakeover:
     """An open operator takeover — the human-in-session fact.
 
-    ``lease_id`` always names the reference lease — active or already closed, never
-    ``None``. ``fence_epoch`` is set only when a live worker was force-killed."""
+    ``lease_id`` always names the reference lease, active or already closed. ``fence_epoch`` is set only
+    when a live worker was force-killed; ``reference_epoch`` is the reference lease's own epoch."""
 
     takeover_id: str
     chunk_id: str
@@ -70,6 +128,21 @@ class OpenTakeover:
     fence_epoch: int | None
     opened_at: datetime
     harness_id: str | None = None
+    reference_epoch: int | None = None
+
+    def holds(self, chunk_id: str, epoch: int | None) -> bool:
+        """Whether this takeover keeps the loop off a lease (or a held chunk) at ``epoch``: the
+        person holds the reference lease and anything at or below the fence. A lease a later
+        re-claim mints sits above both and is the loop's again; a takeover recording neither
+        epoch holds the whole chunk."""
+        if chunk_id != self.chunk_id:
+            return False
+        ceiling = max((e for e in (self.reference_epoch, self.fence_epoch) if e is not None), default=None)
+        return ceiling is None or epoch is None or epoch <= ceiling
+
+    def ended_by(self, view: ChunkStatusView) -> bool:
+        """The hub has ended the chunk, so the takeover's authorization must not outlive it."""
+        return view.status in TERMINAL_STATUSES
 
     @property
     def session(self) -> SessionReference | None:  # ast-grep-ignore: bzh:property-delegates
@@ -87,7 +160,7 @@ class TakeoverOpenScope:
     (``bzh:domain-takes-objects``): the runner holds no chunk entity, so this names
     exactly the facts the rule's refusals and reference-lease derivation read from
     ``chunk_id`` — the open takeover, the held bindings, the active and latest leases,
-    and the fence-epoch floor."""
+    the fence-epoch floor, and whether a runner requeue of the chunk is pending."""
 
     chunk_id: str
     open_takeover: OpenTakeover | None
@@ -95,6 +168,7 @@ class TakeoverOpenScope:
     active_lease: Lease | None
     latest_lease_with_session: Lease | None
     latest_epoch: int
+    requeue_pending: bool = False
 
 
 @dto
@@ -162,7 +236,7 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TakeoverCommand:
     """The ``blizzard runner takeover`` CLI invocation an escalation composes when it can —
@@ -176,6 +250,14 @@ class TakeoverCommand:
     @property
     def wrapped(self) -> str:
         return f"blizzard runner takeover {shlex.quote(self.chunk_id)} --dir {shlex.quote(self.runner_dir)}"
+
+    @classmethod
+    def wrapped_for(cls, chunk_id: str, *, resume_command: str, runner_dir: str) -> str | None:
+        """The wrapped command an escalation carries beside ``resume_command``, or ``None``
+        when it can carry none: no raw resume command to wrap, or no known runner dir."""
+        if not resume_command or not runner_dir:
+            return None
+        return cls(chunk_id, runner_dir).wrapped
 
 
 class TakeoverError(Exception):
@@ -191,6 +273,11 @@ class LiveWorkerConflict(TakeoverError):
     """A live worker attempt is running and ``force`` was not given."""
 
 
+class TakeoverOwnerUnresolvable(TakeoverError):
+    """The reference session's recorded owner cannot be dispatched to right now, so the
+    takeover would offer no usable command."""
+
+
 class SubmissionPending(TakeoverError):
     """The lease's completion (or gate decision) is already buffered, unacked.
 
@@ -200,6 +287,79 @@ class SubmissionPending(TakeoverError):
 
 class TakeoverEndedElsewhere(TakeoverError):
     """No open takeover matches the given id — already closed, or never opened."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class TakeoverAdmission:
+    """An admitted takeover: the session it hands over, and whether it supersedes a live worker."""
+
+    reference: Lease
+    session: SessionReference
+    workdir: str
+    #: A worker is live — the takeover force-kills it and fences its epoch.
+    live: bool
+    #: The epoch the fence mints, above every epoch this runner knows; ``None`` when nothing is live.
+    fence_epoch: int | None
+
+
+def admit_takeover(
+    scope: TakeoverOpenScope, *, force: bool, active_parked: bool, submission_pending: bool
+) -> TakeoverAdmission:
+    """Admit a takeover over ``scope.chunk_id``, or raise the refusal.
+
+    The chunk must be held here with no open takeover and no pending runner requeue. A live worker — an
+    active lease that is not parked, since each such can still land a verdict — refuses unless forced,
+    and a forced entry over an already-buffered submission is refused, as the fence could never apply."""
+    chunk_id = scope.chunk_id
+    if TAKEOVER_TRANSITIONS[_state(scope.open_takeover)][TakeoverVerb.OPEN] is TakeoverVerdict.REFUSE:
+        raise ChunkNotTakeable(f"chunk {chunk_id} already has an open takeover")
+    if not scope.bindings:
+        raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
+    if scope.requeue_pending:
+        raise ChunkNotTakeable(f"chunk {chunk_id} has a runner requeue pending — let it spawn, then take over")
+    active = scope.active_lease
+    live = active is not None and not active_parked
+    if live and not force:
+        raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
+    if live and submission_pending:
+        raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
+    reference = active if active is not None else scope.latest_lease_with_session
+    if reference is None or reference.session is None:
+        raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
+    return TakeoverAdmission(
+        reference=reference,
+        session=reference.session,
+        workdir=scope.bindings[0].workdir,
+        live=live,
+        fence_epoch=scope.latest_epoch + 1 if live else None,
+    )
+
+
+def bounded_takeover_env(full_env: Mapping[str, str]) -> dict[str, str]:
+    """What leaves the daemon: the identity variables and the execution basics, never the whole
+    allowlisted child env, which carries terminal variables that would clobber the operator's
+    and any secret."""
+    return {
+        name: value
+        for name, value in full_env.items()
+        if name.startswith(_IDENTITY_PREFIX) or name in _FORWARDED_EXECUTION_VARS
+    }
+
+
+def takeover_closing(scope: TakeoverCloseScope, takeover_id: str) -> OpenTakeover | None:
+    """The open takeover ending ``takeover_id`` closes, or ``None`` when none is open — ending one
+    already ended is the desired state. Another takeover holding the chunk refuses."""
+    record = scope.open_takeover
+    verb = TakeoverVerb.END_OWN if record is None or record.takeover_id == takeover_id else TakeoverVerb.END_OTHER
+    verdict = TAKEOVER_TRANSITIONS[_state(record)][verb]
+    if verdict is TakeoverVerdict.REFUSE:
+        raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {scope.chunk_id} is not open")
+    return record if verdict is TakeoverVerdict.APPLY else None
+
+
+def _state(open_takeover: OpenTakeover | None) -> TakeoverState:
+    return TakeoverState.NONE if open_takeover is None else TakeoverState.OPEN
 
 
 @dto
@@ -258,30 +418,23 @@ class TakeoverService:
         """Open a takeover over ``scope.chunk_id``, or raise a ``409``-mapped refusal.
         ``scope`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
         chunk_id = scope.chunk_id
-        if scope.open_takeover is not None:
-            raise ChunkNotTakeable(f"chunk {chunk_id} already has an open takeover")
-        if not scope.bindings:
-            raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
-        workdir = scope.bindings[0].workdir
-
         active = scope.active_lease
-        live = active is not None and active.lease_id not in self._asks.parked_lease_ids()
-        if live and not force:
-            raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
-        if live and force and active is not None and active.lease_id in self._outbound.pending_submission_lease_ids():
-            raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
-
-        reference: Lease | None = active if active is not None else scope.latest_lease_with_session
-        if reference is None or reference.session is None:
-            raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
-        session = reference.session
+        admission = admit_takeover(
+            scope,
+            force=force,
+            active_parked=active is not None and active.lease_id in self._asks.parked_lease_ids(),
+            submission_pending=active is not None and active.lease_id in self._outbound.pending_submission_lease_ids(),
+        )
+        reference, session, workdir, live = admission.reference, admission.session, admission.workdir, admission.live
         # Resolve before the fact-before-command write: an unavailable recorded owner blocks
         # this takeover rather than opening it and then offering no usable command.
-        harness = self._harnesses.lifecycle(session.harness_id)
-
+        try:
+            harness = self._harnesses.lifecycle(session.harness_id)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            raise TakeoverOwnerUnresolvable(str(exc)) from exc
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
-        fence_epoch = scope.latest_epoch + 1 if live else None
+        fence_epoch = admission.fence_epoch
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
         # every loop step's open-takeover skip — before anything is killed or returned.
@@ -348,14 +501,7 @@ class TakeoverService:
             local_api_url=self._local_api_url,
             lease_token=lease_token,
         )
-        # Bound what leaves the daemon: never the whole allowlisted child env, which
-        # carries terminal vars that would clobber the operator's and any secret.
-        full_env = harness.identity_env(preamble, chunk_id, session.session_id)
-        env = {
-            name: value
-            for name, value in full_env.items()
-            if name.startswith(_IDENTITY_PREFIX) or name in _FORWARDED_EXECUTION_VARS
-        }
+        env = bounded_takeover_env(harness.identity_env(preamble, chunk_id, session.session_id))
         return OpenedTakeover(
             takeover_id=takeover_id,
             command=command,
@@ -371,10 +517,7 @@ class TakeoverService:
         so it succeeds rather than raising. Only a genuinely *different* takeover holding the
         chunk is the real conflict this still refuses. ``scope`` is already resolved by the
         caller (``bzh:domain-takes-objects``)."""
-        record = scope.open_takeover
-        if record is not None and record.takeover_id != takeover_id:
-            raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {scope.chunk_id} is not open")
-        if record is None:
+        if takeover_closing(scope, takeover_id) is None:
             return
         self._takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:

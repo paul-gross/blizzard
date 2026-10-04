@@ -13,8 +13,9 @@ import hashlib
 import hmac
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from blizzard.auth_core import Role
 from blizzard.foundation.roles import domain_model
@@ -109,3 +110,24 @@ class SessionCookie:
 
     def _sign(self, value: bytes) -> str:
         return hmac.new(self.secret, value, hashlib.sha256).hexdigest()
+
+
+#: The implicit identity a request resolves to when its access control lies elsewhere (unix socket, or no IdP).
+IMPLICIT_SESSION = RunnerSession(
+    username="operator",
+    role=Role.SUPERUSER,
+    issued_at=datetime.fromtimestamp(0, tz=UTC),
+    expires_at=datetime.fromtimestamp(2**31 - 1, tz=UTC),
+)
+
+
+def resolve_human_session(
+    *, socket_peer: bool, gated: Callable[[], bool], presented: Callable[[], RunnerSession | None]
+) -> RunnerSession | None:
+    """One request's runner-local identity. A unix-socket peer (whose access control is the
+    socket file's permissions) and an ungated hub both get :data:`IMPLICIT_SESSION`, whatever
+    cookie rode along; otherwise the validly presented session, or ``None``. ``gated`` and
+    ``presented`` are asked only when the answer needs them, so a socket peer never probes the hub."""
+    if socket_peer or not gated():
+        return IMPLICIT_SESSION
+    return presented()

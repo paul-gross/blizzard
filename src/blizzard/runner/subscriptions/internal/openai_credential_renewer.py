@@ -19,6 +19,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalFailureReason,
     RenewalOutcome,
     RenewalOutcomeKind,
+    renewal_due,
 )
 from blizzard.runner.subscriptions.internal.jwt_expiry import parse_jwt_expiry
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess
@@ -60,11 +61,9 @@ class OpenAICredentialRenewer:
 
     def renew_if_due(self) -> RenewalOutcome:
         expires_at = self._read_access_token_expiry()
-        if expires_at is None:
-            # Unreadable, malformed, or no token to judge — the sampler's own next
-            # attempt reports why; this binding has nothing due to ask for.
-            return RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
-        if self._clock.now() < expires_at - _RENEWAL_LEAD_WINDOW:
+        # An unreadable, malformed, or missing token is never due — the sampler's own next
+        # attempt reports why; this binding has nothing due to ask for.
+        if expires_at is None or not renewal_due(expires_at, self._clock.now(), _RENEWAL_LEAD_WINDOW):
             return RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
         return self._request_refresh(expires_at)
 

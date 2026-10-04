@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 
 from packaging.specifiers import SpecifierSet
-from packaging.version import InvalidVersion, Version
+from packaging.version import Version
 
-from blizzard.runner.harness import harness_shared
+from blizzard.runner.harness.admission import classification_of_manifest, select_reference_corpus, version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 
 # Package-relative, not repo-root-relative: the wheel ships only `src/blizzard`
@@ -38,7 +38,7 @@ def admitted_corpus_versions(
     """Every committed ``corpus_root/harness_id/<version>/manifest.json`` version whose version
     lies inside ``admitted_range``, oldest first — the corpus fixtures a reference-corpus lookup
     or a binding's own declared-degradations union may ever resolve to. Membership is checked
-    through :func:`~blizzard.runner.harness.harness_shared.version_admitted`,
+    through :func:`~blizzard.runner.harness.admission.version_admitted`,
     the one rule a corpus name and an observed version are both judged by."""
 
     harness_dir = corpus_root / harness_id
@@ -48,7 +48,7 @@ def admitted_corpus_versions(
     for child in harness_dir.iterdir():
         if not child.is_dir() or not (child / "manifest.json").is_file():
             continue
-        if not harness_shared.version_admitted(child.name, admitted_range):
+        if not version_admitted(child.name, admitted_range):
             continue
         versions.append((Version(child.name), child.name))
     versions.sort(key=lambda entry: entry[0])
@@ -79,21 +79,13 @@ def reference_corpus_version(
     *,
     corpus_root: Path = DEFAULT_CORPUS_ROOT,
 ) -> str | None:
-    """The committed corpus version that stands in for ``observed_version``: the newest
-    :func:`admitted_corpus_versions` member at or below it. ``None`` when ``observed_version``
-    doesn't parse, or no committed corpus qualifies — never a corpus *above* what was observed,
-    since that would classify a version against evidence captured from a later one."""
+    """The committed corpus version that stands in for ``observed_version`` — the listing of
+    :func:`admitted_corpus_versions`, judged by
+    :func:`~blizzard.runner.harness.admission.select_reference_corpus`."""
 
-    try:
-        observed = Version(observed_version)
-    except InvalidVersion:
-        return None
-    candidates = [
-        version
-        for version in admitted_corpus_versions(harness_id, admitted_range, corpus_root=corpus_root)
-        if Version(version) <= observed
-    ]
-    return candidates[-1] if candidates else None
+    return select_reference_corpus(
+        observed_version, admitted_corpus_versions(harness_id, admitted_range, corpus_root=corpus_root), admitted_range
+    )
 
 
 def classify_offline(
@@ -119,18 +111,7 @@ def classify_offline(
         manifest = json.loads(manifest_path.read_text())
     except (OSError, ValueError):
         return None
-    if not isinstance(manifest, dict):
-        return None
-    live_evidence = manifest.get("live_evidence")
-    if not isinstance(live_evidence, dict):
-        return None
-    label = live_evidence.get("classification")
-    if not isinstance(label, str):
-        return None
-    try:
-        return CompatibilityClassification(label)
-    except ValueError:
-        return None
+    return classification_of_manifest(manifest)
 
 
 __all__ = [
