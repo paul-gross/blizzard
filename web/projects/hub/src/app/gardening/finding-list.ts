@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone } from 'fleet';
+import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone } from 'fleet';
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 
 /** One row of the findings triage bucket list (`hub finding list`'s own read),
@@ -11,16 +11,18 @@ import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFl
  * (they render on `finding-panel.ts`'s own `FindingPanelVm`, the right-hand detail
  * pane a row click opens) — `findingClass` renames the wire's `class`,
  * `RunDeltaVm`'s own `AddedFindingView.class` → `findingClass` rename, so a
- * template never confuses it with the DOM `class` attribute. `state` alone still
- * rides the row purely for classification — {@link FleetFindingList.isGone}/
- * {@link FleetFindingList.isExited} need it even though the row no longer prints
- * it as text. */
+ * template never confuses it with the DOM `class` attribute. `state` and `exit`
+ * ride the row for classification — {@link FleetFindingList.isGone} reads `state`,
+ * {@link FleetFindingList.isExited} reads `exit`. */
 export interface FindingListRowVm {
   readonly findingId: string;
   readonly findingClass: string;
   readonly locus: string;
   readonly summary: string;
-  readonly state: string;
+  readonly state: hubApi.FindingState;
+  /** `FindingView.exit` — `outflow` or `withdrawn` once the finding has exited,
+   * `null` while it is still open. */
+  readonly exit: hubApi.FindingExit | null;
   readonly lastSeenAt: string | null;
   /** The finding's own routine/scope, rendered only when the
    * container hands a non-null value. The widened findings bucket can mix rows
@@ -35,9 +37,9 @@ export interface FindingListRowVm {
    * so the row shows {@link severity} and {@link raisedByChunkId} in its place
    * rather than leaving that slot silently empty. A `"routine"` row renders exactly
    * as it did before this field existed — additive, not a redesign. */
-  readonly source: string;
+  readonly source: hubApi.FindingSource;
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
-  readonly severity: string | null;
+  readonly severity: hubApi.FindingSeverity | null;
   /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
    * finding, set only when {@link source} is `"review"`. Linked like every other
    * chunk-id reference on the board (`run-delta.ts`'s own `['/board', 'chunk', id]`
@@ -46,8 +48,8 @@ export interface FindingListRowVm {
 }
 
 /** The triage verbs a finding can be dispatched under — every human-driven exit
- * `finding.mutations.ts` exposes, plus `reopen`. Named off the CLI's own verb
- * spelling (`src/blizzard/hub/cli/finding.py`), so a container routes an emitted
+ * `finding.mutations.ts` exposes, plus `reopen`. Named off the `hub finding` CLI's
+ * own verb spelling, so a container routes an emitted
  * verb straight to the matching mutation with no translation table of its own.
  * Dispatched one finding at a time, from `app-finding-panel`'s own `triage`
  * output — this list renders rows only, it carries no selection or bulk action of
@@ -71,8 +73,8 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
  * own encapsulated button — `run-list.ts`'s own `.rl-body`/`.rl-body--escalated`
  * shape and its doc comment on why: still open with no flag renders untinted; a
  * `gone`-flagged row renders tinted (`.fl-body--gone`) but stays a normal,
- * fully rendered row — `gone` is *not* exited; an exited row (one of
- * `finding-state.ts`'s `FINDING_EXIT_STATES`) renders dimmed (`.fl-body--exited`)
+ * fully rendered row — `gone` is *not* exited; an exited row (a non-null wire
+ * `exit`) renders dimmed (`.fl-body--exited`)
  * but never leaves the DOM.
  *
  * The row's state rides the last-seen line, pushed to that line's right edge — the
@@ -114,7 +116,7 @@ export class FleetFindingList {
   }
 
   protected isExited(row: FindingListRowVm): boolean {
-    return isFindingExited(row.state);
+    return isFindingExited(row.exit);
   }
 
   /** The row's state badge tone — `finding-state.ts`'s own mapping, so this row and

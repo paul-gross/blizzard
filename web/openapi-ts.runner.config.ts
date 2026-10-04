@@ -5,5 +5,5 @@ import { defineConfig } from '@hey-api/openapi-ts';
 export default defineConfig({
   input: '../openapi/runner.openapi.json',
   output: { path: 'projects/fleet/src/lib/api/runner' },
-  plugins: ['@hey-api/client-fetch', '@hey-api/typescript', '@hey-api/sdk'],
+  plugins: ['@hey-api/client-fetch', { name: '@hey-api/typescript', enums: 'javascript' }, '@hey-api/sdk'],
 });

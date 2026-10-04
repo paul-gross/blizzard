@@ -29,7 +29,7 @@ from blizzard.foundation.platform_tracing.received_export import IReceivedTeleme
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
-from blizzard.foundation.web import Frontend
+from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
@@ -107,6 +107,7 @@ from blizzard.runner.transcripts.internal.http_archived_transcript_repository im
     HttpArchivedTranscriptRepository,
 )
 from blizzard.runner.transcripts.service import TranscriptService
+from blizzard.wire.components import RUNNER_SCHEMA_COMPONENTS
 
 
 @domain_model
@@ -375,6 +376,7 @@ def create_app(
     # The runner-served web app: the human web lane the middleware above gates
     # — the only browser-facing surface this daemon serves.
     Frontend.embedded("runner", app_name="blizzard-runner").mount(app)
+    install_schema_components(app, RUNNER_SCHEMA_COMPONENTS.models, RUNNER_SCHEMA_COMPONENTS.enums)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
     return app

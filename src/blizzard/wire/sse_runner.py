@@ -5,23 +5,25 @@ reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful ser
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import ClassVar, Literal
 
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.wire.sse import SseFramePayload
 
 #: What caused a ``lease-changed`` frame: ``created``/``spawned`` are not closures, ``dormant`` is
-#: an open-lease park; the other seven mirror ``ClosedLease.reason``'s closure vocabulary.
+#: an open-lease park; the other seven are :class:`~blizzard.foundation.leases.LeaseClosureReason`'s members.
 LeaseChangeCause = Literal[
     "created",
     "spawned",
     "dormant",
-    "transitioned",
-    "reaped",
-    "failed",
-    "escalated",
-    "parked",
-    "released",
-    "preempted",
+    LeaseClosureReason.TRANSITIONED,
+    LeaseClosureReason.REAPED,
+    LeaseClosureReason.FAILED,
+    LeaseClosureReason.ESCALATED,
+    LeaseClosureReason.PARKED,
+    LeaseClosureReason.RELEASED,
+    LeaseClosureReason.PREEMPTED,
 ]
 
 #: What caused an ``ask-changed`` frame — a worker's question recorded, or its answer
@@ -84,12 +86,23 @@ class FactChangedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "lease_id"})
 
 
+class RunnerEventType(StrEnum):
+    """Every runner SSE frame kind — the ``event:`` name a frame carries."""
+
+    LEASE_CHANGED = "lease-changed"
+    ASK_CHANGED = "ask-changed"
+    ESCALATION_CHANGED = "escalation-changed"
+    TAKEOVER_CHANGED = "takeover-changed"
+    ENVIRONMENT_CHANGED = "environment-changed"
+    FACT_CHANGED = "fact-changed"
+
+
 #: Mirrors ``blizzard.wire.sse.SSE_FRAME_MODELS``.
 RUNNER_SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
-    "lease-changed": LeaseChangedPayload,
-    "ask-changed": AskChangedPayload,
-    "escalation-changed": EscalationChangedPayload,
-    "takeover-changed": TakeoverChangedPayload,
-    "environment-changed": EnvironmentChangedPayload,
-    "fact-changed": FactChangedPayload,
+    RunnerEventType.LEASE_CHANGED: LeaseChangedPayload,
+    RunnerEventType.ASK_CHANGED: AskChangedPayload,
+    RunnerEventType.ESCALATION_CHANGED: EscalationChangedPayload,
+    RunnerEventType.TAKEOVER_CHANGED: TakeoverChangedPayload,
+    RunnerEventType.ENVIRONMENT_CHANGED: EnvironmentChangedPayload,
+    RunnerEventType.FACT_CHANGED: FactChangedPayload,
 }

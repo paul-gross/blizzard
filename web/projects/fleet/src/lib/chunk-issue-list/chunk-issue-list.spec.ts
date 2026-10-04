@@ -31,6 +31,7 @@ describe('ChunkIssueList', () => {
   function hubItem(overrides: Partial<WorkItemEntry> & { ref: string; author: WorkItemAuthorView }): WorkItemEntry {
     return item({
       source: 'hub',
+      hub_source: true,
       web_url: `/board/chunk/ch_${overrides.ref}`,
       body: '# heading\n\nplain body',
       ...overrides,
@@ -193,6 +194,7 @@ describe('ChunkIssueList', () => {
     const { el } = await render([
       item({
         source: 'hub',
+        hub_source: true,
         ref: '3',
         web_url: '/board/chunk/ch_3',
         error: 'no open hub:3 work item exists',
@@ -211,6 +213,7 @@ describe('ChunkIssueList', () => {
     const { el } = await render([
       item({
         source: 'hub',
+        hub_source: true,
         ref: '5',
         web_url: null,
         error: 'no open hub:5 work item exists',

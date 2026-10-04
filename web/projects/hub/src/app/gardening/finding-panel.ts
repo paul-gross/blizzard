@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type FindingFactView, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
+import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingSeverityTone, findingStateTone, isFindingExited } from './finding-state';
 import type { FindingTriageVerb } from './finding-list';
@@ -28,7 +28,9 @@ export interface FindingPanelVm {
   readonly findingId: string;
   readonly findingClass: string;
   readonly locus: string;
-  readonly state: string;
+  readonly state: hubApi.FindingState;
+  /** `FindingView.exit` — non-null once the finding has exited. */
+  readonly exit: hubApi.FindingExit | null;
   readonly observedCount: number;
   readonly introducedRev: string | null;
   readonly introducedAt: string | null;
@@ -44,9 +46,9 @@ export interface FindingPanelVm {
    * whether {@link severity}/{@link raisedByChunkId} render at all: a `"routine"`
    * finding renders exactly as it did before this field existed — additive, not a
    * redesign (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
-  readonly source: string;
+  readonly source: hubApi.FindingSource;
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
-  readonly severity: string | null;
+  readonly severity: hubApi.FindingSeverity | null;
   /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
    * finding, set only when {@link source} is `"review"`. */
   readonly raisedByChunkId: string | null;
@@ -60,7 +62,7 @@ export interface FindingPanelVm {
  * the container resolves the read and wires {@link triage} to
  * `finding.mutations.ts`, `routine-panel.ts`'s own container/presentational split.
  *
- * Which verbs render depends on the finding's own state, read straight off
+ * Which verbs render depends on whether the finding has exited, read straight off
  * `finding-state.ts`'s own {@link isFindingExited} rather than re-derived locally:
  * the four exit verbs always render (`canControl` gating aside), and `reopen`
  * renders only once the finding has exited — resolving a finding that hasn't
@@ -134,7 +136,7 @@ export class FleetFindingPanel {
 
   protected readonly exited = computed<boolean>(() => {
     const panel = this.vm();
-    return panel !== null && isFindingExited(panel.state);
+    return panel !== null && isFindingExited(panel.exit);
   });
 
   /** The title's state badge tone — `finding-state.ts`'s own mapping, shared with

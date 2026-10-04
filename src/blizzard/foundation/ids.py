@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
@@ -22,28 +23,57 @@ _RAND_CHARS = 16  # 80 bits of randomness
 _ULID_CHARS = _TIME_CHARS + _RAND_CHARS
 
 # The id-prefix registry: one tag per hub entity kind.
-CHUNK_PREFIX = "ch"
-GRAPH_PREFIX = "gr"
-NODE_PREFIX = "nd"
-CHOICE_PREFIX = "cho"
-ARTIFACT_PREFIX = "art"
-TRANSITION_PREFIX = "tr"
-DECISION_PREFIX = "dec"
-QUESTION_PREFIX = "qn"
-LEASE_PREFIX = "lease"
-TAKEOVER_PREFIX = "tko"
-SELFTEST_PREFIX = "self"
-HUB_EXEC_SLOT_PREFIX = "hes"
-MIGRATION_PREFIX = "mg"  # a chunk_migrations fact
-USER_PREFIX = "usr"  # a hub-local user
-SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key
-WORK_ITEM_PREFIX = "wi"  # a hub-owned work item
-WORK_ITEM_PROPOSAL_PREFIX = "wip"  # a proposed work item riding a node-step's completion
-ROUTINE_PREFIX = "rtn"  # a routine — a scope has no prefix; its slug is its id
-FINDING_PREFIX = "fin"  # a finding — one instance a routine's run observed
-FINDING_SET_PREFIX = "fins"  # the set a delivered finding list mints, one per artifact
-GARDEN_PROPOSAL_PREFIX = "gprop"  # a garden proposal — never confused with a work-item proposal
-DEPENDENCY_EDGE_PREFIX = "dep"  # a chunk_dependencies row
+
+
+class IdPrefix(StrEnum):
+    """One tag per hub entity kind; a member formats as its own value."""
+
+    CHUNK = "ch"
+    GRAPH = "gr"
+    NODE = "nd"
+    CHOICE = "cho"
+    ARTIFACT = "art"
+    TRANSITION = "tr"
+    DECISION = "dec"
+    QUESTION = "qn"
+    LEASE = "lease"
+    TAKEOVER = "tko"
+    SELFTEST = "self"
+    HUB_EXEC_SLOT = "hes"
+    MIGRATION = "mg"  # a chunk_migrations fact
+    USER = "usr"  # a hub-local user
+    SEGMENT = "seg"  # a transcript segment, the hub's idempotence key
+    WORK_ITEM = "wi"  # a hub-owned work item
+    WORK_ITEM_PROPOSAL = "wip"  # a proposed work item riding a node-step's completion
+    ROUTINE = "rtn"  # a routine — a scope has no prefix; its slug is its id
+    FINDING = "fin"  # a finding — one instance a routine's run observed
+    FINDING_SET = "fins"  # the set a delivered finding list mints, one per artifact
+    GARDEN_PROPOSAL = "gprop"  # a garden proposal — never confused with a work-item proposal
+    DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
+
+
+CHUNK_PREFIX = IdPrefix.CHUNK
+GRAPH_PREFIX = IdPrefix.GRAPH
+NODE_PREFIX = IdPrefix.NODE
+CHOICE_PREFIX = IdPrefix.CHOICE
+ARTIFACT_PREFIX = IdPrefix.ARTIFACT
+TRANSITION_PREFIX = IdPrefix.TRANSITION
+DECISION_PREFIX = IdPrefix.DECISION
+QUESTION_PREFIX = IdPrefix.QUESTION
+LEASE_PREFIX = IdPrefix.LEASE
+TAKEOVER_PREFIX = IdPrefix.TAKEOVER
+SELFTEST_PREFIX = IdPrefix.SELFTEST
+HUB_EXEC_SLOT_PREFIX = IdPrefix.HUB_EXEC_SLOT
+MIGRATION_PREFIX = IdPrefix.MIGRATION
+USER_PREFIX = IdPrefix.USER
+SEGMENT_PREFIX = IdPrefix.SEGMENT
+WORK_ITEM_PREFIX = IdPrefix.WORK_ITEM
+WORK_ITEM_PROPOSAL_PREFIX = IdPrefix.WORK_ITEM_PROPOSAL
+ROUTINE_PREFIX = IdPrefix.ROUTINE
+FINDING_PREFIX = IdPrefix.FINDING
+FINDING_SET_PREFIX = IdPrefix.FINDING_SET
+GARDEN_PROPOSAL_PREFIX = IdPrefix.GARDEN_PROPOSAL
+DEPENDENCY_EDGE_PREFIX = IdPrefix.DEPENDENCY_EDGE
 
 
 @domain_model

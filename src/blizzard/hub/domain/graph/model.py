@@ -16,6 +16,7 @@ from typing import Protocol
 
 from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model, dto
 
@@ -63,6 +64,15 @@ class ChoiceTarget:
     @property
     def malformed(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.node is None and self.graph is None
+
+    def kind(self) -> ChoiceTargetKind:
+        """``graph`` for a cross-graph target, ``done`` for the reserved terminal, else
+        ``node`` — a malformed target included, which validation refuses before any mint."""
+        if self.graph is not None:
+            return ChoiceTargetKind.GRAPH
+        if self.node == RESERVED_TERMINAL:
+            return ChoiceTargetKind.DONE
+        return ChoiceTargetKind.NODE
 
 
 # ``session: resume:<name>`` — resume ``<name>``'s most-recent

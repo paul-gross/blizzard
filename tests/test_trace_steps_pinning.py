@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.chunk.model import MigrationSource
 from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedChunkCompletion,

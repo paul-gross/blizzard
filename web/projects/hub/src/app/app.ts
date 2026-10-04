@@ -9,7 +9,7 @@ import { injectAuthProvidersQuery } from './auth/providers.query';
 import { injectHubChunkCountsQuery } from './board/chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from './board/fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from './board/health/health.query';
-import { injectLogoutMutation } from './auth/logout.mutation';
+import { injectLogoutMutation } from './auth/logout.mutations';
 import { redirectToLogin } from './auth/auth-redirect';
 
 import { readDemoConfig } from './demo/demo-config';

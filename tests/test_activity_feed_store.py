@@ -13,9 +13,10 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunk.model import DecisionChoice, MigrationSource
+from blizzard.hub.domain.chunk.model import DecisionChoice
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores

@@ -177,6 +177,63 @@
         "title": "ActivityView",
         "type": "object"
       },
+      "AddFindingOp": {
+        "description": "The candidate minus its identity \u2014 a delta, not a state (see\n[blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))\n\u2014 the hub mints the `fin_` id, never the run. Optional `ref` names this addition\nwithin its own submission, for a proposal in the same delivery to cite.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Introduced"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "op": {
+            "const": "add",
+            "default": "add",
+            "title": "Op",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ref"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "class",
+          "locus",
+          "summary",
+          "introduced",
+          "ref"
+        ],
+        "title": "AddFindingOp",
+        "type": "object"
+      },
       "AddedFindingView": {
         "properties": {
           "class": {
@@ -896,8 +953,7 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/ArtifactKind"
           },
           "name": {
             "title": "Name",
@@ -1132,6 +1188,180 @@
           "passed"
         ],
         "title": "CheckResult",
+        "type": "object"
+      },
+      "ChoiceTargetKind": {
+        "description": "A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.",
+        "enum": [
+          "node",
+          "done",
+          "graph"
+        ],
+        "title": "ChoiceTargetKind",
+        "type": "string"
+      },
+      "ChunkChangeCause": {
+        "enum": [
+          "minted",
+          "promoted",
+          "edited",
+          "grouped",
+          "claimed",
+          "node-completed",
+          "migrated",
+          "decision-submitted",
+          "decision-resolved",
+          "question-asked",
+          "question-answered",
+          "escalated",
+          "requeued",
+          "restarted",
+          "detached",
+          "paused",
+          "resumed",
+          "stopped",
+          "completed",
+          "hub-advanced",
+          "deleted"
+        ],
+        "type": "string"
+      },
+      "ChunkChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "By"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "minted",
+                  "promoted",
+                  "edited",
+                  "grouped",
+                  "claimed",
+                  "node-completed",
+                  "migrated",
+                  "decision-submitted",
+                  "decision-resolved",
+                  "question-asked",
+                  "question-answered",
+                  "escalated",
+                  "requeued",
+                  "restarted",
+                  "detached",
+                  "paused",
+                  "resumed",
+                  "stopped",
+                  "completed",
+                  "hub-advanced",
+                  "deleted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cause"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Graph Id"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Node"
+          },
+          "prev_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prev Node"
+          },
+          "prev_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prev Status"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runner Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status"
+        ],
+        "title": "ChunkChangedPayload",
         "type": "object"
       },
       "ChunkCompleteRequest": {
@@ -1411,6 +1641,11 @@
             "title": "Closed Prs",
             "type": "array"
           },
+          "completable": {
+            "default": false,
+            "title": "Completable",
+            "type": "boolean"
+          },
           "cost": {
             "$ref": "#/components/schemas/ChunkUsageTotalView"
           },
@@ -1435,6 +1670,11 @@
               }
             ],
             "title": "Current Node Name"
+          },
+          "current_node_terminal": {
+            "default": false,
+            "title": "Current Node Terminal",
+            "type": "boolean"
           },
           "decision": {
             "anyOf": [
@@ -1472,6 +1712,11 @@
             },
             "title": "Default Model",
             "type": "array"
+          },
+          "deletable": {
+            "default": false,
+            "title": "Deletable",
+            "type": "boolean"
           },
           "escalation": {
             "anyOf": [
@@ -1570,6 +1815,11 @@
             "title": "Open Prs",
             "type": "array"
           },
+          "pausable": {
+            "default": false,
+            "title": "Pausable",
+            "type": "boolean"
+          },
           "pause": {
             "anyOf": [
               {
@@ -1618,6 +1868,11 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "terminal": {
+            "default": false,
+            "title": "Terminal",
+            "type": "boolean"
           },
           "usage": {
             "default": [],
@@ -2313,6 +2568,11 @@
             "title": "Cache Read Tokens",
             "type": "integer"
           },
+          "cost_partial": {
+            "default": false,
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
           "cost_usd": {
             "anyOf": [
               {
@@ -2705,6 +2965,37 @@
         "title": "DecisionChoiceModel",
         "type": "object"
       },
+      "DecisionOpenedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "decision_id"
+        ],
+        "title": "DecisionOpenedPayload",
+        "type": "object"
+      },
       "DecisionResolutionRequest": {
         "description": "A person's choice for an open decision \u2014 first-write-wins CAS. ``struck`` names\nthe chunk's proposal ids to refuse; omitted, it passes every proposal.",
         "properties": {
@@ -2759,6 +3050,37 @@
           "resolved_at"
         ],
         "title": "DecisionResolutionResponse",
+        "type": "object"
+      },
+      "DecisionResolvedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "decision_id"
+        ],
+        "title": "DecisionResolvedPayload",
         "type": "object"
       },
       "DecisionSubmission": {
@@ -3601,6 +3923,78 @@
         "title": "EnvelopeChoice",
         "type": "object"
       },
+      "EscalationCause": {
+        "enum": [
+          "retries-exhausted",
+          "owner-unresolvable",
+          "no-acceptable-harness",
+          "spend-cap",
+          "bounce-cap",
+          "migration-target-unresolvable"
+        ],
+        "title": "EscalationCause",
+        "type": "string"
+      },
+      "EventLoggedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "kind",
+          "chunk_id",
+          "runner_id"
+        ],
+        "title": "EventLoggedPayload",
+        "type": "object"
+      },
       "EventView": {
         "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
         "properties": {
@@ -3769,12 +4163,135 @@
         "title": "FieldChangeView",
         "type": "object"
       },
+      "FindingCandidate": {
+        "description": "A run's survey artifact entry \u2014 no id, since identity is minted at delivery (see\n[blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).\n`ref` is stable only within its own submission, so a later node in the same run can\nname it.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Introduced"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ref"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "class",
+          "locus",
+          "summary",
+          "introduced"
+        ],
+        "title": "FindingCandidate",
+        "type": "object"
+      },
+      "FindingDelta": {
+        "description": "A delivered finding list \u2014 the scope, the revision read per repository, and the\nroutine's measurement, properties of the artifact rather than of any one finding (see\n[blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).",
+        "properties": {
+          "findings": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add": "#/components/schemas/AddFindingOp",
+                  "gone": "#/components/schemas/GoneFindingOp",
+                  "observed": "#/components/schemas/ObservedFindingOp"
+                },
+                "propertyName": "op"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AddFindingOp"
+                },
+                {
+                  "$ref": "#/components/schemas/ObservedFindingOp"
+                },
+                {
+                  "$ref": "#/components/schemas/GoneFindingOp"
+                }
+              ]
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "measurement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Measurement"
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Revisions",
+            "type": "object"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "revisions",
+          "measurement",
+          "findings"
+        ],
+        "title": "FindingDelta",
+        "type": "object"
+      },
       "FindingDetailView": {
         "description": "`GET /api/findings/{finding_id}`'s own response model \u2014 adds the\nfinding's whole fact chain, oldest-first, atop every `FindingView` field. The list\nread (`GET /api/findings`) returns plain `FindingView` and carries no chain.",
         "properties": {
           "class": {
             "title": "Class",
             "type": "string"
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FindingExit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "facts": {
             "items": {
@@ -3883,22 +4400,19 @@
           "severity": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/FindingSeverity"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Severity"
+            ]
           },
           "source": {
-            "default": "routine",
-            "title": "Source",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingSource",
+            "default": "routine"
           },
           "state": {
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingState"
           },
           "summary": {
             "title": "Summary",
@@ -3919,6 +4433,15 @@
         ],
         "title": "FindingDetailView",
         "type": "object"
+      },
+      "FindingExit": {
+        "description": "How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``\nwhen a person judged the finding rather than the code.",
+        "enum": [
+          "outflow",
+          "withdrawn"
+        ],
+        "title": "FindingExit",
+        "type": "string"
       },
       "FindingExitRequest": {
         "additionalProperties": false,
@@ -3944,6 +4467,23 @@
         "title": "FindingExitRequest",
         "type": "object"
       },
+      "FindingFactKind": {
+        "description": "One append-only transformation a finding's fact chain records.",
+        "enum": [
+          "add",
+          "observed",
+          "gone",
+          "delivered",
+          "resolved",
+          "gone-confirmed",
+          "wont-fix",
+          "not-a-finding",
+          "superseded",
+          "reopened"
+        ],
+        "title": "FindingFactKind",
+        "type": "string"
+      },
       "FindingFactView": {
         "description": "One entry in a finding's fact chain, oldest-first \u2014 `FindingFact` on the wire.",
         "properties": {
@@ -3959,8 +4499,7 @@
             "title": "Actor"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFactKind"
           },
           "note": {
             "anyOf": [
@@ -4007,6 +4546,39 @@
         "title": "FindingFactView",
         "type": "object"
       },
+      "FindingSeverity": {
+        "description": "A review-sourced finding's own severity.",
+        "enum": [
+          "blocking",
+          "should-fix"
+        ],
+        "title": "FindingSeverity",
+        "type": "string"
+      },
+      "FindingSource": {
+        "description": "A finding's home \u2014 the routine run or the chunk review that raised it.",
+        "enum": [
+          "routine",
+          "review"
+        ],
+        "title": "FindingSource",
+        "type": "string"
+      },
+      "FindingState": {
+        "description": "A finding's derived liveness \u2014 ``live`` for a live-making newest fact, else the newest\nfact's own kind.",
+        "enum": [
+          "live",
+          "gone",
+          "delivered",
+          "resolved",
+          "gone-confirmed",
+          "wont-fix",
+          "not-a-finding",
+          "superseded"
+        ],
+        "title": "FindingState",
+        "type": "string"
+      },
       "FindingSupersedeRequest": {
         "additionalProperties": false,
         "description": "`POST /api/findings/supersede` \u2014 `FindingExitRequest` plus the absorbing finding.",
@@ -4036,12 +4608,66 @@
         "title": "FindingSupersedeRequest",
         "type": "object"
       },
+      "FindingSurvey": {
+        "description": "A run's survey artifact \u2014 the scope, the revision read per repository, the\nroutine's measurement, and every `FindingCandidate` the run saw.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/FindingCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "measurement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Measurement"
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Revisions",
+            "type": "object"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "revisions",
+          "measurement",
+          "candidates"
+        ],
+        "title": "FindingSurvey",
+        "type": "object"
+      },
       "FindingView": {
         "description": "A finding. `state` folds the newest fact's kind to `\"live\"` for\n`add`/`observed`/`reopened`; `note` is that fact's own note. `source`\nis `\"routine\"` or `\"review\"`: a review-sourced finding carries no\n`routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.",
         "properties": {
           "class": {
             "title": "Class",
             "type": "string"
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FindingExit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "finding_id": {
             "title": "Finding Id",
@@ -4143,22 +4769,19 @@
           "severity": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/FindingSeverity"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Severity"
+            ]
           },
           "source": {
-            "default": "routine",
-            "title": "Source",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingSource",
+            "default": "routine"
           },
           "state": {
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingState"
           },
           "summary": {
             "title": "Summary",
@@ -4934,6 +5557,32 @@
         "title": "GardenSweepsView",
         "type": "object"
       },
+      "GoneFindingOp": {
+        "description": "The run looked and could not find the finding named by `id`. Ordinarily this does\nnot close the finding \u2014 it flags it for a person \u2014 except against a `delivered`\nfinding, which it settles to `resolved` outright: a delivery\nalready carries a person's own claim that the ground moved.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "op": {
+            "const": "gone",
+            "default": "gone",
+            "title": "Op",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "note"
+        ],
+        "title": "GoneFindingOp",
+        "type": "object"
+      },
       "GoneFindingView": {
         "properties": {
           "finding_id": {
@@ -5025,6 +5674,21 @@
               }
             ],
             "title": "Prompt Addendum"
+          },
+          "target_graph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Graph"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/ChoiceTargetKind",
+            "default": "node"
           },
           "to_node_name": {
             "title": "To Node Name",
@@ -5540,6 +6204,21 @@
         "title": "HubAdvanceResponse",
         "type": "object"
       },
+      "HubEventType": {
+        "description": "Every hub SSE frame kind \u2014 the ``event:`` name a frame carries.",
+        "enum": [
+          "chunk-changed",
+          "question-asked",
+          "question-answered",
+          "decision-opened",
+          "decision-resolved",
+          "queue-changed",
+          "runner-changed",
+          "event-logged"
+        ],
+        "title": "HubEventType",
+        "type": "string"
+      },
       "HubMarkerRequest": {
         "description": "The mid-run marker callback's body (#65).",
         "properties": {
@@ -5582,6 +6261,35 @@
         ],
         "title": "HubMarkerResponse",
         "type": "object"
+      },
+      "IdPrefix": {
+        "description": "One tag per hub entity kind; a member formats as its own value.",
+        "enum": [
+          "ch",
+          "gr",
+          "nd",
+          "cho",
+          "art",
+          "tr",
+          "dec",
+          "qn",
+          "lease",
+          "tko",
+          "self",
+          "hes",
+          "mg",
+          "usr",
+          "seg",
+          "wi",
+          "wip",
+          "rtn",
+          "fin",
+          "fins",
+          "gprop",
+          "dep"
+        ],
+        "title": "IdPrefix",
+        "type": "string"
       },
       "IntendedMigrationPatch": {
         "description": "The intended-migration value a ``ChunkPatchRequest`` carries. ``to_graph`` is a\ngraph id, or a name resolved server-side to the newest enabled graph of that name at request time \u2014\nthe resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there\nis no separate ``mode`` field, so \"node supplied under auto\" is unrepresentable.",
@@ -5727,20 +6435,27 @@
       "MeResponse": {
         "description": "The resolved identity's wire view.",
         "properties": {
+          "assignable_roles": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Assignable Roles",
+            "type": "array"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
           },
           "permissions": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "title": "Permissions",
             "type": "array"
           },
           "role": {
-            "title": "Role",
-            "type": "string"
+            "$ref": "#/components/schemas/Role"
           },
           "user_id": {
             "title": "User Id",
@@ -5791,6 +6506,17 @@
           "forced"
         ],
         "title": "MigrationMode",
+        "type": "string"
+      },
+      "MigrationSource": {
+        "description": "What moved a chunk onto another graph \u2014 a migration's attribution.\n\nFour paths write one, and without a discriminator their facts are byte-identical\nin history.",
+        "enum": [
+          "authored-edge",
+          "intent",
+          "follow-latest",
+          "restart"
+        ],
+        "title": "MigrationSource",
         "type": "string"
       },
       "MigrationView": {
@@ -5888,13 +6614,12 @@
           "source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/MigrationSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Source"
+            ]
           },
           "to_graph_id": {
             "title": "To Graph Id",
@@ -6175,6 +6900,27 @@
         "title": "NodeEnvelope",
         "type": "object"
       },
+      "ObservedFindingOp": {
+        "description": "The finding named by `id` still reproduces \u2014 no payload, since it was true when\nrecorded and is true now.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "op": {
+            "const": "observed",
+            "default": "observed",
+            "title": "Op",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id"
+        ],
+        "title": "ObservedFindingOp",
+        "type": "object"
+      },
       "ObservedFindingView": {
         "properties": {
           "class": {
@@ -6277,6 +7023,26 @@
         "title": "PendingView",
         "type": "object"
       },
+      "Permission": {
+        "description": "One grantable capability; a role expands to a fixed set of them.",
+        "enum": [
+          "fleet:view",
+          "chunk:ingest",
+          "chunk:control",
+          "question:answer",
+          "gate:resolve",
+          "queue:reorder",
+          "runner:pause",
+          "runner:retire",
+          "graph:edit",
+          "user:manage",
+          "transcript:read",
+          "analytics:admin",
+          "config:edit"
+        ],
+        "title": "Permission",
+        "type": "string"
+      },
       "PrView": {
         "description": "A repo's PR reference, open or historical according to its containing field.",
         "properties": {
@@ -6341,6 +7107,37 @@
           "type"
         ],
         "title": "ProviderSummary",
+        "type": "object"
+      },
+      "QuestionAnsweredPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "question_id"
+        ],
+        "title": "QuestionAnsweredPayload",
         "type": "object"
       },
       "QuestionAsked": {
@@ -6432,6 +7229,37 @@
           "asked_at"
         ],
         "title": "QuestionAsked",
+        "type": "object"
+      },
+      "QuestionAskedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "question_id"
+        ],
+        "title": "QuestionAskedPayload",
         "type": "object"
       },
       "QuestionView": {
@@ -6566,6 +7394,12 @@
           "asked_at"
         ],
         "title": "QuestionView",
+        "type": "object"
+      },
+      "QueueChangedPayload": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "QueueChangedPayload",
         "type": "object"
       },
       "QueuePageView": {
@@ -7174,6 +8008,18 @@
         ],
         "title": "ReviewFindingsDeliveryResponse",
         "type": "object"
+      },
+      "Role": {
+        "description": "A hub-local user's coarse capability tier \u2014 superuser > admin > contributor > guest > pending.",
+        "enum": [
+          "pending",
+          "guest",
+          "contributor",
+          "admin",
+          "superuser"
+        ],
+        "title": "Role",
+        "type": "string"
       },
       "RoleAssignmentRequest": {
         "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its ``auth_core.Role``\nvalue.",
@@ -7892,6 +8738,88 @@
         "title": "RunnerCapability",
         "type": "object"
       },
+      "RunnerChangeKind": {
+        "enum": [
+          "registered",
+          "heartbeat",
+          "paused",
+          "resumed",
+          "locally-paused",
+          "locally-resumed",
+          "external-usage",
+          "retired",
+          "reinstated",
+          "token-revoked"
+        ],
+        "type": "string"
+      },
+      "RunnerChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "By"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "kind": {
+            "enum": [
+              "registered",
+              "heartbeat",
+              "paused",
+              "resumed",
+              "locally-paused",
+              "locally-resumed",
+              "external-usage",
+              "retired",
+              "reinstated",
+              "token-revoked"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "kind"
+        ],
+        "title": "RunnerChangedPayload",
+        "type": "object"
+      },
       "RunnerEnrollmentResponse": {
         "description": "A freshly minted (or rotated) bearer token.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
         "properties": {
@@ -8341,6 +9269,17 @@
         "title": "RunnerView",
         "type": "object"
       },
+      "SampleMissReason": {
+        "description": "The closed set of reasons one sampling attempt produced nothing:\n``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a\nmissing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other\nnon-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.",
+        "enum": [
+          "credential_lapsed",
+          "credential_unreadable",
+          "endpoint_unreachable",
+          "response_unparseable"
+        ],
+        "title": "SampleMissReason",
+        "type": "string"
+      },
       "ScopeCreateRequest": {
         "description": "Mint a scope, or no-op onto the existing one of the same slug.",
         "properties": {
@@ -8762,13 +9701,12 @@
           "miss_reason": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/SampleMissReason"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Miss Reason"
+            ]
           },
           "missed_at": {
             "anyOf": [
@@ -9948,8 +10886,7 @@
             "type": "array"
           },
           "role": {
-            "title": "Role",
-            "type": "string"
+            "$ref": "#/components/schemas/Role"
           },
           "user_id": {
             "title": "User Id",
@@ -10265,6 +11202,11 @@
           "fetched_at": {
             "title": "Fetched At",
             "type": "string"
+          },
+          "hub_source": {
+            "default": false,
+            "title": "Hub Source",
+            "type": "boolean"
           },
           "label": {
             "anyOf": [

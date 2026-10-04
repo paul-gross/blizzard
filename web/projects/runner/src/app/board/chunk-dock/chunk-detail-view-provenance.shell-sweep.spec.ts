@@ -32,6 +32,7 @@ const LEASE: runnerApi.LeaseView = {
   state: 'closed',
   closed_at: null,
   closure_reason: null,
+  stale_after_seconds: 3600,
 };
 
 const ESCALATION: runnerApi.EscalationView = {

@@ -11,7 +11,8 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
-from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
+from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 
 pytestmark = pytest.mark.unit
 

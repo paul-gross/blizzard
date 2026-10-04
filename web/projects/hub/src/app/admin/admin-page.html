@@ -12,6 +12,7 @@
     [users]="usersQuery.data() ?? []"
     [currentUserId]="currentUserId()"
     [isSuperuser]="isSuperuser()"
+    [assignableRoles]="assignableRoles()"
     (assignRole)="onAssignRole($event)"
   />
 </fleet-kit-async-state>

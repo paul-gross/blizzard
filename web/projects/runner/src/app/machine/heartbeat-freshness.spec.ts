@@ -6,6 +6,8 @@ import { vi } from 'vitest';
 import { HeartbeatFreshness } from './heartbeat-freshness';
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
+/** The lease's wire-carried reap threshold, as the runner serves it today (1h). */
+const STALE_AFTER_SECONDS = 3600;
 
 async function render(lastHeartbeatAt: string | null, stale = false): Promise<HTMLElement> {
   await TestBed.configureTestingModule({
@@ -14,6 +16,7 @@ async function render(lastHeartbeatAt: string | null, stale = false): Promise<HT
   }).compileComponents();
   const fixture = TestBed.createComponent(HeartbeatFreshness);
   fixture.componentRef.setInput('lastHeartbeatAt', lastHeartbeatAt);
+  fixture.componentRef.setInput('staleAfterSeconds', STALE_AFTER_SECONDS);
   fixture.componentRef.setInput('stale', stale);
   await settle(fixture);
   return fixture.nativeElement as HTMLElement;
@@ -98,6 +101,7 @@ describe('HeartbeatFreshness ticking (issue #178)', () => {
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(HeartbeatFreshness);
+    fixture.componentRef.setInput('staleAfterSeconds', STALE_AFTER_SECONDS);
     fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T12:00:00.000Z');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
@@ -120,6 +124,7 @@ describe('HeartbeatFreshness ticking (issue #178)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(HeartbeatFreshness);
     // Past the sampling interval, so the initial render is already draining.
+    fixture.componentRef.setInput('staleAfterSeconds', STALE_AFTER_SECONDS);
     fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T11:58:00.000Z');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;

@@ -88,6 +88,41 @@ export type ActivityView = {
 };
 
 /**
+ * AddFindingOp
+ *
+ * The candidate minus its identity — a delta, not a state (see
+ * [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))
+ * — the hub mints the `fin_` id, never the run. Optional `ref` names this addition
+ * within its own submission, for a proposal in the same delivery to cite.
+ */
+export type AddFindingOp = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Introduced
+     */
+    introduced: string | null;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Op
+     */
+    op: 'add';
+    /**
+     * Ref
+     */
+    ref: string | null;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
  * AddedFindingView
  */
 export type AddedFindingView = {
@@ -513,7 +548,21 @@ export type AnswerResult = {
  *
  * What a completion's apply produced.
  */
-export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'migrated' | 'done' | 'failure';
+export const ApplyOutcome = {
+    NEXT: 'next',
+    HUB_NODE_TAKEN: 'hub_node_taken',
+    PARKED_AT_GATE: 'parked_at_gate',
+    MIGRATED: 'migrated',
+    DONE: 'done',
+    FAILURE: 'failure'
+} as const;
+
+/**
+ * ApplyOutcome
+ *
+ * What a completion's apply produced.
+ */
+export type ApplyOutcome = typeof ApplyOutcome[keyof typeof ApplyOutcome];
 
 /**
  * ApplyResponse
@@ -535,7 +584,14 @@ export type ApplyResponse = {
  *
  * The union discriminator.
  */
-export type ArtifactKind = 'git_commit' | 'asset';
+export const ArtifactKind = { GIT_COMMIT: 'git_commit', ASSET: 'asset' } as const;
+
+/**
+ * ArtifactKind
+ *
+ * The union discriminator.
+ */
+export type ArtifactKind = typeof ArtifactKind[keyof typeof ArtifactKind];
 
 /**
  * ArtifactView
@@ -570,10 +626,7 @@ export type ArtifactView = {
      * Key
      */
     key: string;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: ArtifactKind;
     /**
      * Name
      */
@@ -744,6 +797,96 @@ export type CheckResult = {
      * Passed
      */
     passed: boolean;
+};
+
+/**
+ * ChoiceTargetKind
+ *
+ * A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.
+ */
+export const ChoiceTargetKind = {
+    NODE: 'node',
+    DONE: 'done',
+    GRAPH: 'graph'
+} as const;
+
+/**
+ * ChoiceTargetKind
+ *
+ * A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.
+ */
+export type ChoiceTargetKind = typeof ChoiceTargetKind[keyof typeof ChoiceTargetKind];
+
+export const ChunkChangeCause = {
+    MINTED: 'minted',
+    PROMOTED: 'promoted',
+    EDITED: 'edited',
+    GROUPED: 'grouped',
+    CLAIMED: 'claimed',
+    NODE_COMPLETED: 'node-completed',
+    MIGRATED: 'migrated',
+    DECISION_SUBMITTED: 'decision-submitted',
+    DECISION_RESOLVED: 'decision-resolved',
+    QUESTION_ASKED: 'question-asked',
+    QUESTION_ANSWERED: 'question-answered',
+    ESCALATED: 'escalated',
+    REQUEUED: 'requeued',
+    RESTARTED: 'restarted',
+    DETACHED: 'detached',
+    PAUSED: 'paused',
+    RESUMED: 'resumed',
+    STOPPED: 'stopped',
+    COMPLETED: 'completed',
+    HUB_ADVANCED: 'hub-advanced',
+    DELETED: 'deleted'
+} as const;
+
+export type ChunkChangeCause = typeof ChunkChangeCause[keyof typeof ChunkChangeCause];
+
+/**
+ * ChunkChangedPayload
+ */
+export type ChunkChangedPayload = {
+    /**
+     * By
+     */
+    by?: string | null;
+    /**
+     * Cause
+     */
+    cause?: 'minted' | 'promoted' | 'edited' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Node
+     */
+    node?: string | null;
+    /**
+     * Prev Node
+     */
+    prev_node?: string | null;
+    /**
+     * Prev Status
+     */
+    prev_status?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+    /**
+     * Status
+     */
+    status: string;
 };
 
 /**
@@ -961,6 +1104,10 @@ export type ChunkDetail = {
      * Closed Prs
      */
     closed_prs?: Array<PrView>;
+    /**
+     * Completable
+     */
+    completable?: boolean;
     cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
@@ -970,6 +1117,10 @@ export type ChunkDetail = {
      * Current Node Name
      */
     current_node_name?: string | null;
+    /**
+     * Current Node Terminal
+     */
+    current_node_terminal?: boolean;
     decision?: DecisionView | null;
     /**
      * Default Effort
@@ -983,6 +1134,10 @@ export type ChunkDetail = {
      * Default Model
      */
     default_model?: Array<string>;
+    /**
+     * Deletable
+     */
+    deletable?: boolean;
     escalation?: ChunkEscalationView | null;
     /**
      * Graph Created At
@@ -1022,6 +1177,10 @@ export type ChunkDetail = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    /**
+     * Pausable
+     */
+    pausable?: boolean;
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
@@ -1034,6 +1193,10 @@ export type ChunkDetail = {
     restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
+    /**
+     * Terminal
+     */
+    terminal?: boolean;
     /**
      * Usage
      */
@@ -1272,7 +1435,24 @@ export type ChunkRestartRequest = {
  *
  * The derived chunk statuses. Never stored — always a query result.
  */
-export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
+export const ChunkStatus = {
+    NOT_READY: 'not_ready',
+    READY: 'ready',
+    RUNNING: 'running',
+    DELIVERING: 'delivering',
+    WAITING_ON_HUMAN: 'waiting_on_human',
+    NEEDS_HUMAN: 'needs_human',
+    PAUSED: 'paused',
+    STOPPED: 'stopped',
+    DONE: 'done'
+} as const;
+
+/**
+ * ChunkStatus
+ *
+ * The derived chunk statuses. Never stored — always a query result.
+ */
+export type ChunkStatus = typeof ChunkStatus[keyof typeof ChunkStatus];
 
 /**
  * ChunkStatusView
@@ -1453,6 +1633,10 @@ export type ChunkUsageView = {
      * Cache Read Tokens
      */
     cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial?: boolean;
     /**
      * Cost Usd
      */
@@ -1694,6 +1878,24 @@ export type DecisionChoiceModel = {
 };
 
 /**
+ * DecisionOpenedPayload
+ */
+export type DecisionOpenedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Key
+     */
+    key?: string | null;
+};
+
+/**
  * DecisionResolutionRequest
  *
  * A person's choice for an open decision — first-write-wins CAS. ``struck`` names
@@ -1736,6 +1938,24 @@ export type DecisionResolutionResponse = {
      * Resolved By
      */
     resolved_by: string;
+};
+
+/**
+ * DecisionResolvedPayload
+ */
+export type DecisionResolvedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Key
+     */
+    key?: string | null;
 };
 
 /**
@@ -2228,6 +2448,49 @@ export type EnvelopeChoice = {
 };
 
 /**
+ * EscalationCause
+ */
+export const EscalationCause = {
+    RETRIES_EXHAUSTED: 'retries-exhausted',
+    OWNER_UNRESOLVABLE: 'owner-unresolvable',
+    NO_ACCEPTABLE_HARNESS: 'no-acceptable-harness',
+    SPEND_CAP: 'spend-cap',
+    BOUNCE_CAP: 'bounce-cap',
+    MIGRATION_TARGET_UNRESOLVABLE: 'migration-target-unresolvable'
+} as const;
+
+/**
+ * EscalationCause
+ */
+export type EscalationCause = typeof EscalationCause[keyof typeof EscalationCause];
+
+/**
+ * EventLoggedPayload
+ */
+export type EventLoggedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string | null;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string | null;
+    /**
+     * Severity
+     */
+    severity: 'critical' | 'warning' | 'info';
+};
+
+/**
  * EventView
  *
  * One operational event on the wire — an ``event_log`` row or a projected open
@@ -2297,7 +2560,14 @@ export type EventsResponse = {
  *
  * Where a node's step runs.
  */
-export type Executor = 'runner' | 'hub';
+export const Executor = { RUNNER: 'runner', HUB: 'hub' } as const;
+
+/**
+ * Executor
+ *
+ * Where a node's step runs.
+ */
+export type Executor = typeof Executor[keyof typeof Executor];
 
 /**
  * ExternalSubscriptionUsageWindowView
@@ -2346,6 +2616,65 @@ export type FieldChangeView = {
 };
 
 /**
+ * FindingCandidate
+ *
+ * A run's survey artifact entry — no id, since identity is minted at delivery (see
+ * [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).
+ * `ref` is stable only within its own submission, so a later node in the same run can
+ * name it.
+ */
+export type FindingCandidate = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Introduced
+     */
+    introduced: string | null;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Ref
+     */
+    ref: string | null;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
+ * FindingDelta
+ *
+ * A delivered finding list — the scope, the revision read per repository, and the
+ * routine's measurement, properties of the artifact rather than of any one finding (see
+ * [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).
+ */
+export type FindingDelta = {
+    /**
+     * Findings
+     */
+    findings: Array<AddFindingOp | ObservedFindingOp | GoneFindingOp>;
+    /**
+     * Measurement
+     */
+    measurement: string | null;
+    /**
+     * Revisions
+     */
+    revisions: {
+        [key: string]: string;
+    };
+    /**
+     * Scope
+     */
+    scope: string;
+};
+
+/**
  * FindingDetailView
  *
  * `GET /api/findings/{finding_id}`'s own response model — adds the
@@ -2357,6 +2686,7 @@ export type FindingDetailView = {
      * Class
      */
     class: string;
+    exit?: FindingExit | null;
     /**
      * Facts
      */
@@ -2409,23 +2739,30 @@ export type FindingDetailView = {
      * Scope Slug
      */
     scope_slug: string;
-    /**
-     * Severity
-     */
-    severity?: string | null;
-    /**
-     * Source
-     */
-    source?: string;
-    /**
-     * State
-     */
-    state: string;
+    severity?: FindingSeverity | null;
+    source?: FindingSource;
+    state: FindingState;
     /**
      * Summary
      */
     summary: string;
 };
+
+/**
+ * FindingExit
+ *
+ * How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``
+ * when a person judged the finding rather than the code.
+ */
+export const FindingExit = { OUTFLOW: 'outflow', WITHDRAWN: 'withdrawn' } as const;
+
+/**
+ * FindingExit
+ *
+ * How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``
+ * when a person judged the finding rather than the code.
+ */
+export type FindingExit = typeof FindingExit[keyof typeof FindingExit];
 
 /**
  * FindingExitRequest
@@ -2446,6 +2783,31 @@ export type FindingExitRequest = {
 };
 
 /**
+ * FindingFactKind
+ *
+ * One append-only transformation a finding's fact chain records.
+ */
+export const FindingFactKind = {
+    ADD: 'add',
+    OBSERVED: 'observed',
+    GONE: 'gone',
+    DELIVERED: 'delivered',
+    RESOLVED: 'resolved',
+    GONE_CONFIRMED: 'gone-confirmed',
+    WONT_FIX: 'wont-fix',
+    NOT_A_FINDING: 'not-a-finding',
+    SUPERSEDED: 'superseded',
+    REOPENED: 'reopened'
+} as const;
+
+/**
+ * FindingFactKind
+ *
+ * One append-only transformation a finding's fact chain records.
+ */
+export type FindingFactKind = typeof FindingFactKind[keyof typeof FindingFactKind];
+
+/**
  * FindingFactView
  *
  * One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire.
@@ -2455,10 +2817,7 @@ export type FindingFactView = {
      * Actor
      */
     actor?: string | null;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: FindingFactKind;
     /**
      * Note
      */
@@ -2476,6 +2835,59 @@ export type FindingFactView = {
      */
     superseded_by?: string | null;
 };
+
+/**
+ * FindingSeverity
+ *
+ * A review-sourced finding's own severity.
+ */
+export const FindingSeverity = { BLOCKING: 'blocking', SHOULD_FIX: 'should-fix' } as const;
+
+/**
+ * FindingSeverity
+ *
+ * A review-sourced finding's own severity.
+ */
+export type FindingSeverity = typeof FindingSeverity[keyof typeof FindingSeverity];
+
+/**
+ * FindingSource
+ *
+ * A finding's home — the routine run or the chunk review that raised it.
+ */
+export const FindingSource = { ROUTINE: 'routine', REVIEW: 'review' } as const;
+
+/**
+ * FindingSource
+ *
+ * A finding's home — the routine run or the chunk review that raised it.
+ */
+export type FindingSource = typeof FindingSource[keyof typeof FindingSource];
+
+/**
+ * FindingState
+ *
+ * A finding's derived liveness — ``live`` for a live-making newest fact, else the newest
+ * fact's own kind.
+ */
+export const FindingState = {
+    LIVE: 'live',
+    GONE: 'gone',
+    DELIVERED: 'delivered',
+    RESOLVED: 'resolved',
+    GONE_CONFIRMED: 'gone-confirmed',
+    WONT_FIX: 'wont-fix',
+    NOT_A_FINDING: 'not-a-finding',
+    SUPERSEDED: 'superseded'
+} as const;
+
+/**
+ * FindingState
+ *
+ * A finding's derived liveness — ``live`` for a live-making newest fact, else the newest
+ * fact's own kind.
+ */
+export type FindingState = typeof FindingState[keyof typeof FindingState];
 
 /**
  * FindingSupersedeRequest
@@ -2498,6 +2910,33 @@ export type FindingSupersedeRequest = {
 };
 
 /**
+ * FindingSurvey
+ *
+ * A run's survey artifact — the scope, the revision read per repository, the
+ * routine's measurement, and every `FindingCandidate` the run saw.
+ */
+export type FindingSurvey = {
+    /**
+     * Candidates
+     */
+    candidates: Array<FindingCandidate>;
+    /**
+     * Measurement
+     */
+    measurement: string | null;
+    /**
+     * Revisions
+     */
+    revisions: {
+        [key: string]: string;
+    };
+    /**
+     * Scope
+     */
+    scope: string;
+};
+
+/**
  * FindingView
  *
  * A finding. `state` folds the newest fact's kind to `"live"` for
@@ -2510,6 +2949,7 @@ export type FindingView = {
      * Class
      */
     class: string;
+    exit?: FindingExit | null;
     /**
      * Finding Id
      */
@@ -2558,18 +2998,9 @@ export type FindingView = {
      * Scope Slug
      */
     scope_slug: string;
-    /**
-     * Severity
-     */
-    severity?: string | null;
-    /**
-     * Source
-     */
-    source?: string;
-    /**
-     * State
-     */
-    state: string;
+    severity?: FindingSeverity | null;
+    source?: FindingSource;
+    state: FindingState;
     /**
      * Summary
      */
@@ -2780,7 +3211,15 @@ export type GardenProposalAcceptResponse = {
  * How a garden proposal closed — recorded on the row itself when it closes, never
  * derived from anything else.
  */
-export type GardenProposalClosureKind = 'passed' | 'accepted';
+export const GardenProposalClosureKind = { PASSED: 'passed', ACCEPTED: 'accepted' } as const;
+
+/**
+ * GardenProposalClosureKind
+ *
+ * How a garden proposal closed — recorded on the row itself when it closes, never
+ * derived from anything else.
+ */
+export type GardenProposalClosureKind = typeof GardenProposalClosureKind[keyof typeof GardenProposalClosureKind];
 
 /**
  * GardenProposalClosureView
@@ -2950,7 +3389,15 @@ export type GardenProposalFindingsRequest = {
  * Whether an accepted proposal minted a work item — recorded positively rather than
  * inferred from an absent link, so a declined mint reads as a decision, not a gap.
  */
-export type GardenProposalItemOutcome = 'minted' | 'declined';
+export const GardenProposalItemOutcome = { MINTED: 'minted', DECLINED: 'declined' } as const;
+
+/**
+ * GardenProposalItemOutcome
+ *
+ * Whether an accepted proposal minted a work item — recorded positively rather than
+ * inferred from an absent link, so a declined mint reads as a decision, not a gap.
+ */
+export type GardenProposalItemOutcome = typeof GardenProposalItemOutcome[keyof typeof GardenProposalItemOutcome];
 
 /**
  * GardenProposalOrigin
@@ -2958,7 +3405,15 @@ export type GardenProposalItemOutcome = 'minted' | 'declined';
  * Who authored a garden proposal — a mint-time fact, stored on
  * the row itself and never inferred from a null `routine_name`.
  */
-export type GardenProposalOrigin = 'routine-run' | 'operator';
+export const GardenProposalOrigin = { ROUTINE_RUN: 'routine-run', OPERATOR: 'operator' } as const;
+
+/**
+ * GardenProposalOrigin
+ *
+ * Who authored a garden proposal — a mint-time fact, stored on
+ * the row itself and never inferred from a null `routine_name`.
+ */
+export type GardenProposalOrigin = typeof GardenProposalOrigin[keyof typeof GardenProposalOrigin];
 
 /**
  * GardenProposalPassRequest
@@ -3061,6 +3516,29 @@ export type GardenSweepsView = {
 };
 
 /**
+ * GoneFindingOp
+ *
+ * The run looked and could not find the finding named by `id`. Ordinarily this does
+ * not close the finding — it flags it for a person — except against a `delivered`
+ * finding, which it settles to `resolved` outright: a delivery
+ * already carries a person's own claim that the ground moved.
+ */
+export type GoneFindingOp = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Note
+     */
+    note: string;
+    /**
+     * Op
+     */
+    op: 'gone';
+};
+
+/**
  * GoneFindingView
  */
 export type GoneFindingView = {
@@ -3134,6 +3612,11 @@ export type GraphEdgeView = {
      * Prompt Addendum
      */
     prompt_addendum?: string | null;
+    /**
+     * Target Graph
+     */
+    target_graph?: string | null;
+    target_kind?: ChoiceTargetKind;
     /**
      * To Node Name
      */
@@ -3457,6 +3940,29 @@ export type HubAdvanceResponse = {
 };
 
 /**
+ * HubEventType
+ *
+ * Every hub SSE frame kind — the ``event:`` name a frame carries.
+ */
+export const HubEventType = {
+    CHUNK_CHANGED: 'chunk-changed',
+    QUESTION_ASKED: 'question-asked',
+    QUESTION_ANSWERED: 'question-answered',
+    DECISION_OPENED: 'decision-opened',
+    DECISION_RESOLVED: 'decision-resolved',
+    QUEUE_CHANGED: 'queue-changed',
+    RUNNER_CHANGED: 'runner-changed',
+    EVENT_LOGGED: 'event-logged'
+} as const;
+
+/**
+ * HubEventType
+ *
+ * Every hub SSE frame kind — the ``event:`` name a frame carries.
+ */
+export type HubEventType = typeof HubEventType[keyof typeof HubEventType];
+
+/**
  * HubMarkerRequest
  *
  * The mid-run marker callback's body (#65).
@@ -3491,6 +3997,43 @@ export type HubMarkerResponse = {
      */
     recorded: boolean;
 };
+
+/**
+ * IdPrefix
+ *
+ * One tag per hub entity kind; a member formats as its own value.
+ */
+export const IdPrefix = {
+    CH: 'ch',
+    GR: 'gr',
+    ND: 'nd',
+    CHO: 'cho',
+    ART: 'art',
+    TR: 'tr',
+    DEC: 'dec',
+    QN: 'qn',
+    LEASE: 'lease',
+    TKO: 'tko',
+    SELF: 'self',
+    HES: 'hes',
+    MG: 'mg',
+    USR: 'usr',
+    SEG: 'seg',
+    WI: 'wi',
+    WIP: 'wip',
+    RTN: 'rtn',
+    FIN: 'fin',
+    FINS: 'fins',
+    GPROP: 'gprop',
+    DEP: 'dep'
+} as const;
+
+/**
+ * IdPrefix
+ *
+ * One tag per hub entity kind; a member formats as its own value.
+ */
+export type IdPrefix = typeof IdPrefix[keyof typeof IdPrefix];
 
 /**
  * IntendedMigrationPatch
@@ -3540,7 +4083,14 @@ export type IntendedMigrationView = {
  *
  * Who issues a node's exit judgement — the structural gate marker.
  */
-export type JudgedBy = 'worker' | 'human';
+export const JudgedBy = { WORKER: 'worker', HUMAN: 'human' } as const;
+
+/**
+ * JudgedBy
+ *
+ * Who issues a node's exit judgement — the structural gate marker.
+ */
+export type JudgedBy = typeof JudgedBy[keyof typeof JudgedBy];
 
 /**
  * LandedRepoView
@@ -3600,17 +4150,18 @@ export type LeaseTranscriptView = {
  */
 export type MeResponse = {
     /**
+     * Assignable Roles
+     */
+    assignable_roles?: Array<Role>;
+    /**
      * Display Name
      */
     display_name: string;
     /**
      * Permissions
      */
-    permissions: Array<string>;
-    /**
-     * Role
-     */
-    role: string;
+    permissions: Array<Permission>;
+    role: Role;
     /**
      * User Id
      */
@@ -3647,7 +4198,42 @@ export type MeasurementReadingView = {
  * ``AUTO`` fires only when the transition's own destination node name also exists on
  * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
  */
-export type MigrationMode = 'auto' | 'forced';
+export const MigrationMode = { AUTO: 'auto', FORCED: 'forced' } as const;
+
+/**
+ * MigrationMode
+ *
+ * How a chunk's intended migration fires at its next transition.
+ *
+ * ``AUTO`` fires only when the transition's own destination node name also exists on
+ * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
+ */
+export type MigrationMode = typeof MigrationMode[keyof typeof MigrationMode];
+
+/**
+ * MigrationSource
+ *
+ * What moved a chunk onto another graph — a migration's attribution.
+ *
+ * Four paths write one, and without a discriminator their facts are byte-identical
+ * in history.
+ */
+export const MigrationSource = {
+    AUTHORED_EDGE: 'authored-edge',
+    INTENT: 'intent',
+    FOLLOW_LATEST: 'follow-latest',
+    RESTART: 'restart'
+} as const;
+
+/**
+ * MigrationSource
+ *
+ * What moved a chunk onto another graph — a migration's attribution.
+ *
+ * Four paths write one, and without a discriminator their facts are byte-identical
+ * in history.
+ */
+export type MigrationSource = typeof MigrationSource[keyof typeof MigrationSource];
 
 /**
  * MigrationView
@@ -3699,10 +4285,7 @@ export type MigrationView = {
      * Recorded At
      */
     recorded_at: string;
-    /**
-     * Source
-     */
-    source?: string | null;
+    source?: MigrationSource | null;
     /**
      * To Graph Id
      */
@@ -3833,6 +4416,23 @@ export type NodeEnvelope = {
 };
 
 /**
+ * ObservedFindingOp
+ *
+ * The finding named by `id` still reproduces — no payload, since it was true when
+ * recorded and is true now.
+ */
+export type ObservedFindingOp = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Op
+     */
+    op: 'observed';
+};
+
+/**
  * ObservedFindingView
  */
 export type ObservedFindingView = {
@@ -3902,6 +4502,34 @@ export type PendingView = {
 };
 
 /**
+ * Permission
+ *
+ * One grantable capability; a role expands to a fixed set of them.
+ */
+export const Permission = {
+    FLEET_VIEW: 'fleet:view',
+    CHUNK_INGEST: 'chunk:ingest',
+    CHUNK_CONTROL: 'chunk:control',
+    QUESTION_ANSWER: 'question:answer',
+    GATE_RESOLVE: 'gate:resolve',
+    QUEUE_REORDER: 'queue:reorder',
+    RUNNER_PAUSE: 'runner:pause',
+    RUNNER_RETIRE: 'runner:retire',
+    GRAPH_EDIT: 'graph:edit',
+    USER_MANAGE: 'user:manage',
+    TRANSCRIPT_READ: 'transcript:read',
+    ANALYTICS_ADMIN: 'analytics:admin',
+    CONFIG_EDIT: 'config:edit'
+} as const;
+
+/**
+ * Permission
+ *
+ * One grantable capability; a role expands to a fixed set of them.
+ */
+export type Permission = typeof Permission[keyof typeof Permission];
+
+/**
  * PrView
  *
  * A repo's PR reference, open or historical according to its containing field.
@@ -3952,6 +4580,24 @@ export type ProviderSummary = {
      * Type
      */
     type: string;
+};
+
+/**
+ * QuestionAnsweredPayload
+ */
+export type QuestionAnsweredPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Question Id
+     */
+    question_id: string;
 };
 
 /**
@@ -4007,6 +4653,24 @@ export type QuestionAsked = {
      * Session Id
      */
     session_id?: string | null;
+};
+
+/**
+ * QuestionAskedPayload
+ */
+export type QuestionAskedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Question Id
+     */
+    question_id: string;
 };
 
 /**
@@ -4082,6 +4746,13 @@ export type QuestionView = {
      * Session Id
      */
     session_id?: string | null;
+};
+
+/**
+ * QueueChangedPayload
+ */
+export type QueueChangedPayload = {
+    [key: string]: never;
 };
 
 /**
@@ -4280,7 +4951,16 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  */
-export type RecordKind = 'work_source' | 'secret' | 'repository';
+export const RecordKind = {
+    WORK_SOURCE: 'work_source',
+    SECRET: 'secret',
+    REPOSITORY: 'repository'
+} as const;
+
+/**
+ * RecordKind
+ */
+export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 
 /**
  * RecordRefView
@@ -4495,6 +5175,26 @@ export type ReviewFindingsDeliveryResponse = {
      */
     outcome: 'recorded' | 'invalid';
 };
+
+/**
+ * Role
+ *
+ * A hub-local user's coarse capability tier — superuser > admin > contributor > guest > pending.
+ */
+export const Role = {
+    PENDING: 'pending',
+    GUEST: 'guest',
+    CONTRIBUTOR: 'contributor',
+    ADMIN: 'admin',
+    SUPERUSER: 'superuser'
+} as const;
+
+/**
+ * Role
+ *
+ * A hub-local user's coarse capability tier — superuser > admin > contributor > guest > pending.
+ */
+export type Role = typeof Role[keyof typeof Role];
 
 /**
  * RoleAssignmentRequest
@@ -4749,7 +5449,18 @@ export type RoutineLifecycleRequest = {
  *
  * Select open, closed, or all of a routine's garden proposals.
  */
-export type RoutineProposalState = 'open' | 'closed' | 'all';
+export const RoutineProposalState = {
+    OPEN: 'open',
+    CLOSED: 'closed',
+    ALL: 'all'
+} as const;
+
+/**
+ * RoutineProposalState
+ *
+ * Select open, closed, or all of a routine's garden proposals.
+ */
+export type RoutineProposalState = typeof RoutineProposalState[keyof typeof RoutineProposalState];
 
 /**
  * RoutineRunRequest
@@ -4985,6 +5696,47 @@ export type RunnerCapability = {
      * Version
      */
     version?: string | null;
+};
+
+export const RunnerChangeKind = {
+    REGISTERED: 'registered',
+    HEARTBEAT: 'heartbeat',
+    PAUSED: 'paused',
+    RESUMED: 'resumed',
+    LOCALLY_PAUSED: 'locally-paused',
+    LOCALLY_RESUMED: 'locally-resumed',
+    EXTERNAL_USAGE: 'external-usage',
+    RETIRED: 'retired',
+    REINSTATED: 'reinstated',
+    TOKEN_REVOKED: 'token-revoked'
+} as const;
+
+export type RunnerChangeKind = typeof RunnerChangeKind[keyof typeof RunnerChangeKind];
+
+/**
+ * RunnerChangedPayload
+ */
+export type RunnerChangedPayload = {
+    /**
+     * By
+     */
+    by?: string | null;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Kind
+     */
+    kind: 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed' | 'external-usage' | 'retired' | 'reinstated' | 'token-revoked';
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
 };
 
 /**
@@ -5308,6 +6060,31 @@ export type RunnerView = {
 };
 
 /**
+ * SampleMissReason
+ *
+ * The closed set of reasons one sampling attempt produced nothing:
+ * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
+ * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
+ * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ */
+export const SampleMissReason = {
+    CREDENTIAL_LAPSED: 'credential_lapsed',
+    CREDENTIAL_UNREADABLE: 'credential_unreadable',
+    ENDPOINT_UNREACHABLE: 'endpoint_unreachable',
+    RESPONSE_UNPARSEABLE: 'response_unparseable'
+} as const;
+
+/**
+ * SampleMissReason
+ *
+ * The closed set of reasons one sampling attempt produced nothing:
+ * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
+ * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
+ * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ */
+export type SampleMissReason = typeof SampleMissReason[keyof typeof SampleMissReason];
+
+/**
  * ScopeCreateRequest
  *
  * Mint a scope, or no-op onto the existing one of the same slug.
@@ -5460,7 +6237,14 @@ export type SecretView = {
  *
  * Per-node session freshness.
  */
-export type SessionMode = 'resume' | 'fresh';
+export const SessionMode = { RESUME: 'resume', FRESH: 'fresh' } as const;
+
+/**
+ * SessionMode
+ *
+ * Per-node session freshness.
+ */
+export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
 
 /**
  * SidechainSegmentView
@@ -5572,10 +6356,7 @@ export type SubscriptionUsageView = {
      * Condition
      */
     condition?: string | null;
-    /**
-     * Miss Reason
-     */
-    miss_reason?: string | null;
+    miss_reason?: SampleMissReason | null;
     /**
      * Missed At
      */
@@ -6309,10 +7090,7 @@ export type UserView = {
      * Identities
      */
     identities?: Array<UserIdentityView>;
-    /**
-     * Role
-     */
-    role: string;
+    role: Role;
     /**
      * User Id
      */
@@ -6391,7 +7169,15 @@ export type WorkItemAuthorView = {
  * How a hub-owned work item closed — recorded on the row itself when
  * it closes, never derived from anything else.
  */
-export type WorkItemClosure = 'delivered' | 'withdrawn';
+export const WorkItemClosure = { DELIVERED: 'delivered', WITHDRAWN: 'withdrawn' } as const;
+
+/**
+ * WorkItemClosure
+ *
+ * How a hub-owned work item closed — recorded on the row itself when
+ * it closes, never derived from anything else.
+ */
+export type WorkItemClosure = typeof WorkItemClosure[keyof typeof WorkItemClosure];
 
 /**
  * WorkItemCreateRequest
@@ -6491,6 +7277,10 @@ export type WorkItemEntry = {
      */
     fetched_at: string;
     /**
+     * Hub Source
+     */
+    hub_source?: boolean;
+    /**
      * Label
      */
     label?: string | null;
@@ -6537,7 +7327,18 @@ export type WorkItemPatchRequest = {
  *
  * The three stated-priority values a create or edit may set.
  */
-export type WorkItemPriority = 'low' | 'normal' | 'high';
+export const WorkItemPriority = {
+    LOW: 'low',
+    NORMAL: 'normal',
+    HIGH: 'high'
+} as const;
+
+/**
+ * WorkItemPriority
+ *
+ * The three stated-priority values a create or edit may set.
+ */
+export type WorkItemPriority = typeof WorkItemPriority[keyof typeof WorkItemPriority];
 
 /**
  * WorkItemView
@@ -6801,6 +7602,13 @@ export type WorkSourcesListView = {
      * Sources
      */
     sources?: Array<WorkSourceSummary>;
+};
+
+/**
+ * QueueChangedPayload
+ */
+export type QueueChangedPayloadWritable = {
+    [key: string]: never;
 };
 
 /**

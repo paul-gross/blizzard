@@ -507,7 +507,7 @@ describe('ChunkAwaitingHuman', () => {
     // is the one place this trail asserts something false rather than merely stale: it
     // promises a return trip nothing is left to complete.
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('detail', { ...ANSWERED_UNDELIVERED_DETAIL, status: 'stopped' });
+    fixture.componentRef.setInput('detail', { ...ANSWERED_UNDELIVERED_DETAIL, status: 'stopped', terminal: true });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -532,6 +532,7 @@ describe('ChunkAwaitingHuman', () => {
     fixture.componentRef.setInput('detail', {
       ...ANSWERED_UNDELIVERED_DETAIL,
       status: 'done',
+      terminal: true,
       questions: [answered({ question_id: 'qn_01', delivered: true, delivered_at: '2026-07-13T00:01:05Z' })],
     });
     await fixture.whenStable();

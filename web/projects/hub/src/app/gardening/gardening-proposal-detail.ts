@@ -143,6 +143,7 @@ export class GardeningProposalDetail {
       locus: f.locus,
       summary: f.summary,
       state: f.state,
+      exit: f.exit ?? null,
       workItem,
       pending: this.pendingTriage().some((vars) => vars.findingIds.includes(f.finding_id)),
     }));
@@ -171,7 +172,7 @@ export class GardeningProposalDetail {
   private readonly pendingNotAFinding = injectPendingMutationVariables<FindingExitVars>(notAFindingFindingsMutationKey);
 
   /** Whether the current identity may pass or accept (`chunk:control` — the same
-   * permission `garden_proposals.py`'s two closing routes require server-side);
+   * permission the hub's two closing routes require server-side);
    * `null`/pending resolves to `false`. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
@@ -213,8 +214,7 @@ export class GardeningProposalDetail {
 
   /**
    * Apply one inline exit verb to one evidence row. The note is generated rather than
-   * asked for: every exit route rejects a blank one (`hub/api/findings.py`'s
-   * `_exit_verb`, 422), and the point of these buttons is a decision made in one click
+   * asked for: every exit route rejects a blank one (422), and the point of these buttons is a decision made in one click
    * — so the UI writes what it actually knows, which is the verb and the docket the
    * operator was reading when they chose it. The mutations invalidate the evidence
    * table's own cache (`finding.mutations.ts`), so the row's state re-renders itself

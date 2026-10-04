@@ -215,6 +215,7 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
     # The fetch went to the right binding too — not `alpha`'s.
     items = hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
     assert items[0]["label"] == "beta#7"
+    assert items[0]["hub_source"] is False
     assert items[0]["error"] is None
     assert beta.fetched == ["7"]
     assert alpha.fetched == []

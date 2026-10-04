@@ -33,6 +33,8 @@ class LeaseView(BaseModel):
     state: LeaseState
     closed_at: str | None
     closure_reason: str | None
+    #: How long a running lease may go without a heartbeat before it reads ``stale``.
+    stale_after_seconds: int
 
 
 class LeaseListResponse(BaseModel):

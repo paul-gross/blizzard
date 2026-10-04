@@ -17,6 +17,8 @@ const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -28,6 +30,8 @@ const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -40,6 +44,8 @@ const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
   status: 'needs_human',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 3,
   work_refs: [],
@@ -204,7 +210,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('keeps Complete enabled for a stopped chunk — unlike Stop, Complete has no un-complete verb', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'stopped' });
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'stopped', pausable: false });
     fixture.componentRef.setInput('renderedStatus', 'stopped');
     fixture.componentRef.setInput('canControl', true);
     const el = fixture.nativeElement as HTMLElement;
@@ -216,7 +222,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('disables Complete for an already-done chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'done' });
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'done', pausable: false, completable: false });
     fixture.componentRef.setInput('renderedStatus', 'done');
     fixture.componentRef.setInput('canControl', true);
     const el = fixture.nativeElement as HTMLElement;
@@ -301,7 +307,7 @@ describe('ChunkDetailHeader overflow menu', () => {
   it('enables Delete for an unacquired chunk (not_ready, ready) with chunk:control', async () => {
     for (const status of ['not_ready', 'ready'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
+      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status, deletable: true });
       fixture.componentRef.setInput('renderedStatus', status);
       fixture.componentRef.setInput('canControl', true);
       const el = fixture.nativeElement as HTMLElement;
@@ -336,7 +342,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('disables Delete while the delete mutation is pending, re-enabling once it settles', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready', deletable: true });
     fixture.componentRef.setInput('renderedStatus', 'ready');
     fixture.componentRef.setInput('canControl', true);
     fixture.componentRef.setInput('deletePending', true);
@@ -354,7 +360,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('emits delete with the chunk id once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready', deletable: true });
     fixture.componentRef.setInput('renderedStatus', 'ready');
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
@@ -372,7 +378,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('emits nothing when the operator declines the delete confirm', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready', deletable: true });
     fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('canControl', true);
     let emitted = false;
@@ -390,7 +396,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
   it('withdraws the hub items with no undo, in the delete confirm copy', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready', deletable: true });
     fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('canControl', true);
     const el = fixture.nativeElement as HTMLElement;
@@ -412,6 +418,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
       status: 'ready',
+      deletable: true,
       neighborhood: {
         prerequisites: [],
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
@@ -433,6 +440,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
       status: 'ready',
+      deletable: true,
       neighborhood: {
         prerequisites: [],
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'done', satisfied: true }],

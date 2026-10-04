@@ -13,12 +13,6 @@ const PRIORITY_TONE: Record<string, Tone> = {
   low: 'idle',
 };
 
-/** The hub source's own reserved name (`RESERVED_HUB_SOURCE_NAME`, `hub/config.py`) —
- * every other `source` a pointer can carry is an operator-configured forge. Unlike
- * `author`/`web_url`, `source` is a required wire field, present on every entry
- * regardless of fetch outcome or the pointer's holding chunk's own status. */
-const HUB_SOURCE_NAME = 'hub';
-
 /**
  * A chunk's resolved work items as a one-line-per-issue accordion — the
  * ticket name first (the thing worth reading, carrying the visual weight)
@@ -27,8 +21,8 @@ const HUB_SOURCE_NAME = 'hub';
  * expanding it reveals the item's own idiom — a forge
  * pointer's title/body/messages, or a hub pointer's markdown body,
  * authorship line, and stated priority, discriminated by
- * {@link WorkItemEntry.source source} — the one field every entry carries
- * regardless of fetch outcome.
+ * {@link WorkItemEntry.hub_source hub_source} — the wire's own classification,
+ * carried on every entry regardless of fetch outcome.
  *
  * Daemon-agnostic ({@link ChunkTimeline}/{@link ChunkArtifactsPanel}'s own
  * shape): inputs off the shared `WorkItemEntry` wire type alone, no
@@ -94,14 +88,15 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in, discriminated by the required `source` field.
+  /** Which idiom an entry renders in, discriminated by the wire's `hub_source` flag —
+   * every other source a pointer can carry is an operator-configured forge.
    * Pinned by `chunk-issue-list.spec.ts`'s "a successfully fetched hub entry on a terminal
    * chunk still renders the hub idiom — author alone is enough", "an errored hub entry
    * still routes in-app — web_url discriminates the idiom, never author alone" and "an
    * errored hub entry with no live chunk holder still renders the hub idiom — source
    * discriminates, not author or web_url". */
   protected isHubEntry(item: WorkItemEntry): boolean {
-    return item.source === HUB_SOURCE_NAME;
+    return item.hub_source === true;
   }
 
   /** A stated priority's badge tone, or `null` for one this list does not recognize

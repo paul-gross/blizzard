@@ -16,6 +16,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.history import _rows
 from blizzard.runner.app import create_app
@@ -139,7 +140,7 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
                 landed_node_id="nd_build",
                 landed_node_name="build",
                 choice_name="route",
-                source="authored-edge",
+                source=MigrationSource.AUTHORED_EDGE,
                 epoch=1,
                 recorded_at="2026-07-21T09:00:00+00:00",
             )

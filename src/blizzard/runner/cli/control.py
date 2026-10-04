@@ -11,10 +11,11 @@ import click
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
-from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMissReason
+from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
 
 # The operator's TCP door onto the local API — the override for when the socket is not
 # the right address. `BZ_*` is the operator's config namespace, distinct from the worker's

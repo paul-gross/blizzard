@@ -150,3 +150,103 @@ def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) ->
     assert detail["graph_name"] == "default-delivery"
     assert detail["graph_name"] == summary["name"]
     assert detail["graph_created_at"] == summary["created_at"]
+
+
+def _actions(detail: dict[str, object]) -> dict[str, object]:
+    keys = ("pausable", "completable", "deletable", "terminal", "current_node_terminal")
+    return {k: detail[k] for k in keys}
+
+
+def test_detail_classifies_an_unclaimed_chunk_as_deletable_and_live(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    assert _actions(detail) == {
+        "pausable": True,
+        "completable": True,
+        "deletable": True,
+        "terminal": False,
+        "current_node_terminal": False,
+    }
+
+
+def test_detail_classifies_a_claimed_chunk_as_no_longer_deletable(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
+    )
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    assert detail["deletable"] is False
+    assert (detail["pausable"], detail["completable"], detail["terminal"]) == (True, True, False)
+
+
+def test_detail_classifies_an_operator_completed_chunk_as_terminal(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/complete", json={"by": "operator"})
+    assert resp.status_code < 300, resp.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    assert detail["status"] == "done"
+    assert _actions(detail) == {
+        "pausable": False,
+        "completable": False,
+        "deletable": False,
+        "terminal": True,
+        "current_node_terminal": False,
+    }
+
+
+_ONE_STEP_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: done
+        fail:
+          description: Incomplete.
+          to: build
+"""
+
+
+def test_detail_marks_a_chunk_routed_to_the_reserved_terminal(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": _ONE_STEP_YAML})
+    build = next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
+    )
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build, "artifacts": []},
+    )
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    assert detail["current_node_terminal"] is True
+    assert detail["terminal"] is True

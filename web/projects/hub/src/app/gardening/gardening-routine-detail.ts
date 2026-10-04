@@ -66,7 +66,7 @@ export class GardeningRoutineDetail {
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineName` route param, or `null` on the bare child route. Routines are
-   * keyed by `name` (`hub/store/schema.py`'s `uq_routines_name`), not id. */
+   * keyed by `name` (unique per routine), not id. */
   private readonly routineNameParam = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('routineName'))),
     { initialValue: null },

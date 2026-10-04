@@ -1,20 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, NOT_PAUSABLE, compactRef, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
-
-/** Statuses the hub's `CompleteService` treats as a no-op rather than a transition:
- * a `done` chunk is already done, so the dock withholds the control
- * rather than offer a click that writes nothing. Every other status is completable,
- * including `stopped` — unlike Pause/Detach, Complete does not hang off a live route,
- * and unlike Stop there is no un-complete verb, so this set has exactly one member. */
-const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
-
-/** Statuses with no acquiring runner — the only ones Delete reaches:
- * a `not_ready`/`ready` chunk has no live route to release, unlike every status
- * Detach guards. Owned right beside the control it gates, the same shape as
- * {@link NOT_COMPLETABLE} above. */
-const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
+import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 
 /**
  * The chunk detail dock's header — the chunk's identity in the
@@ -24,7 +11,7 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  *
  * Detach is deliberately **not** requeue — it supersedes no escalation and
  * bumps no epoch, so a `needs_human` chunk detached this way still derives
- * `needs_human` afterward (`src/blizzard/hub/domain/execution/detach.py`); this header
+ * `needs_human` afterward; this header
  * never claims otherwise. Pause/Resume switches on the pause **fact**
  * (`ChunkDetail.pause`), never on `status` — a chunk both paused and parked
  * on a question derives `waiting_on_human`, so a status-keyed switch would
@@ -33,7 +20,7 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  * `stopped` — unlike Stop, there is no un-complete verb, so the dock offers
  * no way back once clicked. **Delete** withdraws the
  * chunk's hub item(s) outright, reachable only from `not_ready`/`ready`
- * ({@link UNACQUIRED_STATUSES}) — a chunk with an acquiring runner has no
+ * (`ChunkDetail.deletable`) — a chunk with an acquiring runner has no
  * live route to release, the same reasoning Detach's own route guard
  * follows. The dock provides room for the confirmation control.
  *
@@ -134,11 +121,12 @@ export class ChunkDetailHeader {
    * Pause (subject to {@link pausable}). `status` must never gate Resume. */
   protected readonly pause = computed<PauseView | null>(() => this.detail().pause ?? null);
 
-  /** Whether an **unpaused** chunk may be paused — mirrors the hub `PauseService`'s
-   * refusal (`ChunkNotPausable`) so the dock never offers a control the server would
-   * answer with a 409, exactly as Detach shows only with a live route to
-   * release. `waiting_on_human`/`needs_human` are deliberately pausable. */
-  protected readonly pausable = computed<boolean>(() => !NOT_PAUSABLE.has(this.detail().status));
+  /** Whether an **unpaused** chunk may be paused — the wire-carried
+   * `ChunkDetail.pausable`, the hub's own admissibility for its pause refusal, so the
+   * dock never offers a control the server would answer with a 409, exactly as Detach
+   * shows only with a live route to release. `waiting_on_human`/`needs_human` are
+   * deliberately pausable. */
+  protected readonly pausable = computed<boolean>(() => this.detail().pausable ?? false);
 
   /** The chunk's live route, if any — Detach shows only while this is non-null:
    * a chunk with no live route has nothing to release. */
@@ -151,16 +139,18 @@ export class ChunkDetailHeader {
     () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
   );
 
-  /** Whether Complete has anything left to do — mirrors the hub
-   * `CompleteService`'s no-op on an already-`done` chunk, so the dock withholds a
-   * click that would write nothing. Every other status is completable, independent of
-   * `pausable`/`route`: Complete does not hang off a live route the way Detach does. */
-  protected readonly completable = computed<boolean>(() => !NOT_COMPLETABLE.has(this.detail().status));
+  /** Whether Complete has anything left to do — the wire-carried
+   * `ChunkDetail.completable`, false only on an already-`done` chunk, so the dock
+   * withholds a click that would write nothing. Independent of `pausable`/`route`:
+   * Complete does not hang off a live route the way Detach does, and `stopped` stays
+   * completable. */
+  protected readonly completable = computed<boolean>(() => this.detail().completable ?? false);
 
-  /** Whether Delete reaches this chunk's status ({@link UNACQUIRED_STATUSES}) —
-   * a chunk with an acquiring runner has no live route to release,
-   * so Delete never offers a click the hub would refuse. */
-  protected readonly deletable = computed<boolean>(() => UNACQUIRED_STATUSES.has(this.detail().status));
+  /** Whether Delete reaches this chunk — the wire-carried `ChunkDetail.deletable`,
+   * true only while no runner has acquired it (`not_ready`/`ready`): a chunk with an
+   * acquiring runner has no live route to release, so Delete never offers a click the
+   * hub would refuse. */
+  protected readonly deletable = computed<boolean>(() => this.detail().deletable ?? false);
 
   /** Every prerequisite this chunk still waits on — `neighborhood.prerequisites` minus
    * the satisfied ones, which by definition block nothing. Unlike `blocked`, which names

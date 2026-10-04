@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.auth_core import Role
+
 
 class UserIdentityView(BaseModel):
     """One linked provider identity."""
@@ -24,7 +26,7 @@ class UserView(BaseModel):
     username: str
     display_name: str
     email: str | None
-    role: str
+    role: Role
     created_at: str
     identities: list[UserIdentityView] = []
 

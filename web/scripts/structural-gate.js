@@ -1,6 +1,6 @@
 // @ts-check
 /*
- * The structural gate (issue #78) — the tooled half of
+ * The structural gate — the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:structural-gate`
  * method.
  *
@@ -29,8 +29,13 @@
  * Also a repository-wide census keeps retired board Top/group controls out of
  * `projects/`, while leaving the generated grouping API available to other clients.
  *
- * Finally, the placement sweep (`placement-sweep.js`, `bzh:frontend-placement`): every
+ * Also the placement sweep (`placement-sweep.js`, `bzh:frontend-placement`): every
  * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
+ *
+ * Finally, the wire-conformist sweeps (`wire-conformist-sweep.js`), neither with an exemption
+ * list: hand-written TS never cites a backend `.py` file, and a generated client function from
+ * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or
+ * `*.mutations.ts` file.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
@@ -38,6 +43,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
+const {
+  assertBackendCitationDetectorWorks,
+  backendCitationViolations,
+  assertClientCallPlacementDetectorWorks,
+  clientCallPlacementViolations,
+} = require('./wire-conformist-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROJECTS_DIR = path.join(ROOT, 'projects');
@@ -647,6 +658,8 @@ function main() {
   assertInvalidateReturnedDetectorWorks();
   assertNoCacheWriteDetectorWorks();
   assertPlacementDetectorWorks();
+  assertBackendCitationDetectorWorks();
+  assertClientCallPlacementDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -718,6 +731,8 @@ function main() {
   }
 
   const placementLines = placementViolations();
+  const backendCitationLines = backendCitationViolations();
+  const clientCallLines = clientCallPlacementViolations();
 
   if (
     realTimerViolations.length > 0 ||
@@ -726,7 +741,9 @@ function main() {
     dockControlViolations.length > 0 ||
     invalidateDiscardedViolations.length > 0 ||
     cacheWriteViolations.length > 0 ||
-    placementLines.length > 0
+    placementLines.length > 0 ||
+    backendCitationLines.length > 0 ||
+    clientCallLines.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -787,6 +804,22 @@ function main() {
           'and never import an app from fleet; a reasoned exemption goes in PLACEMENT_EXEMPT_UNITS with a one-line reason.',
       );
     }
+    if (backendCitationLines.length > 0) {
+      console.error('structural-gate: backend .py citations in hand-written TS:\n');
+      for (const line of backendCitationLines) console.error(line);
+      console.error(
+        '\nThe frontend conforms to the generated client and its types, not to the Python module serving the wire ' +
+          'today: name the generated type or operation instead of the backend file.',
+      );
+    }
+    if (clientCallLines.length > 0) {
+      console.error('structural-gate: generated client functions outside *.query.ts / *.mutations.ts:\n');
+      for (const line of clientCallLines) console.error(line);
+      console.error(
+        '\nCall the generated client only from a query or mutation hook in a `*.query.ts` / `*.mutations.ts` file, ' +
+          'and inject that hook where the call is needed.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -798,6 +831,8 @@ function main() {
   console.log('structural-gate: mutation-hook invalidation sweep clean.');
   console.log('structural-gate: mutation-hook cache-write sweep clean.');
   console.log('structural-gate: placement sweep clean.');
+  console.log('structural-gate: backend-citation sweep clean.');
+  console.log('structural-gate: client-call placement sweep clean.');
 }
 
 main();

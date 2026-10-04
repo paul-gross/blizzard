@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
+import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';
 import { ChunkFindingEntry } from './chunk-finding-entry';
-import type { FindingDelta, FindingDeltaAddOp, FindingDeltaGoneOp, FindingDeltaObservedOp } from './parse-finding-delta';
 import { shortSha } from './short-sha';
 
 /**
@@ -23,8 +23,7 @@ import { shortSha } from './short-sha';
  * class/locus/summary read back from a table this component has no query for.
  * `add`'s payload is the candidate itself, so it renders in full.
  *
- * The three ops' own semantics (`src/blizzard/wire/finding.py`) shape what each
- * group shows: `observed` carries no payload beyond its id — "it was true
+ * The three ops' own semantics shape what each group shows: `observed` carries no payload beyond its id — "it was true
  * when recorded and is true now" — so its entry is the id alone; `gone` ordinarily does
  * not close the finding, it flags it for a person (except against a `delivered`
  * finding, which it settles outright — invisible to this raw-ops
@@ -60,11 +59,11 @@ export class ChunkArtifactDelta {
   protected readonly compactRef = compactRef;
   protected readonly shortSha = shortSha;
 
-  protected readonly added = computed(() => this.delta().findings.filter((f): f is FindingDeltaAddOp => f.op === 'add'));
+  protected readonly added = computed(() => this.delta().findings.filter((f): f is AddFindingOp => f.op === 'add'));
   protected readonly observed = computed(() =>
-    this.delta().findings.filter((f): f is FindingDeltaObservedOp => f.op === 'observed'),
+    this.delta().findings.filter((f): f is ObservedFindingOp => f.op === 'observed'),
   );
-  protected readonly gone = computed(() => this.delta().findings.filter((f): f is FindingDeltaGoneOp => f.op === 'gone'));
+  protected readonly gone = computed(() => this.delta().findings.filter((f): f is GoneFindingOp => f.op === 'gone'));
 
   protected readonly revisionEntries = computed(() => Object.entries(this.delta().revisions));
 

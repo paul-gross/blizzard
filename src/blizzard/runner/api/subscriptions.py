@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.usage.repository import IReadUsageRepository
@@ -38,7 +39,9 @@ def _subscription_list(config: RunnerConfig, usage: IReadUsageRepository) -> Sub
                 provider=declaration.provider,
                 sampled_at=iso_utc(attempt.sampled_at) if attempt is not None else None,
                 ok=attempt.ok if attempt is not None else None,
-                miss_reason=attempt.miss_reason if attempt is not None else None,
+                miss_reason=SampleMissReason(attempt.miss_reason)
+                if attempt is not None and attempt.miss_reason is not None
+                else None,
                 renewal=attempt.renewal if attempt is not None else None,
             )
         )

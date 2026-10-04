@@ -113,7 +113,7 @@
                            `proposal-panel.spec.ts`'s "still offers every verb on a
                            gone-flagged row, which has not exited". Withheld without
                            `chunk:control`, the permission the exit routes require. -->
-                      @if (canControl() && !isExited(row.state)) {
+                      @if (canControl() && !isExited(row.exit)) {
                         <span class="pp-finding-actions">
                           @for (action of actions; track action.verb) {
                             <fleet-kit-button

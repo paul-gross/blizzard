@@ -20,6 +20,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -35,14 +36,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.cli.sessions import IReadSessionStore
-from blizzard.hub.domain.chunk.model import (
-    Chunk,
-    DecisionChoice,
-    IReadWorkItemRepository,
-    MigrationSource,
-    WorkItemAuthor,
-    WorkRef,
-)
+from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, IReadWorkItemRepository, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository

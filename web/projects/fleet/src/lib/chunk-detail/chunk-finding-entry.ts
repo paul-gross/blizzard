@@ -1,20 +1,13 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import type { FindingCandidate } from '../api/hub';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { shortSha } from './short-sha';
 
-/** The fields a finding reads by before it has an identity — what a survey's
- * `FindingCandidate` and a delta's `AddFindingOp` both carry
- * (`src/blizzard/wire/finding.py`: the op is documented as "the candidate minus its
- * identity", so the two agree field for field). Structural, not a re-declaration of
- * either: both of this directory's parsed shapes satisfy it as they stand. */
-export interface FindingEntryView {
-  readonly class: string;
-  readonly locus: string;
-  readonly summary: string;
-  readonly introduced: string | null;
-  readonly ref: string | null;
-}
+/** The fields a finding reads by before it has an identity — a survey's
+ * `FindingCandidate`. A delta's `AddFindingOp` is the candidate minus its identity
+ * plus its `op` tag, so it satisfies this type as it stands. */
+export type FindingEntryView = FindingCandidate;
 
 /**
  * One identity-less finding, laid out — the class/locus head, the best-effort

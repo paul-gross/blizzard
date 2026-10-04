@@ -13,32 +13,28 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingState
 from blizzard.foundation.roles import domain_model, dto
 
-FACT_KINDS = frozenset(
+FACT_KINDS = frozenset(FindingFactKind)
+
+#: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one.
+EXIT_KINDS = frozenset(
     {
-        "add",
-        "observed",
-        "gone",
-        "delivered",
-        "resolved",
-        "gone-confirmed",
-        "wont-fix",
-        "not-a-finding",
-        "superseded",
-        "reopened",
+        FindingFactKind.RESOLVED,
+        FindingFactKind.GONE_CONFIRMED,
+        FindingFactKind.WONT_FIX,
+        FindingFactKind.NOT_A_FINDING,
+        FindingFactKind.SUPERSEDED,
     }
 )
 
-#: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one.
-EXIT_KINDS = frozenset({"resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"})
-
 #: The fact kinds whose being newest makes a finding live — the one home of the liveness mapping,
 #: shared by `derive_liveness` and the store's SQL prefilter.
-LIVE_KINDS = frozenset({"add", "observed", "reopened"})
+LIVE_KINDS = frozenset({FindingFactKind.ADD, FindingFactKind.OBSERVED, FindingFactKind.REOPENED})
 
 #: The ground itself changed — work landed, or a person confirmed non-reproduction.
-OUTFLOW_KINDS = frozenset({"resolved", "gone-confirmed"})
+OUTFLOW_KINDS = frozenset({FindingFactKind.RESOLVED, FindingFactKind.GONE_CONFIRMED})
 
 #: A judgment call about the finding, not the code.
 WITHDRAWN_KINDS = EXIT_KINDS - OUTFLOW_KINDS
@@ -275,7 +271,7 @@ class FindingLiveness:
     """The newest-fact-wins read over a finding's facts — never
     persisted."""
 
-    state: str
+    state: FindingState
     live: bool
     note: str | None
     first_observed_at: datetime | None
@@ -292,28 +288,33 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
     ingestion still derives correctly."""
     if not facts:
         return FindingLiveness(
-            state="live", live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
+            state=FindingState.LIVE, live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
         )
     seen = [f for f in facts if f.kind in ("add", "observed")]
     newest = facts[0]
     for fact in facts[1:]:
         if fact.recorded_at >= newest.recorded_at:  # a tie keeps the later-inserted fact
             newest = fact
-    if newest.kind in LIVE_KINDS:
-        state = "live"
-    elif newest.kind == "gone":
-        state = "gone"
-    else:
-        state = newest.kind
+    state = FindingState.LIVE if newest.kind in LIVE_KINDS else FindingState(newest.kind)
     return FindingLiveness(
         state=state,
-        live=state == "live",
+        live=state is FindingState.LIVE,
         note=newest.note,
         first_observed_at=min((f.recorded_at for f in seen), default=None),
         last_seen_at=max((f.recorded_at for f in seen), default=None),
         observed_count=sum(1 for f in facts if f.kind == "observed"),
         actor=newest.actor,
     )
+
+
+def finding_exit(state: str) -> FindingExit | None:
+    """How a finding in ``state`` exited — ``outflow`` for an `OUTFLOW_KINDS` exit, ``withdrawn``
+    for a `WITHDRAWN_KINDS` one, ``None`` for a finding that has not exited."""
+    if state in OUTFLOW_KINDS:
+        return FindingExit.OUTFLOW
+    if state in WITHDRAWN_KINDS:
+        return FindingExit.WITHDRAWN
+    return None
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

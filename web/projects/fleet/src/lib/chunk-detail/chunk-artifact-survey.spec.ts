@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import type { FindingSurvey } from '../api/hub';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
-import type { FindingSurvey } from './parse-finding-survey';
 
 const FULL_SURVEY: FindingSurvey = {
   scope: 'runner-daemon',

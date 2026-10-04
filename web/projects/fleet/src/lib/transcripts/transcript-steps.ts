@@ -1,13 +1,6 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 import { nodeStepKey } from '../node-step';
 
-/** The reserved terminal node id — the domain's `RESERVED_TERMINAL`
- * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here (not a backend import) since
- * the wire model carries `current_node_id` as a plain string, not a discriminated
- * value. A completed chunk's `current_node_id()` is this terminal — never a step that
- * actually ran, so it names no in-flight step to append. */
-const DONE_TERMINAL = 'done';
-
 /**
  * One node-history step's transcript-segment group — joined to
  * `ChunkDetail.history` by `(node_id, epoch)`: a {@link TransitionView}'s own
@@ -41,12 +34,14 @@ function bySpawnGeneration(entries: readonly TranscriptSegmentIndexEntry[]): Tra
  * Group a chunk's transcript segments into one entry per node-history step, plus
  * the in-flight step and any segment group history doesn't name — a pure function over
  * the segment index and the chunk's own history/current-step fields, unit-testable
- * without a client.
+ * without a client. `current.terminal` is `ChunkDetail.current_node_terminal`: a
+ * completed chunk's current node is the graph's reserved terminal — never a step that
+ * actually ran, so it names no in-flight step to append.
  */
 export function deriveTranscriptSteps(
   segments: readonly TranscriptSegmentIndexEntry[],
   history: readonly TransitionView[],
-  current: { nodeId: string | null; nodeName: string | null; epoch: number | null },
+  current: { nodeId: string | null; nodeName: string | null; epoch: number | null; terminal: boolean },
 ): TranscriptStep[] {
   const bySegmentStep = new Map<string, TranscriptSegmentIndexEntry[]>();
   for (const segment of segments) {
@@ -85,7 +80,7 @@ export function deriveTranscriptSteps(
   // epoch, avoids a false `<next node> · epoch <previous epoch>` "in progress" step.
   if (
     current.nodeId !== null &&
-    current.nodeId !== DONE_TERMINAL &&
+    !current.terminal &&
     current.epoch !== null &&
     !claimedEpochs.has(current.epoch)
   ) {

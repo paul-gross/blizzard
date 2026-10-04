@@ -18,17 +18,18 @@ from blizzard.wire.sse_runner import (
     FactChangedPayload,
     LeaseChangeCause,
     LeaseChangedPayload,
+    RunnerEventType,
     TakeoverChangeCause,
     TakeoverChangedPayload,
 )
 
 # SSE event-type names — the runner's live vocabulary.
-LEASE_CHANGED = "lease-changed"
-ASK_CHANGED = "ask-changed"
-ESCALATION_CHANGED = "escalation-changed"
-TAKEOVER_CHANGED = "takeover-changed"
-ENVIRONMENT_CHANGED = "environment-changed"
-FACT_CHANGED = "fact-changed"
+LEASE_CHANGED = RunnerEventType.LEASE_CHANGED
+ASK_CHANGED = RunnerEventType.ASK_CHANGED
+ESCALATION_CHANGED = RunnerEventType.ESCALATION_CHANGED
+TAKEOVER_CHANGED = RunnerEventType.TAKEOVER_CHANGED
+ENVIRONMENT_CHANGED = RunnerEventType.ENVIRONMENT_CHANGED
+FACT_CHANGED = RunnerEventType.FACT_CHANGED
 
 #: Every event-type name the broker can publish. This tuple, not the bare constants
 #: above, is the broker's declared vocabulary.

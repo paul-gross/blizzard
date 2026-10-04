@@ -7,6 +7,7 @@ omitted when unset unless named in :attr:`SseFramePayload._null_when_absent`."""
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -135,16 +136,29 @@ class EventLoggedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
 
 
+class HubEventType(StrEnum):
+    """Every hub SSE frame kind — the ``event:`` name a frame carries."""
+
+    CHUNK_CHANGED = "chunk-changed"
+    QUESTION_ASKED = "question-asked"
+    QUESTION_ANSWERED = "question-answered"
+    DECISION_OPENED = "decision-opened"
+    DECISION_RESOLVED = "decision-resolved"
+    QUEUE_CHANGED = "queue-changed"
+    RUNNER_CHANGED = "runner-changed"
+    EVENT_LOGGED = "event-logged"
+
+
 #: Keyed by the broker's own event-type constants, duplicated here as literals. The key
 #: set is pinned against those constants by
 #: ``tests/test_sse_contract.py::TestCorpusClosure``.
 SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
-    "chunk-changed": ChunkChangedPayload,
-    "question-asked": QuestionAskedPayload,
-    "question-answered": QuestionAnsweredPayload,
-    "decision-opened": DecisionOpenedPayload,
-    "decision-resolved": DecisionResolvedPayload,
-    "queue-changed": QueueChangedPayload,
-    "runner-changed": RunnerChangedPayload,
-    "event-logged": EventLoggedPayload,
+    HubEventType.CHUNK_CHANGED: ChunkChangedPayload,
+    HubEventType.QUESTION_ASKED: QuestionAskedPayload,
+    HubEventType.QUESTION_ANSWERED: QuestionAnsweredPayload,
+    HubEventType.DECISION_OPENED: DecisionOpenedPayload,
+    HubEventType.DECISION_RESOLVED: DecisionResolvedPayload,
+    HubEventType.QUEUE_CHANGED: QueueChangedPayload,
+    HubEventType.RUNNER_CHANGED: RunnerChangedPayload,
+    HubEventType.EVENT_LOGGED: EventLoggedPayload,
 }

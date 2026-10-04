@@ -115,6 +115,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "state": "running",
         "closed_at": None,
         "closure_reason": None,
+        "stale_after_seconds": 3600,
     }
 
 
@@ -197,6 +198,7 @@ def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path)
     assert closed["state"] == "closed"
     assert closed["closed_at"] == closed_at.isoformat()
     assert closed["closure_reason"] == "failed"
+    assert closed["stale_after_seconds"] == 3600
     assert_all_timestamps_utc({"items": items})
 
 

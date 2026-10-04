@@ -14,6 +14,7 @@ from blizzard.wire.sse import (
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
+    HubEventType,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
     QueueChangedPayload,
@@ -22,14 +23,14 @@ from blizzard.wire.sse import (
 )
 
 # SSE event-type names — the board's live vocabulary.
-CHUNK_CHANGED = "chunk-changed"
-QUESTION_ASKED = "question-asked"
-QUESTION_ANSWERED = "question-answered"
-DECISION_OPENED = "decision-opened"
-DECISION_RESOLVED = "decision-resolved"
-QUEUE_CHANGED = "queue-changed"
-RUNNER_CHANGED = "runner-changed"
-EVENT_LOGGED = "event-logged"
+CHUNK_CHANGED = HubEventType.CHUNK_CHANGED
+QUESTION_ASKED = HubEventType.QUESTION_ASKED
+QUESTION_ANSWERED = HubEventType.QUESTION_ANSWERED
+DECISION_OPENED = HubEventType.DECISION_OPENED
+DECISION_RESOLVED = HubEventType.DECISION_RESOLVED
+QUEUE_CHANGED = HubEventType.QUEUE_CHANGED
+RUNNER_CHANGED = HubEventType.RUNNER_CHANGED
+EVENT_LOGGED = HubEventType.EVENT_LOGGED
 
 #: Every event-type name the broker can publish. This tuple, not the bare
 #: constants above, is the broker's declared vocabulary.

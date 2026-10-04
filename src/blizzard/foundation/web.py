@@ -4,12 +4,15 @@ A deep client-side route resolves to ``index.html`` instead of 404."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, TypeAdapter
+from pydantic.json_schema import models_json_schema
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
@@ -68,3 +71,36 @@ class Frontend:
         @app.get("/", include_in_schema=False)
         def _web_root() -> HTMLResponse:
             return HTMLResponse(placeholder)
+
+
+_COMPONENT_REF = "#/components/schemas/{model}"
+
+
+class SchemaComponentCollision(ValueError):
+    """An extra component named the same as one the routes already reach, with a different schema."""
+
+
+def install_schema_components(app: FastAPI, models: Sequence[type[BaseModel]], enums: Mapping[str, object]) -> None:
+    """Wrap ``app.openapi`` so the spec also carries ``models`` (serialization mode) and the
+    vocabularies in ``enums`` (keyed by component name) under ``components.schemas`` — the
+    served and the exported spec alike. A name the routes already reach must carry the
+    identical schema; a differing one raises :class:`SchemaComponentCollision`."""
+    route_spec: Callable[[], dict[str, Any]] = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        spec = route_spec()
+        schemas: dict[str, Any] = spec.setdefault("components", {}).setdefault("schemas", {})
+        _, top = models_json_schema([(m, "serialization") for m in models], ref_template=_COMPONENT_REF)
+        extra: dict[str, Any] = dict(top.get("$defs", {}))
+        for name, vocabulary in enums.items():
+            extra[name] = TypeAdapter(vocabulary).json_schema(mode="serialization", ref_template=_COMPONENT_REF)
+        for name, schema in extra.items():
+            if name in schemas and schemas[name] != schema:
+                raise SchemaComponentCollision(f"component {name!r} collides with a different route schema")
+            schemas[name] = schema
+        app.openapi_schema = spec
+        return spec
+
+    app.openapi = openapi  # type: ignore[method-assign]

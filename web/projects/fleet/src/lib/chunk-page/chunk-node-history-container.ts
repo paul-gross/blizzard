@@ -86,6 +86,7 @@ export class ChunkNodeHistoryContainer {
       nodeId: d.current_node_id,
       nodeName: d.current_node_name ?? null,
       epoch: d.latest_epoch,
+      terminal: d.current_node_terminal ?? false,
     });
   });
 

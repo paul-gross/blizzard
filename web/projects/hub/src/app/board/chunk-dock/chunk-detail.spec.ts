@@ -12,6 +12,8 @@ const ROUTED_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_routed',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -24,6 +26,8 @@ const GATE_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_gate',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_gate',
   latest_epoch: 1,
   work_refs: [],
@@ -66,6 +70,8 @@ const ASK_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ask',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -99,6 +105,9 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ready',
   graph_id: 'gr_default',
   status: 'not_ready',
+  pausable: true,
+  completable: true,
+  deletable: true,
   current_node_id: null,
   latest_epoch: null,
   work_refs: [],
@@ -109,16 +118,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
 // An unacquired chunk Delete reaches — distinct from
 // NOT_READY_DETAIL so the graph-edit and delete specs don't share a fixture
 // (and so a test can tell their client calls apart by chunk id).
-const DELETABLE_DETAIL: ChunkDetailModel = {
-  chunk_id: 'ch_deletable',
-  graph_id: 'gr_default',
-  status: 'not_ready',
-  current_node_id: null,
-  latest_epoch: null,
-  work_refs: [],
-  history: [],
-  artifacts: [],
-};
+const DELETABLE_DETAIL: ChunkDetailModel = { ...NOT_READY_DETAIL, chunk_id: 'ch_deletable' };
 
 async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
   await fixture.whenStable();

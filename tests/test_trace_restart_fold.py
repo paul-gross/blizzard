@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.observability.tracing.facts import TracedMigration, TracedRestart
 from blizzard.hub.domain.observability.tracing.position import movement_arrivals, position_at
 from tests import trace_fixtures as fx

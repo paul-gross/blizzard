@@ -71,6 +71,7 @@ const PARTIAL_COST_DETAIL: ChunkDetail = {
       cache_read_tokens: 0,
       cache_create_tokens: 0,
       cost_usd: null,
+      cost_partial: true,
     },
   ],
 };

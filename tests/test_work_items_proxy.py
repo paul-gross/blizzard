@@ -28,6 +28,7 @@ _ITEMS: dict[str, object] = {
             "ref": "42",
             "label": "widget#42",
             "web_url": "http://forge.local/repos/acme/widget/issues/42",
+            "hub_source": False,
             "fetched_at": "2026-07-14T00:00:00+00:00",
             "title": "the flake is back",
             "body": "please fix the flake",

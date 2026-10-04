@@ -116,6 +116,39 @@ def test_response_property_type_changed_is_breaking() -> None:
     assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
+def _enum_narrowing_specs(*, request: bool, nullable: bool) -> tuple[dict, dict]:
+    base_prop: dict = {"anyOf": [{"type": "string"}, {"type": "null"}]} if nullable else {"type": "string"}
+    head_prop: dict = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
+    op = (lambda s: _op(request_schema=s)) if request else (lambda s: _op(response_schema=s))
+    color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
+    base = _spec(
+        {"/api/fleet/widgets": {"post": op(_ref("Widget"))}},
+        {"Widget": {"type": "object", "properties": {"color": base_prop}}},
+    )
+    head = _spec(
+        {"/api/fleet/widgets": {"post": op(_ref("Widget"))}},
+        {"Widget": {"type": "object", "properties": {"color": head_prop}}, "Color": color},
+    )
+    return base, head
+
+
+@pytest.mark.parametrize("nullable", [False, True])
+def test_response_string_narrowed_to_enum_component_is_additive(nullable: bool) -> None:
+    base, head = _enum_narrowing_specs(request=False, nullable=nullable)
+    assert classify_spec_diff(base, head) == []
+
+
+def test_request_string_narrowed_to_enum_component_is_breaking() -> None:
+    base, head = _enum_narrowing_specs(request=True, nullable=False)
+    assert any("request property type narrowed" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_response_string_retyped_to_object_component_is_breaking() -> None:
+    base, head = _enum_narrowing_specs(request=False, nullable=False)
+    head["components"]["schemas"]["Color"] = {"type": "object", "properties": {}}
+    assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
 def test_response_property_stops_being_required_is_breaking() -> None:
     base, head = _response_widget_specs(
         {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},

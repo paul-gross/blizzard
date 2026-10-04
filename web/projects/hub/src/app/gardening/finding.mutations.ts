@@ -12,7 +12,7 @@ import {
 } from '../mutation-keys';
 
 /** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
- * `reopen` take; mirrors `FindingExitRequest` (`src/blizzard/wire/finding.py`). */
+ * `reopen` take; the camel-cased view of the wire's `FindingExitRequest`. */
 export interface FindingExitVars {
   readonly findingIds: readonly string[];
   readonly note: string;

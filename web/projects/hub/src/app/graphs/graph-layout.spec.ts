@@ -59,7 +59,7 @@ const DEFAULT_LIKE: GraphView = {
     { from_node_id: 'n_build', choice_id: 'c_fail', to_node_name: 'build' },
     { from_node_id: 'n_review', choice_id: 'c_pass2', to_node_name: 'deliver' },
     { from_node_id: 'n_review', choice_id: 'c_fail2', to_node_name: 'build' },
-    { from_node_id: 'n_deliver', choice_id: 'c_landed', to_node_name: 'done' },
+    { from_node_id: 'n_deliver', choice_id: 'c_landed', to_node_name: 'done', target_kind: 'done' },
     { from_node_id: 'n_deliver', choice_id: 'c_conflict', to_node_name: 'build' },
   ],
   warnings: [],
@@ -240,10 +240,10 @@ describe('layoutGraph', () => {
         },
       ],
       edges: [
-        { from_node_id: 'n_triage', choice_id: 'c_already_done', to_node_name: 'done' },
-        { from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas-dwf' },
-        { from_node_id: 'n_triage', choice_id: 'c_advanced', to_node_name: 'graph:adv-dwf' },
-        { from_node_id: 'n_triage', choice_id: 'c_harness', to_node_name: 'graph:bas-hwf' },
+        { from_node_id: 'n_triage', choice_id: 'c_already_done', to_node_name: 'done', target_kind: 'done' },
+        { from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' },
+        { from_node_id: 'n_triage', choice_id: 'c_advanced', to_node_name: 'graph:adv-dwf', target_kind: 'graph', target_graph: 'adv-dwf' },
+        { from_node_id: 'n_triage', choice_id: 'c_harness', to_node_name: 'graph:bas-hwf', target_kind: 'graph', target_graph: 'bas-hwf' },
       ],
       warnings: [],
     };
@@ -293,7 +293,7 @@ describe('layoutGraph', () => {
             ],
           },
         ],
-        edges: [...TRIAGE_LIKE.edges!, { from_node_id: 'n_triage', choice_id: 'c_basic_2', to_node_name: 'graph:bas-dwf' }],
+        edges: [...TRIAGE_LIKE.edges!, { from_node_id: 'n_triage', choice_id: 'c_basic_2', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' }],
       };
       const outcome = layoutGraph(shared, measure);
       expect(outcome.ok).toBe(true);

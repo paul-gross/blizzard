@@ -15,10 +15,11 @@ from sqlalchemy import Connection, Engine, and_, func, literal, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationSource, RouteHistory
+from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL

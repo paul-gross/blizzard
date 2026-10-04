@@ -18,6 +18,7 @@ from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.work_items import WorkItemClosure
@@ -392,22 +393,6 @@ class HubNodePollFact:
     polled_at: datetime
 
 
-class MigrationSource(StrEnum):
-    """What moved a chunk onto another graph — a migration's attribution.
-
-    Four paths write one, and without a discriminator their facts are byte-identical
-    in history."""
-
-    #: A judgement choice whose ``to:`` named ``graph:<name>``.
-    AUTHORED_EDGE = "authored-edge"
-    #: The chunk's standing ``intended_migration``, set by an operator.
-    INTENT = "intent"
-    #: The standing follow-latest policy — nobody asked for this move.
-    FOLLOW_LATEST = "follow-latest"
-    #: An operator's eager cross-graph restart (#371) — the one path that mints its own epoch.
-    RESTART = "restart"
-
-
 @domain_model
 @dataclass(frozen=True)
 class MigrationFact:
@@ -524,6 +509,10 @@ class UsageFact:
     harness_version: str | None = None
     #: A runner-side subscription estimate, kept apart from ``cost_usd``; ``None`` when none was reported.
     estimated_cost_usd: float | None = None
+
+    def cost_partial(self) -> bool:
+        """Whether this invocation carries neither a billed nor an estimated amount."""
+        return self.cost_usd is None and self.estimated_cost_usd is None
 
 
 @dto
@@ -1471,7 +1460,7 @@ class UsageTotal:
             cost_usd=sum(billed_rows),
             billed_cost_usd=sum(billed_rows) if billed_rows else None,
             estimated_cost_usd=sum(estimated_rows) if estimated_rows else None,
-            cost_partial=any(u.cost_usd is None and u.estimated_cost_usd is None for u in rows),
+            cost_partial=any(u.cost_partial() for u in rows),
             billed_partial=any(u.cost_usd is None for u in rows),
         )
 

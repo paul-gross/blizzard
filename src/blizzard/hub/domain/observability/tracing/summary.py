@@ -10,9 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.chunk.model import MigrationSource, UsageFact, UsageTotal
+from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,

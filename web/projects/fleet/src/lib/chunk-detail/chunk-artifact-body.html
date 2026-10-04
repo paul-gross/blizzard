@@ -5,7 +5,7 @@
   }
   <span class="a-kind">{{ artifact().kind }}</span>
 </div>
-@if (artifact().kind === 'asset') {
+@if (isAsset()) {
   @if (body() === 'full') {
     @if (parsedDelta(); as delta) {
       <fleet-chunk-artifact-delta [delta]="delta" [raw]="artifact().content ?? ''" [testid]="testid()" />

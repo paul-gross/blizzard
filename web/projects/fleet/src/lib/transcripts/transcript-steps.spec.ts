@@ -39,7 +39,7 @@ describe('deriveTranscriptSteps', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'a', node_id: 'build', epoch: 2 })],
       [transition({ from_node_id: 'build', epoch: 2 })],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps).toHaveLength(1);
@@ -56,7 +56,7 @@ describe('deriveTranscriptSteps', () => {
         transition({ from_node_id: 'plan', epoch: 1, from_node_name: 'Plan' }),
         transition({ from_node_id: 'review', epoch: 2, from_node_name: 'Review' }),
       ],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps.map((s) => s.key)).toEqual(['plan:1', 'review:2']);
@@ -67,7 +67,7 @@ describe('deriveTranscriptSteps', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'a', node_id: 'build', epoch: 3 })],
       [transition({ from_node_id: 'plan', epoch: 1 })],
-      { nodeId: 'build', nodeName: 'Build', epoch: 3 },
+      { nodeId: 'build', nodeName: 'Build', epoch: 3, terminal: false },
     );
 
     expect(steps.map((s) => s.key)).toEqual(['plan:1', 'build:3']);
@@ -80,7 +80,7 @@ describe('deriveTranscriptSteps', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'orphan', node_id: 'ghost', epoch: 9 })],
       [transition({ from_node_id: 'build', epoch: 2 })],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps).toHaveLength(2);
@@ -97,40 +97,40 @@ describe('deriveTranscriptSteps', () => {
         segment({ segment_id: 'first', node_id: 'build', epoch: 2, spawn_generation: 0 }),
       ],
       [transition({ from_node_id: 'build', epoch: 2 })],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps[0].segments.map((s) => s.segment_id)).toEqual(['first', 'second']);
   });
 
-  it('does not append a phantom in-flight step for a completed chunk\'s reserved "done" terminal (review:F2)', () => {
+  it('does not append a phantom in-flight step for a completed chunk\'s reserved "done" terminal', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'a', node_id: 'build', epoch: 2 })],
       [transition({ from_node_id: 'build', epoch: 2, to_node_id: 'done' })],
-      { nodeId: 'done', nodeName: null, epoch: 2 },
+      { nodeId: 'done', nodeName: null, epoch: 2, terminal: true },
     );
 
     expect(steps.map((s) => s.key)).toEqual(['build:2']);
     expect(steps.every((s) => !s.current)).toBe(true);
   });
 
-  it('skips a graph-entry transition with no origin node, matching chunk-timeline.ts\'s own truthiness guard (review:F4)', () => {
+  it('skips a graph-entry transition with no origin node, matching chunk-timeline.ts\'s own truthiness guard', () => {
     const steps = deriveTranscriptSteps(
       [],
       [transition({ from_node_id: null, epoch: 1 }), transition({ from_node_id: 'build', epoch: 2 })],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps.map((s) => s.key)).toEqual(['build:2']);
   });
 
-  it('suppresses the in-flight step when its epoch is already claimed by a history row, even under a different node (review:F3)', () => {
+  it('suppresses the in-flight step when its epoch is already claimed by a history row, even under a different node', () => {
     // `current_node_id` can already name the next node while `latest_epoch` still
     // names the previous step's — the next lease hasn't minted its own epoch yet.
     const steps = deriveTranscriptSteps(
       [],
       [transition({ from_node_id: 'build', epoch: 1, to_node_id: 'review' })],
-      { nodeId: 'review', nodeName: 'Review', epoch: 1 },
+      { nodeId: 'review', nodeName: 'Review', epoch: 1, terminal: false },
     );
 
     expect(steps.map((s) => s.key)).toEqual(['build:1']);
@@ -141,14 +141,14 @@ describe('deriveTranscriptSteps', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'only', node_id: 'build', epoch: 2, spawn_generation: 0 })],
       [transition({ from_node_id: 'build', epoch: 2 })],
-      { nodeId: null, nodeName: null, epoch: null },
+      { nodeId: null, nodeName: null, epoch: null, terminal: false },
     );
 
     expect(steps[0].segments).toHaveLength(1);
   });
 });
 
-describe('resolveSegmentSeams (review:F11)', () => {
+describe('resolveSegmentSeams', () => {
   const steps = deriveTranscriptSteps(
     [
       segment({ segment_id: 'first', node_id: 'build', epoch: 2, spawn_generation: 0 }),
@@ -156,7 +156,7 @@ describe('resolveSegmentSeams (review:F11)', () => {
       segment({ segment_id: 'third', node_id: 'build', epoch: 2, spawn_generation: 2 }),
     ],
     [transition({ from_node_id: 'build', epoch: 2 })],
-    { nodeId: null, nodeName: null, epoch: null },
+    { nodeId: null, nodeName: null, epoch: null, terminal: false },
   );
 
   it('resolves both seams for a middle segment', () => {

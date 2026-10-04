@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
+import type { ChunkDetail, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 import { KitTextInput } from '../kit/kit-text-input';
 import { FleetWhen } from '../when-display/fleet-when';
@@ -26,10 +26,6 @@ export interface ResolveDecisionEvent {
 /** How many recently answered questions the dock keeps a trail for. */
 const ANSWERED_TRAIL_LIMIT = 3;
 
-/** The statuses a chunk never leaves. An answer still undelivered on one of these will
- * never be delivered — nothing is left to resume — so the trail says that rather than
- * showing an in-flight state forever. */
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'stopped']);
 
 /**
  * The chunk's awaiting-human gate — whatever the chunk waits on
@@ -134,11 +130,12 @@ export class ChunkAwaitingHuman {
    * or on a chunk since reaped or taken over, has no delivery row and never will. A
    * two-state ternary reads the present-progressive "Delivering…" forever there, which
    * is the one place this trail would assert something false rather than merely stale:
-   * it promises a return trip nothing will complete. On a terminal chunk it says so.
+   * it promises a return trip nothing will complete. On a terminal chunk (the wire's
+   * `terminal` — a status the chunk never leaves, so nothing is left to resume) it says so.
    */
   protected deliveryLine(question: QuestionView): string {
     if (question.delivered) return 'Delivered · agent resumed';
-    return TERMINAL_STATUSES.has(this.detail().status)
+    return this.detail().terminal
       ? 'Not delivered — the chunk ended first'
       : 'Delivering to the agent…';
   }

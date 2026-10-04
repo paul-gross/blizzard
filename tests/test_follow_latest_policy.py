@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.graph.model import FollowLatest
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 

@@ -29,6 +29,7 @@ function findingFixture(overrides: { state: string } & Record<string, unknown>) 
     introduced: '4ba7ef06d',
     note: null,
     live: overrides.state === 'live',
+    exit: null,
     ...overrides,
   };
 }
@@ -54,6 +55,7 @@ const FINDING_RESOLVED_1 = findingFixture({
   locus: 'c.py:3',
   summary: 'summary c',
   state: 'resolved',
+  exit: 'outflow',
   note: 'fixed',
 });
 const FINDING_GONE_CONFIRMED = findingFixture({
@@ -62,6 +64,7 @@ const FINDING_GONE_CONFIRMED = findingFixture({
   locus: 'e.py:5',
   summary: 'summary e',
   state: 'gone-confirmed',
+  exit: 'outflow',
   note: 'confirmed gone',
 });
 /** A second routine/scope, distinct from the other three fixtures' `nightly`/

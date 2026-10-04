@@ -42,6 +42,7 @@ const VM: FindingPanelVm = {
   findingClass: 'stale-docstring',
   locus: 'src/a.py:1',
   state: 'wont-fix',
+  exit: 'withdrawn',
   observedCount: 3,
   introducedRev: '4ba7ef06d',
   introducedAt: null,

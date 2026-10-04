@@ -288,7 +288,7 @@ describe('ChunkPage on a runner daemon', () => {
   it('renders an explicit empty state for a chunk with no history transitions and no transcript segments', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done' };
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done', current_node_terminal: true };
       return routes()(method, path);
     });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);

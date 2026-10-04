@@ -1,4 +1,6 @@
-import { compactRef, type LoggedEvent } from 'fleet';
+import { compactRef, hubApi, type LoggedEvent } from 'fleet';
+
+const { ChunkChangeCause } = hubApi;
 
 /** A `chunk-changed` frame shaped into the Activity feed's two-line block. */
 export interface ChunkChangeSummary {
@@ -9,7 +11,7 @@ export interface ChunkChangeSummary {
    * its `cause` is `'deleted'`: an unacquired chunk has no runner to
    * name, but who deleted it is still worth the same line. Omitted on every other
    * unclaimed transition (a promote, a stop past the point the route released) — `by`
-   * rides only the `deleted` cause today ({@link ChunkChanged.by}'s own docstring). */
+   * rides only the `deleted` cause today. */
   readonly runner?: string;
 }
 
@@ -18,16 +20,15 @@ export interface ChunkChangeSummary {
  *
  * `transition` joins the chunk ref, the previous node, the status, and the next node
  * with the panel's existing `→` vocabulary — each absent segment (and its adjacent
- * arrow) is dropped rather than rendered as placeholder junk (AC 5, widened
- * to `status` — a backfilled row can structurally carry no
- * status yet, `hub/domain/runners/activity.py`'s `ActivityEntry`), so a frame carrying neither node
+ * arrow) is dropped rather than rendered as placeholder junk — `status` included, since
+ * a backfilled row (`ActivityView`) can structurally carry no status — so a frame carrying neither node
  * degrades to exactly today's `C-1NWW → running`, and a frame carrying a node but no
  * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
  * build`. `runner` is the compact runner ref when the frame names one, else omitted —
  * an unclaimed transition (e.g. a promote or a stop past the point the route
  * released) renders no runner line at all rather than an empty one.
  *
- * `graph_id` is deliberately never read here — it rides the wire (AC 4) but is not
+ * `graph_id` is deliberately never read here — it rides the wire but is not
  * part of the rendered row.
  *
  * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
@@ -36,7 +37,7 @@ export interface ChunkChangeSummary {
  * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
  */
 export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSummary {
-  if (data.cause === 'claimed') {
+  if (data.cause === ChunkChangeCause.CLAIMED) {
     return {
       transition: `${compactRef(data.chunk_id ?? '—')} claimed`,
       ...(data.runner_id ? { runner: compactRef(data.runner_id) } : {}),
@@ -48,6 +49,6 @@ export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSumm
   if (data.node) segments.push('→', data.node);
   const summary: ChunkChangeSummary = { transition: segments.join(' ') };
   if (data.runner_id) return { ...summary, runner: compactRef(data.runner_id) };
-  if (data.cause === 'deleted' && data.by) return { ...summary, runner: data.by };
+  if (data.cause === ChunkChangeCause.DELETED && data.by) return { ...summary, runner: data.by };
   return summary;
 }

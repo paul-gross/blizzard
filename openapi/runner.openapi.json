@@ -228,8 +228,7 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/ArtifactKind"
           },
           "name": {
             "title": "Name",
@@ -275,6 +274,46 @@
           "epoch"
         ],
         "title": "ArtifactView",
+        "type": "object"
+      },
+      "AskChangeCause": {
+        "enum": [
+          "asked",
+          "answered"
+        ],
+        "type": "string"
+      },
+      "AskChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "cause": {
+            "enum": [
+              "asked",
+              "answered"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_id",
+          "chunk_id",
+          "question_id",
+          "cause"
+        ],
+        "title": "AskChangedPayload",
         "type": "object"
       },
       "AskListResponse": {
@@ -651,6 +690,11 @@
             "title": "Closed Prs",
             "type": "array"
           },
+          "completable": {
+            "default": false,
+            "title": "Completable",
+            "type": "boolean"
+          },
           "cost": {
             "$ref": "#/components/schemas/ChunkUsageTotalView"
           },
@@ -675,6 +719,11 @@
               }
             ],
             "title": "Current Node Name"
+          },
+          "current_node_terminal": {
+            "default": false,
+            "title": "Current Node Terminal",
+            "type": "boolean"
           },
           "decision": {
             "anyOf": [
@@ -712,6 +761,11 @@
             },
             "title": "Default Model",
             "type": "array"
+          },
+          "deletable": {
+            "default": false,
+            "title": "Deletable",
+            "type": "boolean"
           },
           "escalation": {
             "anyOf": [
@@ -810,6 +864,11 @@
             "title": "Open Prs",
             "type": "array"
           },
+          "pausable": {
+            "default": false,
+            "title": "Pausable",
+            "type": "boolean"
+          },
           "pause": {
             "anyOf": [
               {
@@ -858,6 +917,11 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "terminal": {
+            "default": false,
+            "title": "Terminal",
+            "type": "boolean"
           },
           "usage": {
             "default": [],
@@ -1223,6 +1287,11 @@
             "title": "Cache Read Tokens",
             "type": "integer"
           },
+          "cost_partial": {
+            "default": false,
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
           "cost_usd": {
             "anyOf": [
               {
@@ -1581,6 +1650,41 @@
         "title": "DocketEntryView",
         "type": "object"
       },
+      "EnvironmentChangeCause": {
+        "enum": [
+          "bound",
+          "released"
+        ],
+        "type": "string"
+      },
+      "EnvironmentChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "cause": {
+            "enum": [
+              "bound",
+              "released"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "environment_id",
+          "cause"
+        ],
+        "title": "EnvironmentChangedPayload",
+        "type": "object"
+      },
       "EnvironmentListResponse": {
         "description": "Every environment in the runner's configured pool, held or free.",
         "properties": {
@@ -1635,6 +1739,48 @@
           "environment_id"
         ],
         "title": "EnvironmentView",
+        "type": "object"
+      },
+      "EscalationChangeCause": {
+        "enum": [
+          "opened",
+          "closed"
+        ],
+        "type": "string"
+      },
+      "EscalationChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "cause": {
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lease Id"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "cause"
+        ],
+        "title": "EscalationChangedPayload",
         "type": "object"
       },
       "EscalationListResponse": {
@@ -1768,6 +1914,50 @@
         "title": "EscalationView",
         "type": "object"
       },
+      "FactChangedPayload": {
+        "additionalProperties": false,
+        "description": "A hub-bound fact was enqueued or acked \u2014 mirrors the hub's own ``event-logged``\nshape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,\nsince a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries\nneither. Never a heartbeat \u2014 those ride elsewhere, elapsed-time-derived.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "kind",
+          "chunk_id",
+          "lease_id"
+        ],
+        "title": "FactChangedPayload",
+        "type": "object"
+      },
       "FactListResponse": {
         "description": "The most recent hub-bound facts, newest first.",
         "properties": {
@@ -1843,12 +2033,64 @@
         "title": "FactView",
         "type": "object"
       },
+      "FindingExit": {
+        "description": "How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``\nwhen a person judged the finding rather than the code.",
+        "enum": [
+          "outflow",
+          "withdrawn"
+        ],
+        "title": "FindingExit",
+        "type": "string"
+      },
+      "FindingSeverity": {
+        "description": "A review-sourced finding's own severity.",
+        "enum": [
+          "blocking",
+          "should-fix"
+        ],
+        "title": "FindingSeverity",
+        "type": "string"
+      },
+      "FindingSource": {
+        "description": "A finding's home \u2014 the routine run or the chunk review that raised it.",
+        "enum": [
+          "routine",
+          "review"
+        ],
+        "title": "FindingSource",
+        "type": "string"
+      },
+      "FindingState": {
+        "description": "A finding's derived liveness \u2014 ``live`` for a live-making newest fact, else the newest\nfact's own kind.",
+        "enum": [
+          "live",
+          "gone",
+          "delivered",
+          "resolved",
+          "gone-confirmed",
+          "wont-fix",
+          "not-a-finding",
+          "superseded"
+        ],
+        "title": "FindingState",
+        "type": "string"
+      },
       "FindingView": {
         "description": "A finding. `state` folds the newest fact's kind to `\"live\"` for\n`add`/`observed`/`reopened`; `note` is that fact's own note. `source`\nis `\"routine\"` or `\"review\"`: a review-sourced finding carries no\n`routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.",
         "properties": {
           "class": {
             "title": "Class",
             "type": "string"
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FindingExit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "finding_id": {
             "title": "Finding Id",
@@ -1950,22 +2192,19 @@
           "severity": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/FindingSeverity"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Severity"
+            ]
           },
           "source": {
-            "default": "routine",
-            "title": "Source",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingSource",
+            "default": "routine"
           },
           "state": {
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingState"
           },
           "summary": {
             "title": "Summary",
@@ -2648,6 +2887,71 @@
         "title": "LandedRepoView",
         "type": "object"
       },
+      "LeaseChangeCause": {
+        "enum": [
+          "created",
+          "spawned",
+          "dormant",
+          "transitioned",
+          "reaped",
+          "failed",
+          "escalated",
+          "parked",
+          "released",
+          "preempted"
+        ],
+        "type": "string"
+      },
+      "LeaseChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "cause": {
+            "enum": [
+              "created",
+              "spawned",
+              "dormant",
+              "transitioned",
+              "reaped",
+              "failed",
+              "escalated",
+              "parked",
+              "released",
+              "preempted"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_id",
+          "chunk_id",
+          "cause"
+        ],
+        "title": "LeaseChangedPayload",
+        "type": "object"
+      },
+      "LeaseClosureReason": {
+        "description": "The published ``lease_closures.reason`` values; the store-only mint reasons are not among them.",
+        "enum": [
+          "transitioned",
+          "reaped",
+          "failed",
+          "escalated",
+          "parked",
+          "released",
+          "preempted"
+        ],
+        "title": "LeaseClosureReason",
+        "type": "string"
+      },
       "LeaseListResponse": {
         "description": "Active leases, then recently-closed ones.",
         "properties": {
@@ -2771,6 +3075,10 @@
             ],
             "title": "Session Id"
           },
+          "stale_after_seconds": {
+            "title": "Stale After Seconds",
+            "type": "integer"
+          },
           "state": {
             "enum": [
               "running",
@@ -2811,7 +3119,8 @@
           "last_heartbeat_at",
           "state",
           "closed_at",
-          "closure_reason"
+          "closure_reason",
+          "stale_after_seconds"
         ],
         "title": "LeaseView",
         "type": "object"
@@ -2823,6 +3132,17 @@
           "forced"
         ],
         "title": "MigrationMode",
+        "type": "string"
+      },
+      "MigrationSource": {
+        "description": "What moved a chunk onto another graph \u2014 a migration's attribution.\n\nFour paths write one, and without a discriminator their facts are byte-identical\nin history.",
+        "enum": [
+          "authored-edge",
+          "intent",
+          "follow-latest",
+          "restart"
+        ],
+        "title": "MigrationSource",
         "type": "string"
       },
       "MigrationView": {
@@ -2920,13 +3240,12 @@
           "source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/MigrationSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Source"
+            ]
           },
           "to_graph_id": {
             "title": "To Graph Id",
@@ -3533,6 +3852,19 @@
         "title": "RunnerControlView",
         "type": "object"
       },
+      "RunnerEventType": {
+        "description": "Every runner SSE frame kind \u2014 the ``event:`` name a frame carries.",
+        "enum": [
+          "lease-changed",
+          "ask-changed",
+          "escalation-changed",
+          "takeover-changed",
+          "environment-changed",
+          "fact-changed"
+        ],
+        "title": "RunnerEventType",
+        "type": "string"
+      },
       "RunnerStatusView": {
         "description": "``GET /api/runner`` \u2014 identity, pause states, capacities, hub connectivity, last tick.",
         "properties": {
@@ -3805,6 +4137,17 @@
         "title": "RunnerTraceStatusResponse",
         "type": "object"
       },
+      "SampleMissReason": {
+        "description": "The closed set of reasons one sampling attempt produced nothing:\n``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a\nmissing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other\nnon-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.",
+        "enum": [
+          "credential_lapsed",
+          "credential_unreadable",
+          "endpoint_unreachable",
+          "response_unparseable"
+        ],
+        "title": "SampleMissReason",
+        "type": "string"
+      },
       "ScopeView": {
         "description": "A scope as served by the create/list/read/lifecycle routes.",
         "properties": {
@@ -4031,13 +4374,12 @@
           "miss_reason": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/SampleMissReason"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Miss Reason"
+            ]
           },
           "name": {
             "title": "Name",
@@ -4091,6 +4433,41 @@
           "provider"
         ],
         "title": "SubscriptionView",
+        "type": "object"
+      },
+      "TakeoverChangeCause": {
+        "enum": [
+          "opened",
+          "closed"
+        ],
+        "type": "string"
+      },
+      "TakeoverChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "cause": {
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "takeover_id": {
+            "title": "Takeover Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "takeover_id",
+          "cause"
+        ],
+        "title": "TakeoverChangedPayload",
         "type": "object"
       },
       "TakeoverEndResponse": {
@@ -4838,6 +5215,11 @@
           "fetched_at": {
             "title": "Fetched At",
             "type": "string"
+          },
+          "hub_source": {
+            "default": false,
+            "title": "Hub Source",
+            "type": "boolean"
           },
           "label": {
             "anyOf": [

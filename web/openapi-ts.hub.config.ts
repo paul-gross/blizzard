@@ -10,5 +10,5 @@ import { defineConfig } from '@hey-api/openapi-ts';
 export default defineConfig({
   input: '../openapi/hub.openapi.json',
   output: { path: 'projects/fleet/src/lib/api/hub' },
-  plugins: ['@hey-api/client-fetch', '@hey-api/typescript', '@hey-api/sdk'],
+  plugins: ['@hey-api/client-fetch', { name: '@hey-api/typescript', enums: 'javascript' }, '@hey-api/sdk'],
 });

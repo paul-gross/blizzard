@@ -28,6 +28,7 @@ import uvicorn
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
@@ -931,7 +932,7 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
     with _runner_api(config, events=broker):
         with sse_tap(config.port) as tap:
             first_id = broker.publish_lease_changed("ls_1", "ch_1", cause="created")
-            second_id = broker.publish_lease_changed("ls_1", "ch_1", cause="transitioned")
+            second_id = broker.publish_lease_changed("ls_1", "ch_1", cause=LeaseClosureReason.TRANSITIONED)
             live = tap.collect(window=3.0)
         assert live.count("lease-changed") == 2, live
 
@@ -965,7 +966,7 @@ def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids(tmp_pat
 
     first = EventBroker()
     with _runner_api(config, events=first), sse_tap(config.port) as tap:
-        for cause in ("created", "transitioned", "released"):
+        for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
             stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
         assert tap.collect(window=3.0).count("lease-changed") == 3
 
@@ -983,12 +984,12 @@ def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cu
     config = _bare_runner_config(tmp_path)
 
     first = EventBroker()
-    for cause in ("created", "transitioned", "released"):
+    for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
         stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
 
     second = EventBroker()  # the restart, already carrying buffered events before reconnect
     second.publish_lease_changed("ls_2", "ch_2", cause="created")
-    second.publish_lease_changed("ls_2", "ch_2", cause="transitioned")
+    second.publish_lease_changed("ls_2", "ch_2", cause=LeaseClosureReason.TRANSITIONED)
     assert second.latest_id() < stale_cursor, "the fresh broker's buffered ids must stay below the stale cursor"
 
     with _runner_api(config, events=second):

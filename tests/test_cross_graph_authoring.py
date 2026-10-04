@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import ChoiceTarget, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
@@ -58,6 +59,13 @@ def test_choice_target_distinguishes_node_graph_and_malformed() -> None:
     assert ChoiceTarget.of("graph:default-delivery") == ChoiceTarget(graph="default-delivery")
     assert ChoiceTarget.of("graph:").malformed
     assert ChoiceTarget.of("graph:a:b").malformed  # the deferred explicit-node form
+
+
+@unit
+def test_choice_target_kind_classifies_node_done_and_graph() -> None:
+    assert ChoiceTarget.of("review").kind() is ChoiceTargetKind.NODE
+    assert ChoiceTarget.of("done").kind() is ChoiceTargetKind.DONE
+    assert ChoiceTarget.of("graph:default-delivery").kind() is ChoiceTargetKind.GRAPH
 
 
 # Unit — parse / reify / validate
@@ -143,6 +151,17 @@ def test_minting_a_graph_with_an_unresolved_cross_graph_target_warns(tmp_path: P
     # Late binding: the target `triage` is not minted yet, so it mints with a warning, not
     # an error (the two graphs may be authored in either order).
     assert any("triage" in w for w in warnings), warnings
+
+
+@component
+def test_a_cross_graph_edge_reads_back_as_a_graph_target(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = hub.client.post("/api/graphs", json={"definition_yaml": _CROSS_GRAPH_YAML}).json()["graph_id"]
+
+    edges = hub.client.get(f"/api/graphs/{graph_id}").json()["edges"]
+    migrate = next(e for e in edges if e["to_node_name"] == "graph:triage")
+
+    assert (migrate["target_kind"], migrate["target_graph"]) == ("graph", "triage")
 
 
 @component

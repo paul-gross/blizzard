@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ArtifactView } from '../api/hub';
+import { ArtifactKind, type ArtifactView, type FindingDelta, type FindingSurvey } from '../api/hub';
 import { formatAbsolute, formatWhen } from '../when';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
-import { parseFindingDelta, type FindingDelta } from './parse-finding-delta';
-import { parseFindingSurvey, type FindingSurvey } from './parse-finding-survey';
+import { parseFindingDelta } from './parse-finding-delta';
+import { parseFindingSurvey } from './parse-finding-survey';
 
 /**
  * One artifact, rendered — the head (key, recency, kind) over a kind-dependent
@@ -85,6 +85,8 @@ export class ChunkArtifactBody {
    * replaces the raw-ISO `title` this span carried before, which didn't localize. */
   protected readonly whenTitle = computed(() => formatAbsolute(this.artifact().recorded_at));
 
+  protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
+
   /** The asset's content, parsed as a `FindingDelta` — `null` when there is no
    * content to try ({@link structuredCandidate}) or it fails
    * {@link parseFindingDelta}'s shape check, in which case the template falls through
@@ -110,7 +112,7 @@ export class ChunkArtifactBody {
    * never spend a parse on content they don't render anyway. */
   private readonly structuredCandidate = computed<string | null>(() => {
     const artifact = this.artifact();
-    if (artifact.kind !== 'asset' || this.body() !== 'full') return null;
+    if (artifact.kind !== ArtifactKind.ASSET || this.body() !== 'full') return null;
     return artifact.content ?? null;
   });
 }

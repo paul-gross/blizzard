@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, type Tone, FleetWhen } from 'fleet';
+import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, type Tone, FleetWhen } from 'fleet';
 import type { FindingTriageVerb } from './finding-list';
 import { findingStateTone, isFindingExited } from './finding-state';
 
@@ -18,13 +18,16 @@ export interface ProposalWorkItemVm {
  * carries. `workItem` repeats the same accepted-and-minted proposal's
  * work item on every one of its finding rows, `null` otherwise.
  *
- * `state` is the row's whole classification; pinned by `proposal-panel.spec.ts`'s
- * "still offers every verb on a gone-flagged row, which has not exited". */
+ * `state` tints the row's badge and `exit` alone decides whether it has exited;
+ * pinned by `proposal-panel.spec.ts`'s "still offers every verb on a gone-flagged
+ * row, which has not exited". */
 export interface ProposalEvidenceRowVm {
   readonly findingId: string;
   readonly locus: string;
   readonly summary: string;
-  readonly state: string;
+  readonly state: hubApi.FindingState;
+  /** `FindingView.exit` — non-null once the finding has exited. */
+  readonly exit: hubApi.FindingExit | null;
   readonly workItem: ProposalWorkItemVm | null;
   /** Whether an exit verb is in flight for this finding — disables the row's triage
    * buttons so it cannot be triaged again before the first request settles. */
@@ -61,9 +64,9 @@ export const PROPOSAL_EVIDENCE_ACTIONS: readonly { readonly verb: ProposalEviden
  * record it minted nothing, never an empty space where the item would
  * be. */
 export type ProposalClosureVm =
-  | { readonly kind: 'passed'; readonly closedBy: string; readonly closedAt: string; readonly reason: string | null }
+  | { readonly kind: Extract<hubApi.GardenProposalClosureKind, 'passed'>; readonly closedBy: string; readonly closedAt: string; readonly reason: string | null }
   | {
-      readonly kind: 'accepted';
+      readonly kind: Extract<hubApi.GardenProposalClosureKind, 'accepted'>;
       readonly closedBy: string;
       readonly closedAt: string;
       readonly reason: string | null;
@@ -74,8 +77,8 @@ export type ProposalClosureVm =
  * raised it; `operator` names the authoring identity, plus the routine when one was
  * named, since an operator proposal may cite none at all. */
 export type ProposalOriginVm =
-  | { readonly kind: 'routine-run'; readonly routineName: string }
-  | { readonly kind: 'operator'; readonly createdBy: string; readonly routineName: string | null };
+  | { readonly kind: Extract<hubApi.GardenProposalOrigin, 'routine-run'>; readonly routineName: string }
+  | { readonly kind: Extract<hubApi.GardenProposalOrigin, 'operator'>; readonly createdBy: string; readonly routineName: string | null };
 
 /** The selected proposal's whole panel view model — plain data, no query or wire
  * type, `RoutinePanelVm`'s own shape. `closure` is `null` while the proposal is
@@ -144,9 +147,9 @@ export class FleetProposalPanel {
     return origin.routineName === null ? `operator · ${origin.createdBy}` : `operator · ${origin.createdBy} · ${origin.routineName}`;
   }
 
-  /** Whether the row has already exited, classified off `state` through the shared
-   * predicate — the same one `finding-panel.ts` gates its own verbs on, so the two
-   * surfaces never disagree about what a given state may still be triaged into. */
+  /** Whether the row has already exited, classified off the wire `exit` through the
+   * shared predicate — the same one `finding-panel.ts` gates its own verbs on, so the
+   * two surfaces never disagree about what a finding may still be triaged into. */
   protected readonly isExited = isFindingExited;
 
   /** The shared finding-state palette (`finding-state.ts`), so an evidence row and

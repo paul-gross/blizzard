@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -23,7 +24,6 @@ from blizzard.hub.domain.chunk.model import (
     IntendedMigration,
     LeaseFact,
     MigrationFact,
-    MigrationSource,
     QuestionFact,
     TransitionFact,
 )

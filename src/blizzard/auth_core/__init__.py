@@ -2,13 +2,12 @@
 
 A **dependency-free** domain package — no FastAPI, no SQLAlchemy (``bzh:domain-core``).
 :class:`Role` is a total order, carried declaratively as :data:`ROLE_PERMISSIONS`: a
-**static, code-only map**, never DB-stored. :class:`Permission` is a string-newtype.
+**static, code-only map**, never DB-stored. :class:`Permission` is a string enum.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import NewType
 
 
 class Role(StrEnum):
@@ -21,40 +20,56 @@ class Role(StrEnum):
     SUPERUSER = "superuser"
 
 
-Permission = NewType("Permission", str)
+class Permission(StrEnum):
+    """One grantable capability; a role expands to a fixed set of them."""
 
-#: Fleet-state reads, including the streaming one (``GET /api/events/stream``); reused across
-#: more than one route family. Belongs to ``guest``+.
-FLEET_VIEW = Permission("fleet:view")
-#: Ingest a chunk (``POST /chunks``).
-CHUNK_INGEST = Permission("chunk:ingest")
-#: Every other chunk-scoped control write — promote/detach/pause/resume/stop/requeue/
-#: patch/hub-marker — plus a write outside chunk scope that reuses this same tier.
-CHUNK_CONTROL = Permission("chunk:control")
-#: Answer a question (``POST /questions/{id}/answers``, and the durable ask that lands it).
-QUESTION_ANSWER = Permission("question:answer")
-#: Resolve an open gate decision.
-GATE_RESOLVE = Permission("gate:resolve")
-#: Reorder or group the ready queue.
-QUEUE_REORDER = Permission("queue:reorder")
-#: Pause/resume/enroll a runner.
-RUNNER_PAUSE = Permission("runner:pause")
-#: Retire/reinstate a runner, or revoke its token.
-RUNNER_RETIRE = Permission("runner:retire")
-#: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
-#: routine authoring, the same authoring tier.
-GRAPH_EDIT = Permission("graph:edit")
-#: Administer users and their roles (#94). Held by ``admin``+ (pinned by
-#: tests/test_auth_core.py::test_user_manage_is_admin_and_above).
-USER_MANAGE = Permission("user:manage")
-#: Read a chunk's stored transcript segments — above ``fleet:view``,
-#: since a transcript carries everything a worker saw, not just the fleet's state.
-TRANSCRIPT_READ = Permission("transcript:read")
-#: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
-#: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
-ANALYTICS_ADMIN = Permission("analytics:admin")
-#: Write a configured record — today the secret store. Held by ``admin``+.
-CONFIG_EDIT = Permission("config:edit")
+    #: Fleet-state reads, including the streaming one (``GET /api/events/stream``); reused across
+    #: more than one route family. Belongs to ``guest``+.
+    FLEET_VIEW = "fleet:view"
+    #: Ingest a chunk (``POST /chunks``).
+    CHUNK_INGEST = "chunk:ingest"
+    #: Every other chunk-scoped control write — promote/detach/pause/resume/stop/requeue/
+    #: patch/hub-marker — plus a write outside chunk scope that reuses this same tier.
+    CHUNK_CONTROL = "chunk:control"
+    #: Answer a question (``POST /questions/{id}/answers``, and the durable ask that lands it).
+    QUESTION_ANSWER = "question:answer"
+    #: Resolve an open gate decision.
+    GATE_RESOLVE = "gate:resolve"
+    #: Reorder or group the ready queue.
+    QUEUE_REORDER = "queue:reorder"
+    #: Pause/resume/enroll a runner.
+    RUNNER_PAUSE = "runner:pause"
+    #: Retire/reinstate a runner, or revoke its token.
+    RUNNER_RETIRE = "runner:retire"
+    #: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
+    #: routine authoring, the same authoring tier.
+    GRAPH_EDIT = "graph:edit"
+    #: Administer users and their roles. Held by ``admin``+ (pinned by
+    #: tests/test_auth_core.py::test_user_manage_is_admin_and_above).
+    USER_MANAGE = "user:manage"
+    #: Read a chunk's stored transcript segments — above ``fleet:view``,
+    #: since a transcript carries everything a worker saw, not just the fleet's state.
+    TRANSCRIPT_READ = "transcript:read"
+    #: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
+    #: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
+    ANALYTICS_ADMIN = "analytics:admin"
+    #: Write a configured record — today the secret store. Held by ``admin``+.
+    CONFIG_EDIT = "config:edit"
+
+
+FLEET_VIEW = Permission.FLEET_VIEW
+CHUNK_INGEST = Permission.CHUNK_INGEST
+CHUNK_CONTROL = Permission.CHUNK_CONTROL
+QUESTION_ANSWER = Permission.QUESTION_ANSWER
+GATE_RESOLVE = Permission.GATE_RESOLVE
+QUEUE_REORDER = Permission.QUEUE_REORDER
+RUNNER_PAUSE = Permission.RUNNER_PAUSE
+RUNNER_RETIRE = Permission.RUNNER_RETIRE
+GRAPH_EDIT = Permission.GRAPH_EDIT
+USER_MANAGE = Permission.USER_MANAGE
+TRANSCRIPT_READ = Permission.TRANSCRIPT_READ
+ANALYTICS_ADMIN = Permission.ANALYTICS_ADMIN
+CONFIG_EDIT = Permission.CONFIG_EDIT
 
 #: ``guest`` — read everything, mutate nothing.
 _GUEST_PERMISSIONS: frozenset[Permission] = frozenset({FLEET_VIEW})

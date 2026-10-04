@@ -1,10 +1,9 @@
 import { computed, type Signal } from '@angular/core';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, reopenFindingsMutationKey, resolveFindingsMutationKey, supersedeFindingsMutationKey, wontFixFindingsMutationKey } from '../mutation-keys';
-import { FINDING_STATES } from './finding-state';
 import { injectHubFindingsBucketQuery } from './finding.query';
 import { injectHubRoutinesQuery } from './routines.query';
 import { injectHubScopesQuery } from './scopes.query';
-import { injectPendingMutationVariables, type AsyncStateQuery, type FindingView, type KitChipOption, type RoutineView, type ScopeView } from 'fleet';
+import { hubApi, injectPendingMutationVariables, type AsyncStateQuery, type FindingView, type KitChipOption, type RoutineView, type ScopeView } from 'fleet';
 import { type FindingExitVars } from './finding.mutations';
 
 import { injectQueryFilters } from '../route-state';
@@ -133,8 +132,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * here — the triage dialog that actually fires them (`gardening-finding-triage-
    * dialog.ts`) is a sibling surface this list never mounts.
    *
-   * `derive_liveness` (`src/blizzard/hub/domain/garden/findings/model.py`) folds a finding's facts
-   * newest-wins, and every one of these six verbs' own fact `kind` is exactly its
+   * The hub folds a finding's facts newest-wins into `FindingView.state`, and every one of these six verbs' own fact `kind` is exactly its
    * resulting `state` (`reopened` folds to `"live"`, same as `add`/`observed`) — so
    * each verb's resulting state is fixed and known ahead of the call settling, the
    * same guarantee `chunk-detail.ts`'s `overrideStatus` documents for Pause/Complete.
@@ -150,7 +148,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   /** Each pending list above paired with the fixed state its own verb resolves to;
    * pinned by `gardening-findings-page.spec.ts`'s "keeps the row visible on a
    * same-state re-dispatch — …". */
-  const pendingByResultingState = computed<readonly { readonly findingIds: readonly string[]; readonly resultingState: string }[]>(
+  const pendingByResultingState = computed<readonly { readonly findingIds: readonly string[]; readonly resultingState: hubApi.FindingState }[]>(
     () => [
       { findingIds: resolvePending().flatMap((v) => v.findingIds), resultingState: 'resolved' },
       { findingIds: confirmGonePending().flatMap((v) => v.findingIds), resultingState: 'gone-confirmed' },
@@ -176,11 +174,11 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     url.patch({ class: value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length) });
   }
 
-  /** {@link FINDING_STATES} is fixed, unlike `class`, so these carry no value
-   * prefix and no collision guard. */
+  /** The generated `FindingState` vocabulary is fixed, unlike `class`, so these
+   * carry no value prefix and no collision guard. */
   const stateChips: readonly KitChipOption[] = [
     { value: ALL_STATES, label: 'All states', testid: 'gardening-finding-state-all' },
-    ...FINDING_STATES.map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
+    ...Object.values(hubApi.FindingState).map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
   ];
   function onStateChoose(value: string): void {
     url.patch({ state: value === ALL_STATES ? null : value });

@@ -1,7 +1,8 @@
 """``derive_liveness`` — the newest-fact-wins finding read (unit tier):
 no facts reads live with nothing seen; a plain add/observe history stays live; a `gone`
 takes it out of the live bucket; a later fact after `gone` restores it; and
-`observed_count` counts only `observed` facts, never the initial `add`."""
+`observed_count` counts only `observed` facts, never the initial `add`; and ``finding_exit``
+classifies a state as an outflow, a withdrawal, or not exited."""
 
 from __future__ import annotations
 
@@ -9,7 +10,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.garden.findings.model import FindingFact, derive_liveness
+from blizzard.foundation.findings import FindingExit, FindingState
+from blizzard.hub.domain.garden.findings.model import FindingFact, derive_liveness, finding_exit
 
 pytestmark = pytest.mark.unit
 
@@ -221,3 +223,18 @@ def test_facts_with_nothing_seen_leave_the_span_unset() -> None:
     state = derive_liveness([FindingFact(kind="gone", recorded_at=_T1)])
 
     assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (None, None, 0)
+
+
+@pytest.mark.parametrize("state", [FindingState.RESOLVED, FindingState.GONE_CONFIRMED])
+def test_an_outflow_state_exits_as_outflow(state: FindingState) -> None:
+    assert finding_exit(state) is FindingExit.OUTFLOW
+
+
+@pytest.mark.parametrize("state", [FindingState.WONT_FIX, FindingState.NOT_A_FINDING, FindingState.SUPERSEDED])
+def test_a_withdrawing_state_exits_as_withdrawn(state: FindingState) -> None:
+    assert finding_exit(state) is FindingExit.WITHDRAWN
+
+
+@pytest.mark.parametrize("state", [FindingState.LIVE, FindingState.GONE, FindingState.DELIVERED])
+def test_a_state_that_has_not_exited_has_no_exit(state: FindingState) -> None:
+    assert finding_exit(state) is None

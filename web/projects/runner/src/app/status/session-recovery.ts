@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
-import { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet';
 
-import { runnerLogoutInFlight } from '../identity/auth.query';
+import { readRunnerSession, runnerLogoutInFlight } from '../identity/auth.query';
 
 /** `sessionStorage` key marking that a bounce was already attempted this cycle —
  * the backstop `handle` checks across the full-page navigation
@@ -116,7 +116,7 @@ export class SessionRecovery {
 
     this.inFlight = true;
     try {
-      const { data } = await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
+      const { data } = await readRunnerSession();
       if (data === undefined) return 'read-failed';
       const noSession = data.auth_enabled && !data.username;
       if (!noSession) return 'not-applicable';

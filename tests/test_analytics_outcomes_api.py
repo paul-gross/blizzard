@@ -13,9 +13,9 @@ from typing import cast
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.delivery.command_runner import CommandResult
-from blizzard.hub.domain.chunk.model import MigrationSource
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository

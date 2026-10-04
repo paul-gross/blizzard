@@ -1,22 +1,24 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type ActivityView, compactRef, type KitAsyncStateValue, asyncState, FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind, formatClockTime } from 'fleet';
+import { type ActivityView, compactRef, type KitAsyncStateValue, asyncState, FleetLiveUpdates, hubApi, type LoggedEvent, type RunnerChangeKind, formatClockTime } from 'fleet';
 import { ACTIVITY_LIMIT, injectHubActivityQuery } from './activity.query';
 import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
+const { HubEventType, RunnerChangeKind: Kind } = hubApi;
+
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one. Only the pause and retirement families need an entry: the registration and heartbeat kinds
- * never reach the feed (fleet-live.ts, `MUTED_RUNNER_KINDS`), and the fallback below
- * renders any kind absent here as itself. */
+ * never reach the feed (`FleetLiveUpdates` mutes them), and the fallback below
+ * renders any kind absent here — including one from a newer hub — as itself. */
 const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
-  ['paused', 'paused'],
-  ['resumed', 'resumed'],
-  ['locally-paused', 'locally paused'],
-  ['locally-resumed', 'locally resumed'],
-  ['retired', 'retired'],
-  ['reinstated', 'reinstated'],
-  ['token-revoked', 'had its token revoked'],
+  [Kind.PAUSED, 'paused'],
+  [Kind.RESUMED, 'resumed'],
+  [Kind.LOCALLY_PAUSED, 'locally paused'],
+  [Kind.LOCALLY_RESUMED, 'locally resumed'],
+  [Kind.RETIRED, 'retired'],
+  [Kind.REINSTATED, 'reinstated'],
+  [Kind.TOKEN_REVOKED, 'had its token revoked'],
 ]);
 
 /**
@@ -43,30 +45,29 @@ interface RowSummary {
 
 /**
  * A human-readable summary of a hub event ("a legible summary"; widened to a two-line
- * block for `chunk-changed`). Maps the board's live vocabulary
- * (events/broker.py) onto plain phrasing; an unknown type degrades to its raw name
- * rather than dropping the row.
+ * block for `chunk-changed`). Maps the generated `HubEventType` vocabulary onto plain
+ * phrasing; an unknown type degrades to its raw name rather than dropping the row.
  */
 function summarize(event: LoggedEvent): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
   switch (event.type) {
-    case 'chunk-changed': {
+    case HubEventType.CHUNK_CHANGED: {
       const { transition, runner } = summarizeChunkChange(event.data);
       return { message: transition, detail: runner };
     }
-    case 'question-asked':
+    case HubEventType.QUESTION_ASKED:
       return { message: `${chunk} asked a question` };
-    case 'question-answered':
+    case HubEventType.QUESTION_ANSWERED:
       return { message: `${chunk} question answered` };
-    case 'decision-opened':
+    case HubEventType.DECISION_OPENED:
       return { message: `${chunk} gate opened` };
-    case 'decision-resolved':
+    case HubEventType.DECISION_RESOLVED:
       return { message: `${chunk} gate resolved` };
-    case 'queue-changed':
+    case HubEventType.QUEUE_CHANGED:
       return { message: 'ready queue changed' };
-    case 'runner-changed':
+    case HubEventType.RUNNER_CHANGED:
       return { message: summarizeRunnerChange(event.data) };
-    case 'event-logged':
+    case HubEventType.EVENT_LOGGED:
       return {
         message: `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
       };
@@ -83,29 +84,11 @@ const RENDER_LIMIT = ACTIVITY_LIMIT;
  * unchanged over either source. `seq` is caller-assigned (negative, so it can never
  * collide with the live spine's own positive, monotonic counter) — it exists only so
  * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
- * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects.
- *
- * Field-by-field rather than a blind spread: `ActivityView`'s optional fields are
- * `T | null | undefined` (an explicit "absent" from a JSON API), while
- * `HubEventPayload`'s are `T | undefined` (`Partial`) — the seam every present-when-
- * meaningful field needs `?? undefined` to cross. */
+ * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects. The
+ * row less its envelope is already {@link LoggedEvent.data}'s shape. */
 function fromActivity(row: ActivityView, seq: number): LoggedEvent {
-  const data: HubEventPayload = {
-    chunk_id: row.chunk_id ?? undefined,
-    status: row.status ?? undefined,
-    prev_status: row.prev_status ?? undefined,
-    prev_node: row.prev_node ?? undefined,
-    node: row.node ?? undefined,
-    runner_id: row.runner_id ?? undefined,
-    cause: row.cause ?? undefined,
-    graph_id: row.graph_id ?? undefined,
-    kind: row.kind ?? undefined,
-    by: row.by ?? undefined,
-    reason: row.reason ?? undefined,
-    severity: row.severity ?? undefined,
-    key: row.key,
-  };
-  return { seq, type: row.type, data, at: Date.parse(row.at), key: row.key };
+  const { at, type, ...data } = row;
+  return { seq, type, data, at: Date.parse(at), key: row.key };
 }
 
 /**

@@ -8,8 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import dto
-from blizzard.hub.domain.chunk.model import MigrationSource, UsageFact
+from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.graph.model import Graph
 
 

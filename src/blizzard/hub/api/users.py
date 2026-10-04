@@ -30,7 +30,7 @@ def _user_view(user: User, *, identities: list[Identity]) -> UserView:
         username=user.username,
         display_name=user.display_name,
         email=user.email,
-        role=user.role.value,
+        role=user.role,
         created_at=iso_utc(user.created_at),
         identities=[UserIdentityView(provider_name=i.provider_name, handle=i.handle) for i in identities],
     )

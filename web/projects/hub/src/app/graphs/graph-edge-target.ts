@@ -1,24 +1,14 @@
-import type { GraphView } from 'fleet';
+import { hubApi, type GraphView } from 'fleet';
 
 /**
- * What one choice's `to:` names — resolved from the wire's plain-string
- * `to_node_name` into the three things it can mean, and the structural kind that
- * follows from which one it is. `graph-layout.ts` re-exports
- * {@link EdgeKind} and {@link EdgeTarget} so consumers use one type entrypoint.
+ * What one choice's `to:` names — the wire edge's `target_kind` (a node in this
+ * graph, the reserved `done` terminal, or a migration to another graph) resolved
+ * into a laid-out target, and the structural kind that follows from which one it
+ * is. `graph-layout.ts` re-exports {@link EdgeKind} and {@link EdgeTarget} so
+ * consumers use one type entrypoint.
  */
 
-/** A node's declaration in `graph.nodes` names the terminal a choice can point at
- * instead of a node — the domain's `RESERVED_TERMINAL`
- * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here (not a backend import) since
- * the wire model carries it as a plain string, not a discriminated value. */
-export const DONE_TERMINAL = 'done';
-
-/** The cross-graph migration prefix a choice's `to:` may carry instead of a node
- * name or the reserved terminal — the domain's `GRAPH_TARGET_PREFIX`
- * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here for the same reason as
- * {@link DONE_TERMINAL}: the wire model carries `to_node_name` as a plain string,
- * not a discriminated value. */
-export const GRAPH_TARGET_PREFIX = 'graph:';
+const TargetKind = hubApi.ChoiceTargetKind;
 
 /** An edge's derived semantic kind — purely structural, since the wire model
  * carries no `kind` field: an edge to the reserved `done` terminal, a migration to
@@ -28,15 +18,13 @@ export const GRAPH_TARGET_PREFIX = 'graph:';
  * `advance`. */
 export type EdgeKind = 'advance' | 'retry';
 
-/** What a resolved edge (or the current selection) targets — the three things a
- * choice's `to:` can name (`ChoiceTarget` in `src/blizzard/hub/domain/graph/model.py`):
- * a node in this graph, the reserved `done` terminal, or a migration to another
- * graph entirely. Replaces the old `toNodeId: string | null` encoding, which had
- * no room for the third case. */
+/** What a resolved edge (or the current selection) targets — one variant per
+ * {@link hubApi.ChoiceTargetKind}: a node in this graph, the reserved `done`
+ * terminal, or a migration to another graph entirely. */
 export type EdgeTarget =
-  | { readonly kind: 'node'; readonly nodeId: string }
-  | { readonly kind: 'done' }
-  | { readonly kind: 'graph'; readonly targetGraph: string };
+  | { readonly kind: typeof TargetKind.NODE; readonly nodeId: string }
+  | { readonly kind: typeof TargetKind.DONE }
+  | { readonly kind: typeof TargetKind.GRAPH; readonly targetGraph: string };
 
 export interface ResolvedEdge {
   readonly id: string;
@@ -47,12 +35,11 @@ export interface ResolvedEdge {
   readonly choiceId: string;
 }
 
-/** Resolves every edge's target — a node in this graph, the reserved `done`
- * terminal, or a `graph:<name>` migration — and its structural kind. Returns `null`
- * if an edge names a target that matches none of the three (an unknown node name, or
- * a malformed `graph:` value — empty or carrying a further `:`, mirroring the
- * domain's `ChoiceTarget.malformed`) — a degenerate graph the caller falls back on
- * rather than mis-render.
+/** Resolves every edge's target — from the wire edge's `target_kind`, a node in
+ * this graph, the reserved `done` terminal, or a migration to `target_graph` — and
+ * its structural kind. Returns `null` if an edge names a target it cannot place (an
+ * unknown node name, or a graph migration carrying no target graph) — a degenerate
+ * graph the caller falls back on rather than mis-render.
  *
  * Only edges actually present in `graph.edges` are laid out here — the runtime's
  * machinery-default edges (e.g. a `deliver` node's implicit `landed→done` /
@@ -68,17 +55,18 @@ export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, str
     // edge only carries `choice_id` (mirrors `graph-detail.ts`'s `resolvedEdges`).
     const choice = nodeById.get(edge.from_node_id)?.choices?.find((c) => c.choice_id === edge.choice_id);
     const label = choice?.name ?? edge.choice_id;
-    if (edge.to_node_name === DONE_TERMINAL) {
-      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: 'done' }, kind: 'advance', label, choiceId: edge.choice_id });
+    const targetKind = edge.target_kind ?? TargetKind.NODE;
+    if (targetKind === TargetKind.DONE) {
+      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: TargetKind.DONE }, kind: 'advance', label, choiceId: edge.choice_id });
       continue;
     }
-    if (edge.to_node_name.startsWith(GRAPH_TARGET_PREFIX)) {
-      const targetGraph = edge.to_node_name.slice(GRAPH_TARGET_PREFIX.length);
-      if (targetGraph === '' || targetGraph.includes(':')) return null;
+    if (targetKind === TargetKind.GRAPH) {
+      const targetGraph = edge.target_graph;
+      if (!targetGraph) return null;
       resolved.push({
         id: `e${i}`,
         fromId: edge.from_node_id,
-        target: { kind: 'graph', targetGraph },
+        target: { kind: TargetKind.GRAPH, targetGraph },
         kind: 'advance',
         label,
         choiceId: edge.choice_id,
@@ -93,7 +81,7 @@ export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, str
     const isSelfLoop = toId === edge.from_node_id;
     const isBackEdge = !isSelfLoop && toIndex <= fromIndex;
     const kind: EdgeKind = isSelfLoop || isBackEdge ? 'retry' : 'advance';
-    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: 'node', nodeId: toId }, kind, label, choiceId: edge.choice_id });
+    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: TargetKind.NODE, nodeId: toId }, kind, label, choiceId: edge.choice_id });
   }
   return resolved;
 }

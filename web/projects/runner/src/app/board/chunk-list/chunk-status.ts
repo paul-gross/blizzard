@@ -1,4 +1,4 @@
-import type { Tone, runnerApi } from 'fleet';
+import { type Tone, runnerApi } from 'fleet';
 
 /**
  * The machine-side derived status of a chunk this runner holds — folded at
@@ -51,7 +51,7 @@ export function deriveMachineChunkStatus(lease: runnerApi.LeaseView, facts: Mach
     case 'closed':
       // `transitioned` is the one healthy closure (the node step completed and
       // the chunk moved on) — the rest (`failed`/`reaped`/`released`/…) read dim.
-      return lease.closure_reason === 'transitioned'
+      return lease.closure_reason === runnerApi.LeaseClosureReason.TRANSITIONED
         ? { label: 'TRANSITIONED', tone: 'done' }
         : { label: `CLOSED · ${(lease.closure_reason ?? 'unknown').toUpperCase()}`, tone: 'idle' };
   }

@@ -10,13 +10,13 @@ const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   { value: 'info', label: 'Info', testid: 'events-filter-info' },
   { value: 'warning', label: 'Warning', testid: 'events-filter-warning' },
   { value: 'critical', label: 'Critical', testid: 'events-filter-critical' },
-];
+] satisfies readonly (KitChipOption & { readonly value: EventView['severity'] | '' })[];
 
 /** `EventView.severity` → {@link Tone} — critical reads as the board's alarm red,
  * warning as its live-work amber, and info as its dim/idle color, so the badge
  * agrees with the rest of the board's derived-status vocabulary rather than
  * inventing a severity-only color scale. */
-const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
+const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
   critical: 'stale',
   warning: 'running',
   info: 'idle',
@@ -116,7 +116,7 @@ export class EventsView {
     ];
   }
 
-  protected toneFor(severity: string): Tone {
+  protected toneFor(severity: EventView['severity']): Tone {
     return SEVERITY_TONE[severity] ?? 'idle';
   }
 

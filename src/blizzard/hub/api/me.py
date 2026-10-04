@@ -10,8 +10,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import resolve_identity
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.auth.service import ASSIGNABLE_ROLES
 from blizzard.hub.config import AUTH_MODE_NONE
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -23,8 +25,10 @@ class MeResponse(BaseModel):
     user_id: str
     username: str
     display_name: str
-    role: str
-    permissions: list[str]
+    role: Role
+    permissions: list[Permission]
+    #: Every role the role-assignment API may grant.
+    assignable_roles: list[Role] = []
 
 
 @router.get("/me", response_model=MeResponse)
@@ -40,6 +44,7 @@ def me(request: Request) -> MeResponse:
         user_id=identity.user_id,
         username=identity.username,
         display_name=identity.display_name,
-        role=identity.role.value,
+        role=identity.role,
         permissions=sorted(identity.permissions),
+        assignable_roles=list(ASSIGNABLE_ROLES),
     )

@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -23,7 +24,7 @@ from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
+from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry

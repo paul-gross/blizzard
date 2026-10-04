@@ -119,7 +119,14 @@ export type AnalyticsSpendView = {
  *
  * The union discriminator.
  */
-export type ArtifactKind = 'git_commit' | 'asset';
+export const ArtifactKind = { GIT_COMMIT: 'git_commit', ASSET: 'asset' } as const;
+
+/**
+ * ArtifactKind
+ *
+ * The union discriminator.
+ */
+export type ArtifactKind = typeof ArtifactKind[keyof typeof ArtifactKind];
 
 /**
  * ArtifactScope
@@ -128,7 +135,20 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * the graph itself (``artifacts:``), or blizzard's own published, global-namespace
  * documents, resolved at call time (``system``).
  */
-export type ArtifactScope = 'node' | 'graph' | 'system';
+export const ArtifactScope = {
+    NODE: 'node',
+    GRAPH: 'graph',
+    SYSTEM: 'system'
+} as const;
+
+/**
+ * ArtifactScope
+ *
+ * Where an artifact is pinned — a chunk's node-step, the graph mint that baked it into
+ * the graph itself (``artifacts:``), or blizzard's own published, global-namespace
+ * documents, resolved at call time (``system``).
+ */
+export type ArtifactScope = typeof ArtifactScope[keyof typeof ArtifactScope];
 
 /**
  * ArtifactView
@@ -163,10 +183,7 @@ export type ArtifactView = {
      * Key
      */
     key: string;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: ArtifactKind;
     /**
      * Name
      */
@@ -187,6 +204,32 @@ export type ArtifactView = {
      * Repo
      */
     repo?: string | null;
+};
+
+export const AskChangeCause = { ASKED: 'asked', ANSWERED: 'answered' } as const;
+
+export type AskChangeCause = typeof AskChangeCause[keyof typeof AskChangeCause];
+
+/**
+ * AskChangedPayload
+ */
+export type AskChangedPayload = {
+    /**
+     * Cause
+     */
+    cause: 'asked' | 'answered';
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
 };
 
 /**
@@ -458,6 +501,10 @@ export type ChunkDetail = {
      * Closed Prs
      */
     closed_prs?: Array<PrView>;
+    /**
+     * Completable
+     */
+    completable?: boolean;
     cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
@@ -467,6 +514,10 @@ export type ChunkDetail = {
      * Current Node Name
      */
     current_node_name?: string | null;
+    /**
+     * Current Node Terminal
+     */
+    current_node_terminal?: boolean;
     decision?: DecisionView | null;
     /**
      * Default Effort
@@ -480,6 +531,10 @@ export type ChunkDetail = {
      * Default Model
      */
     default_model?: Array<string>;
+    /**
+     * Deletable
+     */
+    deletable?: boolean;
     escalation?: ChunkEscalationView | null;
     /**
      * Graph Created At
@@ -519,6 +574,10 @@ export type ChunkDetail = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    /**
+     * Pausable
+     */
+    pausable?: boolean;
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
@@ -531,6 +590,10 @@ export type ChunkDetail = {
     restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
+    /**
+     * Terminal
+     */
+    terminal?: boolean;
     /**
      * Usage
      */
@@ -614,7 +677,24 @@ export type ChunkNeighborhoodView = {
  *
  * The derived chunk statuses. Never stored — always a query result.
  */
-export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
+export const ChunkStatus = {
+    NOT_READY: 'not_ready',
+    READY: 'ready',
+    RUNNING: 'running',
+    DELIVERING: 'delivering',
+    WAITING_ON_HUMAN: 'waiting_on_human',
+    NEEDS_HUMAN: 'needs_human',
+    PAUSED: 'paused',
+    STOPPED: 'stopped',
+    DONE: 'done'
+} as const;
+
+/**
+ * ChunkStatus
+ *
+ * The derived chunk statuses. Never stored — always a query result.
+ */
+export type ChunkStatus = typeof ChunkStatus[keyof typeof ChunkStatus];
 
 /**
  * ChunkSummary
@@ -754,6 +834,10 @@ export type ChunkUsageView = {
      * Cache Read Tokens
      */
     cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial?: boolean;
     /**
      * Cost Usd
      */
@@ -962,6 +1046,28 @@ export type DocketEntryView = {
     struck_by?: string | null;
 };
 
+export const EnvironmentChangeCause = { BOUND: 'bound', RELEASED: 'released' } as const;
+
+export type EnvironmentChangeCause = typeof EnvironmentChangeCause[keyof typeof EnvironmentChangeCause];
+
+/**
+ * EnvironmentChangedPayload
+ */
+export type EnvironmentChangedPayload = {
+    /**
+     * Cause
+     */
+    cause: 'bound' | 'released';
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+};
+
 /**
  * EnvironmentListResponse
  *
@@ -999,6 +1105,28 @@ export type EnvironmentView = {
      * Held Since
      */
     held_since?: string | null;
+};
+
+export const EscalationChangeCause = { OPENED: 'opened', CLOSED: 'closed' } as const;
+
+export type EscalationChangeCause = typeof EscalationChangeCause[keyof typeof EscalationChangeCause];
+
+/**
+ * EscalationChangedPayload
+ */
+export type EscalationChangedPayload = {
+    /**
+     * Cause
+     */
+    cause: 'opened' | 'closed';
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Lease Id
+     */
+    lease_id?: string | null;
 };
 
 /**
@@ -1074,6 +1202,33 @@ export type EscalationView = {
 };
 
 /**
+ * FactChangedPayload
+ *
+ * A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
+ * shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,
+ * since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries
+ * neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived.
+ */
+export type FactChangedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string | null;
+    /**
+     * Seq
+     */
+    seq: number;
+};
+
+/**
  * FactListResponse
  *
  * The most recent hub-bound facts, newest first.
@@ -1121,6 +1276,75 @@ export type FactView = {
 };
 
 /**
+ * FindingExit
+ *
+ * How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``
+ * when a person judged the finding rather than the code.
+ */
+export const FindingExit = { OUTFLOW: 'outflow', WITHDRAWN: 'withdrawn' } as const;
+
+/**
+ * FindingExit
+ *
+ * How an exited finding left: ``outflow`` when the ground itself changed, ``withdrawn``
+ * when a person judged the finding rather than the code.
+ */
+export type FindingExit = typeof FindingExit[keyof typeof FindingExit];
+
+/**
+ * FindingSeverity
+ *
+ * A review-sourced finding's own severity.
+ */
+export const FindingSeverity = { BLOCKING: 'blocking', SHOULD_FIX: 'should-fix' } as const;
+
+/**
+ * FindingSeverity
+ *
+ * A review-sourced finding's own severity.
+ */
+export type FindingSeverity = typeof FindingSeverity[keyof typeof FindingSeverity];
+
+/**
+ * FindingSource
+ *
+ * A finding's home — the routine run or the chunk review that raised it.
+ */
+export const FindingSource = { ROUTINE: 'routine', REVIEW: 'review' } as const;
+
+/**
+ * FindingSource
+ *
+ * A finding's home — the routine run or the chunk review that raised it.
+ */
+export type FindingSource = typeof FindingSource[keyof typeof FindingSource];
+
+/**
+ * FindingState
+ *
+ * A finding's derived liveness — ``live`` for a live-making newest fact, else the newest
+ * fact's own kind.
+ */
+export const FindingState = {
+    LIVE: 'live',
+    GONE: 'gone',
+    DELIVERED: 'delivered',
+    RESOLVED: 'resolved',
+    GONE_CONFIRMED: 'gone-confirmed',
+    WONT_FIX: 'wont-fix',
+    NOT_A_FINDING: 'not-a-finding',
+    SUPERSEDED: 'superseded'
+} as const;
+
+/**
+ * FindingState
+ *
+ * A finding's derived liveness — ``live`` for a live-making newest fact, else the newest
+ * fact's own kind.
+ */
+export type FindingState = typeof FindingState[keyof typeof FindingState];
+
+/**
  * FindingView
  *
  * A finding. `state` folds the newest fact's kind to `"live"` for
@@ -1133,6 +1357,7 @@ export type FindingView = {
      * Class
      */
     class: string;
+    exit?: FindingExit | null;
     /**
      * Finding Id
      */
@@ -1181,18 +1406,9 @@ export type FindingView = {
      * Scope Slug
      */
     scope_slug: string;
-    /**
-     * Severity
-     */
-    severity?: string | null;
-    /**
-     * Source
-     */
-    source?: string;
-    /**
-     * State
-     */
-    state: string;
+    severity?: FindingSeverity | null;
+    source?: FindingSource;
+    state: FindingState;
     /**
      * Summary
      */
@@ -1231,7 +1447,15 @@ export type FleetSummaryView = {
  * How a garden proposal closed — recorded on the row itself when it closes, never
  * derived from anything else.
  */
-export type GardenProposalClosureKind = 'passed' | 'accepted';
+export const GardenProposalClosureKind = { PASSED: 'passed', ACCEPTED: 'accepted' } as const;
+
+/**
+ * GardenProposalClosureKind
+ *
+ * How a garden proposal closed — recorded on the row itself when it closes, never
+ * derived from anything else.
+ */
+export type GardenProposalClosureKind = typeof GardenProposalClosureKind[keyof typeof GardenProposalClosureKind];
 
 /**
  * GardenProposalClosureView
@@ -1270,7 +1494,15 @@ export type GardenProposalClosureView = {
  * Whether an accepted proposal minted a work item — recorded positively rather than
  * inferred from an absent link, so a declined mint reads as a decision, not a gap.
  */
-export type GardenProposalItemOutcome = 'minted' | 'declined';
+export const GardenProposalItemOutcome = { MINTED: 'minted', DECLINED: 'declined' } as const;
+
+/**
+ * GardenProposalItemOutcome
+ *
+ * Whether an accepted proposal minted a work item — recorded positively rather than
+ * inferred from an absent link, so a declined mint reads as a decision, not a gap.
+ */
+export type GardenProposalItemOutcome = typeof GardenProposalItemOutcome[keyof typeof GardenProposalItemOutcome];
 
 /**
  * GardenProposalOrigin
@@ -1278,7 +1510,15 @@ export type GardenProposalItemOutcome = 'minted' | 'declined';
  * Who authored a garden proposal — a mint-time fact, stored on
  * the row itself and never inferred from a null `routine_name`.
  */
-export type GardenProposalOrigin = 'routine-run' | 'operator';
+export const GardenProposalOrigin = { ROUTINE_RUN: 'routine-run', OPERATOR: 'operator' } as const;
+
+/**
+ * GardenProposalOrigin
+ *
+ * Who authored a garden proposal — a mint-time fact, stored on
+ * the row itself and never inferred from a null `routine_name`.
+ */
+export type GardenProposalOrigin = typeof GardenProposalOrigin[keyof typeof GardenProposalOrigin];
 
 /**
  * GardenProposalView
@@ -1462,7 +1702,19 @@ export type HarnessSignalStatus = {
  *
  * What the runner does with one of Claude Code's telemetry signals.
  */
-export type HarnessTelemetryOutcome = 'off' | 'captured' | 'operator_configured' | 'no_runner_destination';
+export const HarnessTelemetryOutcome = {
+    OFF: 'off',
+    CAPTURED: 'captured',
+    OPERATOR_CONFIGURED: 'operator_configured',
+    NO_RUNNER_DESTINATION: 'no_runner_destination'
+} as const;
+
+/**
+ * HarnessTelemetryOutcome
+ *
+ * What the runner does with one of Claude Code's telemetry signals.
+ */
+export type HarnessTelemetryOutcome = typeof HarnessTelemetryOutcome[keyof typeof HarnessTelemetryOutcome];
 
 /**
  * HarnessTelemetryStatus
@@ -1618,6 +1870,61 @@ export type LandedRepoView = {
     url?: string | null;
 };
 
+export const LeaseChangeCause = {
+    CREATED: 'created',
+    SPAWNED: 'spawned',
+    DORMANT: 'dormant',
+    TRANSITIONED: 'transitioned',
+    REAPED: 'reaped',
+    FAILED: 'failed',
+    ESCALATED: 'escalated',
+    PARKED: 'parked',
+    RELEASED: 'released',
+    PREEMPTED: 'preempted'
+} as const;
+
+export type LeaseChangeCause = typeof LeaseChangeCause[keyof typeof LeaseChangeCause];
+
+/**
+ * LeaseChangedPayload
+ */
+export type LeaseChangedPayload = {
+    /**
+     * Cause
+     */
+    cause: 'created' | 'spawned' | 'dormant' | 'transitioned' | 'reaped' | 'failed' | 'escalated' | 'parked' | 'released' | 'preempted';
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+};
+
+/**
+ * LeaseClosureReason
+ *
+ * The published ``lease_closures.reason`` values; the store-only mint reasons are not among them.
+ */
+export const LeaseClosureReason = {
+    TRANSITIONED: 'transitioned',
+    REAPED: 'reaped',
+    FAILED: 'failed',
+    ESCALATED: 'escalated',
+    PARKED: 'parked',
+    RELEASED: 'released',
+    PREEMPTED: 'preempted'
+} as const;
+
+/**
+ * LeaseClosureReason
+ *
+ * The published ``lease_closures.reason`` values; the store-only mint reasons are not among them.
+ */
+export type LeaseClosureReason = typeof LeaseClosureReason[keyof typeof LeaseClosureReason];
+
 /**
  * LeaseListResponse
  *
@@ -1694,6 +2001,10 @@ export type LeaseView = {
      */
     session_id: string | null;
     /**
+     * Stale After Seconds
+     */
+    stale_after_seconds: number;
+    /**
      * State
      */
     state: 'running' | 'stale' | 'parked' | 'backing-off' | 'spawning' | 'exited' | 'closed';
@@ -1711,7 +2022,42 @@ export type LeaseView = {
  * ``AUTO`` fires only when the transition's own destination node name also exists on
  * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
  */
-export type MigrationMode = 'auto' | 'forced';
+export const MigrationMode = { AUTO: 'auto', FORCED: 'forced' } as const;
+
+/**
+ * MigrationMode
+ *
+ * How a chunk's intended migration fires at its next transition.
+ *
+ * ``AUTO`` fires only when the transition's own destination node name also exists on
+ * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
+ */
+export type MigrationMode = typeof MigrationMode[keyof typeof MigrationMode];
+
+/**
+ * MigrationSource
+ *
+ * What moved a chunk onto another graph — a migration's attribution.
+ *
+ * Four paths write one, and without a discriminator their facts are byte-identical
+ * in history.
+ */
+export const MigrationSource = {
+    AUTHORED_EDGE: 'authored-edge',
+    INTENT: 'intent',
+    FOLLOW_LATEST: 'follow-latest',
+    RESTART: 'restart'
+} as const;
+
+/**
+ * MigrationSource
+ *
+ * What moved a chunk onto another graph — a migration's attribution.
+ *
+ * Four paths write one, and without a discriminator their facts are byte-identical
+ * in history.
+ */
+export type MigrationSource = typeof MigrationSource[keyof typeof MigrationSource];
 
 /**
  * MigrationView
@@ -1763,10 +2109,7 @@ export type MigrationView = {
      * Recorded At
      */
     recorded_at: string;
-    /**
-     * Source
-     */
-    source?: string | null;
+    source?: MigrationSource | null;
     /**
      * To Graph Id
      */
@@ -2171,6 +2514,27 @@ export type RunnerControlView = {
 };
 
 /**
+ * RunnerEventType
+ *
+ * Every runner SSE frame kind — the ``event:`` name a frame carries.
+ */
+export const RunnerEventType = {
+    LEASE_CHANGED: 'lease-changed',
+    ASK_CHANGED: 'ask-changed',
+    ESCALATION_CHANGED: 'escalation-changed',
+    TAKEOVER_CHANGED: 'takeover-changed',
+    ENVIRONMENT_CHANGED: 'environment-changed',
+    FACT_CHANGED: 'fact-changed'
+} as const;
+
+/**
+ * RunnerEventType
+ *
+ * Every runner SSE frame kind — the ``event:`` name a frame carries.
+ */
+export type RunnerEventType = typeof RunnerEventType[keyof typeof RunnerEventType];
+
+/**
  * RunnerStatusView
  *
  * ``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick.
@@ -2303,6 +2667,31 @@ export type RunnerTraceStatusResponse = {
      */
     state: 'enabled' | 'disabled' | 'rejected';
 };
+
+/**
+ * SampleMissReason
+ *
+ * The closed set of reasons one sampling attempt produced nothing:
+ * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
+ * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
+ * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ */
+export const SampleMissReason = {
+    CREDENTIAL_LAPSED: 'credential_lapsed',
+    CREDENTIAL_UNREADABLE: 'credential_unreadable',
+    ENDPOINT_UNREACHABLE: 'endpoint_unreachable',
+    RESPONSE_UNPARSEABLE: 'response_unparseable'
+} as const;
+
+/**
+ * SampleMissReason
+ *
+ * The closed set of reasons one sampling attempt produced nothing:
+ * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
+ * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
+ * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ */
+export type SampleMissReason = typeof SampleMissReason[keyof typeof SampleMissReason];
 
 /**
  * ScopeView
@@ -2472,10 +2861,7 @@ export type SubscriptionListResponse = {
  * that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``.
  */
 export type SubscriptionView = {
-    /**
-     * Miss Reason
-     */
-    miss_reason?: string | null;
+    miss_reason?: SampleMissReason | null;
     /**
      * Name
      */
@@ -2500,6 +2886,28 @@ export type SubscriptionView = {
      * Slug
      */
     slug: string;
+};
+
+export const TakeoverChangeCause = { OPENED: 'opened', CLOSED: 'closed' } as const;
+
+export type TakeoverChangeCause = typeof TakeoverChangeCause[keyof typeof TakeoverChangeCause];
+
+/**
+ * TakeoverChangedPayload
+ */
+export type TakeoverChangedPayload = {
+    /**
+     * Cause
+     */
+    cause: 'opened' | 'closed';
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Takeover Id
+     */
+    takeover_id: string;
 };
 
 /**
@@ -2975,6 +3383,10 @@ export type WorkItemEntry = {
      */
     fetched_at: string;
     /**
+     * Hub Source
+     */
+    hub_source?: boolean;
+    /**
      * Label
      */
     label?: string | null;
@@ -3002,7 +3414,18 @@ export type WorkItemEntry = {
  *
  * The three stated-priority values a create or edit may set.
  */
-export type WorkItemPriority = 'low' | 'normal' | 'high';
+export const WorkItemPriority = {
+    LOW: 'low',
+    NORMAL: 'normal',
+    HIGH: 'high'
+} as const;
+
+/**
+ * WorkItemPriority
+ *
+ * The three stated-priority values a create or edit may set.
+ */
+export type WorkItemPriority = typeof WorkItemPriority[keyof typeof WorkItemPriority];
 
 /**
  * WorkItemsView

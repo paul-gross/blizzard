@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import MigrationSource
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal

@@ -2,18 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal } from 'fleet';
 
 /**
- * How stale a heartbeat may read before REAP calls it dead — mirrors the
- * backend's `HEARTBEAT_STALENESS_THRESHOLD` (`runner/domain/leases.py`, 1h).
- * The bar's zero point: an empty bar means "reap-pending old", exactly the
- * boundary the server-derived `stale` state flips on. Kept as a frontend
- * constant because the threshold is not on the wire; the *decision* still
- * belongs to the server's `state` — this bar only ever decorates it.
- */
-export const STALE_AFTER_MS = 60 * 60_000;
-
-/**
  * Heartbeat freshness as a draining bar — 100% for any age at or under
- * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS}, 0% at the reap threshold.
+ * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS}, 0% at the reap threshold
+ * ({@link staleAfterSeconds}, the lease's wire-carried `stale_after_seconds`).
+ * The bar's zero point: an empty bar means "reap-pending old", exactly the
+ * boundary the server-derived `stale` state flips on — the *decision* still
+ * belongs to the server's `state`; this bar only ever decorates it.
+ *
  * Heartbeats ride tool calls (`POST /api/heartbeat` fires from the worker's
  * PostToolUse hook), so healthy gaps run seconds to minutes while the reap
  * threshold is an hour: a *linear* drain would pin every healthy lease at ~99%
@@ -47,6 +42,9 @@ export class HeartbeatFreshness {
   /** The lease's `last_heartbeat_at` ISO instant, or null before the first beat. */
   readonly lastHeartbeatAt = input.required<string | null>();
 
+  /** The lease's `stale_after_seconds` — how old a heartbeat may read before REAP calls it dead. */
+  readonly staleAfterSeconds = input.required<number>();
+
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
@@ -66,7 +64,7 @@ export class HeartbeatFreshness {
     const resolvedAge = Math.max(0, age - RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS);
     // Second-granular: in ms the log ratio compresses the useful band, and
     // sub-second precision is noise here.
-    const drained = Math.log1p(resolvedAge / 1000) / Math.log1p(STALE_AFTER_MS / 1000);
+    const drained = Math.log1p(resolvedAge / 1000) / Math.log1p(this.staleAfterSeconds());
     return Math.round(Math.max(0, Math.min(1, 1 - drained)) * 100);
   });
 

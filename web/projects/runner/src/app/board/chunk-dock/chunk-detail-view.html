@@ -10,7 +10,7 @@
       <ng-template #heartbeatValue>
         <span class="hb-line">
           <span data-testid="heartbeat-label">{{ heartbeatLabel() }}</span>
-          <app-heartbeat-freshness class="hb-bar" [lastHeartbeatAt]="l.last_heartbeat_at" [stale]="l.state === 'stale'" />
+          <app-heartbeat-freshness class="hb-bar" [lastHeartbeatAt]="l.last_heartbeat_at" [staleAfterSeconds]="l.stale_after_seconds" [stale]="l.state === 'stale'" />
         </span>
       </ng-template>
       <fleet-kit-fact-list class="lp-facts" testid="detail-facts" [rows]="factRows(l, leaseValue, workdirValue, heartbeatValue)" />
