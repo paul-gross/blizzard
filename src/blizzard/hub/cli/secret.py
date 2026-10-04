@@ -39,9 +39,9 @@ def secret_set(cli: CliContext, name: str) -> None:
     value = click.get_text_stream("stdin").read().rstrip("\r\n")
     if not value:
         raise click.ClickException("refusing an empty secret value — pipe the value on stdin")
-    resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value})
+    resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value}, door=True)
     if resp.status_code == httpx.codes.NOT_FOUND:
-        resp = cli.post("/api/secrets", "POST /secrets", json_body={"name": name, "value": value})
+        resp = cli.post("/api/secrets", "POST /secrets", json_body={"name": name, "value": value}, door=True)
     else:
         cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
     body = resp.json()
@@ -88,18 +88,22 @@ def secret_show(cli: CliContext, name: str) -> None:
     """Show NAME's metadata — revision, who replaced it and when. Never its value."""
     body = cli.get(f"/api/secrets/{name}", "GET /secrets/{name}", on_status={404: f"unknown secret {name}"}).json()
     state = "retired" if body["retired"] else "enabled"
+    used_by = ", ".join(f"{r['kind']} {r['key']}" for r in body["references"]) or "-"
     cli.show_lines(
         body,
         f"{body['name']}  revision {body['revision']}  {state}",
         f"created {body['created_at']}",
         f"replaced {body['replaced_at']} by {body['replaced_by']}",
+        f"used by {used_by}",
     )
 
 
 @secret_group.command("retire", cls=FleetCommand)
 @click.argument("name")
 def secret_retire(cli: CliContext, name: str) -> None:
-    """Retire NAME — a reversible brake; a retired secret cannot be replaced."""
+    """Retire NAME — a reversible brake; a retired secret cannot be replaced.
+
+    Refused while an active record still uses it; the refusal names those records."""
     _set_lifecycle(cli, name, verb="retire")
 
 
@@ -112,7 +116,10 @@ def secret_enable(cli: CliContext, name: str) -> None:
 
 def _set_lifecycle(cli: CliContext, name: str, *, verb: str) -> None:
     resp = cli.post(
-        f"/api/secrets/{name}/{verb}", f"POST /secrets/{{name}}/{verb}", on_status={404: f"unknown secret {name}"}
+        f"/api/secrets/{name}/{verb}",
+        f"POST /secrets/{{name}}/{verb}",
+        on_status={404: f"unknown secret {name}", 409: f"secret {name} cannot be {verb}d"},
+        door=True,
     )
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"

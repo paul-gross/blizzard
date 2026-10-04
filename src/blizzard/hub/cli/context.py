@@ -91,13 +91,33 @@ class CliContext:
         json_body: object | None = None,
         on_status: dict[int, str] | None = None,
         timeout: float = CLIENT_TIMEOUT,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
-        return self._verb("post", path, operation, json_body=json_body, on_status=on_status, timeout=timeout)
+        return self._verb(
+            "post",
+            path,
+            operation,
+            json_body=json_body,
+            on_status=on_status,
+            timeout=timeout,
+            if_match=if_match,
+            door=door,
+        )
 
     def patch(
-        self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
+        self,
+        path: str,
+        operation: str,
+        *,
+        json_body: object | None = None,
+        on_status: dict[int, str] | None = None,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
-        return self._verb("patch", path, operation, json_body=json_body, on_status=on_status)
+        return self._verb(
+            "patch", path, operation, json_body=json_body, on_status=on_status, if_match=if_match, door=door
+        )
 
     def put(
         self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
@@ -147,6 +167,8 @@ class CliContext:
         json_body: object | None = None,
         params: dict[str, str] | None = None,
         timeout: float = CLIENT_TIMEOUT,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first.
         Dispatches through ``httpx``'s module-level verb function, same as :meth:`stream` —
@@ -158,7 +180,9 @@ class CliContext:
             kwargs["json"] = json_body
         if params is not None:
             kwargs["params"] = params
-        headers = self._headers()
+        headers = self._headers(door=door)
+        if if_match is not None:
+            headers["If-Match"] = str(if_match)
         if headers:
             kwargs["headers"] = headers
         try:
@@ -195,6 +219,13 @@ class CliContext:
             detail = body.get("detail")
             if isinstance(detail, str):
                 return detail
+            if isinstance(detail, list):
+                # A validation refusal: one "field: message" per entry.
+                parts = [
+                    f"{e['loc'][-1]}: {e['msg']}" for e in detail if isinstance(e, dict) and e.get("loc") and "msg" in e
+                ]
+                if parts:
+                    return "; ".join(parts)
         return fallback
 
     def failed(self, operation: str, exc: Exception) -> click.ClickException:
@@ -238,15 +269,21 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
         timeout: float = CLIENT_TIMEOUT,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
-        resp = self.send(method, path, json_body=json_body, params=params, timeout=timeout)
+        resp = self.send(
+            method, path, json_body=json_body, params=params, timeout=timeout, if_match=if_match, door=door
+        )
         self.check(resp, operation, on_status=on_status)
         return resp
 
-    def _headers(self) -> dict[str, str]:
-        """The ``Authorization: Bearer`` header for this hub — absent when the local session
-        store holds none, so every verb keeps working with no login — and the running operator
-        command's ``traceparent`` when it is traced."""
+    def _headers(self, *, door: bool = False) -> dict[str, str]:
+        """``X-Blizzard-Door: cli`` when ``door`` — sent by the verbs that write a configured
+        record, so the hub records this client as the door; the ``Authorization: Bearer`` header
+        for this hub — absent when the local session store holds none, so every verb keeps working
+        with no login — and the running operator command's ``traceparent`` when it is traced."""
         token = self.session_reader.load(self.hub_url)
         headers = {"Authorization": f"Bearer {token}"} if token else {}
-        return {**headers, **OperatorTrace.headers()}
+        door_header = {"X-Blizzard-Door": "cli"} if door else {}
+        return {**door_header, **headers, **OperatorTrace.headers()}

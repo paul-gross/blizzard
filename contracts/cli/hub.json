@@ -1576,6 +1576,81 @@
       "path": "hub chunk",
       "short_help": "Operator verbs over one chunk: ingest, inspect, edit, and transition it."
     },
+    "config": {
+      "commands": {
+        "changes": {
+          "help": "List configuration changes newest first \u2014 who changed which record, through which door, and what.\n\nShows the newest page unless --all. A secret's value never appears.",
+          "params": [
+            {
+              "help": "Only changes to this kind of record.",
+              "hidden": false,
+              "kind": "option",
+              "name": "kind",
+              "opts": [
+                "--kind"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Only changes to the record with this name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "key",
+              "opts": [
+                "--key"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print every change rather than the newest page.",
+              "hidden": false,
+              "kind": "option",
+              "name": "everything",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub config changes",
+          "short_help": "List configuration changes newest first \u2014 who changed which record, through which door, and what."
+        }
+      },
+      "help": "Operator verbs over configuration: changes.",
+      "params": [],
+      "path": "hub config",
+      "short_help": "Operator verbs over configuration: changes."
+    },
     "decision": {
       "commands": {
         "list": {
@@ -5636,7 +5711,7 @@
           "short_help": "List secrets \u2014 name, revision, retired."
         },
         "retire": {
-          "help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced.",
+          "help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced.\n\nRefused while an active record still uses it; the refusal names those records.",
           "params": [
             {
               "hidden": false,
@@ -5785,6 +5860,463 @@
       "params": [],
       "path": "hub secret",
       "short_help": "Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key."
+    },
+    "source": {
+      "commands": {
+        "create": {
+          "help": "Add work source NAME at revision 1.\n\nRefused when the name or the provider and locator are already taken \u2014 a retired source keeps its claim \u2014\nor when the secret is missing or retired. A stored source does not yet change what the hub ingests.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The provider the source reads items from, e.g. github.",
+              "hidden": false,
+              "kind": "option",
+              "name": "provider",
+              "opts": [
+                "--provider"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Where the items live; for github, owner/name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "locator",
+              "opts": [
+                "--locator"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The stored secret holding the provider credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Provider API origin override.",
+              "hidden": false,
+              "kind": "option",
+              "name": "api_base",
+              "opts": [
+                "--api-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Web origin override.",
+              "hidden": false,
+              "kind": "option",
+              "name": "web_base",
+              "opts": [
+                "--web-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Whether the hub annotates items on the forge.",
+              "hidden": false,
+              "kind": "option",
+              "name": "annotate",
+              "opts": [
+                "--annotate"
+              ],
+              "required": false,
+              "secondary_opts": [
+                "--no-annotate"
+              ],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source create",
+          "short_help": "Add work source NAME at revision 1."
+        },
+        "edit": {
+          "help": "Change only the fields given on NAME; every other field keeps its value.\n\nA change that leaves every field as it is writes nothing and keeps the revision. Refused when\n--if-match names a stale revision, and for the built-in hub source.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new provider.",
+              "hidden": false,
+              "kind": "option",
+              "name": "provider",
+              "opts": [
+                "--provider"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new locator.",
+              "hidden": false,
+              "kind": "option",
+              "name": "locator",
+              "opts": [
+                "--locator"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new credential secret.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new API origin override.",
+              "hidden": false,
+              "kind": "option",
+              "name": "api_base",
+              "opts": [
+                "--api-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new web origin override.",
+              "hidden": false,
+              "kind": "option",
+              "name": "web_base",
+              "opts": [
+                "--web-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Turn forge annotation on or off.",
+              "hidden": false,
+              "kind": "option",
+              "name": "annotate",
+              "opts": [
+                "--annotate"
+              ],
+              "required": false,
+              "secondary_opts": [
+                "--no-annotate"
+              ],
+              "type": "boolean"
+            },
+            {
+              "help": "Clear a field back to unset; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear",
+              "opts": [
+                "--clear"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Refuse the change unless the source is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source edit",
+          "short_help": "Change only the fields given on NAME; every other field keeps its value."
+        },
+        "enable": {
+          "help": "Re-enable a retired NAME. Refused while its secret is retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the source is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source enable",
+          "short_help": "Re-enable a retired NAME."
+        },
+        "list": {
+          "help": "List the built-in hub source and every work source \u2014 name, revision, state, provider, locator.",
+          "params": [
+            {
+              "help": "Also list retired sources.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source list",
+          "short_help": "List the built-in hub source and every work source \u2014 name, revision, state, provider, locator."
+        },
+        "retire": {
+          "help": "Retire NAME: it leaves the default list and keeps its provider and locator, so no other source takes them.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the source is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source retire",
+          "short_help": "Retire NAME: it leaves the default list and keeps its provider and locator, so no other source takes them."
+        },
+        "show": {
+          "help": "Show NAME's fields, revision, and who created it and when.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source show",
+          "short_help": "Show NAME's fields, revision, and who created it and when."
+        }
+      },
+      "help": "Operator verbs over work-source records: create, list, show, edit, retire, enable.",
+      "params": [],
+      "path": "hub source",
+      "short_help": "Operator verbs over work-source records: create, list, show, edit, retire, enable."
     },
     "status": {
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
