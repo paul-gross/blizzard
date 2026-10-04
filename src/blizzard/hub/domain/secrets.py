@@ -1,9 +1,10 @@
 """Secret domain model — a named credential written once, sealed at rest, never returned.
 
-A value enters through :class:`SecretAuthoring`, is sealed under the hub key by an
+A value enters through ``ConfigAuthoring``, is sealed under the hub key by an
 :class:`ISecretCipher`, and leaves only through :class:`ISecretReader` as a
 :class:`SecretValue` whose ``repr``/``str`` are redacted (``bzh:secret-write-only``).
-Retire/enable is a newest-fact-wins brake, a scope's shape (``bzh:facts-not-status``)."""
+Writes go through ``ConfigAuthoring``. Retire/enable is a newest-fact-wins brake,
+a scope's shape (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.config.changes import ConfigChange, RecordRef
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
 _REDACTED = "SecretValue(<redacted>)"
@@ -49,6 +50,15 @@ class SecretRevisionConflict(Exception):
         super().__init__(f"secret {name} is at revision {current}")
         self.name = name
         self.current = current
+
+
+class SecretReferenced(Exception):
+    """Active configured records still name the secret — retire or repoint them first."""
+
+    def __init__(self, name: str, referrers: list[RecordRef]) -> None:
+        super().__init__(f"secret {name} is referenced by {', '.join(str(r) for r in referrers)}")
+        self.name = name
+        self.referrers = referrers
 
 
 class SecretUnreadable(Exception):
@@ -192,16 +202,23 @@ class IResealSecretRepository(ISealedSecretRepository, Protocol):
 class IWriteSecretRepository(ISecretCatalog, Protocol):
     """Secret writes. Only the domain services below depend on this variant."""
 
-    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str) -> SecretRecord:
-        """Insert at revision 1; :class:`SecretAlreadyExists` when the name is taken."""
+    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretRecord:
+        """Insert at revision 1 and commit ``change`` with it;
+        :class:`SecretAlreadyExists` when the name is taken."""
         ...
 
-    def replace(self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str) -> SecretRecord:
-        """Compare-and-set ``from_revision`` → ``from_revision + 1``;
-        :class:`SecretRevisionConflict` when the stored revision has moved."""
+    def replace(
+        self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
+    ) -> SecretRecord:
+        """Compare-and-set ``from_revision`` → ``from_revision + 1``, committing ``change``
+        with it; :class:`SecretRevisionConflict` when the stored revision has moved."""
         ...
 
-    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str) -> None: ...
+    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
+        """Append the lifecycle fact and ``change`` in one transaction. Retiring is refused
+        with :class:`SecretReferenced` when an active record names the secret, checked in
+        that same transaction."""
+        ...
 
 
 class IHubKeyProvider(Protocol):
@@ -230,46 +247,3 @@ class ISecretReader(Protocol):
     def reveal(self, name: SecretName) -> SecretValue:
         """Raises :class:`SecretNotFound` or :class:`SecretRetired`."""
         ...
-
-
-# --- Domain services ------------------------------------------------------------
-
-
-class SecretAuthoring:
-    """Create and replace a secret's value. The plaintext arrives as a ``str`` so no
-    request-plane module has to import :class:`SecretValue`; it is wrapped on entry."""
-
-    def __init__(self, *, secrets: IWriteSecretRepository, cipher: ISecretCipher, clock: IClock) -> None:
-        self._secrets = secrets
-        self._cipher = cipher
-        self._clock = clock
-
-    def create(self, name: SecretName, value: str, *, by: str) -> SecretRecord:
-        sealed = self._cipher.seal(SecretValue(value), name=name.value, revision=1)
-        return self._secrets.create(name.value, sealed=sealed, at=self._clock.now(), by=by)
-
-    def replace(self, record: SecretRecord, value: str, *, by: str, if_match: int | None = None) -> SecretRecord:
-        """Seal under ``record.revision + 1`` and compare-and-set from ``record.revision``.
-        ``if_match`` is the revision the caller last saw, checked before any write."""
-        if self._secrets.is_retired(record.name):
-            raise SecretRetired(record.name)
-        if if_match is not None and if_match != record.revision:
-            raise SecretRevisionConflict(record.name, current=record.revision)
-        sealed = self._cipher.seal(SecretValue(value), name=record.name, revision=record.revision + 1)
-        return self._secrets.replace(
-            record.name, from_revision=record.revision, sealed=sealed, at=self._clock.now(), by=by
-        )
-
-
-class SecretLifecycle:
-    """Set or clear a secret's retired brake without touching its row."""
-
-    def __init__(self, *, secrets: IWriteSecretRepository, clock: IClock) -> None:
-        self._secrets = secrets
-        self._clock = clock
-
-    def retire(self, record: SecretRecord, *, by: str) -> None:
-        self._secrets.record_lifecycle(record.name, retired=True, at=self._clock.now(), by=by)
-
-    def enable(self, record: SecretRecord, *, by: str) -> None:
-        self._secrets.record_lifecycle(record.name, retired=False, at=self._clock.now(), by=by)

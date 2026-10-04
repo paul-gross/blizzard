@@ -15,16 +15,15 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.domain.secrets import SecretAuthoring, SecretName
+from blizzard.hub.domain.secrets import SecretName
 from blizzard.hub.secrets import (
     ENV_SECRET_KEY,
     ENV_SECRET_KEY_PREVIOUS,
     hub_key_provider,
-    secret_cipher,
     secret_keys_dir,
 )
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.support import hub_store_connections
+from tests.support import OP, config_authoring, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -43,10 +42,7 @@ def _seed_secret(config: HubConfig) -> str:
     keys = hub_key_provider({}, data_dir=config.data_dir)
     engine = create_engine_from_url(config.db_url)
     try:
-        store = SecretStore(hub_store_connections(engine))
-        SecretAuthoring(secrets=store, cipher=secret_cipher(keys), clock=FixedClock(_NOW)).create(
-            SecretName.parse("gh"), "tok", by="op"
-        )
+        config_authoring(engine, keys=keys, clock=FixedClock(_NOW)).create_secret(SecretName.parse("gh"), "tok", OP)
     finally:
         engine.dispose()
     return keys.current().key_id
@@ -92,7 +88,11 @@ def test_a_retired_row_still_needs_its_generation(tmp_path: Path, monkeypatch: p
     key_id = _seed_secret(config)
     engine = create_engine_from_url(config.db_url)
     try:
-        SecretStore(hub_store_connections(engine)).record_lifecycle("gh", retired=True, at=_NOW, by="op")
+        record = SecretStore(hub_store_connections(engine)).get("gh")
+        assert record is not None
+        config_authoring(
+            engine, keys=hub_key_provider({}, data_dir=config.data_dir), clock=FixedClock(_NOW)
+        ).retire_secret(record, OP)
     finally:
         engine.dispose()
     monkeypatch.setenv(ENV_SECRET_KEY, _ENV_KEY)

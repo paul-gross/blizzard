@@ -2560,6 +2560,102 @@
         "title": "CompletionSubmission",
         "type": "object"
       },
+      "ConfigChangeView": {
+        "description": "One row of the change log.",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "apply_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Id"
+          },
+          "diff": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeView"
+            },
+            "title": "Diff",
+            "type": "array"
+          },
+          "door": {
+            "title": "Door",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "op": {
+            "title": "Op",
+            "type": "string"
+          },
+          "record_key": {
+            "title": "Record Key",
+            "type": "string"
+          },
+          "record_kind": {
+            "title": "Record Kind",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "recorded_at",
+          "actor",
+          "door",
+          "record_kind",
+          "record_key",
+          "revision",
+          "op",
+          "diff"
+        ],
+        "title": "ConfigChangeView",
+        "type": "object"
+      },
+      "ConfigChangesPage": {
+        "description": "A newest-first page; ``next_before`` is the ``before`` that fetches the next, ``None`` at the end.",
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigChangeView"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "title": "ConfigChangesPage",
+        "type": "object"
+      },
       "CreateWorkItemProposal": {
         "additionalProperties": false,
         "description": "A proposed new work item \u2014 a title, a markdown body, and a stated priority.",
@@ -3713,6 +3809,26 @@
           "window_seconds"
         ],
         "title": "ExternalSubscriptionUsageWindowView",
+        "type": "object"
+      },
+      "FieldChangeView": {
+        "description": "One changed field. A secret's value never appears in a diff.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "new": {
+            "title": "New"
+          },
+          "old": {
+            "title": "Old"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "title": "FieldChangeView",
         "type": "object"
       },
       "FindingDetailView": {
@@ -6812,6 +6928,33 @@
         "title": "ReceiverStatus",
         "type": "object"
       },
+      "RecordKind": {
+        "enum": [
+          "work_source",
+          "secret"
+        ],
+        "title": "RecordKind",
+        "type": "string"
+      },
+      "RecordRefView": {
+        "description": "A configured record named by kind and key.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "key"
+        ],
+        "title": "RecordRefView",
+        "type": "object"
+      },
       "RestartView": {
         "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
@@ -8278,6 +8421,14 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "references": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RecordRefView"
+            },
+            "title": "References",
+            "type": "array"
           },
           "replaced_at": {
             "title": "Replaced At",
@@ -10322,20 +10473,255 @@
         "title": "WorkRefView",
         "type": "object"
       },
+      "WorkSourceDocument": {
+        "additionalProperties": false,
+        "description": "A work source as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret.",
+        "properties": {
+          "annotate": {
+            "default": false,
+            "title": "Annotate",
+            "type": "boolean"
+          },
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          }
+        },
+        "required": [
+          "name",
+          "provider",
+          "locator"
+        ],
+        "title": "WorkSourceDocument",
+        "type": "object"
+      },
+      "WorkSourcePatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.\n``name`` is immutable, so a body carrying it is refused.",
+        "properties": {
+          "annotate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annotate"
+          },
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          }
+        },
+        "title": "WorkSourcePatchRequest",
+        "type": "object"
+      },
       "WorkSourceSummary": {
-        "description": "One work source's capability booleans \u2014 the ``GET /api/work-sources`` listing\nrow. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on.",
+        "description": "One work source \u2014 the ``GET /api/work-sources`` listing row and every record verb's\nview. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on. The\nbuilt-in ``hub`` source is ``built_in`` and carries no record fields.",
         "properties": {
           "annotate": {
             "title": "Annotate",
             "type": "boolean"
           },
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "built_in": {
+            "default": false,
+            "title": "Built In",
+            "type": "boolean"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
           "edit": {
             "title": "Edit",
             "type": "boolean"
           },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
           }
         },
         "required": [
@@ -14349,6 +14735,146 @@
         "summary": "Get Work Items",
         "tags": [
           "chunks"
+        ]
+      }
+    },
+    "/api/config/changes": {
+      "get": {
+        "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key`.",
+        "operationId": "list_changes_api_config_changes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "record_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RecordKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Record Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "record_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Record Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigChangesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Changes",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/config/schema/{kind}": {
+      "get": {
+        "description": "The JSON Schema of a record kind's document model; 404 for a kind with none yet.",
+        "operationId": "get_schema_api_config_schema__kind__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Schema Api Config Schema  Kind  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Schema",
+        "tags": [
+          "config"
         ]
       }
     },
@@ -19563,6 +20089,24 @@
       "post": {
         "description": "Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name.",
         "operationId": "create_secret_api_secrets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -19657,6 +20201,22 @@
               "title": "Name",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
           }
         ],
         "responses": {
@@ -19689,7 +20249,7 @@
     },
     "/api/secrets/{name}/retire": {
       "post": {
-        "description": "Retire a secret \u2014 a reversible brake; 404 on an unknown name.",
+        "description": "Retire a secret \u2014 a reversible brake; 404 on an unknown name, 409 naming the active\nrecords that still reference it.",
         "operationId": "retire_secret_api_secrets__name__retire_post",
         "parameters": [
           {
@@ -19699,6 +20259,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -19758,6 +20334,22 @@
                 }
               ],
               "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -20013,8 +20605,20 @@
     },
     "/api/work-sources": {
       "get": {
-        "description": "Every configured (plus the built-in ``hub``) source's capability booleans \u2014 no\ngate of its own, since a client needs this to know which sources gate their items.",
+        "description": "The built-in ``hub`` source and every stored work source, retired ones hidden unless\n`include_retired`. No gate beyond `FLEET_VIEW`, since a client needs this to know which\nsources gate their items.",
         "operationId": "list_work_sources_api_work_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -20025,9 +20629,278 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Work Sources",
+        "tags": [
+          "work-sources"
+        ]
+      },
+      "post": {
+        "description": "Store a new work source at revision 1. 422 naming the field for a bad name, provider,\nlocator, or a missing or retired secret; 409 for a taken name or a taken\n`(provider, locator)`, naming the holder.",
+        "operationId": "create_work_source_api_work_sources_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkSourceDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSourceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Work Source",
+        "tags": [
+          "work-sources"
+        ]
+      }
+    },
+    "/api/work-sources/{source}": {
+      "get": {
+        "description": "One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name.",
+        "operationId": "get_work_source_api_work_sources__source__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSourceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Source",
+        "tags": [
+          "work-sources"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or\n`secret` (the last only where the provider needs no credential). A patch that changes\nnothing writes nothing. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current\nrevision), or a taken `(provider, locator)`; 422 naming the field.",
+        "operationId": "patch_work_source_api_work_sources__source__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkSourcePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSourceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Work Source",
+        "tags": [
+          "work-sources"
+        ]
+      }
+    },
+    "/api/work-sources/{source}/enable": {
+      "post": {
+        "description": "Re-enable a retired work source; enabling an active one changes nothing. 404 unknown,\n409 for `hub` or a stale `If-Match`, 422 when its secret has since been retired.",
+        "operationId": "enable_work_source_api_work_sources__source__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSourceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Work Source",
         "tags": [
           "work-sources"
         ]
@@ -20296,6 +21169,81 @@
           }
         },
         "summary": "Patch Work Item",
+        "tags": [
+          "work-sources"
+        ]
+      }
+    },
+    "/api/work-sources/{source}/retire": {
+      "post": {
+        "description": "Retire a work source \u2014 a reversible brake that keeps its locator claim. Retiring a\nretired source changes nothing. 404 unknown, 409 for `hub` or a stale `If-Match`.",
+        "operationId": "retire_work_source_api_work_sources__source__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSourceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Work Source",
         "tags": [
           "work-sources"
         ]

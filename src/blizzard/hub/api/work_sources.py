@@ -1,5 +1,7 @@
-"""Work-source item routes — the operator-plane editor surface over a
-work source's browsable items, human-plane throughout (``reject_runner_principal``).
+"""Work-source routes — the configured-record verbs (create, list, show, patch, retire,
+enable) and the operator-plane editor surface over a work source's browsable items,
+human-plane throughout (``reject_runner_principal``). The record verbs write only through
+``ConfigAuthoring``; the actor and door come from the request's :class:`ChangeContext`.
 
 Every source-addressed route is gated on the source's editor (reads included): an
 unknown source is 404, a known one with no editor is 409. The sources listing itself
@@ -9,18 +11,29 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
+from blizzard.auth_core import CHUNK_CONTROL, CONFIG_EDIT, FLEET_VIEW
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.config.work_sources import (
+    ConfigFieldError,
+    ConfigRevisionConflict,
+    WorkSourceEdit,
+    WorkSourceFields,
+    WorkSourceLocatorTaken,
+    WorkSourceNameTaken,
+    WorkSourceRecord,
+)
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
@@ -42,6 +55,8 @@ from blizzard.wire.work_source import (
     WorkItemPatchRequest,
     WorkItemsListView,
     WorkItemView,
+    WorkSourceDocument,
+    WorkSourcePatchRequest,
     WorkSourcesListView,
     WorkSourceSummary,
 )
@@ -98,20 +113,172 @@ def _view(
     )
 
 
-@router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(FLEET_VIEW))])
-def list_work_sources(services: Annotated[HubServices, Depends(get_services)]) -> WorkSourcesListView:
-    """Every configured (plus the built-in ``hub``) source's capability booleans — no
-    gate of its own, since a client needs this to know which sources gate their items."""
-    return WorkSourcesListView(
-        sources=[
-            WorkSourceSummary(
-                name=name,
-                annotate=services.work_sources.annotator(name) is not None,
-                edit=services.work_sources.editor(name) is not None,
-            )
-            for name in services.work_sources.names()
-        ]
+def _summary(record: WorkSourceRecord, services: HubServices) -> WorkSourceSummary:
+    fields = record.fields
+    return WorkSourceSummary(
+        name=record.name,
+        annotate=fields.annotate,
+        edit=services.work_sources.editor(record.name) is not None,
+        provider=fields.provider,
+        locator=fields.locator,
+        api_base=fields.api_base,
+        web_base=fields.web_base,
+        secret=fields.secret,
+        revision=record.revision,
+        created_at=iso_utc(record.created_at),
+        created_by=record.created_by,
+        retired=record.retired,
     )
+
+
+def _built_in_summary(services: HubServices) -> WorkSourceSummary:
+    return WorkSourceSummary(
+        name=RESERVED_HUB_SOURCE_NAME,
+        annotate=services.work_sources.annotator(RESERVED_HUB_SOURCE_NAME) is not None,
+        edit=services.work_sources.editor(RESERVED_HUB_SOURCE_NAME) is not None,
+        built_in=True,
+    )
+
+
+def _unprocessable(exc: ConfigFieldError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
+    )
+
+
+def _conflict(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+def _writable(source: str, services: HubServices) -> WorkSourceRecord:
+    """The stored record for a write: 409 for the built-in ``hub``, 404 for an unknown name."""
+    if source == RESERVED_HUB_SOURCE_NAME:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"work source {source} is built in and cannot be changed"
+        )
+    record = services.work_source_records.get(source)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
+    return record
+
+
+@router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(FLEET_VIEW))])
+def list_work_sources(
+    services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
+) -> WorkSourcesListView:
+    """The built-in ``hub`` source and every stored work source, retired ones hidden unless
+    `include_retired`. No gate beyond `FLEET_VIEW`, since a client needs this to know which
+    sources gate their items."""
+    records = services.work_source_records.list_all(include_retired=include_retired)
+    return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services) for r in records)])
+
+
+@router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
+def create_work_source(
+    request: WorkSourceDocument,
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> WorkSourceSummary:
+    """Store a new work source at revision 1. 422 naming the field for a bad name, provider,
+    locator, or a missing or retired secret; 409 for a taken name or a taken
+    `(provider, locator)`, naming the holder."""
+    fields = WorkSourceFields(
+        provider=request.provider,
+        locator=request.locator,
+        api_base=request.api_base,
+        web_base=request.web_base,
+        annotate=request.annotate,
+        secret=request.secret,
+    )
+    try:
+        record = services.config_authoring.create_work_source(request.name, fields, change_context(identity, door))
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc) from exc
+    except (WorkSourceNameTaken, WorkSourceLocatorTaken) as exc:
+        raise _conflict(exc) from exc
+    return _summary(record, services)
+
+
+@router.get("/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(FLEET_VIEW))])
+def get_work_source(source: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkSourceSummary:
+    """One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name."""
+    if source == RESERVED_HUB_SOURCE_NAME:
+        return _built_in_summary(services)
+    record = services.work_source_records.get(source)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
+    return _summary(record, services)
+
+
+@router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
+def patch_work_source(
+    source: str,
+    request: WorkSourcePatchRequest,
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
+) -> WorkSourceSummary:
+    """Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
+    `secret` (the last only where the provider needs no credential). A patch that changes
+    nothing writes nothing. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current
+    revision), or a taken `(provider, locator)`; 422 naming the field."""
+    record = _writable(source, services)
+    present = request.model_fields_set
+    edit = WorkSourceEdit(**{name: getattr(request, name) for name in present})
+    try:
+        edited = services.config_authoring.edit_work_source(
+            record, edit, change_context(identity, door), if_match=if_match
+        )
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc) from exc
+    except (ConfigRevisionConflict, WorkSourceLocatorTaken) as exc:
+        raise _conflict(exc) from exc
+    return _summary(edited, services)
+
+
+@router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
+def retire_work_source(
+    source: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
+) -> WorkSourceSummary:
+    """Retire a work source — a reversible brake that keeps its locator claim. Retiring a
+    retired source changes nothing. 404 unknown, 409 for `hub` or a stale `If-Match`."""
+    record = _writable(source, services)
+    try:
+        retired = services.config_authoring.retire_work_source(
+            record, change_context(identity, door), if_match=if_match
+        )
+    except ConfigRevisionConflict as exc:
+        raise _conflict(exc) from exc
+    return _summary(retired, services)
+
+
+@router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
+def enable_work_source(
+    source: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
+) -> WorkSourceSummary:
+    """Re-enable a retired work source; enabling an active one changes nothing. 404 unknown,
+    409 for `hub` or a stale `If-Match`, 422 when its secret has since been retired."""
+    record = _writable(source, services)
+    try:
+        enabled = services.config_authoring.enable_work_source(
+            record, change_context(identity, door), if_match=if_match
+        )
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc) from exc
+    except ConfigRevisionConflict as exc:
+        raise _conflict(exc) from exc
+    return _summary(enabled, services)
 
 
 @router.get(

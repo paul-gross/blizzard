@@ -198,6 +198,53 @@ secret_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
+# --- Work sources (configured records; secret_name references a secret, never a value) ---
+
+work_sources = Table(
+    "work_sources",
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("provider", String, nullable=False),
+    Column("locator", String, nullable=False),
+    Column("api_base", String, nullable=True),
+    Column("web_base", String, nullable=True),
+    Column("annotate", Boolean, nullable=False),
+    Column("secret_name", String, ForeignKey("secrets.name"), nullable=True),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+    UniqueConstraint("provider", "locator", name="uq_work_sources_provider_locator"),
+)
+
+# Work source retire/enable facts: append-only, newest wins.
+work_source_lifecycle_facts = Table(
+    "work_source_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, ForeignKey("work_sources.name"), nullable=False),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+# --- Configuration change log (one fact row per committed write to a configured record) ---
+
+config_changes = Table(
+    "config_changes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("door", String, nullable=False),  # board | cli | api | apply | migration
+    Column("record_kind", String, nullable=False),
+    Column("record_key", String, nullable=False),
+    Column("revision", Integer, nullable=False),  # the record's revision as written
+    Column("op", String, nullable=False),  # create | edit | retire | enable | replace
+    Column("diff", Text, nullable=False),  # JSON [{field, old, new}]; never a secret value
+    Column("apply_id", String, nullable=True),
+)
+Index("ix_config_changes_record", config_changes.c.record_kind, config_changes.c.record_key, config_changes.c.id)
+
 # --- Routines (mutable graph, scope and run defaults; surrogate id) ---
 
 routines = Table(

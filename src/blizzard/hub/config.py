@@ -54,7 +54,7 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 
 # The only work-source provider grammar a source may declare; an unknown provider fails
 # at config load, not at first use.
-_KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
+KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
 # The built-in, always-seated hub work source's reserved name — no
@@ -232,10 +232,10 @@ class WorkSourceConfig:
                 # under two identities — this is what holds pointer identity uniqueness up.
                 raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
             seen_provider_repo.add(provider_repo)
-            if provider not in _KNOWN_WORK_SOURCE_PROVIDERS:
+            if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
                 raise ConfigError(
                     f"[[work_source]] {name!r} has unknown provider {provider!r} "
-                    f"(known: {sorted(_KNOWN_WORK_SOURCE_PROVIDERS)})"
+                    f"(known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
                 )
             annotate = entry.get("annotate", False)
             if not isinstance(annotate, bool):

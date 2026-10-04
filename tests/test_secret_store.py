@@ -14,10 +14,9 @@ from sqlalchemy import Engine, select, update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.secrets import (
     SecretAlreadyExists,
-    SecretAuthoring,
-    SecretLifecycle,
     SecretName,
     SecretNotFound,
     SecretRetired,
@@ -28,7 +27,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.schema import secrets
-from tests.support import hub_store_connections
+from tests.support import OP, config_authoring, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -42,13 +41,13 @@ class _World:
         self.engine: Engine = create_engine_from_url(db_url)
         self.store = SecretStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
-        cipher = secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data"))
-        self.authoring = SecretAuthoring(secrets=self.store, cipher=cipher, clock=self.clock)
-        self.lifecycle = SecretLifecycle(secrets=self.store, clock=self.clock)
+        keys = hub_key_provider({}, data_dir=tmp_path / "data")
+        cipher = secret_cipher(keys)
+        self.authoring = config_authoring(self.engine, keys=keys, clock=self.clock)
         self.reader = StoreSecretReader(catalog=self.store, sealed=self.store, cipher=cipher)
 
     def create(self, name: str, value: str) -> None:
-        self.authoring.create(SecretName.parse(name), value, by="op")
+        self.authoring.create_secret(SecretName.parse(name), value, OP)
 
     def raw(self, name: str):  # type: ignore[no-untyped-def]
         with self.engine.connect() as conn:
@@ -88,7 +87,7 @@ def test_replace_moves_to_the_next_revision_and_reseals(world: _World) -> None:
     record = world.store.get("gh")
     assert record is not None
 
-    replaced = world.authoring.replace(record, "new", by="alice")
+    replaced = world.authoring.replace_secret(record, "new", ChangeContext("alice", Door.API))
 
     assert (replaced.revision, replaced.replaced_by, replaced.created_at) == (2, "alice", _NOW)
     assert replaced.replaced_at == _NOW + timedelta(minutes=5)
@@ -100,10 +99,10 @@ def test_replace_from_a_stale_revision_is_a_conflict_naming_the_current_one(worl
     world.create("gh", "v1")
     stale = world.store.get("gh")
     assert stale is not None
-    world.authoring.replace(stale, "v2", by="op")
+    world.authoring.replace_secret(stale, "v2", OP)
 
     with pytest.raises(SecretRevisionConflict) as caught:
-        world.authoring.replace(stale, "v3", by="op")
+        world.authoring.replace_secret(stale, "v3", OP)
     assert caught.value.current == 2
     assert world.reader.reveal(SecretName.parse("gh")).expose() == "v2"
 
@@ -114,7 +113,7 @@ def test_replace_with_a_mismatched_if_match_is_refused_before_writing(world: _Wo
     assert record is not None
 
     with pytest.raises(SecretRevisionConflict) as caught:
-        world.authoring.replace(record, "v2", by="op", if_match=7)
+        world.authoring.replace_secret(record, "v2", OP, if_match=7)
     assert caught.value.current == 1
     assert world.raw("gh").revision == 1
 
@@ -124,15 +123,15 @@ def test_a_retired_secret_refuses_replace_and_reveal_until_enabled(world: _World
     record = world.store.get("gh")
     assert record is not None
 
-    world.lifecycle.retire(record, by="op")
+    world.authoring.retire_secret(record, OP)
     assert world.store.is_retired("gh")
     assert world.store.retired_names() == {"gh"}
     with pytest.raises(SecretRetired):
-        world.authoring.replace(record, "v2", by="op")
+        world.authoring.replace_secret(record, "v2", OP)
     with pytest.raises(SecretRetired):
         world.reader.reveal(SecretName.parse("gh"))
 
-    world.lifecycle.enable(record, by="op")
+    world.authoring.enable_secret(record, OP)
     assert world.store.retired_names() == set()
     assert world.reader.reveal(SecretName.parse("gh")).expose() == "v1"
 
@@ -158,7 +157,7 @@ def test_a_ciphertext_restored_at_an_older_revision_fails_to_open(world: _World)
     old = world.raw("gh")
     record = world.store.get("gh")
     assert record is not None
-    world.authoring.replace(record, "v2", by="op")
+    world.authoring.replace_secret(record, "v2", OP)
 
     world.overwrite("gh", ciphertext=old.ciphertext, nonce=old.nonce)
 

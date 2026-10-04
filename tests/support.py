@@ -60,8 +60,11 @@ from blizzard.hub.config import (
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.delivery_read import DeliveryTrace
 from blizzard.hub.domain.graph import Edge, Graph, Node
+from blizzard.hub.domain.secrets import IHubKeyProvider
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,
@@ -83,11 +86,13 @@ from blizzard.hub.egress.writer import (
 )
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
@@ -104,6 +109,17 @@ def hub_store_connections(engine: Engine) -> HubStoreConnections:
     own migrated engine — one helper so every adapter's test file constructs it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+
+
+OP = ChangeContext(actor="op", door=Door.API)
+
+
+def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) -> ConfigAuthoring:
+    """The one configured-record writer over ``engine``, sealing under ``keys``."""
+    store = hub_store_connections(engine)
+    return ConfigAuthoring(
+        work_sources=WorkSourceRecordStore(store), secrets=SecretStore(store), cipher=secret_cipher(keys), clock=clock
+    )
 
 
 def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:

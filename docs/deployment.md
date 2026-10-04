@@ -39,6 +39,7 @@ owns what that assumption still costs.
 
 | File                                                                             | When to read                                                                                                                                         |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deployment/config-changes.md`](./deployment/config-changes.md)                 | You are asking who changed a work source or a secret, when, through which door, and what changed                                                     |
 | [`deployment/work-sources.md`](./deployment/work-sources.md)                     | You are declaring the `[[work_source]]` bindings a chunk's work item is read through: credentials, label projection, delivery closure, ingest tokens |
 | [`deployment/worker-spawn.md`](./deployment/worker-spawn.md)                     | You are deciding what a worker process is handed: forwarded environment vars, model and effort tiers, session stickiness, and the spawn preamble     |
 | [`deployment/artifacts.md`](./deployment/artifacts.md)                           | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                               |

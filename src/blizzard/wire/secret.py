@@ -21,6 +21,13 @@ class SecretReplaceRequest(BaseModel):
     value: SecretStr
 
 
+class RecordRefView(BaseModel):
+    """A configured record named by kind and key."""
+
+    kind: str
+    key: str
+
+
 class SecretView(BaseModel):
     """A secret's metadata as served by every secret route."""
 
@@ -30,3 +37,4 @@ class SecretView(BaseModel):
     replaced_by: str
     created_at: str
     retired: bool = False
+    references: list[RecordRefView] = []

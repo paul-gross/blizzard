@@ -57,6 +57,9 @@ from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.chunks.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.dependencies import DependencyService
@@ -109,7 +112,7 @@ from blizzard.hub.domain.routines import (
 )
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
-from blizzard.hub.domain.secrets import IHubKeyProvider, ISecretCatalog, SecretAuthoring, SecretLifecycle
+from blizzard.hub.domain.secrets import IHubKeyProvider, ISecretCatalog
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.tracing.replay import TraceReplay
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
@@ -131,6 +134,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
+from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -151,6 +155,7 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -281,10 +286,14 @@ class HubServices:
     scope_lifecycle: ScopeLifecycle
     #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
     secret_catalog: ISecretCatalog
-    #: Create and replace a secret's value.
-    secret_authoring: SecretAuthoring
-    #: The secret retire/enable brake.
-    secret_lifecycle: SecretLifecycle
+    #: The active configured records naming each secret.
+    secret_references: ISecretReferences
+    #: The one writer of configured records — work sources and secrets, each write with its change row.
+    config_authoring: ConfigAuthoring
+    #: Stored work-source records (the read half; ``work_sources`` is the boot-built registry).
+    work_source_records: IReadWorkSourceRepository
+    #: The configuration change log.
+    config_changes: IReadConfigChanges
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -366,6 +375,9 @@ class HubCore:
     garden_proposal_resolution: GardenProposalDeliveryResolution
     #: Sealed secret rows — composition-only, never a ``HubServices`` field.
     secrets: SecretStore
+    #: Work-source records — composition-only write half; ``HubServices`` carries the read half.
+    work_source_records: WorkSourceRecordStore
+    config_changes: ConfigChangeStore
     clock: IClock
 
 
@@ -409,6 +421,8 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
         secrets=SecretStore(store_connections),
+        work_source_records=WorkSourceRecordStore(store_connections),
+        config_changes=ConfigChangeStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -823,8 +837,15 @@ def build_services(
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=core.secrets,
-        secret_authoring=SecretAuthoring(secrets=core.secrets, cipher=secret_cipher(secret_keys), clock=clock),
-        secret_lifecycle=SecretLifecycle(secrets=core.secrets, clock=clock),
+        secret_references=core.work_source_records,
+        config_authoring=ConfigAuthoring(
+            work_sources=core.work_source_records,
+            secrets=core.secrets,
+            cipher=secret_cipher(secret_keys),
+            clock=clock,
+        ),
+        work_source_records=core.work_source_records,
+        config_changes=core.config_changes,
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store),

@@ -88,14 +88,23 @@ def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Pa
 
 
 def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
+    """The listing is the built-in ``hub`` plus stored records; a file-configured source is
+    not listed (its rows arrive by import), though its items stay served."""
     hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")})
+    hub.client.post("/api/secrets", json={"name": "gh", "value": "v"})
+    hub.client.post(
+        "/api/work-sources",
+        json={"name": "stored", "provider": "github", "locator": "acme/stored", "secret": "gh", "annotate": True},
+    )
 
     sources = {row["name"]: row for row in hub.client.get("/api/work-sources").json()["sources"]}
 
+    assert set(sources) == {"hub", "stored"}
     assert sources["hub"]["edit"] is True
-    assert sources["forge"]["edit"] is False
-    assert sources["forge"]["annotate"] is False
-    assert "close" not in sources["forge"]
+    assert sources["hub"]["annotate"] is False
+    assert sources["stored"]["edit"] is False
+    assert sources["stored"]["annotate"] is True
+    assert "close" not in sources["stored"]
 
 
 # --------------------------------------------------------------------------- #

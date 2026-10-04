@@ -1593,6 +1593,70 @@ export type CompletionSubmission = {
 };
 
 /**
+ * ConfigChangeView
+ *
+ * One row of the change log.
+ */
+export type ConfigChangeView = {
+    /**
+     * Actor
+     */
+    actor: string;
+    /**
+     * Apply Id
+     */
+    apply_id?: string | null;
+    /**
+     * Diff
+     */
+    diff: Array<FieldChangeView>;
+    /**
+     * Door
+     */
+    door: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Op
+     */
+    op: string;
+    /**
+     * Record Key
+     */
+    record_key: string;
+    /**
+     * Record Kind
+     */
+    record_kind: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * ConfigChangesPage
+ *
+ * A newest-first page; ``next_before`` is the ``before`` that fetches the next, ``None`` at the end.
+ */
+export type ConfigChangesPage = {
+    /**
+     * Changes
+     */
+    changes: Array<ConfigChangeView>;
+    /**
+     * Next Before
+     */
+    next_before?: number | null;
+};
+
+/**
  * CreateWorkItemProposal
  *
  * A proposed new work item — a title, a markdown body, and a stated priority.
@@ -2297,6 +2361,26 @@ export type ExternalSubscriptionUsageWindowView = {
      * Window Seconds
      */
     window_seconds: number;
+};
+
+/**
+ * FieldChangeView
+ *
+ * One changed field. A secret's value never appears in a diff.
+ */
+export type FieldChangeView = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * New
+     */
+    new?: unknown;
+    /**
+     * Old
+     */
+    old?: unknown;
 };
 
 /**
@@ -4251,6 +4335,27 @@ export type ReceiverStatus = {
 };
 
 /**
+ * RecordKind
+ */
+export type RecordKind = 'work_source' | 'secret';
+
+/**
+ * RecordRefView
+ *
+ * A configured record named by kind and key.
+ */
+export type RecordRefView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+};
+
+/**
  * RestartView
  *
  * One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
@@ -5263,6 +5368,10 @@ export type SecretView = {
      * Name
      */
     name: string;
+    /**
+     * References
+     */
+    references?: Array<RecordRefView>;
     /**
      * Replaced At
      */
@@ -6480,11 +6589,83 @@ export type WorkRefView = {
 };
 
 /**
+ * WorkSourceDocument
+ *
+ * A work source as a document — the create body, and the model whose JSON Schema
+ * ``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret.
+ */
+export type WorkSourceDocument = {
+    /**
+     * Annotate
+     */
+    annotate?: boolean;
+    /**
+     * Api Base
+     */
+    api_base?: string | null;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
+};
+
+/**
+ * WorkSourcePatchRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
+ * ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.
+ * ``name`` is immutable, so a body carrying it is refused.
+ */
+export type WorkSourcePatchRequest = {
+    /**
+     * Annotate
+     */
+    annotate?: boolean | null;
+    /**
+     * Api Base
+     */
+    api_base?: string | null;
+    /**
+     * Locator
+     */
+    locator?: string | null;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
+};
+
+/**
  * WorkSourceSummary
  *
- * One work source's capability booleans — the ``GET /api/work-sources`` listing
- * row. ``readable`` is not a field: every source answers ``fetch``, so it carries no
- * information; ``edit`` is the "has browsable items" signal the item routes gate on.
+ * One work source — the ``GET /api/work-sources`` listing row and every record verb's
+ * view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
+ * information; ``edit`` is the "has browsable items" signal the item routes gate on. The
+ * built-in ``hub`` source is ``built_in`` and carries no record fields.
  */
 export type WorkSourceSummary = {
     /**
@@ -6492,13 +6673,53 @@ export type WorkSourceSummary = {
      */
     annotate: boolean;
     /**
+     * Api Base
+     */
+    api_base?: string | null;
+    /**
+     * Built In
+     */
+    built_in?: boolean;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Edit
      */
     edit: boolean;
     /**
+     * Locator
+     */
+    locator?: string | null;
+    /**
      * Name
      */
     name: string;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Revision
+     */
+    revision?: number | null;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
 };
 
 /**
@@ -8394,6 +8615,82 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 };
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
+
+export type ListChangesApiConfigChangesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Before
+         */
+        before?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Record Kind
+         */
+        record_kind?: RecordKind | null;
+        /**
+         * Record Key
+         */
+        record_key?: string | null;
+    };
+    url: '/api/config/changes';
+};
+
+export type ListChangesApiConfigChangesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChangesApiConfigChangesGetError = ListChangesApiConfigChangesGetErrors[keyof ListChangesApiConfigChangesGetErrors];
+
+export type ListChangesApiConfigChangesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigChangesPage;
+};
+
+export type ListChangesApiConfigChangesGetResponse = ListChangesApiConfigChangesGetResponses[keyof ListChangesApiConfigChangesGetResponses];
+
+export type GetSchemaApiConfigSchemaKindGetData = {
+    body?: never;
+    path: {
+        /**
+         * Kind
+         */
+        kind: string;
+    };
+    query?: never;
+    url: '/api/config/schema/{kind}';
+};
+
+export type GetSchemaApiConfigSchemaKindGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSchemaApiConfigSchemaKindGetError = GetSchemaApiConfigSchemaKindGetErrors[keyof GetSchemaApiConfigSchemaKindGetErrors];
+
+export type GetSchemaApiConfigSchemaKindGetResponses = {
+    /**
+     * Response Get Schema Api Config Schema  Kind  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetSchemaApiConfigSchemaKindGetResponse = GetSchemaApiConfigSchemaKindGetResponses[keyof GetSchemaApiConfigSchemaKindGetResponses];
 
 export type ListDecisionsApiDecisionsGetData = {
     body?: never;
@@ -11565,6 +11862,12 @@ export type ListSecretsApiSecretsGetResponse = ListSecretsApiSecretsGetResponses
 
 export type CreateSecretApiSecretsPostData = {
     body: SecretCreateRequestWritable;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path?: never;
     query?: never;
     url: '/api/secrets';
@@ -11620,6 +11923,12 @@ export type GetSecretApiSecretsNameGetResponse = GetSecretApiSecretsNameGetRespo
 
 export type EnableSecretApiSecretsNameEnablePostData = {
     body?: never;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Name
@@ -11650,6 +11959,12 @@ export type EnableSecretApiSecretsNameEnablePostResponse = EnableSecretApiSecret
 
 export type RetireSecretApiSecretsNameRetirePostData = {
     body?: never;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Name
@@ -11685,6 +12000,10 @@ export type ReplaceSecretApiSecretsNameValuePutData = {
          * If-Match
          */
         'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
     };
     path: {
         /**
@@ -11844,9 +12163,23 @@ export type AssignRoleApiUsersUserIdRolePostResponse = AssignRoleApiUsersUserIdR
 export type ListWorkSourcesApiWorkSourcesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
     url: '/api/work-sources';
 };
+
+export type ListWorkSourcesApiWorkSourcesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWorkSourcesApiWorkSourcesGetError = ListWorkSourcesApiWorkSourcesGetErrors[keyof ListWorkSourcesApiWorkSourcesGetErrors];
 
 export type ListWorkSourcesApiWorkSourcesGetResponses = {
     /**
@@ -11856,6 +12189,147 @@ export type ListWorkSourcesApiWorkSourcesGetResponses = {
 };
 
 export type ListWorkSourcesApiWorkSourcesGetResponse = ListWorkSourcesApiWorkSourcesGetResponses[keyof ListWorkSourcesApiWorkSourcesGetResponses];
+
+export type CreateWorkSourceApiWorkSourcesPostData = {
+    body: WorkSourceDocument;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/work-sources';
+};
+
+export type CreateWorkSourceApiWorkSourcesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateWorkSourceApiWorkSourcesPostError = CreateWorkSourceApiWorkSourcesPostErrors[keyof CreateWorkSourceApiWorkSourcesPostErrors];
+
+export type CreateWorkSourceApiWorkSourcesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: WorkSourceSummary;
+};
+
+export type CreateWorkSourceApiWorkSourcesPostResponse = CreateWorkSourceApiWorkSourcesPostResponses[keyof CreateWorkSourceApiWorkSourcesPostResponses];
+
+export type GetWorkSourceApiWorkSourcesSourceGetData = {
+    body?: never;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}';
+};
+
+export type GetWorkSourceApiWorkSourcesSourceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkSourceApiWorkSourcesSourceGetError = GetWorkSourceApiWorkSourcesSourceGetErrors[keyof GetWorkSourceApiWorkSourcesSourceGetErrors];
+
+export type GetWorkSourceApiWorkSourcesSourceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkSourceSummary;
+};
+
+export type GetWorkSourceApiWorkSourcesSourceGetResponse = GetWorkSourceApiWorkSourcesSourceGetResponses[keyof GetWorkSourceApiWorkSourcesSourceGetResponses];
+
+export type PatchWorkSourceApiWorkSourcesSourcePatchData = {
+    body: WorkSourcePatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}';
+};
+
+export type PatchWorkSourceApiWorkSourcesSourcePatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchWorkSourceApiWorkSourcesSourcePatchError = PatchWorkSourceApiWorkSourcesSourcePatchErrors[keyof PatchWorkSourceApiWorkSourcesSourcePatchErrors];
+
+export type PatchWorkSourceApiWorkSourcesSourcePatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkSourceSummary;
+};
+
+export type PatchWorkSourceApiWorkSourcesSourcePatchResponse = PatchWorkSourceApiWorkSourcesSourcePatchResponses[keyof PatchWorkSourceApiWorkSourcesSourcePatchResponses];
+
+export type EnableWorkSourceApiWorkSourcesSourceEnablePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/enable';
+};
+
+export type EnableWorkSourceApiWorkSourcesSourceEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableWorkSourceApiWorkSourcesSourceEnablePostError = EnableWorkSourceApiWorkSourcesSourceEnablePostErrors[keyof EnableWorkSourceApiWorkSourcesSourceEnablePostErrors];
+
+export type EnableWorkSourceApiWorkSourcesSourceEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkSourceSummary;
+};
+
+export type EnableWorkSourceApiWorkSourcesSourceEnablePostResponse = EnableWorkSourceApiWorkSourcesSourceEnablePostResponses[keyof EnableWorkSourceApiWorkSourcesSourceEnablePostResponses];
 
 export type ListWorkItemsApiWorkSourcesSourceItemsGetData = {
     body?: never;
@@ -12023,3 +12497,43 @@ export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses = {
 };
 
 export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponse = PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses[keyof PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses];
+
+export type RetireWorkSourceApiWorkSourcesSourceRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/retire';
+};
+
+export type RetireWorkSourceApiWorkSourcesSourceRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireWorkSourceApiWorkSourcesSourceRetirePostError = RetireWorkSourceApiWorkSourcesSourceRetirePostErrors[keyof RetireWorkSourceApiWorkSourcesSourceRetirePostErrors];
+
+export type RetireWorkSourceApiWorkSourcesSourceRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkSourceSummary;
+};
+
+export type RetireWorkSourceApiWorkSourcesSourceRetirePostResponse = RetireWorkSourceApiWorkSourcesSourceRetirePostResponses[keyof RetireWorkSourceApiWorkSourcesSourceRetirePostResponses];

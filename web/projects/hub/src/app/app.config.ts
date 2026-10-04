@@ -2,6 +2,7 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessC
 import { provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideAuthInterceptor } from './auth/auth.interceptor';
+import { provideDoorInterceptor } from './auth/door.interceptor';
 import { provideViewportRenavigation } from 'fleet/shell';
 
 import { routes } from './app.routes';
@@ -22,5 +23,6 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
     provideViewportRenavigation(),
     provideAuthInterceptor(),
+    provideDoorInterceptor(),
   ],
 };
