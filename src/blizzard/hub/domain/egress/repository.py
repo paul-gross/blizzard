@@ -12,14 +12,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact
-from blizzard.hub.domain.egress.rows import UsageRow
+from blizzard.hub.domain.egress.rows import AttributedUsage
 from blizzard.hub.domain.tracing.cursor import CursorKey
 
 if TYPE_CHECKING:
     from blizzard.hub.domain.egress.event_rows import EventDerivation
 
 
+@dto
 @dataclass(frozen=True, order=True)
 class UsagePosition:
     """A position in the total order of usage facts: the time the hub received it, then its id."""
@@ -28,6 +30,7 @@ class UsagePosition:
     usage_id: int = 0
 
 
+@dto
 @dataclass(frozen=True, order=True)
 class EventsPosition:
     """A position in the ``events`` dataset's total order: the source's time (``derived_at`` or ``dropped_at``),
@@ -38,8 +41,9 @@ class EventsPosition:
     extractor_version: str = ""
 
 
+@dto
 @dataclass(frozen=True)
-class EgressCursorRecord:
+class EgressCheckpoint:
     """One ``egress_cursor`` row: where a dataset stood after a pass, and what that pass wrote.
 
     ``step`` is set only for ``steps`` and ``events`` only for ``events``. ``files`` are the placed paths, the
@@ -54,8 +58,9 @@ class EgressCursorRecord:
     events: EventsPosition | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class EgressFailureRecord:
+class EgressWriteFailure:
     """The newest ``egress-write-failed`` event: when it was recorded and what it said."""
 
     at: datetime
@@ -63,19 +68,19 @@ class EgressFailureRecord:
 
 
 class IReadEgress(Protocol):
-    def newest_cursor(self, dataset: str) -> EgressCursorRecord | None:
+    def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
         """The newest ``egress_cursor`` row of ``dataset`` — its position — or ``None`` before its first pass."""
         ...
 
-    def newest_cursor_with_files(self) -> EgressCursorRecord | None:
+    def newest_cursor_with_files(self) -> EgressCheckpoint | None:
         """The newest ``egress_cursor`` row of any dataset that placed files, or ``None`` before the first write."""
         ...
 
-    def newest_egress_failure(self) -> EgressFailureRecord | None:
+    def newest_egress_failure(self) -> EgressWriteFailure | None:
         """The newest ``egress-write-failed`` event, or ``None`` when the export has never failed."""
         ...
 
-    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[UsageRow]:
+    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
         """Up to ``limit`` usage facts past ``position`` and recorded at or before ``until``, in position order."""
         ...
 
@@ -85,9 +90,10 @@ class IReadEgress(Protocol):
 
 
 class IWriteEgressCursor(IReadEgress, Protocol):
-    def append_cursor(self, record: EgressCursorRecord) -> None: ...
+    def append_cursor(self, record: EgressCheckpoint) -> None: ...
 
 
+@dto
 @dataclass(frozen=True, order=True)
 class EpochKey:
     """One chunk epoch, the events backfill's keyset order."""

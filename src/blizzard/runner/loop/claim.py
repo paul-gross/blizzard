@@ -14,7 +14,7 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
-from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
+from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
@@ -226,7 +226,7 @@ class InterruptedClaims:
                 self._reconcile_one(chunk_id, bindings, requeued=chunk_id in requeue_pending, braked=braked)
             # else a live worker holds it — REAP/ADVANCE own it
 
-    def _reconcile_one(self, chunk_id: str, bindings: list[EnvBindingRecord], *, requeued: bool, braked: bool) -> None:
+    def _reconcile_one(self, chunk_id: str, bindings: list[EnvBinding], *, requeued: bool, braked: bool) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
@@ -266,7 +266,7 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
-    def _owns_node_entry(self, chunk_id: str, view: ChunkStatusView, bindings: list[EnvBindingRecord]) -> bool:
+    def _owns_node_entry(self, chunk_id: str, view: ChunkStatusView, bindings: list[EnvBinding]) -> bool:
         """Whether FILL, not ADVANCE, spawns this running chunk's lease-less current node.
 
         ADVANCE enters a strictly newer hub epoch through the node's declared session, so
@@ -331,7 +331,7 @@ class InterruptedClaims:
             harness_id=self._latest_owner(chunk_id),
         )
 
-    def _reclaim(self, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
+    def _reclaim(self, chunk_id: str, bindings: list[EnvBinding]) -> None:
         """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
 
         The environment was bound but the claim never landed, so the chunk still reads ``ready``.

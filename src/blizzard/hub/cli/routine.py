@@ -12,6 +12,7 @@ import click
 import httpx
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing, ProposalOrigin
@@ -37,6 +38,7 @@ class RoutineListing(Listing):
         )
 
 
+@dto
 @dataclass(frozen=True)
 class RoutineDetail:
     body: dict[str, Any]
@@ -299,6 +301,7 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
     cli.show_lines(body, *lines)
 
 
+@dto
 @dataclass(frozen=True)
 class TrendDetail:
     """`routine trend`'s own render — per-period counts, then the age cut."""
@@ -358,6 +361,7 @@ def routine_trend(
     cli.show(body, TrendDetail(body))
 
 
+@dto
 @dataclass(frozen=True)
 class SweepsDetail:
     """`routine sweeps`'s own render — the last-swept table (unwindowed), then the
@@ -405,6 +409,7 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime)
     cli.show(body, SweepsDetail(body))
 
 
+@dto
 @dataclass(frozen=True)
 class ProposalCountsDetail:
     """`routine proposal-counts`'s own render — one line per class/origin

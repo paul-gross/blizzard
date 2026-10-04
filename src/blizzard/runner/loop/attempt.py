@@ -12,7 +12,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.leases.closure import (
     ESCALATED,
     ESCALATION_MINT,
@@ -79,7 +79,7 @@ class Attempt:
     routes this chunk here, and by whether its fence rose; each records its own closure."""
 
     ctx: LoopContext
-    lease: LeaseRecord
+    lease: Lease
 
     def _kill_process(self) -> None:
         """Best-effort teardown of this lease's own worker process — the shared,

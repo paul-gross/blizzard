@@ -14,7 +14,7 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.selftest_result import SelfTestResultRecord
+from blizzard.runner.domain.selftest_result import LatestSelfTestResult
 from blizzard.runner.harness import health_cache
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
@@ -73,9 +73,9 @@ class _FakeAdapter:
 
 @dataclass
 class _FakeSelftestResults:
-    record: SelfTestResultRecord | None = None
+    record: LatestSelfTestResult | None = None
 
-    def latest_selftest_result(self, harness_id: str) -> SelfTestResultRecord | None:
+    def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         del harness_id
         return self.record
 
@@ -150,7 +150,7 @@ def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:
     results = _FakeSelftestResults()
     cache = _cache(probe, results, clock=clock)
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
-    results.record = SelfTestResultRecord(harness_id=_HARNESS_ID, status="failed", error="boom", recorded_at=_NOW)
+    results.record = LatestSelfTestResult(harness_id=_HARNESS_ID, status="failed", error="boom", recorded_at=_NOW)
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
     assert probe.calls == 2
     assert result is not None

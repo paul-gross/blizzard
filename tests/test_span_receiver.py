@@ -21,7 +21,7 @@ from blizzard.foundation.platform_tracing.received import (
 )
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.tracing.receiver import MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
 from blizzard.runner.domain.tracing.receiver_limits import (
     BUCKET_CAPACITY,
@@ -36,8 +36,8 @@ _ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
 _SPAN_ID = 0x00F067AA0BA902B7
 
 
-def _lease(chunk_id: str = "ch_1", epoch: int = 1) -> LeaseRecord:
-    return LeaseRecord(
+def _lease(chunk_id: str = "ch_1", epoch: int = 1) -> Lease:
+    return Lease(
         lease_id="lease_1",
         chunk_id=chunk_id,
         graph_id="gr_1",

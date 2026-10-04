@@ -14,7 +14,7 @@ from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -143,7 +143,7 @@ class _Routed:
         assert route is not None
         return route
 
-    def transcript_record(self) -> tuple[int, SegmentRecord]:
+    def transcript_record(self) -> tuple[int, TranscriptSlice]:
         wire = TranscriptSegmentRecord(
             seq=1,
             segment_id="sg_1",

@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from blizzard.foundation.roles import domain_model
+
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 #: Ports a browser omits from ``Host``, so a declared origin naming one still matches.
 _DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -32,6 +34,7 @@ def _authority(url: str) -> str | None:
     return f"{host}:{port}"
 
 
+@domain_model
 @dataclass(frozen=True)
 class PublicOrigins:
     """Every base URL a runner answers on, in declaration order; the first is its canonical one.

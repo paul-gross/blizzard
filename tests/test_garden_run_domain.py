@@ -22,8 +22,8 @@ from blizzard.hub.domain.garden_run import (
     DeliveredSet,
     DeliveredSetRaw,
     GardenRunService,
+    RunDeliveries,
     RunIdentity,
-    RunRecord,
 )
 from blizzard.hub.domain.work import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 
@@ -36,11 +36,11 @@ _UNTIL = datetime(2026, 2, 1, tzinfo=UTC)
 
 @dataclass
 class _FakeRepo:
-    records: list[RunRecord] = field(default_factory=list)
+    records: list[RunDeliveries] = field(default_factory=list)
     identities: dict[str, RunIdentity] = field(default_factory=dict)
     delivered: dict[str, list[DeliveredSetRaw]] = field(default_factory=dict)
 
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunRecord]:
+    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
         return [r for r in self.records if since <= r.identity.minted_at < until]
 
     def run_identity(self, chunk_id: str) -> RunIdentity | None:
@@ -213,7 +213,7 @@ def test_a_delivered_run_reports_its_outcome_and_finding_sets() -> None:
             gone_count=1,
         )
     ]
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
@@ -228,7 +228,7 @@ def test_a_delivered_run_reports_its_outcome_and_finding_sets() -> None:
 
 def test_an_escalated_run_carries_its_node_and_takeover_command() -> None:
     identity = _identity("ch_1")
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=[])])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=[])])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1", graph_id="gr_9")})
     facts = ChunkFacts(
         minted=True,
@@ -259,7 +259,7 @@ def test_an_escalation_reports_the_node_it_opened_on_not_a_later_migration() -> 
     after the escalation can re-pin the chunk elsewhere while it stays open — the row
     must still name the node the escalation was actually raised from."""
     identity = _identity("ch_1")
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=[])])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=[])])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1", graph_id="gr_new")})
     facts = ChunkFacts(
         minted=True,
@@ -313,7 +313,7 @@ def test_a_run_that_delivered_nothing_still_lists_with_an_empty_delivered_list()
             gone_count=0,
         )
     ]
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
@@ -342,7 +342,7 @@ def test_several_delivered_sets_from_one_run_stay_separate_never_merged() -> Non
             gone_count=0,
         ),
     ]
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
@@ -353,7 +353,7 @@ def test_several_delivered_sets_from_one_run_stay_separate_never_merged() -> Non
 
 def test_a_run_whose_chunk_is_ephemeral_is_absent_from_the_list() -> None:
     identity = _identity("ch_gone")
-    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=[])])
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=[])])
     service = _service(repo, _FakeChunkRecords(chunks={}), _FakeChunkFacts(facts={}))
 
     assert service.list_runs(since=_SINCE, until=_UNTIL) == []

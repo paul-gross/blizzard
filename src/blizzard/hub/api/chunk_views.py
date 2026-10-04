@@ -14,7 +14,7 @@ from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
+from blizzard.hub.domain.artifacts import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
@@ -403,7 +403,7 @@ class ChunkView:
                 return source
         return None
 
-    def _artifacts(self, rows: list[ArtifactRow]) -> list[ArtifactView]:
+    def _artifacts(self, rows: list[StoredArtifact]) -> list[ArtifactView]:
         """The chunk's inline artifact store — every entry, with an asset's content and a
         git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
         so a re-run's later-epoch entry follows its predecessors (append-only history)."""

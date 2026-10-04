@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
+
 # The immutable owner code every existing production session binds.
 CLAUDE_CODE_HARNESS_ID = "claude_code"
 # The OpenCode binding's own immutable owner code (harness-selection spec).
 OPENCODE_HARNESS_ID = "opencode"
 
 
+@domain_model
 @dataclass(frozen=True)
 class SessionReference:
     """A concrete harness session's authoritative identity: both values are required and

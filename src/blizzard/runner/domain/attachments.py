@@ -13,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 
 __all__ = ["AttachmentRejected", "AttachmentService", "IReadAttachmentRepository", "IWriteAttachmentRepository"]
 
@@ -77,7 +77,7 @@ class AttachmentService:
         self._clock = clock
         self._tokens = tokens
 
-    def attach(self, lease: LeaseRecord, *, presented_token: str | None, name: str, content: str) -> None:
+    def attach(self, lease: Lease, *, presented_token: str | None, name: str, content: str) -> None:
         """Record ``content`` under ``name`` for ``lease``, or raise
         :class:`AttachmentRejected` if ``presented_token`` does not authorize it. ``lease``
         is already resolved by the caller (``bzh:domain-takes-objects``). Append-and-read-

@@ -12,9 +12,9 @@ import pytest
 from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_cursor import (
     CursorMark,
-    CursorRecord,
     MessagePartCursor,
     MessagePartIdentity,
+    MessagePartRevision,
     records_for_export,
 )
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
@@ -30,12 +30,12 @@ _CORPUS_DIR = (
 )
 
 
-def _text_record(message_id: str, part_id: str, text: str) -> CursorRecord:
-    return CursorRecord.of(message_id, part_id, {"id": part_id, "type": "text", "text": text})
+def _text_record(message_id: str, part_id: str, text: str) -> MessagePartRevision:
+    return MessagePartRevision.of(message_id, part_id, {"id": part_id, "type": "text", "text": text})
 
 
-def _compaction_record(message_id: str, part_id: str) -> CursorRecord:
-    return CursorRecord.of(message_id, part_id, {"id": part_id, "type": "compaction"})
+def _compaction_record(message_id: str, part_id: str) -> MessagePartRevision:
+    return MessagePartRevision.of(message_id, part_id, {"id": part_id, "type": "compaction"})
 
 
 # --- never prune on absence alone ---

@@ -8,16 +8,18 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.roles import dto
 
 __all__ = [
     "BufferedFact",
     "IReadOutboundRepository",
     "IWriteOutboundRepository",
-    "OutboundFactRecord",
+    "OutboundFactEntry",
     "event_payload",
 ]
 
 
+@dto
 @dataclass(frozen=True)
 class BufferedFact:
     """One pending hub-bound fact in the store-and-forward buffer."""
@@ -30,8 +32,9 @@ class BufferedFact:
     created_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class OutboundFactRecord:
+class OutboundFactEntry:
     """One hub-bound fact off the outbound buffer, acked or not. The same table as
     :class:`BufferedFact`, read as a ledger: ``acked_at`` kept, ``payload`` dropped."""
 
@@ -89,7 +92,7 @@ class IReadOutboundRepository(Protocol):
         just to count it."""
         ...
 
-    def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
+    def recent_outbound(self, limit: int) -> list[OutboundFactEntry]:
         """The newest ``limit`` outbound facts, acked or not, newest first — the local fact log."""
         ...
 

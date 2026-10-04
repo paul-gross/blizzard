@@ -8,11 +8,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 # The per-check timeout a node applies when it authors no ``checks_timeout``.
 # A timeout is a red check — a hung check must not wedge the tick forever.
 DEFAULT_CHECK_TIMEOUT: int = 600
 
 
+@dto
 @dataclass(frozen=True)
 class CheckOutcome:
     """One check command's runner-executed outcome.

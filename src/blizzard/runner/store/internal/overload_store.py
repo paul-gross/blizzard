@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.overload import InvocationKind, IWriteOverloadRepository, OverloadFactRecord
+from blizzard.runner.domain.overload import InvocationKind, IWriteOverloadRepository, OverloadExit
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import Unclosed, Unsuperseded
 from blizzard.runner.store.schema import lease_closures, overload_facts, overload_resets
@@ -64,7 +64,7 @@ class OverloadStore:
                 conn.execute(select(func.count()).select_from(overload_facts).where(and_(*conditions))).scalar_one()
             )
 
-    def open_overload_facts(self) -> list[OverloadFactRecord]:
+    def open_overload_facts(self) -> list[OverloadExit]:
         rows = self._store.all(
             select(overload_facts).where(
                 overload_facts.c.resume_after.is_not(None),
@@ -131,8 +131,8 @@ class OverloadStore:
         _log.info("provider overload streak reset", lease_id=lease_id, epoch=epoch)
 
     @staticmethod
-    def _row_to_record(r) -> OverloadFactRecord:  # type: ignore[no-untyped-def]
-        return OverloadFactRecord(
+    def _row_to_record(r) -> OverloadExit:  # type: ignore[no-untyped-def]
+        return OverloadExit(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             epoch=int(r.epoch),

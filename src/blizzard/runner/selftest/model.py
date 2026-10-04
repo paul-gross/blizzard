@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from blizzard.foundation.roles import domain_model, dto
+
 SelfTestStatus = Literal["running", "passed", "failed"]
 
 # The seven adapter-drift checks, in the order a run performs them (the last two were added later).
@@ -21,6 +23,7 @@ USAGE_PARSING = "usage_parsing"
 TRANSCRIPT_READABILITY = "transcript_readability"
 
 
+@dto
 @dataclass(frozen=True)
 class SelfTestCheck:
     """One pass/fail check within a selftest run, with a human-readable detail."""
@@ -30,6 +33,7 @@ class SelfTestCheck:
     detail: str
 
 
+@domain_model
 @dataclass
 class SelfTestRun:
     """A selftest job resource: minted `running` by ``start``, filled in as checks

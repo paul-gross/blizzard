@@ -12,7 +12,8 @@ from typing import Any
 
 from sqlalchemy import Connection, and_, select
 
-from blizzard.runner.domain.leases import LeaseRecord, WorkRefStamp
+from blizzard.foundation.roles import domain_model
+from blizzard.runner.domain.leases import Lease, WorkRefStamp
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
@@ -32,6 +33,7 @@ from blizzard.runner.store.schema import (
 NO_NORMALIZER_VERSION = ""
 
 
+@domain_model
 @dataclass(frozen=True)
 class Unsuperseded:
     """A fact row stands while no superseding row exists — one correlated ``NOT EXISTS``.
@@ -47,6 +49,7 @@ class Unsuperseded:
         return ~select(self.marker).where(*self.conditions).exists()
 
 
+@domain_model
 @dataclass(frozen=True)
 class Unclosed:
     """A row stands while no closing row names its id — a plain ``NOT IN``.
@@ -171,8 +174,8 @@ def decode_work_refs(raw: str | None) -> tuple[WorkRefStamp, ...] | None:
     return tuple(WorkRefStamp(source=e["source"], ref=e["ref"], label=e.get("label")) for e in json.loads(raw))
 
 
-def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
-    return LeaseRecord(
+def row_to_lease(r) -> Lease:  # type: ignore[no-untyped-def]
+    return Lease(
         lease_id=str(r.lease_id),
         chunk_id=str(r.chunk_id),
         graph_id=str(r.graph_id),

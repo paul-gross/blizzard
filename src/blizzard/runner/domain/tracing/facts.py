@@ -9,11 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseRow:
+class LeaseGrantFact:
     """A ``leases`` row."""
 
     lease_id: str
@@ -23,8 +25,9 @@ class LeaseRow:
     created_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseContextRow:
+class LeaseContextFact:
     """A ``lease_context`` row; ``None`` declares unknown."""
 
     graph_id: str
@@ -38,16 +41,18 @@ class LeaseContextRow:
     resolved_effort: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseClosureRow:
+class LeaseClosureFact:
     """A ``lease_closures`` row; ``reason`` verbatim, mint reasons included."""
 
     reason: str
     closed_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class SpawnRow:
+class SpawnFact:
     """A ``lease_spawns`` row — identity only, never its process facts."""
 
     id: int
@@ -58,8 +63,9 @@ class SpawnRow:
     identified_at: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class BoundaryRow:
+class BoundaryFact:
     """An ``invocation_boundaries`` row — never its transcript position."""
 
     id: int
@@ -69,8 +75,9 @@ class BoundaryRow:
     closed_at: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class UsageRow:
+class TokenUsageFact:
     """A ``usage_facts`` row."""
 
     id: int
@@ -88,14 +95,16 @@ class UsageRow:
     harness_version: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class SessionEndRow:
+class SessionEndFact:
     id: int
     ended_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class ContextSampleRow:
+class ContextSampleFact:
     """A ``context_samples`` row; ``context_tokens`` ``None`` is an unmeasurable sample."""
 
     id: int
@@ -103,8 +112,9 @@ class ContextSampleRow:
     context_tokens: int | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class ParkRow:
+class ParkFact:
     """A ``park_facts`` row — the question's id, never its text."""
 
     id: int
@@ -112,29 +122,33 @@ class ParkRow:
     parked_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class ParkResumeRow:
+class ParkResumeFact:
     id: int
     question_id: str
     resumed_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class PauseParkRow:
+class PauseParkFact:
     id: int
     parked_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class PauseResumeRow:
+class PauseResumeFact:
     """A ``pause_park_resumes`` row."""
 
     id: int
     resumed_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class OverloadRow:
+class OverloadFact:
     """An ``overload_facts`` row; ``resume_after`` ``None`` is a recorded fall-through."""
 
     id: int
@@ -144,30 +158,34 @@ class OverloadRow:
     resume_after: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class TakeoverRow:
+class TakeoverFact:
     """A ``takeovers`` row — never its working directory or session."""
 
     takeover_id: str
     opened_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class TakeoverEndRow:
+class TakeoverEndFact:
     id: int
     takeover_id: str
     ended_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class NudgeRow:
+class NudgeFact:
     id: int
     epoch: int
     nudged_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class CheckResultRow:
+class CheckResultFact:
     """A ``check_results`` row — the outcome only, never the command or its output."""
 
     id: int
@@ -175,32 +193,34 @@ class CheckResultRow:
     passed: bool
 
 
+@dto
 @dataclass(frozen=True)
-class ChecksRanRow:
+class ChecksRanFact:
     id: int
     epoch: int
     ran_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class LeaseTraceFacts:
     """One closed lease's facts; every row tuple holds only that lease's rows."""
 
-    lease: LeaseRow
-    context: LeaseContextRow
-    closure: LeaseClosureRow
-    spawns: tuple[SpawnRow, ...] = ()
-    boundaries: tuple[BoundaryRow, ...] = ()
-    usage: tuple[UsageRow, ...] = ()
-    session_ends: tuple[SessionEndRow, ...] = ()
-    context_samples: tuple[ContextSampleRow, ...] = ()
-    parks: tuple[ParkRow, ...] = ()
-    park_resumes: tuple[ParkResumeRow, ...] = ()
-    pause_parks: tuple[PauseParkRow, ...] = ()
-    pause_resumes: tuple[PauseResumeRow, ...] = ()
-    overloads: tuple[OverloadRow, ...] = ()
-    takeovers: tuple[TakeoverRow, ...] = ()
-    takeover_ends: tuple[TakeoverEndRow, ...] = ()
-    nudges: tuple[NudgeRow, ...] = ()
-    check_results: tuple[CheckResultRow, ...] = ()
-    checks_ran: tuple[ChecksRanRow, ...] = ()
+    lease: LeaseGrantFact
+    context: LeaseContextFact
+    closure: LeaseClosureFact
+    spawns: tuple[SpawnFact, ...] = ()
+    boundaries: tuple[BoundaryFact, ...] = ()
+    usage: tuple[TokenUsageFact, ...] = ()
+    session_ends: tuple[SessionEndFact, ...] = ()
+    context_samples: tuple[ContextSampleFact, ...] = ()
+    parks: tuple[ParkFact, ...] = ()
+    park_resumes: tuple[ParkResumeFact, ...] = ()
+    pause_parks: tuple[PauseParkFact, ...] = ()
+    pause_resumes: tuple[PauseResumeFact, ...] = ()
+    overloads: tuple[OverloadFact, ...] = ()
+    takeovers: tuple[TakeoverFact, ...] = ()
+    takeover_ends: tuple[TakeoverEndFact, ...] = ()
+    nudges: tuple[NudgeFact, ...] = ()
+    check_results: tuple[CheckResultFact, ...] = ()
+    checks_ran: tuple[ChecksRanFact, ...] = ()

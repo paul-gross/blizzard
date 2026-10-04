@@ -9,13 +9,13 @@ from collections.abc import Callable
 from datetime import date, datetime
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.egress.rows import UsageRow, invocation_row, step_row
+from blizzard.hub.domain.egress.rows import AttributedUsage, invocation_row, step_row
 from blizzard.hub.domain.egress.schema import invocation_egress_row, partition_of, step_egress_row
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.steps import NodeStep, StepKind
 from blizzard.hub.domain.tracing.summary import summarize_step
-from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause, EgressRow
+from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause, EgressValues
 
 _log = get_logger("blizzard.hub.egress")
 
@@ -28,7 +28,7 @@ def runner_step(steps: tuple[NodeStep, ...], epoch: int) -> NodeStep | None:
 
 
 def add_step(
-    batch: dict[str, tuple[CursorKey, EgressRow]],
+    batch: dict[str, tuple[CursorKey, EgressValues]],
     facts: StepFacts,
     steps: tuple[NodeStep, ...],
     step: NodeStep,
@@ -44,8 +44,8 @@ def add_step(
 
 
 def invocation_entry(
-    chunk: StepFacts, steps: tuple[NodeStep, ...], usage: UsageRow, now: datetime
-) -> tuple[date, EgressRow] | None:
+    chunk: StepFacts, steps: tuple[NodeStep, ...], usage: AttributedUsage, now: datetime
+) -> tuple[date, EgressValues] | None:
     """``usage``'s row and partition, or ``None`` when ``steps`` hold no runner step to attribute it to."""
     step = runner_step(steps, usage.fact.epoch)
     if step is None:
@@ -54,13 +54,13 @@ def invocation_entry(
     return partition_of(invocation.recorded_at), invocation_egress_row(invocation)
 
 
-def ended_at(row: EgressRow) -> datetime:
+def ended_at(row: EgressValues) -> datetime:
     value = row.values["ended_at"]
     assert isinstance(value, datetime)
     return value
 
 
-def step_partition(row: EgressRow) -> date:
+def step_partition(row: EgressValues) -> date:
     return partition_of(ended_at(row))
 
 

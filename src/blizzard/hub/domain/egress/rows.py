@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.steps import NodeStep, StepKind
@@ -20,8 +21,9 @@ from blizzard.hub.domain.work import UsageFact
 _MONEY_SCALE = Decimal("0.000000001")
 
 
+@dto
 @dataclass(frozen=True)
-class StepRow:
+class ExportedStep:
     """One ``steps`` row; field order is the column order."""
 
     step_key: str
@@ -68,8 +70,9 @@ class StepRow:
     exported_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class UsageRow:
+class AttributedUsage:
     """A hub ``usage_facts`` row with the identity columns :class:`UsageFact` does not carry."""
 
     usage_id: int
@@ -78,8 +81,9 @@ class UsageRow:
     fact: UsageFact
 
 
+@dto
 @dataclass(frozen=True)
-class InvocationRow:
+class ExportedInvocation:
     """One ``invocations`` row; field order is the column order."""
 
     usage_id: int
@@ -115,9 +119,9 @@ def trace_id_text(key: StepKey) -> str:
     return f"{trace_id(key):032x}"
 
 
-def step_row(summary: StepSummary, exported_at: datetime) -> StepRow:
+def step_row(summary: StepSummary, exported_at: datetime) -> ExportedStep:
     """The ``steps`` row of a closed step. ``runner_id`` is the holder of a runner step only."""
-    return StepRow(
+    return ExportedStep(
         step_key=summary.step_key.text(),
         trace_id=trace_id_text(summary.step_key),
         step_kind=summary.kind.value,
@@ -163,13 +167,15 @@ def step_row(summary: StepSummary, exported_at: datetime) -> StepRow:
     )
 
 
-def invocation_row(facts: StepFacts, step: NodeStep, usage: UsageRow, exported_at: datetime) -> InvocationRow:
+def invocation_row(
+    facts: StepFacts, step: NodeStep, usage: AttributedUsage, exported_at: datetime
+) -> ExportedInvocation:
     """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
     open or closed."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact
-    return InvocationRow(
+    return ExportedInvocation(
         usage_id=usage.usage_id,
         step_key=step.key.text(),
         trace_id=trace_id_text(step.key),

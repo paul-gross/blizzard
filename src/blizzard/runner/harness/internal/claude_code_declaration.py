@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.ambient_conflicts import (
     claude_code_ambient_sources,
@@ -34,6 +35,7 @@ from blizzard.runner.harness.worker_settings import WorkerSettings
 from blizzard.runner.loop.process import IProcessProbe
 
 
+@domain_model
 @dataclass(frozen=True)
 class ClaudeCodeDeclaration:
     """Claude Code, declared once."""

@@ -8,14 +8,16 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import ChunkRow, Cost, QuestionRow, RunnerRow
+from blizzard.hub.cli.views import ChunkLine, Cost, QuestionLine, RunnerLine
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``.
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
 
 
+@dto
 @dataclass(frozen=True)
 class FleetStatus:
     chunks: list[dict[str, Any]]
@@ -26,13 +28,13 @@ class FleetStatus:
     def lines(self) -> Iterator[str]:
         yield f"chunks ({len(self.chunks)}):"
         for chunk in self.chunks:
-            yield f"  {ChunkRow(chunk, prefer_node_name=False).line()}"
+            yield f"  {ChunkLine(chunk, prefer_node_name=False).line()}"
         yield f"\nrunners ({len(self.runners)}):"
         for runner in self.runners:
-            yield f"  {RunnerRow(runner).line()}"
+            yield f"  {RunnerLine(runner).line()}"
         yield f"\nopen questions ({len(self.questions)}):"
         for question in self.questions:
-            yield f"  {QuestionRow(question).line()}"
+            yield f"  {QuestionLine(question).line()}"
         yield f"\nfleet spend (all time): {Cost.of(self.spend).rendered}"
 
 

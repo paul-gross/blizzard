@@ -11,12 +11,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = [
     "WORKER_STARTING_KINDS",
     "IReadInvocationBoundaryRepository",
     "IWriteInvocationBoundaryRepository",
+    "InvocationBoundary",
     "InvocationBoundaryKind",
-    "InvocationBoundaryRecord",
     "InvocationBoundaryStart",
 ]
 
@@ -27,8 +29,9 @@ InvocationBoundaryKind = Literal["spawn", "resume", "judge", "nudge"]
 WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
 
+@dto
 @dataclass(frozen=True)
-class InvocationBoundaryRecord:
+class InvocationBoundary:
     """One invocation's durable start marker — its true start, never rewritten. ``start_position``
     is the opaque ``TranscriptPosition.token`` minted just before launch, or ``None`` — a fresh
     session's own beginning sentinel; ``start_unreadable`` marks a failed tail read instead."""
@@ -46,6 +49,7 @@ class InvocationBoundaryRecord:
     start_unreadable: bool = False
 
 
+@dto
 @dataclass(frozen=True)
 class InvocationBoundaryStart:
     """Where an invocation boundary's range currently starts: the newest advance's own
@@ -59,7 +63,7 @@ class InvocationBoundaryStart:
 class IReadInvocationBoundaryRepository(Protocol):
     """Read-only invocation-boundary queries (held by read-path edges)."""
 
-    def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundaryRecord | None:
+    def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundary | None:
         """This exact invocation's marker — its true start, never rewritten — or ``None``
         when it was never opened."""
         ...
@@ -72,7 +76,7 @@ class IReadInvocationBoundaryRepository(Protocol):
         interrupted-usage recovery keys a standing judge's range from."""
         ...
 
-    def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
+    def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundary]:
         """This lease's boundaries with no ``closed_at`` yet, in ``opened_at`` order —
         empty once the lease has closed (``bzh:open-facts-declare-closure``)."""
         ...

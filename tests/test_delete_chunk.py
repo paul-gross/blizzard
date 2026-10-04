@@ -21,7 +21,7 @@ from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef
 from blizzard.hub.store import schema as s
@@ -133,7 +133,7 @@ def test_a_deleted_chunk_is_excluded_from_unmaterialized_proposals(tmp_path: Pat
         at=_T0,
         artifacts=[],
         proposals=[
-            WorkItemProposalRow(
+            StampedWorkItemProposal(
                 proposal_id="wip_1",
                 chunk_id="ch_1",
                 node_id="nd_1",

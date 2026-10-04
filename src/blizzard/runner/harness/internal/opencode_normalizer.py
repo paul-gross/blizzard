@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.internal.opencode_cursor import MessagePartIdentity
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeMessage,
@@ -27,6 +28,7 @@ NORMALIZER_VERSION = "opencode-export/1"
 MAX_BLOCK_CHARS = 1024 * 1024
 
 
+@dto
 @dataclass(frozen=True)
 class Text:
     """One string block, capped at :data:`MAX_BLOCK_CHARS`. OpenCode's own export carries
@@ -46,6 +48,7 @@ class Text:
 _EMPTY = Text("", False)
 
 
+@dto
 @dataclass(frozen=True)
 class ChildCandidate:
     """One tool part's undocumented child-session pointer, and the agent type its own input

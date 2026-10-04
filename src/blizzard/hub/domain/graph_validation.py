@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.artifacts import is_valid_graph_artifact_name
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
@@ -39,6 +40,7 @@ def _is_uninlined_file_reference(content: str) -> bool:
     return "/" in content or bool(_FILE_EXTENSION.search(content))
 
 
+@dto
 @dataclass(frozen=True)
 class ValidationResult:
     """The outcome of validating a graph definition."""
@@ -52,6 +54,7 @@ class ValidationResult:
         return not self.errors
 
 
+@domain_model
 @dataclass(frozen=True)
 class Validator:
     """A parsed graph run against its structural rules.
@@ -153,6 +156,7 @@ class Validator:
                 )
 
 
+@domain_model
 @dataclass(frozen=True)
 class NodeCheck:
     """One node run against the rules its executor, judgement, checks, and session imply."""
@@ -324,6 +328,7 @@ class NodeCheck:
             )
 
 
+@domain_model
 @dataclass(frozen=True)
 class Reachability:
     """What the entry reaches over the adjacency every node's authored choices imply.

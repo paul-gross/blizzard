@@ -19,13 +19,14 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.domain.leases import Lease, Liveness, as_utc
 from blizzard.runner.domain.leases.closure import REAPED
 from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.usage import ContextSampleState
-from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
+from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
@@ -206,7 +207,7 @@ class Reap(Step):
 @dataclass(frozen=True)
 class ResumeIntents:
     """Marking in-flight leases for same-lease restart-resume — the graceful-shutdown hook
-    (#12) and the startup crash-orphan scan (#13). Store-only: no context, no hub.
+    and the startup crash-orphan scan. Store-only: no context, no hub.
 
     Spans leases, asks (parked) and outbound (pending submission), so it holds the
     :class:`~blizzard.runner.stores.RunnerStores` bundle."""
@@ -235,7 +236,7 @@ class ResumeIntents:
             _log.info("marked crash-interrupted leases for restart-resume", count=marked)
         return marked
 
-    def _resumable(self) -> Iterator[LeaseRecord]:
+    def _resumable(self) -> Iterator[Lease]:
         """Active, session-bearing leases that are neither parked, mid-submission, nor
         mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
 
@@ -259,9 +260,7 @@ class ResumeIntents:
                 continue
             yield lease
 
-    def _crash_orphaned(
-        self, ended: Container[str], process: IProcessProbe, crashed_at: datetime
-    ) -> Iterator[LeaseRecord]:
+    def _crash_orphaned(self, ended: Container[str], process: IProcessProbe, crashed_at: datetime) -> Iterator[Lease]:
         for lease in self._resumable():
             if lease.lease_id in ended:
                 continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
@@ -273,7 +272,7 @@ class ResumeIntents:
                 continue
             yield lease
 
-    def _mark(self, leases: Iterator[LeaseRecord], *, now: datetime) -> int:
+    def _mark(self, leases: Iterator[Lease], *, now: datetime) -> int:
         marked = 0
         for lease in leases:
             self.stores.resume_intent.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
@@ -313,10 +312,11 @@ class _FenceRef(Protocol):
     def epoch(self) -> int: ...
 
 
+@domain_model
 @dataclass(frozen=True)
 class Fenced:
     """Whether the hub has moved a chunk out from under a reference epoch still held here — an
-    active lease (#370) or a closed one behind an open escalation (#396).
+    active lease or a closed one behind an open escalation.
 
     The signal is the fence itself: an epoch above the reference's, or a restart AT it. The id set
     is the one place a higher one is somebody else's business — a takeover a person is in."""
@@ -339,7 +339,7 @@ class Pull(Step):
 
         Reconciliation runs BEFORE the drain, so a preempted lease's queued submission still
         reaches the hub and the drain absorbs the stale-epoch rejection against a lease already
-        closed — the retry budget the move must not spend is never reached (#370)."""
+        closed — the retry budget the move must not spend is never reached."""
         self._sync_registry()
         self._reconcile_leases()
         self._reconcile_escalations()
@@ -377,7 +377,7 @@ class Pull(Step):
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
         no longer routes it here, park it if the operator paused it, preempt it if a
-        restart moved the chunk out from under it (#370). All three share **one** ``ctx.chunk_views.get``
+        restart moved the chunk out from under it. All three share **one** ``ctx.chunk_views.get``
         per lease — a per-tick cache primed at tick start, not a fresh hub round trip
         each time — and a transport failure reads as none of them. The pause branch keys on the
         pause *fact*, which an ask-park masks."""
@@ -555,7 +555,7 @@ class Advance(Step):
             if chunk_id not in active_chunk_ids:
                 HeldChunk(ctx, chunk_id).drive()
 
-    def _advance_exited_worker(self, lease: LeaseRecord) -> None:
+    def _advance_exited_worker(self, lease: Lease) -> None:
         """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
         elicitation.
 
@@ -682,10 +682,10 @@ class ContextSample(Step):
 
     def _sample(
         self,
-        lease: LeaseRecord,
+        lease: Lease,
         warn_tokens: int,
         state: ContextSampleState | None,
-        bindings: list[EnvBindingRecord],
+        bindings: list[EnvBinding],
     ) -> None:
         ctx = self.ctx
         session = lease.session
@@ -738,7 +738,7 @@ class ContextSample(Step):
             )
 
     @staticmethod
-    def _event(lease: LeaseRecord, tokens: int | None, warn_tokens: int, now: datetime) -> dict[str, object]:
+    def _event(lease: Lease, tokens: int | None, warn_tokens: int, now: datetime) -> dict[str, object]:
         """The ``event.recorded`` payload one crossing surfaces, in the shape the hub ingests."""
         return {
             "severity": EVENT_LOG_SEVERITY[_CONTEXT_WARNED],
@@ -755,7 +755,7 @@ class ContextSample(Step):
             },
         }
 
-    def _spawn_cwd(self, bindings: list[EnvBindingRecord]) -> str | None:
+    def _spawn_cwd(self, bindings: list[EnvBinding]) -> str | None:
         """The lease's worktree, the transcript locator's multi-match tie-break — never its key.
 
         Resolved exactly as the transcript pump resolves it, so both lanes read the same file."""

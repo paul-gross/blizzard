@@ -26,7 +26,7 @@ from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_en
 from blizzard.hub.domain.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.egress.events_window import events_rows, position_of, take
 from blizzard.hub.domain.egress.repository import (
-    EgressCursorRecord,
+    EgressCheckpoint,
     EventsPosition,
     IReadEgressEvents,
     IWriteEgressCursor,
@@ -48,7 +48,7 @@ from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
     EgressPass,
-    EgressRow,
+    EgressValues,
     IEgressWriter,
     PlacedFile,
 )
@@ -69,7 +69,7 @@ _CP_EGRESS_AFTER_COMMIT_BEFORE_CURSOR = crashpoint(
 _FAILED: EventLogKind = "egress-write-failed"
 _RECOVERED: EventLogKind = "egress-write-recovered"
 
-_Rows = list[tuple[date, EgressRow]]
+_Rows = list[tuple[date, EgressValues]]
 
 
 class EgressSweep:
@@ -140,7 +140,7 @@ class EgressSweep:
             self._recovered()
 
     def _dataset_pass(
-        self, dataset: str, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime
+        self, dataset: str, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime
     ) -> bool | EgressFailure:
         if dataset == STEPS_SCHEMA.name:
             return self._steps_pass(cursor, egress_pass, until)
@@ -152,7 +152,7 @@ class EgressSweep:
 
     # --- the first pass -----------------------------------------------------------------
 
-    def _anchor(self, cursors: dict[str, EgressCursorRecord | None], now: datetime) -> None:
+    def _anchor(self, cursors: dict[str, EgressCheckpoint | None], now: datetime) -> None:
         """Starts each unanchored dataset's export at ``now`` less the settle window, writing no rows."""
         at = now - self._settle
         for dataset, cursor in cursors.items():
@@ -160,11 +160,11 @@ class EgressSweep:
                 continue
             step = CursorKey.opening(at) if dataset == STEPS_SCHEMA.name else None
             events = EventsPosition(at) if dataset == EVENTS_SCHEMA.name else None
-            self._egress.append_cursor(EgressCursorRecord(dataset, step, UsagePosition(at), 0, (), now, events))
+            self._egress.append_cursor(EgressCheckpoint(dataset, step, UsagePosition(at), 0, (), now, events))
 
     # --- steps --------------------------------------------------------------------------
 
-    def _steps_pass(self, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime) -> bool | EgressFailure:
+    def _steps_pass(self, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime) -> bool | EgressFailure:
         assert cursor.step is not None  # a steps cursor always carries its step position
         window = read_window(self._steps, cursor.step, until, self._batch_limit)
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
@@ -173,7 +173,7 @@ class EgressSweep:
         steps: dict[str, tuple[NodeStep, ...]] = {
             closed.step.key.chunk_id: closed.steps for closed in window.closed_steps()
         }
-        batch: dict[str, tuple[CursorKey, EgressRow]] = {}
+        batch: dict[str, tuple[CursorKey, EgressValues]] = {}
         for closed in window.closed_steps():
             add_step(batch, closed.facts, closed.steps, closed.step, closed.key, now)
         late = [row for row in usage if row.chunk_id not in facts]
@@ -189,7 +189,7 @@ class EgressSweep:
             if key <= window.position:
                 add_step(batch, chunk, steps[row.chunk_id], step, key, now)
         position = usage[-1] if usage else None
-        advanced = EgressCursorRecord(
+        advanced = EgressCheckpoint(
             STEPS_SCHEMA.name,
             window.position,
             UsagePosition(position.fact.recorded_at, position.usage_id) if position is not None else cursor.usage,
@@ -207,7 +207,7 @@ class EgressSweep:
     # --- invocations --------------------------------------------------------------------
 
     def _invocations_pass(
-        self, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime
+        self, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime
     ) -> bool | EgressFailure:
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
         if not usage:
@@ -225,7 +225,7 @@ class EgressSweep:
                 continue
             rows.append(entry)
         last = usage[-1]
-        advanced = EgressCursorRecord(
+        advanced = EgressCheckpoint(
             INVOCATIONS_SCHEMA.name,
             None,
             UsagePosition(last.fact.recorded_at, last.usage_id),
@@ -240,9 +240,7 @@ class EgressSweep:
 
     # --- events -------------------------------------------------------------------------
 
-    def _events_pass(
-        self, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime
-    ) -> bool | EgressFailure:
+    def _events_pass(self, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime) -> bool | EgressFailure:
         assert cursor.events is not None  # an events cursor always carries its events position
         assert self._paths is not None  # checked at construction
         limit = self._batch_limit
@@ -263,7 +261,7 @@ class EgressSweep:
         )
         facts = self._steps.step_facts_for(chunk_ids)
         rows = events_rows(items, derivations, facts, self._paths, egress_pass.started_at)
-        advanced = EgressCursorRecord(
+        advanced = EgressCheckpoint(
             EVENTS_SCHEMA.name, None, cursor.usage, len(rows), (), egress_pass.started_at, position_of(items[-1])
         )
         if rows:
@@ -274,10 +272,10 @@ class EgressSweep:
     # --- placing ------------------------------------------------------------------------
 
     def _write(
-        self, schema: DatasetSchema, rows: _Rows, egress_pass: EgressPass, advanced: EgressCursorRecord
+        self, schema: DatasetSchema, rows: _Rows, egress_pass: EgressPass, advanced: EgressCheckpoint
     ) -> bool | EgressFailure:
         """Place ``rows`` per date partition, commit the manifest, then append ``advanced``."""
-        by_partition: dict[date, list[EgressRow]] = defaultdict(list)
+        by_partition: dict[date, list[EgressValues]] = defaultdict(list)
         for partition, row in rows:
             by_partition[partition].append(row)
         placed: list[PlacedFile] = []

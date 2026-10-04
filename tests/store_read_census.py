@@ -62,7 +62,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigC
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
 from blizzard.hub.domain.egress.repository import (
-    EgressCursorRecord,
+    EgressCheckpoint,
     EpochKey,
     EventsPosition,
     IReadEgress,
@@ -78,14 +78,14 @@ from blizzard.hub.domain.garden_run import IReadGardenRunRepository
 from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden_trend import IReadGardenTrendRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository, IReadManyGraphs
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.secrets import ISecretCatalog, SecretName
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCursorRecord
+from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCheckpoint
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.work import (
     Chunk,
@@ -113,10 +113,10 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
-from blizzard.runner.domain.artifacts import GraphArtifactRecord, IReadGraphArtifactRepository
+from blizzard.runner.domain.artifacts import PinnedGraphArtifact, IReadGraphArtifactRepository
 from blizzard.runner.domain.asks import IReadAskRepository
 from blizzard.runner.domain.attachments import IReadAttachmentRepository
-from blizzard.runner.domain.checks import CheckResultRecord, IReadCheckRepository
+from blizzard.runner.domain.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.domain.elicitation import IReadElicitationRepository
 from blizzard.runner.domain.escalations import IReadEscalationRepository
 from blizzard.runner.domain.git_commit_declaration import IReadGitCommitDeclarationRepository
@@ -135,7 +135,7 @@ from blizzard.runner.domain.requeue import IReadRequeueRepository
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.domain.takeover import IReadTakeoverRepository
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseCursorRecord
+from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
@@ -379,8 +379,8 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         node_id=node_a,
         epoch=2,
         results=[
-            CheckResultRecord(command="pytest", passed=True, output_tail="ok"),
-            CheckResultRecord(command="lint", passed=False, output_tail="fail"),
+            ExecutedCheck(command="pytest", passed=True, output_tail="ok"),
+            ExecutedCheck(command="lint", passed=False, output_tail="fail"),
         ],
         at=_t(12),
     )
@@ -564,8 +564,8 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     stores.graph_artifacts.record_graph_artifacts(
         graph_id=GRAPH_ID,
         artifacts=[
-            GraphArtifactRecord(name="a1", ordinal=0, kind=ArtifactKind.ASSET, content="c1"),
-            GraphArtifactRecord(name="a2", ordinal=1, kind=ArtifactKind.GIT_COMMIT, content="c2"),
+            PinnedGraphArtifact(name="a1", ordinal=0, kind=ArtifactKind.ASSET, content="c1"),
+            PinnedGraphArtifact(name="a2", ordinal=1, kind=ArtifactKind.GIT_COMMIT, content="c2"),
         ],
         recorded_at=_t(85),
     )
@@ -599,7 +599,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         kind="completion.submitted", chunk_id=chunk_1, lease_id=lease_2, payload="{}", created_at=_t(91)
     )
     stores.outbound.ack_outbound(seq_a, acked_at=_t(92))
-    stores.lease_traces.append_trace_cursor(LeaseCursorRecord(LeaseCursorKey.opening(_t(0)), 0, _t(93)))
+    stores.lease_traces.append_trace_cursor(LeaseTraceCheckpoint(LeaseCursorKey.opening(_t(0)), 0, _t(93)))
     stores.lease_traces.record_trace_latch(
         "trace-export-failed", at=_t(94), report_kind="event.recorded", report_payload="{}"
     )
@@ -1363,7 +1363,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(37),
         artifacts=[],
         proposals=[
-            WorkItemProposalRow(
+            StampedWorkItemProposal(
                 proposal_id="wip_hub_1",
                 chunk_id=chunk_transition,
                 node_id=build_node.node_id,
@@ -1416,7 +1416,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(44),
         artifacts=[],
         proposals=[
-            WorkItemProposalRow(
+            StampedWorkItemProposal(
                 proposal_id="wip_hub_2",
                 chunk_id=chunk_decision_1,
                 node_id=build_node.node_id,
@@ -1733,9 +1733,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     # --- trace export cursor ----------------------------------------------------------
-    _trace_store_of(store_connections, hub).append_cursor(TraceCursorRecord(CursorKey.opening(_ht(0)), 0, _ht(100)))
+    _trace_store_of(store_connections, hub).append_cursor(TraceCheckpoint(CursorKey.opening(_ht(0)), 0, _ht(100)))
     _egress_store_of(store_connections).append_cursor(
-        EgressCursorRecord("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
+        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
     )
 
     return HubWorld(

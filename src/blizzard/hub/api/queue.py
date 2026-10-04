@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
+from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -144,6 +145,7 @@ def _reposition(
     services.events.publish_queue_changed()
 
 
+@dto
 @dataclass(frozen=True)
 class ReadyQueue:
     """The hub-ordered ready queue as every peek renders it — position is the order itself.
@@ -185,6 +187,7 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
     )
 
 
+@dto
 @dataclass(frozen=True)
 class MatchedPeek:
     """The matched fleet peek — at most one ready entry the calling runner can both work
@@ -296,6 +299,7 @@ def reposition_queue(
     return ReadyQueue.of(services, statuses).view
 
 
+@dto
 @dataclass(frozen=True)
 class Backlog:
     """The hub-ordered ``not_ready`` list as every peek renders it — position is the

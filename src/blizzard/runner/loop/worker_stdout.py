@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, Lease
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class WorkerStdoutFiles:
         """That generation's captured stdout, or ``""`` when absent/unreadable."""
         return self._read(self.stdout_path(lease_id, generation))
 
-    def stderr_tail(self, lease: LeaseRecord, *, limit: int = 2000) -> str:
+    def stderr_tail(self, lease: Lease, *, limit: int = 2000) -> str:
         """The tail of this lease's most-recent captured spawn-stderr, or ``""``.
 
         Best-effort and never raises (a hung-but-live worker that never crashed to stderr, or

@@ -8,11 +8,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from blizzard.foundation.roles import domain_model
+
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class Table:
     """One parsed toml table, read through the coercions the config fields share.

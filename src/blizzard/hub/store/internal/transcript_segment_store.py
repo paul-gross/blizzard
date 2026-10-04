@@ -17,9 +17,9 @@ from sqlalchemy import Insert, Select, Update, func, insert, select
 from blizzard.hub.domain.transcripts import (
     IWriteTranscriptSegments,
     NaturalKeyState,
-    SegmentIndexRow,
-    SegmentRecord,
     SegmentRecordContent,
+    SegmentSummary,
+    TranscriptSlice,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -44,7 +44,7 @@ def content_digest(*, turn_range_start: int, rejected: bool, content: bytes | No
     return digest.hexdigest()
 
 
-def _identity_values(record: SegmentRecord) -> dict[str, object]:
+def _identity_values(record: TranscriptSlice) -> dict[str, object]:
     return {
         "segment_id": record.segment_id,
         "chunk_id": record.chunk_id,
@@ -178,7 +178,7 @@ def _update_high_water_stmt(runner_id: str, *, seq: int, at: datetime) -> Update
 
 
 def _insert_accepted_stmt(
-    record: SegmentRecord, *, byte_count: int, codec: str, content: bytes, at: datetime
+    record: TranscriptSlice, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Insert:
     return insert(s.transcript_segments).values(
         **_identity_values(record),
@@ -192,7 +192,7 @@ def _insert_accepted_stmt(
     )
 
 
-def _insert_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> Insert:
+def _insert_rejected_stmt(record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> Insert:
     return insert(s.transcript_segments).values(
         **_identity_values(record),
         rejected=True,
@@ -205,7 +205,7 @@ def _insert_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str
     )
 
 
-def _natural_key_rejected_row(record: SegmentRecord) -> Update:
+def _natural_key_rejected_row(record: TranscriptSlice) -> Update:
     return s.transcript_segments.update().where(
         s.transcript_segments.c.segment_id == record.segment_id,
         s.transcript_segments.c.turn_range_start == record.turn_range_start,
@@ -214,7 +214,7 @@ def _natural_key_rejected_row(record: SegmentRecord) -> Update:
 
 
 def _update_to_accepted_stmt(
-    record: SegmentRecord, *, byte_count: int, codec: str, content: bytes, at: datetime
+    record: TranscriptSlice, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Update:
     # Re-adjudication refreshes: a re-offer's identity fields replace the original rejected
     # offer's, same as an insert; the WHERE-matched natural key is a no-op here.
@@ -230,7 +230,7 @@ def _update_to_accepted_stmt(
     )
 
 
-def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> Update:
+def _update_still_rejected_stmt(record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> Update:
     # Re-adjudication refreshes: see `_update_to_accepted_stmt`. `byte_count` replaces rather than
     # accumulates — why, in tests/test_transcript_segment_store.py.
     return _natural_key_rejected_row(record).values(
@@ -250,7 +250,7 @@ class TranscriptSegmentStore:
 
     # --- reads ----------------------------------------------------------------
 
-    def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]:
+    def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]:
         with self._store.read("segments_for_chunk") as conn:
             rows = conn.execute(_segments_for_chunk_stmt(chunk_id)).all()
         return [
@@ -338,21 +338,21 @@ class TranscriptSegmentStore:
                 return
             conn.execute(_update_high_water_stmt(runner_id, seq=seq, at=at))
 
-    def insert_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+    def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
         with self._store.write("insert_accepted") as conn:
             conn.execute(_insert_accepted_stmt(record, byte_count=byte_count, codec=codec, content=content, at=at))
 
-    def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+    def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         with self._store.write("insert_rejected") as conn:
             conn.execute(_insert_rejected_stmt(record, byte_count=byte_count, reason=reason, at=at))
 
-    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+    def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
         with self._store.write("update_to_accepted") as conn:
             conn.execute(_update_to_accepted_stmt(record, byte_count=byte_count, codec=codec, content=content, at=at))
 
-    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+    def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         with self._store.write("update_still_rejected") as conn:
             conn.execute(_update_still_rejected_stmt(record, byte_count=byte_count, reason=reason, at=at))
 
@@ -369,8 +369,8 @@ class TranscriptSegmentStore:
         return zlib.decompress(content).decode("utf-8")
 
     @staticmethod
-    def _index_row(segment_id: str, rows: list) -> SegmentIndexRow:  # type: ignore[type-arg]
-        return SegmentIndexRow(
+    def _index_row(segment_id: str, rows: list) -> SegmentSummary:  # type: ignore[type-arg]
+        return SegmentSummary(
             segment_id=segment_id,
             node_id=rows[0].node_id,
             epoch=rows[0].epoch,

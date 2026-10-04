@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from blizzard.foundation.roles import domain_model
+
 # OpenTelemetry's ``TraceFlags.SAMPLED`` bit, carried by every derived context.
 SAMPLED = 0x01
 
@@ -62,6 +64,7 @@ class ChunkRole(StrEnum):
     PAUSE = "chunk/pause-wait"
 
 
+@domain_model
 @dataclass(frozen=True)
 class StepKey:
     """The identity of one step: an attempt at a node, or one human decision.
@@ -192,6 +195,7 @@ def parse_traceparent(value: str) -> DerivedContext | None:
     return DerivedContext(trace_number, span_number, flag_number)
 
 
+@domain_model
 @dataclass(frozen=True)
 class DerivedContext:
     """One span's derived context; every derived context is sampled."""

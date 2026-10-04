@@ -41,7 +41,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
@@ -70,9 +70,9 @@ from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
+    HubWorkItem,
     IWriteWorkItemRepository,
     WorkItemAuthor,
-    WorkItemRecord,
     WorkRef,
 )
 from blizzard.hub.egress.writer import (
@@ -191,12 +191,12 @@ class InMemoryTraceExporter:
     ``attempts`` counts every call, accepted or not."""
 
     def __init__(self) -> None:
-        self.batches: list[tuple[SpanRecord, ...]] = []
+        self.batches: list[tuple[FinishedSpan, ...]] = []
         self.attempts = 0
         self.fail = False
         self.raises = False
 
-    def export(self, spans: Sequence[SpanRecord]) -> bool:
+    def export(self, spans: Sequence[FinishedSpan]) -> bool:
         self.attempts += 1
         if self.raises:
             raise RuntimeError("in-memory trace exporter told to raise")
@@ -206,7 +206,7 @@ class InMemoryTraceExporter:
         return True
 
     @property
-    def spans(self) -> list[SpanRecord]:
+    def spans(self) -> list[FinishedSpan]:
         return [span for batch in self.batches for span in batch]
 
 
@@ -1145,7 +1145,7 @@ def seed_work_item(
     author: WorkItemAuthor,
     stated_priority: str | None = None,
     at: datetime,
-) -> WorkItemRecord:
+) -> HubWorkItem:
     """Seed one hub-owned work item plus its resting chunk, mirroring production's own
     two-step mint (``WorkItemEditService.create``) — there is no chunkless
     filing path to seed around. Callers still seed ``graph_id``'s own row first

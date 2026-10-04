@@ -20,6 +20,7 @@ from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import PRODUCES_ENFORCE, EgressConfig, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
+from blizzard.hub.config import default_db_url as hub_default_db_url
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
     LEGACY_ANTHROPIC_SLUG,
@@ -38,7 +39,7 @@ from tests.runner_config_legacy_emitted import LEGACY_EMITTED
 
 @pytest.mark.unit
 def test_hub_default_db_url_is_sqlite_under_data_dir(tmp_path: Path) -> None:
-    url = HubConfig.default_db_url(tmp_path)
+    url = hub_default_db_url(tmp_path)
     assert url.startswith("sqlite:///")
     assert url.endswith("data/hub.db")
 
@@ -696,7 +697,7 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 def _hub_config(tmp_path: Path) -> HubConfig:
     root = tmp_path / "hub"
     root.mkdir()
-    return HubConfig(root=root, db_url=HubConfig.default_db_url(root))
+    return HubConfig(root=root, db_url=hub_default_db_url(root))
 
 
 @pytest.mark.unit
@@ -1505,7 +1506,7 @@ def test_load_falls_back_to_default_db_url_when_key_is_absent(tmp_path: Path) ->
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('host = "0.0.0.0"\n')
-    assert HubConfig.load(root).db_url == HubConfig.default_db_url(root)
+    assert HubConfig.load(root).db_url == hub_default_db_url(root)
 
 
 @pytest.mark.unit
@@ -1524,7 +1525,7 @@ def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp
     shutil.copytree(original, copy_root)
 
     copy_config = HubConfig.load(copy_root)
-    assert copy_config.db_url == HubConfig.default_db_url(copy_root)
+    assert copy_config.db_url == hub_default_db_url(copy_root)
     assert Path(copy_config.db_url.removeprefix("sqlite:///")).exists()
 
 
@@ -1609,7 +1610,7 @@ def test_a_transcript_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: 
 def test_hub_transcript_caps_default_to_none_so_the_domain_keeps_its_own(tmp_path: Path) -> None:
     from blizzard.hub.config import HubConfig
 
-    caps = HubConfig(root=tmp_path, db_url=HubConfig.default_db_url(tmp_path)).transcripts
+    caps = HubConfig(root=tmp_path, db_url=hub_default_db_url(tmp_path)).transcripts
 
     assert caps.record_max_bytes is None
     assert caps.chunk_budget_max_bytes is None
@@ -1624,7 +1625,7 @@ def test_hub_transcript_caps_parse_and_round_trip_through_to_toml(tmp_path: Path
     root.mkdir()
     edited = HubConfig(
         root=root,
-        db_url=HubConfig.default_db_url(root),
+        db_url=hub_default_db_url(root),
         transcripts=TranscriptCapsConfig(runner_daily_rate_max_bytes=214748364800),
     )
     (root / "blizzard-hub.toml").write_text(edited.to_toml())
@@ -1643,7 +1644,7 @@ def test_the_hub_template_shows_each_ingest_ceiling_at_its_domain_default(tmp_pa
     from blizzard.hub.config import HubConfig
     from blizzard.hub.domain.transcripts import TranscriptCaps
 
-    rendered = HubConfig(root=tmp_path, db_url=HubConfig.default_db_url(tmp_path)).to_toml()
+    rendered = HubConfig(root=tmp_path, db_url=hub_default_db_url(tmp_path)).to_toml()
     defaults = TranscriptCaps()
 
     assert f"# record_max_bytes = {defaults.record_max_bytes}\n" in rendered
@@ -1676,7 +1677,7 @@ def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) 
     resolved = _transcript_caps(
         HubConfig(
             root=tmp_path,
-            db_url=HubConfig.default_db_url(tmp_path),
+            db_url=hub_default_db_url(tmp_path),
             transcripts=TranscriptCapsConfig(runner_daily_rate_max_bytes=214748364800),
         )
     )
@@ -1963,7 +1964,7 @@ def test_a_short_or_malformed_session_secret_is_rejected_without_echoing_it(
 def test_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n')
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{hub_default_db_url(root)}"\n')
     assert HubConfig.load(root).tracing == TracingConfig(
         sweep_seconds=60, settle_seconds=300, batch_limit=200, max_lag_seconds=86400, replay_max_window=604800
     )
@@ -2013,7 +2014,7 @@ def test_harness_telemetry_round_trips_and_refuses_a_non_boolean(tmp_path: Path)
     (root / "blizzard-hub.toml").write_text(text)
     assert HubConfig.load(root).tracing.harness_telemetry is True
     (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nharness_telemetry = "yes"\n'
+        f'db_url = "{hub_default_db_url(root)}"\n\n[tracing]\nharness_telemetry = "yes"\n'
     )
     with pytest.raises(HubConfigError, match=re.escape("tracing.harness_telemetry must be true or false")):
         HubConfig.load(root)
@@ -2046,7 +2047,7 @@ def test_worker_program_services_refuses_a_bad_entry(tmp_path: Path, entry: str,
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing.worker_program_services]\n{entry}\n'
+        f'db_url = "{hub_default_db_url(root)}"\n\n[tracing.worker_program_services]\n{entry}\n'
     )
     with pytest.raises(HubConfigError, match=re.escape(complaint)):
         HubConfig.load(root)
@@ -2057,7 +2058,7 @@ def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nworker_program_services = "x"\n'
+        f'db_url = "{hub_default_db_url(root)}"\n\n[tracing]\nworker_program_services = "x"\n'
     )
     with pytest.raises(HubConfigError, match="must be a table"):
         HubConfig.load(root)
@@ -2078,7 +2079,7 @@ def test_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nsettle_seconds = 0\nbatch_limit = 50\n'
+        f'db_url = "{hub_default_db_url(root)}"\n\n[tracing]\nsettle_seconds = 0\nbatch_limit = 50\n'
     )
     tracing = HubConfig.load(root).tracing
     assert tracing.settle_seconds == 0
@@ -2092,7 +2093,7 @@ def test_platform_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> No
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nplatform = true\nplatform_sample_ratio = 0\n'
+        f'db_url = "{hub_default_db_url(root)}"\n\n[tracing]\nplatform = true\nplatform_sample_ratio = 0\n'
     )
     tracing = HubConfig.load(root).tracing
     assert tracing.platform is True
@@ -2128,9 +2129,7 @@ def test_runner_platform_tracing_parses_from_a_hand_written_table(tmp_path: Path
 def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -> None:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n'
-    )
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{hub_default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n')
     with pytest.raises(HubConfigError, match=f"tracing.{key}"):
         HubConfig.load(root)
 
@@ -2156,7 +2155,7 @@ def test_tracing_integer_knobs_enforce_their_individual_minima(key: str, minimum
 def _hub_egress_root(tmp_path: Path, table: str = "") -> Path:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n{table}')
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{hub_default_db_url(root)}"\n{table}')
     return root
 
 

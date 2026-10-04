@@ -15,7 +15,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.egress.event_rows import (
     EventDerivation,
-    EventsRow,
+    ExportedEventsEntry,
     FilePathPolicy,
     derivation_rows,
     dropped_row,
@@ -23,7 +23,7 @@ from blizzard.hub.domain.egress.event_rows import (
 from blizzard.hub.domain.egress.repository import EventsPosition
 from blizzard.hub.domain.egress.schema import events_egress_row, partition_of
 from blizzard.hub.domain.tracing.facts import StepFacts
-from blizzard.hub.egress.writer import EgressRow
+from blizzard.hub.egress.writer import EgressValues
 
 _log = get_logger("blizzard.hub.egress")
 
@@ -71,10 +71,10 @@ def events_rows(
     facts: Mapping[str, StepFacts],
     paths: FilePathPolicy,
     now: datetime,
-) -> list[tuple[date, EgressRow]]:
+) -> list[tuple[date, EgressValues]]:
     """Each item's rows with their step-start partition, in ``items``' order. A marker absent from ``derivations``
     changed after it was read and is reached again later; an item with no runner step to stand in is skipped."""
-    rows: list[tuple[date, EgressRow]] = []
+    rows: list[tuple[date, EgressValues]] = []
     for item in items:
         try:
             assembled = _assemble(item, derivations, facts, paths, now)
@@ -92,7 +92,7 @@ def _assemble(
     facts: Mapping[str, StepFacts],
     paths: FilePathPolicy,
     now: datetime,
-) -> tuple[EventsRow, ...]:
+) -> tuple[ExportedEventsEntry, ...]:
     if isinstance(item, DropFact):
         return (dropped_row(_facts(facts, item.chunk_id), item, now),)
     derivation = derivations.get((item.segment_id, item.extractor_version))

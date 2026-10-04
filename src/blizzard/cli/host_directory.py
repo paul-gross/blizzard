@@ -10,8 +10,10 @@ from dataclasses import dataclass
 import click
 
 from blizzard.cli.param_rank import ParamSource
+from blizzard.foundation.roles import dto
 
 
+@dto
 @dataclass(frozen=True)
 class HostDirectory:
     """A ``host`` verb's two spellings of the same runtime directory."""

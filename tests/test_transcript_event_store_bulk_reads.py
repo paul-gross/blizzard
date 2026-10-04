@@ -19,7 +19,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.events import SegmentProvenance
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, _segment_contexts_stmt
@@ -33,7 +33,7 @@ _EXTRACTOR_VERSION = "blizzard-analytics/1"
 _PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
 
 
-def _segment_record(**overrides: object) -> SegmentRecord:
+def _segment_record(**overrides: object) -> TranscriptSlice:
     values: dict[str, object] = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
@@ -71,7 +71,7 @@ def _segment_record(**overrides: object) -> SegmentRecord:
         ),
     }
     values.update(overrides)
-    return SegmentRecord(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)  # type: ignore[arg-type]
 
 
 def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2", "ch_3")) -> Engine:

@@ -6,13 +6,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.identity import SessionReference
 
-__all__ = ["EscalationRecord", "IReadEscalationRepository", "IWriteEscalationRepository"]
+__all__ = ["IReadEscalationRepository", "IWriteEscalationRepository", "ParkedEscalation"]
 
 
+@dto
 @dataclass(frozen=True)
-class EscalationRecord:
+class ParkedEscalation:
     """A closed-``escalated`` lease not yet superseded — the status view's read.
 
     Open until a later lease is minted for the chunk, or the hub resolves it terminally and
@@ -48,13 +50,13 @@ class EscalationRecord:
 class IReadEscalationRepository(Protocol):
     """Read-only escalation queries (held by read-path edges)."""
 
-    def open_escalations(self) -> list[EscalationRecord]:
+    def open_escalations(self) -> list[ParkedEscalation]:
         """Every escalated chunk still unsuperseded.
 
-        See :class:`EscalationRecord` for what "open" means here."""
+        See :class:`ParkedEscalation` for what "open" means here."""
         ...
 
-    def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
+    def open_escalation_for_chunk(self, chunk_id: str) -> ParkedEscalation | None:
         """The chunk's open escalation, or ``None``.
 
         The single-chunk narrowing of :meth:`open_escalations`. Unaffected by a takeover

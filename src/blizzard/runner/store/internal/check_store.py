@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.checks import CheckResultRecord, IWriteCheckRepository
+from blizzard.runner.domain.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import check_results, checks_ran, nudge_facts
 
@@ -32,7 +32,7 @@ class CheckStore:
         )
         return bool(rows)
 
-    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
+    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[ExecutedCheck]:
         # Ordered by insert id so the results read back in the order the checks ran.
         rows = self._store.all(
             select(check_results)
@@ -40,8 +40,7 @@ class CheckStore:
             .order_by(check_results.c.id)
         )
         return [
-            CheckResultRecord(command=str(r.command), passed=bool(r.passed), output_tail=str(r.output_tail))
-            for r in rows
+            ExecutedCheck(command=str(r.command), passed=bool(r.passed), output_tail=str(r.output_tail)) for r in rows
         ]
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
@@ -63,7 +62,7 @@ class CheckStore:
         chunk_id: str,
         node_id: str,
         epoch: int,
-        results: list[CheckResultRecord],
+        results: list[ExecutedCheck],
         at: datetime,
     ) -> None:
         # Delete-then-insert in one transaction, so a re-run for the same `(lease, epoch)`

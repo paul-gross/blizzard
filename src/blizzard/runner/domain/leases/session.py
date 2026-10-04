@@ -11,7 +11,7 @@ from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
-    from blizzard.runner.domain.leases import LeaseRecord, PoolHead
+    from blizzard.runner.domain.leases import Lease, PoolHead
 
 __all__ = ["IReadLeaseSessionRepository", "IWriteLeaseSessionRepository", "LeaseSessionService"]
 
@@ -42,7 +42,7 @@ class IReadLeaseSessionRepository(Protocol):
         node-steps.** Zero is a real answer here, not an unknown."""
         ...
 
-    def lease_for_session(self, session: SessionReference) -> LeaseRecord | None:
+    def lease_for_session(self, session: SessionReference) -> Lease | None:
         """The newest lease that ran ``session_id``, or ``None``.
 
         Keyed on the *session*, which outlives the lease that minted it: several leases
@@ -99,7 +99,7 @@ class LeaseSessionService:
         self._store = store
         self._clock = clock
 
-    def record_session_end(self, lease: LeaseRecord) -> None:
+    def record_session_end(self, lease: Lease) -> None:
         """Record a lease's session-end, stamped with the injected clock.
 
         ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""

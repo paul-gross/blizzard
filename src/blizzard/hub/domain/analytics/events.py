@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: :attr:`TranscriptEvent.kind` values this build's extractors mint — open to a
@@ -21,6 +22,7 @@ KIND_SKILL_INVOCATION = "skill_invocation"
 KIND_AGENT_SPAWN = "agent_spawn"
 
 
+@dto
 @dataclass(frozen=True)
 class SegmentProvenance:
     """A segment's own frozen harness identity — one per
@@ -34,6 +36,7 @@ class SegmentProvenance:
     effort: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptEvent:
     """One derived occurrence, ready to store. ``segment_id``/``extractor_version`` are
@@ -57,6 +60,7 @@ class TranscriptEvent:
     occurred_at: datetime | None
 
 
+@dto
 @dataclass(frozen=True)
 class DerivationMarker:
     """One ``(segment_id, extractor_version)`` pair's most recent derivation."""
@@ -69,6 +73,7 @@ class DerivationMarker:
     complete: bool
 
 
+@dto
 @dataclass(frozen=True)
 class DropFact:
     """One segment's drop: the moment its events stopped counting, with the segment's own position."""
@@ -80,6 +85,7 @@ class DropFact:
     dropped_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class CandidacyRead:
     """One candidacy pass's whole visibility evaluation: the visible
@@ -91,6 +97,7 @@ class CandidacyRead:
     candidate_segment_ids: list[str]
 
 
+@dto
 @dataclass(frozen=True)
 class DerivationSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
@@ -104,6 +111,7 @@ class DerivationSignature:
     chunk_count: int
 
 
+@dto
 @dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service: decoded once,
@@ -123,6 +131,7 @@ class SegmentDerivationInput:
     provenance: SegmentProvenance
 
 
+@dto
 @dataclass(frozen=True)
 class SegmentContext:
     """:class:`SegmentDerivationInput` with ``turns`` dropped — every field a caller can

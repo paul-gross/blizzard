@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
-from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
+from blizzard.hub.domain.work import AnswerOutcome, NodeQuestion
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
@@ -28,12 +28,12 @@ class ChunkQuestionsStore:
         self._store = store
         self._clock = clock
 
-    def get_question(self, question_id: str) -> QuestionRow | None:
+    def get_question(self, question_id: str) -> NodeQuestion | None:
         with self._store.read("get_question") as conn:
             row = conn.execute(QUESTIONS.select.where(s.questions.c.question_id == question_id)).one_or_none()
             return QUESTIONS.of(row) if row is not None else None
 
-    def list_open_questions(self) -> list[QuestionRow]:
+    def list_open_questions(self) -> list[NodeQuestion]:
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select.where(
@@ -42,7 +42,7 @@ class ChunkQuestionsStore:
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
-    def load_questions(self, chunk_id: str) -> list[QuestionRow]:
+    def load_questions(self, chunk_id: str) -> list[NodeQuestion]:
         with self._store.read("load_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select.where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)

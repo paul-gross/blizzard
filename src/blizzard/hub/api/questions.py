@@ -20,13 +20,13 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import QuestionRow
+from blizzard.hub.domain.work import NodeQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
 router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
 
 
-def question_view(row: QuestionRow) -> QuestionView:
+def question_view(row: NodeQuestion) -> QuestionView:
     """Render a stored question row as its wire view — derived answer + delivery state."""
     return QuestionView(
         question_id=row.question_id,

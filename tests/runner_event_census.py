@@ -198,7 +198,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_requeue": Silent(
         "clears only the internal pending-requeue mark that gates FILL's interrupted-claim "
         "resume (`pending_requeue_chunk_ids`); the escalation itself stays open, per "
-        "EscalationRecord's own derivation, until the retry's lease mint supersedes it — which "
+        "ParkedEscalation's own derivation, until the retry's lease mint supersedes it — which "
         "Spawner's own lease-changed(created) frame announces."
     ),
     # --- takeovers ---------------------------------------------------------------

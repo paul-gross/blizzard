@@ -25,7 +25,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import TraceCursorRecord
+from blizzard.hub.domain.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -104,7 +104,7 @@ def test_the_first_pass_starts_the_cursor_at_now_and_exports_nothing(tmp_path: P
 
     _sweep(hub).sweep()
 
-    assert _store(hub).newest_cursor() == TraceCursorRecord(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
+    assert _store(hub).newest_cursor() == TraceCheckpoint(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
     assert exporter.attempts == 0
     _sweep(hub).sweep()
     assert exporter.attempts == 0
@@ -119,7 +119,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
     append = sweep._steps.append_cursor
     attempts = 0
 
-    def append_once_failed(record: TraceCursorRecord) -> None:
+    def append_once_failed(record: TraceCheckpoint) -> None:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -133,7 +133,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
 
     sweep.sweep()
     assert attempts == 2
-    assert _store(hub).newest_cursor() == TraceCursorRecord(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
+    assert _store(hub).newest_cursor() == TraceCheckpoint(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
     _closed_pair(hub)
     sweep.sweep()
     assert len(_roots(exporter)) == 2
@@ -292,7 +292,7 @@ def test_an_unsent_step_older_than_the_lag_cap_jumps_the_cursor_and_records_the_
 
     boundary = hub.clock.now() - timedelta(seconds=3600)
     newest = _store(hub).newest_cursor()
-    assert newest == TraceCursorRecord(CursorKey.opening(boundary), 0, hub.clock.now())
+    assert newest == TraceCheckpoint(CursorKey.opening(boundary), 0, hub.clock.now())
     assert exporter.batches == []
     assert _kinds(hub) == ["trace-export-failed", "trace-window-skipped"]
     detail = _skipped_detail(hub)
@@ -327,7 +327,7 @@ def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(t
     restarted.clock.advance(timedelta(seconds=3600 + 60))
     _sweep(restarted).sweep()
 
-    assert _store(restarted).newest_cursor() == TraceCursorRecord(
+    assert _store(restarted).newest_cursor() == TraceCheckpoint(
         CursorKey.opening(restarted.clock.now()), 0, restarted.clock.now()
     )
     assert exporter.attempts == 0

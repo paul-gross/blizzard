@@ -2,7 +2,7 @@
 
 A discriminated union: code works with the typed variants (:class:`GitCommitArtifact`,
 :class:`AssetArtifact`), which compress to and uncompress from the single-string
-:class:`ArtifactRow` at the store boundary, exactly in both directions.
+:class:`StoredArtifact` at the store boundary, exactly in both directions.
 Dependency-free (``bzh:domain-core``): no SQLAlchemy here."""
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.roles import domain_model, dto
 
 # One conservative URL path segment — no `/`, since the consuming route percent-encodes a
 # bare name into it. Shared by both name grammars below (`canon:one-owner`).
@@ -36,6 +37,7 @@ def is_valid_system_artifact_name(name: str) -> bool:
     return bool(_SYSTEM_ARTIFACT_NAME.fullmatch(name))
 
 
+@domain_model
 @dataclass(frozen=True)
 class Provenance:
     """Where an artifact came from — a reference to its committing transition."""
@@ -45,6 +47,7 @@ class Provenance:
     epoch: int
 
 
+@domain_model
 @dataclass(frozen=True)
 class GitCommitArtifact:
     """A branch pushed to the forge before submission, pinned by commit hash.
@@ -62,6 +65,7 @@ class GitCommitArtifact:
     kind: ArtifactKind = ArtifactKind.GIT_COMMIT
 
 
+@domain_model
 @dataclass(frozen=True)
 class AssetArtifact:
     """A text or blob output — a review's findings, a spike write-up."""
@@ -77,8 +81,9 @@ class AssetArtifact:
 Artifact = GitCommitArtifact | AssetArtifact
 
 
+@dto
 @dataclass(frozen=True)
-class ArtifactRow:
+class StoredArtifact:
     """The flat storage row: variant fields compressed into one ``data`` string.
 
     ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``, ``asset``
@@ -96,7 +101,7 @@ class ArtifactRow:
     epoch: int
 
     @classmethod
-    def of(cls, artifact: Artifact, *, node_name: str) -> ArtifactRow:
+    def of(cls, artifact: Artifact, *, node_name: str) -> StoredArtifact:
         """Compress a typed artifact to its storage row (lossless)."""
         common = {
             "name": artifact.name,

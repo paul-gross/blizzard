@@ -8,13 +8,13 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.invocation_boundaries import (
     WORKER_STARTING_KINDS,
+    InvocationBoundary,
     InvocationBoundaryKind,
-    InvocationBoundaryRecord,
     IReadInvocationBoundaryRepository,
 )
-from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, Lease
 from blizzard.runner.domain.usage import IWriteUsageRepository, derive_invocation_cost
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -47,7 +47,7 @@ class UsageRecorder:
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
 
-    def record_worker(self, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
+    def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""
         generation = self.leases.lease_generation(lease.lease_id)
         kind: UsageKind = "spawn" if generation <= 1 else "resume"
@@ -55,7 +55,7 @@ class UsageRecorder:
         if sample is not None:
             self.record_sample(lease, generation=generation, sample=sample)
 
-    def record_attempt(self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, judge_output: str) -> None:
+    def record_attempt(self, lease: Lease, bindings: list[EnvBinding], *, judge_output: str) -> None:
         """Record the spawn/resume invocation ADVANCE is judging and the judgement resume
         that elicited its verdict — each its own fact."""
         self.record_worker(lease, bindings)
@@ -75,7 +75,7 @@ class UsageRecorder:
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
-    def record_sample(self, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
+    def record_sample(self, lease: Lease, *, generation: int, sample: UsageSample) -> None:
         """Make one already-parsed sample durable against this lease's generation, stamped
         with the lease's own recorded harness identity — never a fresh
         resolution that may since have changed."""
@@ -118,7 +118,7 @@ class UsageRecorder:
             )
 
     def _worker_sample(
-        self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int, kind: UsageKind
+        self, lease: Lease, bindings: list[EnvBinding], *, generation: int, kind: UsageKind
     ) -> UsageSample | None:
         """This attempt's own spawn/resume usage, parsed off *this generation's own* stdout
         envelope, falling back to a transcript-summed, cost-absent sample when none survived.
@@ -146,9 +146,7 @@ class UsageRecorder:
             return None
         return harness.sum_transcript_usage(lines, kind, model=model)
 
-    def worker_transcript_lines(
-        self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
-    ) -> list[str]:
+    def worker_transcript_lines(self, lease: Lease, bindings: list[EnvBinding], *, generation: int) -> list[str]:
         """This generation's own worker-starting-to-judge-or-tail transcript range,
         raw — the read half of :meth:`_worker_sample`'s own fallback, extracted
         so a usage-limit classification reads the identical range a usage sum would sum."""
@@ -168,9 +166,7 @@ class UsageRecorder:
             lease.lease_id, session, bindings, generation=generation, start=boundary.start_position, end_kind="judge"
         )
 
-    def judge_transcript_lines(
-        self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
-    ) -> list[str]:
+    def judge_transcript_lines(self, lease: Lease, bindings: list[EnvBinding], *, generation: int) -> list[str]:
         """This generation's own judge-boundary-to-tail transcript range, raw —
         the judge's own turns, read the same way :meth:`worker_transcript_lines` reads the
         worker's; there is no boundary after a judge's own within one generation, so the
@@ -189,7 +185,7 @@ class UsageRecorder:
         self,
         lease_id: str,
         session: SessionReference,
-        bindings: list[EnvBindingRecord],
+        bindings: list[EnvBinding],
         *,
         generation: int,
         start: str | None,
@@ -227,7 +223,7 @@ class UsageRecorder:
         start_position = TranscriptPosition(start) if start is not None else None
         return source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start_position, end=end)
 
-    def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundaryRecord | None:
+    def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundary | None:
         """This generation's own worker-starting boundary — whichever of spawn/resume/nudge
         actually opened it, since `record_worker`'s usage-kind label doesn't reliably name it."""
         for kind in WORKER_STARTING_KINDS:

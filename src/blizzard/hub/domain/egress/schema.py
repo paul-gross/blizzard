@@ -1,5 +1,5 @@
 """The ``steps``, ``invocations`` and ``events`` dataset schemas, and the encoding of a typed row into an
-:class:`EgressRow`.
+:class:`EgressValues`.
 
 Contract: ``blizzard-product:/plans/fact-egress/steps/spec/rows.md`` §Datasets and
 ``blizzard-product:/plans/fact-egress/events/spec/rows.md`` §Dataset: ``events``. Pure. A schema's column names are the
@@ -12,12 +12,12 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from blizzard.hub.domain.egress.repository import EventsPosition, UsagePosition
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow
+from blizzard.hub.domain.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.egress.writer import ColumnType, DatasetColumn, DatasetSchema, EgressRow, rfc3339_utc
+from blizzard.hub.egress.writer import ColumnSpec, ColumnType, DatasetSchema, EgressValues, rfc3339_utc
 
 if TYPE_CHECKING:
-    from blizzard.hub.domain.egress.event_rows import EventsRow
+    from blizzard.hub.domain.egress.event_rows import ExportedEventsEntry
 
 __all__ = [
     "EVENTS_SCHEMA",
@@ -148,7 +148,7 @@ _EVENTS: tuple[tuple[str, ColumnType, bool, str], ...] = (
 
 
 def _schema(name: str, columns: tuple[tuple[str, ColumnType, bool, str], ...]) -> DatasetSchema:
-    return DatasetSchema(name, 1, tuple(DatasetColumn(*column) for column in columns))
+    return DatasetSchema(name, 1, tuple(ColumnSpec(*column) for column in columns))
 
 
 STEPS_SCHEMA = _schema("steps", _STEPS)
@@ -171,20 +171,20 @@ def events_position_text(position: EventsPosition) -> str:
     return f"{rfc3339_utc(position.at)}|{position.segment_id}|{position.extractor_version}"
 
 
-def _values(row: StepRow | InvocationRow | EventsRow) -> dict[str, object]:
+def _values(row: ExportedStep | ExportedInvocation | ExportedEventsEntry) -> dict[str, object]:
     return {f.name: getattr(row, f.name) for f in fields(row)}
 
 
-def step_egress_row(row: StepRow, key: CursorKey) -> EgressRow:
-    return EgressRow(step_position(key), _values(row))
+def step_egress_row(row: ExportedStep, key: CursorKey) -> EgressValues:
+    return EgressValues(step_position(key), _values(row))
 
 
-def invocation_egress_row(row: InvocationRow) -> EgressRow:
-    return EgressRow(usage_position_text(UsagePosition(row.recorded_at, row.usage_id)), _values(row))
+def invocation_egress_row(row: ExportedInvocation) -> EgressValues:
+    return EgressValues(usage_position_text(UsagePosition(row.recorded_at, row.usage_id)), _values(row))
 
 
-def events_egress_row(row: EventsRow, position: EventsPosition) -> EgressRow:
-    return EgressRow(events_position_text(position), _values(row))
+def events_egress_row(row: ExportedEventsEntry, position: EventsPosition) -> EgressValues:
+    return EgressValues(events_position_text(position), _values(row))
 
 
 def partition_of(at: datetime) -> date:

@@ -19,7 +19,7 @@ from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
@@ -172,8 +172,8 @@ def test_landing_node_is_name_match_else_entry() -> None:
 # Component — the atomic store write
 
 
-def _artifact(chunk_id: str, node_id: str) -> ArtifactRow:
-    return ArtifactRow(
+def _artifact(chunk_id: str, node_id: str) -> StoredArtifact:
+    return StoredArtifact(
         kind=ArtifactKind.ASSET,
         name="triage-notes",
         data="hand off to delivery",

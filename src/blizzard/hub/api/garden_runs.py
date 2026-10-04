@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -22,7 +23,7 @@ from blizzard.hub.domain.garden_run import (
     DeliveredSetDelta,
     RunDelta,
     RunEscalation,
-    RunRow,
+    RunSummary,
 )
 from blizzard.wire.garden_run import (
     AddedFindingView,
@@ -38,6 +39,7 @@ from blizzard.wire.garden_run import (
 router = APIRouter(prefix="/api", tags=["garden-runs"], dependencies=[Depends(reject_runner_principal)])
 
 
+@dto
 @dataclass(frozen=True)
 class _RunWindow:
     """One `GET /runs` request's parsed window — both edges optional, defaulting to the
@@ -96,7 +98,7 @@ def _escalation_view(escalation: RunEscalation | None, names: GraphNames) -> Run
     )
 
 
-def _run_row_view(row: RunRow, names: GraphNames) -> RunRowView:
+def _run_row_view(row: RunSummary, names: GraphNames) -> RunRowView:
     return RunRowView(
         chunk_id=row.chunk_id,
         routine_name=row.routine_name,

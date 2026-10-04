@@ -13,7 +13,7 @@ from blizzard.foundation.trace_export.cursor import (
     lag_cap_jump,
 )
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import ChunkStoppedRecord, EpochOwnerRecord, LeaseRecord, StepFacts
+from blizzard.hub.domain.tracing.facts import StepFacts, TracedChunkStop, TracedEpochOwner, TracedLease
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.tracing.window import select_window
 from tests import trace_fixtures as fx
@@ -116,9 +116,9 @@ def _chunk(chunk_id: str, *, closes_at: int) -> StepFacts:
         chunk_id=chunk_id,
         graphs=fx.GRAPHS,
         pin_graph_id="g1",
-        lease_facts=(LeaseRecord(1, fx.at(1)),),
-        epoch_owners=(EpochOwnerRecord(1, "r-1", fx.at(0)),),
-        chunk_stopped=(ChunkStoppedRecord(fx.at(closes_at)),),
+        lease_facts=(TracedLease(1, fx.at(1)),),
+        epoch_owners=(TracedEpochOwner(1, "r-1", fx.at(0)),),
+        chunk_stopped=(TracedChunkStop(fx.at(closes_at)),),
     )
 
 

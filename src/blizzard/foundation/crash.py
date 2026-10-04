@@ -12,12 +12,15 @@ import signal
 from dataclasses import dataclass
 from typing import ClassVar
 
+from blizzard.foundation.roles import domain_model
+
 #: Names the armed crash point; a kill fires only with the fence below also set.
 ENV_CRASH_POINT = "BLIZZARD_CRASH_POINT"
 #: The fence (``bzh:crash-point-registry``): a stray point name alone never kills.
 ENV_CRASH_FENCE = "BLIZZARD_CRASH_FENCE"
 
 
+@domain_model
 @dataclass(frozen=True)
 class Arming:
     """Which point the environment arms, and whether the test fence is set."""
@@ -34,6 +37,7 @@ class Arming:
         return self.point is not None and name == self.point and self.fenced
 
 
+@domain_model
 @dataclass(frozen=True)
 class CrashPoint:
     """A named dangerous window. Declaring one registers it; ``reached()`` is the boundary."""

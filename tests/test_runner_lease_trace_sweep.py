@@ -15,7 +15,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKey
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import LeaseCursorRecord
+from blizzard.runner.domain.tracing.repository import LeaseTraceCheckpoint
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from blizzard.wire.facts import EVENT_RECORDED
 from tests import runner_trace_fixtures as fx
@@ -71,7 +71,7 @@ def test_the_first_pass_starts_the_cursor_at_now_and_exports_nothing(tmp_path: P
     runner.sweep.sweep()
 
     now = runner.clock.now()
-    assert runner.store.newest_trace_cursor() == LeaseCursorRecord(LeaseCursorKey.opening(now), 0, now)
+    assert runner.store.newest_trace_cursor() == LeaseTraceCheckpoint(LeaseCursorKey.opening(now), 0, now)
     assert runner.exporter.attempts == 0
     runner.sweep.sweep()
     assert runner.exporter.attempts == 0
@@ -209,7 +209,7 @@ def test_an_unsent_lease_older_than_the_lag_cap_jumps_the_cursor_and_records_the
 
     boundary = runner.clock.now() - timedelta(seconds=3600)
     now = runner.clock.now()
-    assert runner.store.newest_trace_cursor() == LeaseCursorRecord(LeaseCursorKey.opening(boundary), 0, now)
+    assert runner.store.newest_trace_cursor() == LeaseTraceCheckpoint(LeaseCursorKey.opening(boundary), 0, now)
     assert runner.exporter.batches == []
     assert runner.kinds() == ["trace-export-failed", "trace-window-skipped"]
     detail = runner.events()[1]["detail"]
@@ -244,7 +244,7 @@ def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(t
     restarted.sweep.sweep()
 
     now = restarted.clock.now()
-    assert restarted.store.newest_trace_cursor() == LeaseCursorRecord(LeaseCursorKey.opening(now), 0, now)
+    assert restarted.store.newest_trace_cursor() == LeaseTraceCheckpoint(LeaseCursorKey.opening(now), 0, now)
     assert restarted.exporter.attempts == 0
     [skipped] = restarted.events()
     assert skipped["kind"] == "trace-window-skipped"
@@ -273,7 +273,7 @@ def test_a_window_of_leases_that_tell_nothing_advances_without_an_export(tmp_pat
     runner.sweep.sweep()
 
     assert runner.exporter.attempts == 0
-    assert runner.store.newest_trace_cursor() == LeaseCursorRecord(
+    assert runner.store.newest_trace_cursor() == LeaseTraceCheckpoint(
         LeaseCursorKey(runner.clock.now(), lease_id), 0, runner.clock.now()
     )
     assert runner.kinds() == []

@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Literal
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact, SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.egress.assembly import runner_step
 from blizzard.hub.domain.egress.rows import trace_id_text
@@ -26,7 +27,7 @@ __all__ = [
     "RECORD_DROPPED",
     "RECORD_EVENT",
     "EventDerivation",
-    "EventsRow",
+    "ExportedEventsEntry",
     "FilePathMode",
     "FilePathPolicy",
     "derivation_id",
@@ -45,6 +46,7 @@ _FILE_READ = "file_read"
 type FilePathMode = Literal["relative", "hashed", "absolute", "omit"]
 
 
+@domain_model
 @dataclass(frozen=True)
 class FilePathPolicy:
     """What leaves as a ``file_read`` event's subject. ``relative`` and ``hashed`` hash some or all paths, so they
@@ -89,6 +91,7 @@ def _relative_to(path: str, working_directory: str) -> str | None:
     return resolved[len(prefix) :]
 
 
+@dto
 @dataclass(frozen=True)
 class EventDerivation:
     """One derivation as the store holds it: the marker, the segment's frozen identity, and its events.
@@ -104,8 +107,9 @@ class EventDerivation:
     spawn_cwd: str | None
 
 
+@dto
 @dataclass(frozen=True)
-class EventsRow:
+class ExportedEventsEntry:
     """One ``events`` row; field order is the column order. A column that does not apply to the record type is
     ``None``."""
 
@@ -153,7 +157,7 @@ def derivation_id(segment_id: str, extractor_version: str, derived_at: datetime)
 
 def _anchored(
     record_type: str, segment_id: str, facts: StepFacts, chunk_id: str, epoch: int, spawn_generation: int, at: datetime
-) -> EventsRow:
+) -> ExportedEventsEntry:
     """A row of ``record_type`` carrying only the columns every record has: the segment's step, position and
     ``exported_at``."""
     if chunk_id != facts.chunk_id:
@@ -161,7 +165,7 @@ def _anchored(
     step = runner_step(identify_steps(facts), epoch)
     if step is None:
         raise LookupError(f"segment {segment_id} has no runner step at epoch {epoch} of {facts.chunk_id}")
-    return EventsRow(
+    return ExportedEventsEntry(
         record_type=record_type,
         segment_id=segment_id,
         extractor_version=None,
@@ -198,7 +202,7 @@ def _anchored(
 
 def derivation_rows(
     facts: StepFacts, derivation: EventDerivation, paths: FilePathPolicy, exported_at: datetime
-) -> tuple[EventsRow, ...]:
+) -> tuple[ExportedEventsEntry, ...]:
     """The ``derivation`` row, then one ``event`` row per event, positioned by the runner step at the segment's epoch.
 
     Raises :class:`ValueError` when the derivation belongs to another chunk and :class:`LookupError` when the facts
@@ -246,7 +250,7 @@ def derivation_rows(
     return tuple(rows)
 
 
-def dropped_row(facts: StepFacts, drop: DropFact, exported_at: datetime) -> EventsRow:
+def dropped_row(facts: StepFacts, drop: DropFact, exported_at: datetime) -> ExportedEventsEntry:
     """The ``dropped`` row of one drop fact, positioned by the runner step at the segment's epoch.
 
     Raises :class:`ValueError` and :class:`LookupError` as :func:`derivation_rows` does."""

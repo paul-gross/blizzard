@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import LeaseCursorRecord
+from blizzard.runner.domain.tracing.repository import LeaseTraceCheckpoint
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_migration_prototype
 from tests.runner_trace_leases import close, closed_lease
@@ -58,8 +58,8 @@ def test_the_window_ends_at_the_settle_boundary_inclusive_and_truncates_at_the_l
 def test_the_newest_cursor_row_is_the_position(tmp_path: Path) -> None:
     store = _store(tmp_path)
     assert store.newest_trace_cursor() is None
-    first = LeaseCursorRecord(_START, 0, fx.at(1))
-    second = LeaseCursorRecord(LeaseCursorKey(fx.at(5), "l-1"), 3, fx.at(2))
+    first = LeaseTraceCheckpoint(_START, 0, fx.at(1))
+    second = LeaseTraceCheckpoint(LeaseCursorKey(fx.at(5), "l-1"), 3, fx.at(2))
 
     store.append_trace_cursor(first)
     store.append_trace_cursor(second)

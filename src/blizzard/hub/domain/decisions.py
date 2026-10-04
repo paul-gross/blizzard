@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.hub.config import ROUTE_TOKEN_WARN
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -25,15 +26,16 @@ from blizzard.hub.domain.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import Chunk, DecisionChoice, DecisionRow
+from blizzard.hub.domain.work import Chunk, DecisionChoice, GateDecision
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 
+@dto
 @dataclass(frozen=True)
 class DecisionSubmitResult:
     """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
@@ -49,6 +51,7 @@ class DecisionSubmitResult:
         return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
 
 
+@dto
 @dataclass(frozen=True)
 class ResolutionResult:
     """The outcome of a resolution attempt (first-write-wins)."""
@@ -151,12 +154,12 @@ class DecisionService:
             decision_id=decision_id,
         )
 
-    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
+    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> StoredArtifact:
         """Twin of :meth:`~blizzard.hub.domain.apply.ApplyService._row`; the shared owner would be
-        :class:`ArtifactRow`, which cannot import the wire type without a cycle."""
+        :class:`StoredArtifact`, which cannot import the wire type without a cycle."""
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
         data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
-        return ArtifactRow(
+        return StoredArtifact(
             kind=artifact.kind,
             name=artifact.name,
             data=data,
@@ -171,10 +174,10 @@ class DecisionService:
 
     def _proposal_rows(
         self, chunk: Chunk, node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
-    ) -> list[WorkItemProposalRow]:
+    ) -> list[StampedWorkItemProposal]:
         """Twin of :meth:`~blizzard.hub.domain.apply.ApplyService._proposal_rows`."""
         return [
-            WorkItemProposalRow.of(
+            StampedWorkItemProposal.of(
                 p,
                 proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
                 chunk_id=chunk.chunk_id,
@@ -188,7 +191,7 @@ class DecisionService:
         ]
 
     def resolve(
-        self, decision: DecisionRow, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
+        self, decision: GateDecision, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
     ) -> ResolutionResult:
         """Record a choice, first-write-wins, striking ``struck``'s proposal ids in the same
         write. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare

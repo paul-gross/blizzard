@@ -1,5 +1,5 @@
 """The ``events`` window and schema (unit tier) — the merge of markers and drops in cursor order, the cut on an item
-boundary, and the schema's column parity with :class:`EventsRow`."""
+boundary, and the schema's column parity with :class:`ExportedEventsEntry`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact
-from blizzard.hub.domain.egress.event_rows import EventsRow
+from blizzard.hub.domain.egress.event_rows import ExportedEventsEntry
 from blizzard.hub.domain.egress.events_window import position_of, take
 from blizzard.hub.domain.egress.repository import EventsPosition
 from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, events_position_text
@@ -36,7 +36,7 @@ def _ids(items: tuple[DerivationMarker | DropFact, ...]) -> list[str]:
 
 
 def test_the_events_schema_names_every_events_row_field_in_order() -> None:
-    assert [column.name for column in EVENTS_SCHEMA.columns] == [f.name for f in fields(EventsRow)]
+    assert [column.name for column in EVENTS_SCHEMA.columns] == [f.name for f in fields(ExportedEventsEntry)]
     assert (EVENTS_SCHEMA.name, EVENTS_SCHEMA.major_version) == ("events", 1)
 
 

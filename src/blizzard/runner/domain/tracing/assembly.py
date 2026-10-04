@@ -1,7 +1,7 @@
 """Assembling one closed lease into its finished span records.
 
 Contract: ``blizzard-product:/delivered/tracing/runner-spans/spec/spans.md``, ids and GenAI usage per fleet-spans
-§Identity and §GenAI usage. Pure: a :class:`LeaseTraceFacts` in, an ordered tuple of :class:`SpanRecord` out —
+§Identity and §GenAI usage. Pure: a :class:`LeaseTraceFacts` in, an ordered tuple of :class:`FinishedSpan` out —
 ``worker`` first, then its children by start — with no clock, env read or I/O."""
 
 from __future__ import annotations
@@ -12,11 +12,12 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id
-from blizzard.foundation.trace_spans import AttributeValue, EventRecord, SpanRecord
+from blizzard.foundation.trace_spans import AttributeValue, FinishedSpan, SpanEvent
 from blizzard.runner.domain.leases import closure
 from blizzard.runner.domain.tracing import attributes as attr
-from blizzard.runner.domain.tracing.facts import BoundaryRow, LeaseTraceFacts, SpawnRow, UsageRow
+from blizzard.runner.domain.tracing.facts import BoundaryFact, LeaseTraceFacts, SpawnFact, TokenUsageFact
 
 _EXECUTOR = "runner"
 
@@ -29,6 +30,7 @@ class EndSource(StrEnum):
     LEASE_CLOSE = "lease_close"
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Window:
     """A child's interval, already clamped to the lease's close."""
@@ -80,7 +82,7 @@ def _earliest(candidates: Iterable[tuple[datetime | None, EndSource]]) -> tuple[
 
 
 def _invocation_end(
-    facts: LeaseTraceFacts, boundary: BoundaryRow, following: BoundaryRow | None, close: datetime
+    facts: LeaseTraceFacts, boundary: BoundaryFact, following: BoundaryFact | None, close: datetime
 ) -> tuple[datetime, EndSource]:
     ended = [e.ended_at for e in facts.session_ends if e.ended_at > boundary.opened_at]
     found = _earliest(
@@ -93,14 +95,14 @@ def _invocation_end(
     return found if found is not None else (close, EndSource.LEASE_CLOSE)
 
 
-def _usage_for(facts: LeaseTraceFacts, boundary: BoundaryRow) -> list[UsageRow]:
+def _usage_for(facts: LeaseTraceFacts, boundary: BoundaryFact) -> list[TokenUsageFact]:
     """Usage matched by generation and side: ``judge`` rows to the judge boundary, any other kind to the worker's."""
     judge = boundary.kind == "judge"
     rows = (u for u in facts.usage if u.generation == boundary.generation and (u.kind == "judge") == judge)
     return sorted(rows, key=lambda u: (u.recorded_at, u.id))
 
 
-def _measures(usage: Sequence[UsageRow]) -> dict[str, AttributeValue]:
+def _measures(usage: Sequence[TokenUsageFact]) -> dict[str, AttributeValue]:
     if not usage:
         return {}
     measures: dict[str, AttributeValue] = {
@@ -120,12 +122,12 @@ def _measures(usage: Sequence[UsageRow]) -> dict[str, AttributeValue]:
     return measures
 
 
-def _spawn_of(spawns: Sequence[SpawnRow], generation: int) -> SpawnRow | None:
+def _spawn_of(spawns: Sequence[SpawnFact], generation: int) -> SpawnFact | None:
     """The n-th spawn row on the lease, by id, is worker generation n."""
     return spawns[generation - 1] if generation <= len(spawns) else None
 
 
-def _harness(spawn: SpawnRow | None, usage: Sequence[UsageRow], judge: bool) -> tuple[str | None, str | None]:
+def _harness(spawn: SpawnFact | None, usage: Sequence[TokenUsageFact], judge: bool) -> tuple[str | None, str | None]:
     if not judge:
         return (spawn.harness_id, spawn.harness_version) if spawn is not None else (None, None)
     known = [u for u in usage if u.harness_id is not None]
@@ -136,11 +138,11 @@ def _invocation(
     facts: LeaseTraceFacts,
     key: StepKey,
     parent: int,
-    boundaries: Sequence[BoundaryRow],
+    boundaries: Sequence[BoundaryFact],
     index: int,
-    spawns: Sequence[SpawnRow],
+    spawns: Sequence[SpawnFact],
     dims: dict[str, AttributeValue],
-) -> SpanRecord:
+) -> FinishedSpan:
     boundary = boundaries[index]
     following = boundaries[index + 1] if index + 1 < len(boundaries) else None
     close = _lease_close(facts)
@@ -171,19 +173,19 @@ def _invocation(
             shared.HARNESS_VERSION: harness_version,
         },
     )
-    events: list[EventRecord] = []
+    events: list[SpanEvent] = []
     if spawn is not None and spawn.identified_at is not None and window.holds(spawn.identified_at):
-        events.append(EventRecord(attr.EVENT_SESSION_IDENTIFIED, spawn.identified_at))
+        events.append(SpanEvent(attr.EVENT_SESSION_IDENTIFIED, spawn.identified_at))
     events += [
-        EventRecord(attr.EVENT_SESSION_END, e.ended_at)
+        SpanEvent(attr.EVENT_SESSION_END, e.ended_at)
         for e in facts.session_ends
         if e.ended_at > boundary.opened_at and window.holds(e.ended_at)
     ]
     for sample in facts.context_samples:
         if window.holds(sample.sampled_at):
             tokens = {} if sample.context_tokens is None else {attr.CONTEXT_TOKENS: sample.context_tokens}
-            events.append(EventRecord(attr.EVENT_CONTEXT_SAMPLE, sample.sampled_at, tokens))
-    return SpanRecord(
+            events.append(SpanEvent(attr.EVENT_CONTEXT_SAMPLE, sample.sampled_at, tokens))
+    return FinishedSpan(
         context=DerivedContext.of(key, RunnerSpanRole.INVOCATION, f"{boundary.generation}/{boundary.kind}"),
         parent_span_id=parent,
         name=f"{attr.INVOKE_AGENT} {session_name}" if session_name is not None else attr.INVOKE_AGENT,
@@ -202,8 +204,8 @@ def _child(
     name: str,
     window: _Window,
     attrs: dict[str, AttributeValue],
-) -> SpanRecord:
-    return SpanRecord(
+) -> FinishedSpan:
+    return FinishedSpan(
         context=DerivedContext.of(key, role, discriminator),
         parent_span_id=parent,
         name=name,
@@ -217,11 +219,11 @@ def _waits(
     facts: LeaseTraceFacts,
     key: StepKey,
     parent: int,
-    boundaries: Sequence[BoundaryRow],
+    boundaries: Sequence[BoundaryFact],
     dims: dict[str, AttributeValue],
-) -> list[SpanRecord]:
+) -> list[FinishedSpan]:
     close = _lease_close(facts)
-    spans: list[SpanRecord] = []
+    spans: list[FinishedSpan] = []
     for park in facts.parks:
         resumed = [
             r.resumed_at
@@ -249,19 +251,19 @@ def _waits(
     return spans
 
 
-def _worker_events(facts: LeaseTraceFacts) -> tuple[EventRecord, ...]:
+def _worker_events(facts: LeaseTraceFacts) -> tuple[SpanEvent, ...]:
     """Nudges, then each checks run's per-check events and its summary, all clamped to the worker's span."""
-    events = [EventRecord(attr.EVENT_NUDGE, n.nudged_at) for n in facts.nudges]
+    events = [SpanEvent(attr.EVENT_NUDGE, n.nudged_at) for n in facts.nudges]
     for ran in sorted(facts.checks_ran, key=lambda r: r.id):
         results = sorted((c for c in facts.check_results if c.epoch == ran.epoch), key=lambda c: c.id)
         events += [
-            EventRecord(attr.EVENT_CHECK, ran.ran_at, {attr.CHECK_INDEX: index, attr.CHECK_PASSED: result.passed})
+            SpanEvent(attr.EVENT_CHECK, ran.ran_at, {attr.CHECK_INDEX: index, attr.CHECK_PASSED: result.passed})
             for index, result in enumerate(results, start=1)
         ]
         summary = {attr.CHECKS_PASSED: all(c.passed for c in results), attr.CHECKS_COUNT: len(results)}
-        events.append(EventRecord(attr.EVENT_CHECKS_RAN, ran.ran_at, summary))
+        events.append(SpanEvent(attr.EVENT_CHECKS_RAN, ran.ran_at, summary))
     window = _Window.within(facts.lease.created_at, _lease_close(facts), _lease_close(facts))
-    clamped = [EventRecord(e.name, min(max(e.time, window.start), window.end), e.attributes) for e in events]
+    clamped = [SpanEvent(e.name, min(max(e.time, window.start), window.end), e.attributes) for e in events]
     return tuple(sorted(clamped, key=lambda e: e.time))
 
 
@@ -270,7 +272,7 @@ def _lease_close(facts: LeaseTraceFacts) -> datetime:
     return max(facts.closure.closed_at, facts.lease.created_at)
 
 
-def assemble_lease(facts: LeaseTraceFacts) -> tuple[SpanRecord, ...]:
+def assemble_lease(facts: LeaseTraceFacts) -> tuple[FinishedSpan, ...]:
     """The finished spans of one closed lease, ``worker`` first; ``()`` for a lease whose spawn was never identified."""
     if not any(s.identified_at is not None for s in facts.spawns):
         return ()
@@ -290,7 +292,7 @@ def assemble_lease(facts: LeaseTraceFacts) -> tuple[SpanRecord, ...]:
             attr.EFFORT_RESOLVED: facts.context.resolved_effort,
         },
     )
-    worker = SpanRecord(
+    worker = FinishedSpan(
         context=DerivedContext.of(key, RunnerSpanRole.WORKER, lease.lease_id),
         parent_span_id=span_id(key, SpanRole.STEP),
         name=f"worker {facts.context.node_name}",

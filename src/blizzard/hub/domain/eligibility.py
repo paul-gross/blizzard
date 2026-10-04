@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.envelope import EffectiveSession
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.registry import RunnerCapability
@@ -18,6 +19,7 @@ from blizzard.hub.domain.work import Chunk
 from blizzard.wire.envelope import TIER_PREFIX
 
 
+@domain_model
 @dataclass(frozen=True)
 class EligibilityCheck:
     """Whether ``capabilities`` can execute every runner-owned session lineage statically

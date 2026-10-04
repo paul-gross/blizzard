@@ -10,7 +10,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.roles import dto
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.chunk_spans import (
     assemble_completion,
@@ -25,6 +26,7 @@ from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.tracing.steps import NodeStep, identify_steps
 
 
+@dto
 @dataclass(frozen=True)
 class ClosedStep:
     key: CursorKey
@@ -33,6 +35,7 @@ class ClosedStep:
     steps: tuple[NodeStep, ...]
 
 
+@dto
 @dataclass(frozen=True)
 class FinishedChunk:
     """A chunk told as a whole at its finish, or with ``completion`` at a later hand-completion."""
@@ -45,6 +48,7 @@ class FinishedChunk:
 TraceItem = ClosedStep | FinishedChunk
 
 
+@dto
 @dataclass(frozen=True)
 class TraceWindow:
     """Up to a limit of items in cursor order, and ``position`` — where a pass that told every
@@ -118,12 +122,12 @@ def read_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit
     return select_window(facts.values(), since, until, candidates.frontier, limit, candidates.newest)
 
 
-def assemble_window(window: TraceWindow) -> tuple[SpanRecord, ...]:
+def assemble_window(window: TraceWindow) -> tuple[FinishedSpan, ...]:
     """Every span of every item in the window — the one assembly a sweep and a replay both tell."""
     return tuple(span for item in window.items for span in _assemble(item))
 
 
-def _assemble(item: TraceItem) -> tuple[SpanRecord, ...]:
+def _assemble(item: TraceItem) -> tuple[FinishedSpan, ...]:
     if isinstance(item, ClosedStep):
         return assemble_step(item.facts, item.step, item.steps)
     return (

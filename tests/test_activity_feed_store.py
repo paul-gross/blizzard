@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import ActivityRow, DecisionChoice, MigrationSource
+from blizzard.hub.domain.work import ActivityEntry, DecisionChoice, MigrationSource
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -51,7 +51,7 @@ def _seed_second_chunk(engine: sa.Engine, chunk_id: str) -> None:
         seed_chunk(conn, chunk_id, graph_id="gr_1", at=_T0)
 
 
-def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: int = 50) -> ActivityRow:
+def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: int = 50) -> ActivityEntry:
     rows = [r for r in store.events.activity_facts_since(since, limit=limit) if r.cause == cause]
     assert len(rows) == 1, f"expected exactly one {cause!r} row, got {rows}"
     return rows[0]

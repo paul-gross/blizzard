@@ -15,11 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
+    ConfiguredWorkSource,
     IWriteWorkSourceRepository,
     WorkSourceFields,
     WorkSourceLocatorTaken,
     WorkSourceNameTaken,
-    WorkSourceRecord,
     WorkSourceSecretUnavailable,
 )
 from blizzard.hub.store.errors import HubStoreConnections
@@ -41,7 +41,7 @@ def _check_secret(conn: Connection, secret: str | None) -> None:
         raise WorkSourceSecretUnavailable(secret, retired=retired)
 
 
-def _columns(record: WorkSourceRecord) -> dict[str, object]:
+def _columns(record: ConfiguredWorkSource) -> dict[str, object]:
     f = record.fields
     return {
         "provider": f.provider,
@@ -59,7 +59,7 @@ class WorkSourceRecordStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def create(self, record: WorkSourceRecord, *, change: ConfigChange) -> WorkSourceRecord:
+    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
         try:
             with self._store.write(
                 "create", expect=(WorkSourceSecretUnavailable, WorkSourceNameTaken, WorkSourceLocatorTaken)
@@ -89,7 +89,7 @@ class WorkSourceRecordStore:
             raise WorkSourceNameTaken(record.name) from exc
         return record
 
-    def update(self, record: WorkSourceRecord, *, from_revision: int, change: ConfigChange) -> WorkSourceRecord:
+    def update(self, record: ConfiguredWorkSource, *, from_revision: int, change: ConfigChange) -> ConfiguredWorkSource:
         with self._store.write(
             "update", expect=(WorkSourceSecretUnavailable, WorkSourceLocatorTaken, ConfigRevisionConflict)
         ) as conn:
@@ -115,14 +115,14 @@ class WorkSourceRecordStore:
 
     def record_lifecycle(
         self,
-        record: WorkSourceRecord,
+        record: ConfiguredWorkSource,
         *,
         retired: bool,
         from_revision: int,
         at: datetime,
         by: str,
         change: ConfigChange,
-    ) -> WorkSourceRecord:
+    ) -> ConfiguredWorkSource:
         with self._store.write(
             "record_lifecycle", expect=(WorkSourceSecretUnavailable, ConfigRevisionConflict)
         ) as conn:
@@ -145,10 +145,10 @@ class WorkSourceRecordStore:
     def _revision(conn: Connection, name: str) -> int:
         return conn.execute(select(work_sources.c.revision).where(work_sources.c.name == name)).scalar_one()
 
-    def get(self, name: str) -> WorkSourceRecord | None:
+    def get(self, name: str) -> ConfiguredWorkSource | None:
         return self.get_many([name]).get(name)
 
-    def get_many(self, names: list[str]) -> dict[str, WorkSourceRecord]:
+    def get_many(self, names: list[str]) -> dict[str, ConfiguredWorkSource]:
         if not names:
             return {}
         with self._store.read("get_many") as conn:
@@ -158,7 +158,7 @@ class WorkSourceRecordStore:
             )
         return {row.name: self._of(row, retired=row.name in retired) for row in rows}
 
-    def list_all(self, *, include_retired: bool) -> list[WorkSourceRecord]:
+    def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(work_sources).order_by(work_sources.c.name)).all()
             retired = set(conn.execute(_retired_names_query()).scalars())
@@ -167,8 +167,8 @@ class WorkSourceRecordStore:
         ]
 
     @staticmethod
-    def _of(row, *, retired: bool) -> WorkSourceRecord:  # type: ignore[no-untyped-def]
-        return WorkSourceRecord(
+    def _of(row, *, retired: bool) -> ConfiguredWorkSource:  # type: ignore[no-untyped-def]
+        return ConfiguredWorkSource(
             name=row.name,
             fields=WorkSourceFields(
                 provider=row.provider,

@@ -13,11 +13,14 @@ import hmac
 import secrets
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
+
 #: ``secrets.token_urlsafe`` byte count for a minted verifier — well inside RFC 7636 §4.1's
 #: 43..128 character range.
 _VERIFIER_BYTES = 48
 
 
+@domain_model
 @dataclass(frozen=True)
 class Pkce:
     """One ``code_verifier`` and the ``code_challenge`` it must hash to."""

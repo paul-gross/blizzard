@@ -7,7 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.roles import domain_model
 
+
+@domain_model
 @dataclass(frozen=True, order=True)
 class LeaseCursorKey:
     """A position in the total order of closed leases: first-closure time, then lease id.

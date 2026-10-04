@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 
+
+@domain_model
 @dataclass(frozen=True)
 class Sha256Hex:
     """A secret in plaintext and its sha256 hex digest, so mint and resolve cannot drift."""

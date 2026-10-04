@@ -11,6 +11,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
+
 REDACTED = "<redacted>"
 
 _SENSITIVE_KEY_NAMES = frozenset(
@@ -260,6 +262,7 @@ def sanitize_json(
     return json.dumps(cleaned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeSanitizer:
     """A reusable pure sanitizer carrying the evidence-specific replacements."""

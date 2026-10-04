@@ -19,7 +19,7 @@ from blizzard.foundation.trace_ids import (
     lifetime_trace_id,
     step_root,
 )
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
@@ -33,20 +33,20 @@ from blizzard.hub.domain.tracing.chunk_spans import (
 )
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
-    BounceRecord,
-    ChunkCompletedRecord,
-    ChunkStoppedRecord,
-    DecisionRecord,
-    DecisionResolutionRecord,
-    EpochOwnerRecord,
-    EscalationRecord,
-    PauseRecord,
-    PromotionRecord,
-    RequeueRecord,
-    RestartRecord,
-    RouteCreatedRecord,
     StepFacts,
-    TransitionRecord,
+    TracedBounce,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedDecisionResolution,
+    TracedEpochOwner,
+    TracedEscalation,
+    TracedPause,
+    TracedPromotion,
+    TracedRequeue,
+    TracedRestart,
+    TracedRouteCreation,
+    TracedTransition,
 )
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.tracing.window import ClosedStep, FinishedChunk, assemble_window, select_window
@@ -75,22 +75,22 @@ def _done(**extra: Any) -> StepFacts:
     """build, review (bounced), build again, review, then the terminal: one chunk, four steps."""
     parts = fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 35), fx.runner_epoch(3, 60), fx.runner_epoch(4, 85))
     return fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        routes_created=(RouteCreatedRecord(fx.at(6)),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        routes_created=(TracedRouteCreation(fx.at(6)),),
         transitions=(
             fx.to("g1", "review", 30, 1),
             fx.to("g1", "build", 55, 2),
             fx.to("g1", "review", 80, 3),
-            TransitionRecord(4, fx.at(100), "g1", RESERVED_TERMINAL),
+            TracedTransition(4, fx.at(100), "g1", RESERVED_TERMINAL),
         ),
-        bounces=(BounceRecord(2, "conflict", fx.at(50)),),
+        bounces=(TracedBounce(2, "conflict", fx.at(50)),),
         usage=(_usage(1, 20), _usage(3, 70)),
         work_refs=("acme#42",),
         **{**parts, **extra},
     )
 
 
-def _all_spans(facts: StepFacts) -> list[SpanRecord]:
+def _all_spans(facts: StepFacts) -> list[FinishedSpan]:
     steps = [s for s in identify_steps(facts) if s.close is not None]
     return (
         [span for step in steps for span in assemble_step(facts, step, identify_steps(facts))]
@@ -99,7 +99,7 @@ def _all_spans(facts: StepFacts) -> list[SpanRecord]:
     )
 
 
-def _named(spans: tuple[SpanRecord, ...], name: str) -> SpanRecord:
+def _named(spans: tuple[FinishedSpan, ...], name: str) -> FinishedSpan:
     return next(s for s in spans if s.name == name)
 
 
@@ -134,7 +134,7 @@ def test_the_work_root_starts_at_the_first_step_and_ends_at_the_finish_with_tota
 
 
 def test_a_chunk_that_took_no_step_has_a_lifetime_trace_and_no_work_trace() -> None:
-    facts = fx.make_facts(chunk_stopped=(ChunkStoppedRecord(fx.at(40)),))
+    facts = fx.make_facts(chunk_stopped=(TracedChunkStop(fx.at(40)),))
 
     assert assemble_work(facts) == ()
     assert [s.name for s in assemble_lifetime(facts)] == ["chunk", "backlog wait"]
@@ -190,7 +190,7 @@ def test_the_lifetime_trace_leaves_no_gap_where_the_work_trace_accounts_for_the_
 
 
 def test_a_lifetime_wait_and_a_lifetime_step_never_overlap() -> None:
-    spans = assemble_lifetime(_done(pauses=(PauseRecord("p1", True, fx.at(3)), PauseRecord("p2", False, fx.at(8)))))
+    spans = assemble_lifetime(_done(pauses=(TracedPause("p1", True, fx.at(3)), TracedPause("p2", False, fx.at(8)))))
     covered = sorted((s.start, s.end, s.name) for s in spans[1:])
 
     assert all(earlier[1] <= later[0] for earlier, later in pairwise(covered))
@@ -198,10 +198,10 @@ def test_a_lifetime_wait_and_a_lifetime_step_never_overlap() -> None:
 
 def test_a_wait_that_reaches_into_a_step_span_is_clipped_to_what_no_step_shows() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
-        escalations=(EscalationRecord(1, fx.at(40)),),
-        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        routes_created=(TracedRouteCreation(fx.at(6)), TracedRouteCreation(fx.at(300))),
+        escalations=(TracedEscalation(1, fx.at(40)),),
+        transitions=(TracedTransition(2, fx.at(400), "g1", RESERVED_TERMINAL),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
     )
 
@@ -219,11 +219,11 @@ def test_a_wait_that_reaches_into_a_step_span_is_clipped_to_what_no_step_shows()
 
 def test_an_escalation_a_restart_releases_is_a_wait_and_the_next_step_queues_from_the_restart() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
-        escalations=(EscalationRecord(1, fx.at(40)),),
-        restarts=(RestartRecord(2, fx.at(250), "g1", "g1-build"),),
-        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        routes_created=(TracedRouteCreation(fx.at(6)), TracedRouteCreation(fx.at(300))),
+        escalations=(TracedEscalation(1, fx.at(40)),),
+        restarts=(TracedRestart(2, fx.at(250), "g1", "g1-build"),),
+        transitions=(TracedTransition(2, fx.at(400), "g1", RESERVED_TERMINAL),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
     )
 
@@ -248,12 +248,12 @@ def test_a_step_span_that_would_run_past_the_next_steps_start_ends_there() -> No
 
 def test_a_gate_is_a_lifetime_span_of_kind_gate() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
-        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
+        decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
         transitions=(
             fx.to("g1", "build", 50, 2, decision_id="d1", choice_name="approve"),
-            TransitionRecord(2, fx.at(100), "g1", RESERVED_TERMINAL),
+            TracedTransition(2, fx.at(100), "g1", RESERVED_TERMINAL),
         ),
         **fx.runner_epoch(1, 10),
     )
@@ -304,9 +304,9 @@ def test_the_lifetime_spans_are_derived_not_random() -> None:
 
 def test_a_stopped_chunk_keeps_its_outcome_and_a_later_completion_is_a_marker() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        chunk_stopped=(ChunkStoppedRecord(fx.at(40)),),
-        chunk_completed=(ChunkCompletedRecord(fx.at(90)),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        chunk_stopped=(TracedChunkStop(fx.at(40)),),
+        chunk_completed=(TracedChunkCompletion(fx.at(90)),),
         **fx.runner_epoch(1, 10),
     )
 
@@ -325,7 +325,7 @@ def test_a_stopped_chunk_keeps_its_outcome_and_a_later_completion_is_a_marker() 
 
 def test_a_completion_that_ties_the_stop_decides_the_chunk_and_leaves_no_marker() -> None:
     facts = fx.make_facts(
-        chunk_stopped=(ChunkStoppedRecord(fx.at(40)),), chunk_completed=(ChunkCompletedRecord(fx.at(40)),)
+        chunk_stopped=(TracedChunkStop(fx.at(40)),), chunk_completed=(TracedChunkCompletion(fx.at(40)),)
     )
 
     end = chunk_end(facts)
@@ -337,7 +337,7 @@ def test_a_completion_that_ties_the_stop_decides_the_chunk_and_leaves_no_marker(
 
 
 def test_an_unfinished_chunk_is_refused() -> None:
-    facts = fx.make_facts(promotions=(PromotionRecord(fx.at(5)),))
+    facts = fx.make_facts(promotions=(TracedPromotion(fx.at(5)),))
 
     assert chunk_end(facts) is None
     with pytest.raises(ValueError, match="unfinished"):
@@ -346,11 +346,11 @@ def test_an_unfinished_chunk_is_refused() -> None:
 
 def test_an_escalation_wait_covers_the_gap_to_the_requeue() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        routes_created=(RouteCreatedRecord(fx.at(6)), RouteCreatedRecord(fx.at(300))),
-        escalations=(EscalationRecord(1, fx.at(40)),),
-        requeues=(RequeueRecord(fx.at(300)),),
-        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        routes_created=(TracedRouteCreation(fx.at(6)), TracedRouteCreation(fx.at(300))),
+        escalations=(TracedEscalation(1, fx.at(40)),),
+        requeues=(TracedRequeue(fx.at(300)),),
+        transitions=(TracedTransition(2, fx.at(400), "g1", RESERVED_TERMINAL),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 310)),
     )
 
@@ -365,9 +365,9 @@ def test_an_escalation_wait_covers_the_gap_to_the_requeue() -> None:
 
 def test_an_escalation_still_open_at_the_stop_ends_there() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        escalations=(EscalationRecord(1, fx.at(40)),),
-        chunk_stopped=(ChunkStoppedRecord(fx.at(70)),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        escalations=(TracedEscalation(1, fx.at(40)),),
+        chunk_stopped=(TracedChunkStop(fx.at(70)),),
         **fx.runner_epoch(1, 10),
     )
 
@@ -378,14 +378,14 @@ def test_an_escalation_still_open_at_the_stop_ends_there() -> None:
 
 def test_a_pause_while_unclaimed_is_a_wait_and_a_pause_inside_a_step_is_not() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
+        promotions=(TracedPromotion(fx.at(5)),),
         pauses=(
-            PauseRecord("p1", True, fx.at(7)),
-            PauseRecord("p2", False, fx.at(9)),
-            PauseRecord("p3", True, fx.at(20)),
-            PauseRecord("p4", False, fx.at(25)),
+            TracedPause("p1", True, fx.at(7)),
+            TracedPause("p2", False, fx.at(9)),
+            TracedPause("p3", True, fx.at(20)),
+            TracedPause("p4", False, fx.at(25)),
         ),
-        transitions=(TransitionRecord(1, fx.at(60), "g1", RESERVED_TERMINAL),),
+        transitions=(TracedTransition(1, fx.at(60), "g1", RESERVED_TERMINAL),),
         **fx.runner_epoch(1, 10),
     )
 
@@ -397,12 +397,12 @@ def test_a_pause_while_unclaimed_is_a_wait_and_a_pause_inside_a_step_is_not() ->
 
 def test_a_pause_a_restart_closes_the_step_under_is_a_wait_from_the_close_to_the_resume() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        pauses=(PauseRecord("p1", True, fx.at(20)), PauseRecord("p2", False, fx.at(50))),
-        restarts=(RestartRecord(2, fx.at(30), "g1", "g1-build"),),
-        transitions=(TransitionRecord(3, fx.at(80), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        pauses=(TracedPause("p1", True, fx.at(20)), TracedPause("p2", False, fx.at(50))),
+        restarts=(TracedRestart(2, fx.at(30), "g1", "g1-build"),),
+        transitions=(TracedTransition(3, fx.at(80), "g1", RESERVED_TERMINAL),),
         **fx.merge(
-            fx.runner_epoch(1, 10), {"epoch_owners": (EpochOwnerRecord(2, None, fx.at(30)),)}, fx.runner_epoch(3, 55)
+            fx.runner_epoch(1, 10), {"epoch_owners": (TracedEpochOwner(2, None, fx.at(30)),)}, fx.runner_epoch(3, 55)
         ),
     )
 
@@ -418,13 +418,13 @@ def test_a_pause_a_restart_closes_the_step_under_is_a_wait_from_the_close_to_the
 
 def test_a_pause_while_a_gate_holds_the_route_is_a_wait_only_after_the_gate_closes() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
-        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
-        pauses=(PauseRecord("p1", True, fx.at(30)), PauseRecord("p2", False, fx.at(520))),
+        promotions=(TracedPromotion(fx.at(5)),),
+        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
+        decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
+        pauses=(TracedPause("p1", True, fx.at(30)), TracedPause("p2", False, fx.at(520))),
         transitions=(
             fx.to("g1", "build", 500, 2, decision_id="d1", choice_name="approve"),
-            TransitionRecord(2, fx.at(600), "g1", RESERVED_TERMINAL),
+            TracedTransition(2, fx.at(600), "g1", RESERVED_TERMINAL),
         ),
         **fx.runner_epoch(1, 10),
     )
@@ -440,9 +440,9 @@ def test_a_pause_while_a_gate_holds_the_route_is_a_wait_only_after_the_gate_clos
 
 def test_a_pause_inside_the_backlog_leaves_the_backlog_wait_alone() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(20)),),
-        pauses=(PauseRecord("p1", True, fx.at(5)), PauseRecord("p2", False, fx.at(30))),
-        transitions=(TransitionRecord(1, fx.at(80), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(20)),),
+        pauses=(TracedPause("p1", True, fx.at(5)), TracedPause("p2", False, fx.at(30))),
+        transitions=(TracedTransition(1, fx.at(80), "g1", RESERVED_TERMINAL),),
         **fx.runner_epoch(1, 35),
     )
 
@@ -456,11 +456,11 @@ def test_a_pause_inside_the_backlog_leaves_the_backlog_wait_alone() -> None:
 
 def test_a_pause_inside_an_escalation_wait_leaves_it_alone() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        pauses=(PauseRecord("p1", True, fx.at(50)), PauseRecord("p2", False, fx.at(100))),
-        escalations=(EscalationRecord(1, fx.at(40)),),
-        requeues=(RequeueRecord(fx.at(200)),),
-        transitions=(TransitionRecord(2, fx.at(400), "g1", RESERVED_TERMINAL),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        pauses=(TracedPause("p1", True, fx.at(50)), TracedPause("p2", False, fx.at(100))),
+        escalations=(TracedEscalation(1, fx.at(40)),),
+        requeues=(TracedRequeue(fx.at(200)),),
+        transitions=(TracedTransition(2, fx.at(400), "g1", RESERVED_TERMINAL),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 210)),
     )
 
@@ -471,7 +471,7 @@ def test_a_pause_inside_an_escalation_wait_leaves_it_alone() -> None:
 
 
 def test_a_chunk_never_promoted_rests_in_the_backlog_until_it_ends() -> None:
-    facts = fx.make_facts(chunk_stopped=(ChunkStoppedRecord(fx.at(40)),))
+    facts = fx.make_facts(chunk_stopped=(TracedChunkStop(fx.at(40)),))
 
     chunk, backlog = assemble_lifetime(facts)
 
@@ -500,9 +500,9 @@ def test_a_sweep_tells_each_chunk_span_exactly_once() -> None:
 
 def test_a_chunk_span_is_told_before_a_later_completion_marker_and_neither_is_told_twice() -> None:
     facts = fx.make_facts(
-        promotions=(PromotionRecord(fx.at(5)),),
-        chunk_stopped=(ChunkStoppedRecord(fx.at(40)),),
-        chunk_completed=(ChunkCompletedRecord(fx.at(90)),),
+        promotions=(TracedPromotion(fx.at(5)),),
+        chunk_stopped=(TracedChunkStop(fx.at(40)),),
+        chunk_completed=(TracedChunkCompletion(fx.at(90)),),
         **fx.runner_epoch(1, 10),
     )
 
@@ -519,14 +519,14 @@ def test_a_chunk_span_is_told_before_a_later_completion_marker_and_neither_is_to
 
 
 def test_a_replay_and_the_sweep_tell_the_same_ids() -> None:
-    facts = _done(pauses=(PauseRecord("p1", True, fx.at(31)), PauseRecord("p2", False, fx.at(33))))
+    facts = _done(pauses=(TracedPause("p1", True, fx.at(31)), TracedPause("p2", False, fx.at(33))))
     swept = assemble_window(_window(facts, CursorKey.opening(fx.at(0))))
     replayed = assemble_window(_window(facts, CursorKey.opening(fx.at(100)), limit=100))
 
-    def ids(spans: list[SpanRecord]) -> set[tuple[int, int, int | None]]:
+    def ids(spans: list[FinishedSpan]) -> set[tuple[int, int, int | None]]:
         return {(s.context.trace_id, s.context.span_id, s.parent_span_id) for s in spans}
 
-    def whole(spans: tuple[SpanRecord, ...]) -> list[SpanRecord]:
+    def whole(spans: tuple[FinishedSpan, ...]) -> list[FinishedSpan]:
         """What a finished chunk is told as: its lifetime trace and its work root, not the steps the sweep told earlier."""
         return [s for s in spans if s.context.trace_id == lifetime_trace_id("ch_1") or s.name == "chunk work"]
 

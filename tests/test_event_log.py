@@ -18,7 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
+from blizzard.hub.domain.work import EscalationOpen, EventFeed, OperationalEvent
 from blizzard.hub.store import schema as s
 from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph, seed_lease
 
@@ -309,7 +309,7 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
 
 def test_event_feed_sorts_by_recency_across_severities() -> None:
     events = [
-        EventRow(
+        OperationalEvent(
             id=1,
             recorded_at=_at(1),
             severity="info",
@@ -321,7 +321,7 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
             message="info-old",
             detail=None,
         ),
-        EventRow(
+        OperationalEvent(
             id=2,
             recorded_at=_at(9),
             severity="warning",
@@ -333,7 +333,7 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
             message="warn-new",
             detail=None,
         ),
-        EventRow(
+        OperationalEvent(
             id=3,
             recorded_at=_at(2),
             severity="critical",

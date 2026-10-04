@@ -11,6 +11,7 @@ import hmac
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
 from blizzard.hub.domain.work import ChunkFacts, RouteHistory
@@ -18,6 +19,7 @@ from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 _log = get_logger("blizzard.hub.route_auth")
 
 
+@domain_model
 @dataclass(frozen=True)
 class RouteToken:
     """A chunk's live route acquisition judged against one submission's presented token."""

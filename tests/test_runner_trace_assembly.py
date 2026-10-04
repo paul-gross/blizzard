@@ -9,24 +9,24 @@ import pytest
 
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
-from blizzard.foundation.trace_spans import SpanKind, SpanRecord, SpanStatus
+from blizzard.foundation.trace_spans import FinishedSpan, SpanKind, SpanStatus
 from blizzard.runner.domain.leases import closure
 from blizzard.runner.domain.tracing import attributes as attr
 from blizzard.runner.domain.tracing import facts as facts_module
 from blizzard.runner.domain.tracing.assembly import assemble_lease
 from blizzard.runner.domain.tracing.facts import (
-    CheckResultRow,
-    ChecksRanRow,
-    ContextSampleRow,
-    NudgeRow,
-    OverloadRow,
-    ParkResumeRow,
-    ParkRow,
-    PauseParkRow,
-    PauseResumeRow,
-    SessionEndRow,
-    TakeoverEndRow,
-    TakeoverRow,
+    CheckResultFact,
+    ChecksRanFact,
+    ContextSampleFact,
+    NudgeFact,
+    OverloadFact,
+    ParkFact,
+    ParkResumeFact,
+    PauseParkFact,
+    PauseResumeFact,
+    SessionEndFact,
+    TakeoverEndFact,
+    TakeoverFact,
 )
 from tests import runner_trace_fixtures as fx
 from tests.trace_contract_support import dictionary
@@ -48,16 +48,16 @@ _MEASURES = {
 }
 
 
-def _role(spans: tuple[SpanRecord, ...], role: RunnerSpanRole, discriminator: str = "") -> SpanRecord:
+def _role(spans: tuple[FinishedSpan, ...], role: RunnerSpanRole, discriminator: str = "") -> FinishedSpan:
     wanted = span_id(_KEY, role, discriminator)
     return next(s for s in spans if s.context.span_id == wanted)
 
 
-def _worker(spans: tuple[SpanRecord, ...]) -> SpanRecord:
+def _worker(spans: tuple[FinishedSpan, ...]) -> FinishedSpan:
     return _role(spans, RunnerSpanRole.WORKER, fx.LEASE_ID)
 
 
-def _invocation(spans: tuple[SpanRecord, ...], generation: int, kind: str) -> SpanRecord:
+def _invocation(spans: tuple[FinishedSpan, ...], generation: int, kind: str) -> FinishedSpan:
     return _role(spans, RunnerSpanRole.INVOCATION, f"{generation}/{kind}")
 
 
@@ -184,7 +184,7 @@ def test_a_chunk_the_hub_stopped_closes_released_and_open_children_end_at_the_cl
     facts = fx.make_facts(
         reason=closure.RELEASED,
         closed=60,
-        parks=(ParkRow(1, "q1", fx.at(20)),),
+        parks=(ParkFact(1, "q1", fx.at(20)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 60),),
     )
     spans = assemble_lease(facts)
@@ -199,7 +199,7 @@ def test_a_chunk_the_hub_stopped_closes_released_and_open_children_end_at_the_cl
 
 def test_end_source_session_end() -> None:
     facts = fx.make_facts(
-        session_ends=(SessionEndRow(1, fx.at(40)), SessionEndRow(2, fx.at(45))),
+        session_ends=(SessionEndFact(1, fx.at(40)), SessionEndFact(2, fx.at(45))),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 1, "judge", 50, 100)),
     )
     invocation = _invocation(assemble_lease(facts), 1, "spawn")
@@ -211,7 +211,7 @@ def test_end_source_session_end() -> None:
 def test_a_session_end_before_the_invocation_opened_is_not_its_end() -> None:
     facts = fx.make_facts(
         spawns=(fx.spawn(1, 1), fx.spawn(2, 30)),
-        session_ends=(SessionEndRow(1, fx.at(20)),),
+        session_ends=(SessionEndFact(1, fx.at(20)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 30, 100)),
     )
     second = _invocation(assemble_lease(facts), 2, "resume")
@@ -243,7 +243,7 @@ def test_an_unclosed_boundary_ends_at_the_lease_close() -> None:
 
 def test_a_session_end_tie_with_the_next_invocation_reads_session_end() -> None:
     facts = fx.make_facts(
-        session_ends=(SessionEndRow(1, fx.at(50)),),
+        session_ends=(SessionEndFact(1, fx.at(50)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 1, "judge", 50, 100)),
     )
     assert _invocation(assemble_lease(facts), 1, "spawn").attributes[attr.INVOCATION_END_SOURCE] == "session_end"
@@ -251,7 +251,7 @@ def test_a_session_end_tie_with_the_next_invocation_reads_session_end() -> None:
 
 def test_a_child_ending_after_the_lease_is_clamped_to_its_close() -> None:
     facts = fx.make_facts(
-        boundaries=(fx.boundary(1, 1, "spawn", 1, 150),), takeovers=(TakeoverRow("tko_1", fx.at(120)),)
+        boundaries=(fx.boundary(1, 1, "spawn", 1, 150),), takeovers=(TakeoverFact("tko_1", fx.at(120)),)
     )
     spans = assemble_lease(facts)
     assert _invocation(spans, 1, "spawn").end == fx.at(100)
@@ -306,7 +306,7 @@ def test_a_nudge_after_a_quiet_worker() -> None:
     facts = fx.make_facts(
         spawns=(fx.spawn(1, 1), fx.spawn(2, 60)),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "nudge", 60, 100)),
-        nudges=(NudgeRow(1, fx.EPOCH, fx.at(59)),),
+        nudges=(NudgeFact(1, fx.EPOCH, fx.at(59)),),
         usage=(fx.usage(1, 2, "resume", 90, input_tokens=7),),
     )
     spans = assemble_lease(facts)
@@ -370,8 +370,8 @@ def test_measures_sit_only_on_invocation_spans_with_cached_input_in_genai_input(
             fx.usage(1, 1, "spawn", 40, input_tokens=100, cache_read_tokens=1000, cache_create_tokens=50),
             fx.usage(2, 1, "spawn", 41, input_tokens=1, output_tokens=2, cache_read_tokens=3, cache_create_tokens=4),
         ),
-        parks=(ParkRow(1, "q1", fx.at(20)),),
-        overloads=(OverloadRow(1, 1, 1, fx.at(30)),),
+        parks=(ParkFact(1, "q1", fx.at(20)),),
+        overloads=(OverloadFact(1, 1, 1, fx.at(30)),),
     )
     spans = assemble_lease(facts)
     invocation = _invocation(spans, 1, "spawn")
@@ -431,10 +431,10 @@ def test_cost_is_omitted_when_no_row_has_a_figure() -> None:
 def test_a_spawn_a_park_on_an_ask_and_a_resume_after_the_answer() -> None:
     facts = fx.make_facts(
         spawns=(fx.spawn(1, 1), fx.spawn(2, 41)),
-        session_ends=(SessionEndRow(1, fx.at(19)),),
+        session_ends=(SessionEndFact(1, fx.at(19)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 41, 100)),
-        parks=(ParkRow(1, "q1", fx.at(20)),),
-        park_resumes=(ParkResumeRow(1, "q0", fx.at(30)), ParkResumeRow(2, "q1", fx.at(40))),
+        parks=(ParkFact(1, "q1", fx.at(20)),),
+        park_resumes=(ParkResumeFact(1, "q0", fx.at(30)), ParkResumeFact(2, "q1", fx.at(40))),
     )
     spans = assemble_lease(facts)
     park = _role(spans, RunnerSpanRole.ASK_PARK, "q1")
@@ -447,14 +447,14 @@ def test_a_spawn_a_park_on_an_ask_and_a_resume_after_the_answer() -> None:
 
 
 def test_a_resume_recorded_before_the_park_does_not_end_it() -> None:
-    facts = fx.make_facts(parks=(ParkRow(1, "q1", fx.at(20)),), park_resumes=(ParkResumeRow(1, "q1", fx.at(10)),))
+    facts = fx.make_facts(parks=(ParkFact(1, "q1", fx.at(20)),), park_resumes=(ParkResumeFact(1, "q1", fx.at(10)),))
     assert _role(assemble_lease(facts), RunnerSpanRole.ASK_PARK, "q1").end == fx.at(100)
 
 
 def test_a_pause_park_ends_at_the_next_resume_or_the_close() -> None:
     facts = fx.make_facts(
-        pause_parks=(PauseParkRow(4, fx.at(20)), PauseParkRow(7, fx.at(60))),
-        pause_resumes=(PauseResumeRow(1, fx.at(10)), PauseResumeRow(2, fx.at(45)), PauseResumeRow(3, fx.at(50))),
+        pause_parks=(PauseParkFact(4, fx.at(20)), PauseParkFact(7, fx.at(60))),
+        pause_resumes=(PauseResumeFact(1, fx.at(10)), PauseResumeFact(2, fx.at(45)), PauseResumeFact(3, fx.at(50))),
     )
     spans = assemble_lease(facts)
     first, second = _role(spans, RunnerSpanRole.PAUSE_PARK, "4"), _role(spans, RunnerSpanRole.PAUSE_PARK, "7")
@@ -467,9 +467,9 @@ def test_an_overload_backoff_followed_by_a_resume() -> None:
     facts = fx.make_facts(
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 25, 100)),
         overloads=(
-            OverloadRow(1, 1, 2, fx.at(10), resume_after=fx.at(30)),
-            OverloadRow(2, 2, 1, fx.at(40), resume_after=fx.at(55)),
-            OverloadRow(3, 2, 3, fx.at(70)),
+            OverloadFact(1, 1, 2, fx.at(10), resume_after=fx.at(30)),
+            OverloadFact(2, 2, 1, fx.at(40), resume_after=fx.at(55)),
+            OverloadFact(3, 2, 3, fx.at(70)),
         ),
     )
     spans = assemble_lease(facts)
@@ -483,8 +483,8 @@ def test_an_overload_backoff_followed_by_a_resume() -> None:
 
 def test_a_takeover_ends_at_its_end_or_the_close() -> None:
     facts = fx.make_facts(
-        takeovers=(TakeoverRow("tko_1", fx.at(20)), TakeoverRow("tko_2", fx.at(50))),
-        takeover_ends=(TakeoverEndRow(1, "tko_1", fx.at(35)),),
+        takeovers=(TakeoverFact("tko_1", fx.at(20)), TakeoverFact("tko_2", fx.at(50))),
+        takeover_ends=(TakeoverEndFact(1, "tko_1", fx.at(35)),),
     )
     spans = assemble_lease(facts)
     ended = _role(spans, RunnerSpanRole.TAKEOVER, "tko_1")
@@ -500,9 +500,9 @@ def test_context_samples_land_on_the_invocation_whose_window_holds_them() -> Non
     facts = fx.make_facts(
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 1, "judge", 50, 100)),
         context_samples=(
-            ContextSampleRow(1, fx.at(10), 5000),
-            ContextSampleRow(2, fx.at(60), None),
-            ContextSampleRow(3, fx.at(0), 1),
+            ContextSampleFact(1, fx.at(10), 5000),
+            ContextSampleFact(2, fx.at(60), None),
+            ContextSampleFact(3, fx.at(0), 1),
         ),
     )
     spans = assemble_lease(facts)
@@ -514,8 +514,8 @@ def test_context_samples_land_on_the_invocation_whose_window_holds_them() -> Non
 
 def test_checks_that_all_pass() -> None:
     facts = fx.make_facts(
-        check_results=(CheckResultRow(1, fx.EPOCH, True), CheckResultRow(2, fx.EPOCH, True)),
-        checks_ran=(ChecksRanRow(1, fx.EPOCH, fx.at(80)),),
+        check_results=(CheckResultFact(1, fx.EPOCH, True), CheckResultFact(2, fx.EPOCH, True)),
+        checks_ran=(ChecksRanFact(1, fx.EPOCH, fx.at(80)),),
     )
     events = _worker(assemble_lease(facts)).events
     assert [(e.name, dict(e.attributes)) for e in events] == [
@@ -529,12 +529,12 @@ def test_checks_that_all_pass() -> None:
 def test_checks_with_one_failing_are_indexed_by_row_id() -> None:
     facts = fx.make_facts(
         check_results=(
-            CheckResultRow(12, fx.EPOCH, True),
-            CheckResultRow(10, fx.EPOCH, True),
-            CheckResultRow(11, fx.EPOCH, False),
-            CheckResultRow(3, fx.EPOCH + 1, False),
+            CheckResultFact(12, fx.EPOCH, True),
+            CheckResultFact(10, fx.EPOCH, True),
+            CheckResultFact(11, fx.EPOCH, False),
+            CheckResultFact(3, fx.EPOCH + 1, False),
         ),
-        checks_ran=(ChecksRanRow(1, fx.EPOCH, fx.at(80)),),
+        checks_ran=(ChecksRanFact(1, fx.EPOCH, fx.at(80)),),
     )
     events = _worker(assemble_lease(facts)).events
     assert [dict(e.attributes) for e in events] == [
@@ -546,15 +546,15 @@ def test_checks_with_one_failing_are_indexed_by_row_id() -> None:
 
 
 def test_check_results_without_a_checks_ran_marker_tell_nothing() -> None:
-    facts = fx.make_facts(check_results=(CheckResultRow(1, fx.EPOCH, True),))
+    facts = fx.make_facts(check_results=(CheckResultFact(1, fx.EPOCH, True),))
     assert _worker(assemble_lease(facts)).events == ()
 
 
 def test_worker_events_are_clamped_into_the_lease() -> None:
     facts = fx.make_facts(
-        nudges=(NudgeRow(1, fx.EPOCH, fx.at(130)), NudgeRow(2, fx.EPOCH, fx.at(-3))),
-        check_results=(CheckResultRow(1, fx.EPOCH, True),),
-        checks_ran=(ChecksRanRow(1, fx.EPOCH, fx.at(50)),),
+        nudges=(NudgeFact(1, fx.EPOCH, fx.at(130)), NudgeFact(2, fx.EPOCH, fx.at(-3))),
+        check_results=(CheckResultFact(1, fx.EPOCH, True),),
+        checks_ran=(ChecksRanFact(1, fx.EPOCH, fx.at(50)),),
     )
     assert [(e.name, e.time) for e in _worker(assemble_lease(facts)).events] == [
         ("nudge", fx.at(0)),
@@ -625,18 +625,18 @@ def test_planted_content_never_reaches_a_span() -> None:
         fx.busy_facts(),
         parks=(
             _load(
-                ParkRow,
+                ParkFact,
                 {"id": 1, "question_id": "q1", "parked_at": fx.at(20), "question": question, "options": "[]"},
             ),
         ),  # type: ignore[arg-type]
         check_results=(
             _load(
-                CheckResultRow,
+                CheckResultFact,
                 {"id": 1, "epoch": fx.EPOCH, "passed": False, "command": command, "output_tail": output},
             ),
         ),  # type: ignore[arg-type]
         takeovers=(
-            _load(TakeoverRow, {"takeover_id": "tko_1", "opened_at": fx.at(80), "workdir": workdir, "pid": 4242}),
+            _load(TakeoverFact, {"takeover_id": "tko_1", "opened_at": fx.at(80), "workdir": workdir, "pid": 4242}),
         ),  # type: ignore[arg-type]
     )
     spans = assemble_lease(facts)
@@ -651,7 +651,7 @@ def test_planted_content_never_reaches_a_span() -> None:
 def test_a_session_end_at_the_instant_an_invocation_opened_belongs_to_the_one_before() -> None:
     facts = fx.make_facts(
         spawns=(fx.spawn(1, 1), fx.spawn(2, 50)),
-        session_ends=(SessionEndRow(1, fx.at(50)),),
+        session_ends=(SessionEndFact(1, fx.at(50)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 50, 100)),
     )
     second = _invocation(assemble_lease(facts), 2, "resume")
@@ -660,7 +660,7 @@ def test_a_session_end_at_the_instant_an_invocation_opened_belongs_to_the_one_be
 
 
 def test_a_context_sample_at_the_instant_an_invocation_opened_is_its_own() -> None:
-    facts = fx.make_facts(context_samples=(ContextSampleRow(1, fx.at(1), 10),))
+    facts = fx.make_facts(context_samples=(ContextSampleFact(1, fx.at(1), 10),))
     assert [e.name for e in _invocation(assemble_lease(facts), 1, "spawn").events] == [
         "context sample",
         "session identified",
@@ -669,10 +669,10 @@ def test_a_context_sample_at_the_instant_an_invocation_opened_is_its_own() -> No
 
 def test_a_resume_at_the_instant_of_its_park_ends_it_there() -> None:
     facts = fx.make_facts(
-        parks=(ParkRow(1, "q1", fx.at(20)),),
-        park_resumes=(ParkResumeRow(1, "q1", fx.at(20)),),
-        pause_parks=(PauseParkRow(1, fx.at(30)),),
-        pause_resumes=(PauseResumeRow(1, fx.at(30)),),
+        parks=(ParkFact(1, "q1", fx.at(20)),),
+        park_resumes=(ParkResumeFact(1, "q1", fx.at(20)),),
+        pause_parks=(PauseParkFact(1, fx.at(30)),),
+        pause_resumes=(PauseResumeFact(1, fx.at(30)),),
     )
     spans = assemble_lease(facts)
     assert _role(spans, RunnerSpanRole.ASK_PARK, "q1").end == fx.at(20)
@@ -682,15 +682,15 @@ def test_a_resume_at_the_instant_of_its_park_ends_it_there() -> None:
 def test_an_invocation_opened_at_the_overloads_instant_does_not_end_it() -> None:
     facts = fx.make_facts(
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 30, 100)),
-        overloads=(OverloadRow(1, 1, 1, fx.at(30), resume_after=fx.at(45)),),
+        overloads=(OverloadFact(1, 1, 1, fx.at(30), resume_after=fx.at(45)),),
     )
     assert _role(assemble_lease(facts), RunnerSpanRole.OVERLOAD, "1").end == fx.at(45)
 
 
 def test_checks_runs_at_one_instant_tell_in_row_id_order() -> None:
     facts = fx.make_facts(
-        check_results=(CheckResultRow(1, fx.EPOCH, True), CheckResultRow(2, fx.EPOCH + 1, False)),
-        checks_ran=(ChecksRanRow(2, fx.EPOCH + 1, fx.at(80)), ChecksRanRow(1, fx.EPOCH, fx.at(80))),
+        check_results=(CheckResultFact(1, fx.EPOCH, True), CheckResultFact(2, fx.EPOCH + 1, False)),
+        checks_ran=(ChecksRanFact(2, fx.EPOCH + 1, fx.at(80)), ChecksRanFact(1, fx.EPOCH, fx.at(80))),
     )
     assert [e.attributes.get(attr.CHECKS_PASSED) for e in _worker(assemble_lease(facts)).events] == [
         None,

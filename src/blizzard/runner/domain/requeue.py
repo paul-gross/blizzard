@@ -12,10 +12,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 
 if TYPE_CHECKING:
-    from blizzard.runner.domain.escalations import EscalationRecord
-    from blizzard.runner.domain.takeover import TakeoverRecord
+    from blizzard.runner.domain.escalations import ParkedEscalation
+    from blizzard.runner.domain.takeover import OpenTakeover
 
 __all__ = [
     "ChunkNotRequeueable",
@@ -27,6 +28,7 @@ __all__ = [
 ]
 
 
+@dto
 @dataclass(frozen=True)
 class RequeueScope:
     """The chunk-keyed facts :meth:`RequeueService.requeue` reads, resolved at the edge
@@ -34,8 +36,8 @@ class RequeueScope:
     names exactly the two facts the rule checks rather than an aggregate."""
 
     chunk_id: str
-    open_takeover: TakeoverRecord | None
-    open_escalation: EscalationRecord | None
+    open_takeover: OpenTakeover | None
+    open_escalation: ParkedEscalation | None
 
 
 class IReadRequeueRepository(Protocol):

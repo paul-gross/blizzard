@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from blizzard.foundation.hashing import Sha256Hex
+from blizzard.foundation.roles import domain_model
 
 
+@domain_model
 @dataclass(frozen=True)
 class SessionId:
     """A session id in plaintext — handed out once at mint, presented on every request."""

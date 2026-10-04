@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, TypeVar
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
@@ -22,6 +23,7 @@ from blizzard.runner.loop.process import IProcessProbe
 SectionT_contra = TypeVar("SectionT_contra", bound=IHarnessSection, contravariant=True)
 
 
+@dto
 @dataclass(frozen=True)
 class SharedHarnessInputs:
     """The runner-wide knobs every binding reads — never carried by a binding's own section."""

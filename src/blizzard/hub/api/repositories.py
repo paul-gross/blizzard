@@ -18,11 +18,11 @@ from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
     RepositoryCoordinateTaken,
     RepositoryEdit,
     RepositoryFields,
     RepositoryNameTaken,
-    RepositoryRecord,
 )
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.wire.repository import (
@@ -35,7 +35,7 @@ from blizzard.wire.repository import (
 router = APIRouter(prefix="/api", tags=["repositories"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _summary(record: RepositoryRecord) -> RepositorySummary:
+def _summary(record: ConfiguredRepository) -> RepositorySummary:
     fields = record.fields
     return RepositorySummary(
         name=record.name,
@@ -62,7 +62,7 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _stored(name: str, services: HubServices) -> RepositoryRecord:
+def _stored(name: str, services: HubServices) -> ConfiguredRepository:
     record = services.repository_records.get(name)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown repository {name!r}")

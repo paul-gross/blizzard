@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import Chunk, DecisionChoice, WorkItemMaterializationOutcome
 from blizzard.hub.store.internal.chunk_rows import insert_materialization_row
 from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
@@ -38,8 +38,8 @@ def _mint(store: ChunkStores, chunk_id: str) -> None:
     store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
 
 
-def _proposal(chunk_id: str, proposal_id: str, *, ordinal: int = 0) -> WorkItemProposalRow:
-    return WorkItemProposalRow(
+def _proposal(chunk_id: str, proposal_id: str, *, ordinal: int = 0) -> StampedWorkItemProposal:
+    return StampedWorkItemProposal(
         proposal_id=proposal_id,
         chunk_id=chunk_id,
         node_id="nd_1",
@@ -53,7 +53,7 @@ def _proposal(chunk_id: str, proposal_id: str, *, ordinal: int = 0) -> WorkItemP
 
 
 def _record_decision(
-    store: ChunkStores, chunk_id: str, decision_id: str, proposals: list[WorkItemProposalRow], *, at: datetime = _T0
+    store: ChunkStores, chunk_id: str, decision_id: str, proposals: list[StampedWorkItemProposal], *, at: datetime = _T0
 ) -> None:
     store.decisions.record_decision(
         imposed_by_runner_id=None,

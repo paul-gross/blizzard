@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.foundation.transcripts import TranscriptUnavailable, TurnKind
 
 
+@dto
 @dataclass(frozen=True)
 class ToolCall:
     """A tool invocation, structured — mirrors
@@ -33,6 +35,7 @@ class ToolCall:
     output_patch: bool = False
 
 
+@dto
 @dataclass(frozen=True)
 class Sidechain:
     """A subagent's private conversation, nested under its spawning tool turn (or, when
@@ -48,6 +51,7 @@ class Sidechain:
     parent_tool_use_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class Turn:
     """One conversation turn, carried in full. ``tool``/``sidechain`` populate only
@@ -65,6 +69,7 @@ class Turn:
     truncated: bool
 
 
+@dto
 @dataclass(frozen=True)
 class Transcript:
     """A lease's parsed session — the transcript read model. ``available=False`` carries
@@ -89,7 +94,7 @@ class IReadTranscriptRepository(Protocol):
         """The session's parsed transcript, located by ``session_id`` alone.
 
         ``spawn_cwd`` disambiguates when several project directories hold a same-id file,
-        else ``None``. ``since`` is a forward-read cursor (``TranscriptSegmentLedgerRow.cursor``)
+        else ``None``. ``since`` is a forward-read cursor (``TranscriptSegmentState.cursor``)
         bounding the read to what followed it; ``None`` reads from the start."""
         ...
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -18,7 +19,7 @@ from blizzard.runner.loop.transcript_drain import HUB_CAPPED, TranscriptDrain
 from blizzard.runner.loop.transcript_pump import BACKFILL_INCOMPLETE, MAX_BUFFERED_BYTES, TranscriptPump
 from blizzard.runner.transcripts.ledger import (
     TranscriptBackfillLease,
-    TranscriptSegmentLedgerRow,
+    TranscriptSegmentState,
 )
 
 _log = get_logger("blizzard.runner.loop")
@@ -36,6 +37,7 @@ class TranscriptReshipError(Exception):
     of these — that outcome is the report's own ``complete``."""
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptBackfillReport:
     """What one pass did, counted by session. Every count is local: ``imported`` means read
@@ -49,6 +51,7 @@ class TranscriptBackfillReport:
     capped: int
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptReshipReport:
     """What one re-ship landed. ``segment_id`` is the NEW segment carrying the content;
@@ -196,7 +199,7 @@ class TranscriptBackfill:
             shipping_stopped_reason=(landed.shipping_stopped_reason if landed else None) or None,
         )
 
-    def _resumable(self, source: TranscriptSegmentLedgerRow) -> TranscriptSegmentLedgerRow | None:
+    def _resumable(self, source: TranscriptSegmentState) -> TranscriptSegmentState | None:
         """An earlier re-ship's own still-open segment for this session, if one was left
         behind. Never ``source`` itself, which is finalized and stays as it shipped."""
         return next(
@@ -204,7 +207,7 @@ class TranscriptBackfill:
             None,
         )
 
-    def _open_beside(self, source: TranscriptSegmentLedgerRow) -> str:
+    def _open_beside(self, source: TranscriptSegmentState) -> str:
         """A fresh segment over ``source``'s own lease coordinates, pointed at what it
         replaces. Without that pointer the hub's lease read — keyed on the lease, not the
         segment — concatenates both and renders the conversation twice."""
@@ -261,7 +264,7 @@ class TranscriptBackfill:
             if segment.truncated_reason == HUB_CAPPED or segment.shipping_stopped_reason is not None
         )
 
-    def _unfinished(self) -> list[TranscriptSegmentLedgerRow]:
+    def _unfinished(self) -> list[TranscriptSegmentState]:
         """Segments still open on an already-closed lease — an interrupted earlier run's
         own. A live lease's segment belongs to the tick's pump, never here."""
         active_lease_ids = {lease.lease_id for lease in self.ctx.stores.lease_record.list_active_leases()}

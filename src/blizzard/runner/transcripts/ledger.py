@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.identity import SessionReference
 
 __all__ = [
@@ -18,12 +19,13 @@ __all__ = [
     "IReadTranscriptLedgerRepository",
     "IWriteTranscriptLedgerRepository",
     "TranscriptBackfillLease",
-    "TranscriptSegmentLedgerRow",
+    "TranscriptSegmentState",
 ]
 
 
+@dto
 @dataclass(frozen=True)
-class TranscriptSegmentLedgerRow:
+class TranscriptSegmentState:
     """One row of the transcript segment ledger — local state, never shipped
     as-is, and so named apart from the wire's own ``TranscriptSegmentRecord``.
     ``normalizer_version`` is never ``None``, starting at the source seam's "never ran"
@@ -62,6 +64,7 @@ class TranscriptSegmentLedgerRow:
         return SessionReference(self.harness_id, self.session_id)
 
 
+@dto
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
     """One pending record in the transcript lane's own buffer — ``BufferedFact``'s
@@ -77,6 +80,7 @@ class BufferedTranscriptDelta:
     created_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptBackfillLease:
     """One session-bearing lease the backfill may import, with whether that
@@ -99,27 +103,27 @@ class TranscriptBackfillLease:
 class IReadTranscriptLedgerRepository(Protocol):
     """Read-only transcript segment ledger queries (held by read-path edges)."""
 
-    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentState | None:
         """The segment by id, or ``None`` — the pump and drain's per-segment read."""
         ...
 
-    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
+    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
         """:meth:`transcript_segment` for every id in ``segment_ids``, in one grouped read.
         An id with no row is absent, exactly as the singular answers ``None`` for it."""
         ...
 
-    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
+    def open_transcript_segments(self) -> list[TranscriptSegmentState]:
         """Segments with no final marker yet — the pump's per-tick work list."""
         ...
 
-    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
+    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentState]:
         """This lease's own open segments — :meth:`open_transcript_segments` narrowed to one
         lease (`bzh:bulk-reconstitution`), rather than reading every open segment in the
         store and filtering to one lease in Python. A lease ordinarily holds at most one,
         but a re-ship can leave a second beside its source."""
         ...
 
-    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         """The chunk's segment ledger rows, oldest first, open or finalized alike — the
         runner-plane's chunk-scoped segment index read (runner-node-grouped-transcripts).
         A chunk this store holds no lease for returns ``[]``."""

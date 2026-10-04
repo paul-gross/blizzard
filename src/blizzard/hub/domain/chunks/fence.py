@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from blizzard.foundation.roles import domain_model, dto
+
 
 class EpochAdmission(Enum):
     """Which epochs a write accepts, against the chunk's newest."""
@@ -29,6 +31,7 @@ class EpochAdmission(Enum):
         return epoch > newest
 
 
+@dto
 @dataclass(frozen=True)
 class FenceRefusal:
     """Why a fenced write was refused and never recorded: the chunk is terminal, or the
@@ -52,6 +55,7 @@ class FenceRefusal:
         return cls(epoch=epoch, latest=latest, detail=f"displaced attempt: epoch {epoch} is not this attempt's")
 
 
+@domain_model
 @dataclass(frozen=True)
 class EpochOwner:
     """Who took one epoch of a chunk — the hub (``runner_id`` ``None``) or one runner.
@@ -71,6 +75,7 @@ class EpochOwner:
         return self.runner_id is None
 
 
+@domain_model
 @dataclass(frozen=True)
 class Claimant:
     """The runner attempt a runner-submitted write speaks for — its runner, and the lease
@@ -90,6 +95,7 @@ class Claimant:
         return owning_lease_id is None or self.lease_id is None or owning_lease_id == self.lease_id
 
 
+@domain_model
 @dataclass(frozen=True)
 class MintAdmission:
     """Whether a runner's ``lease.minted`` at ``epoch`` may land, given the chunk's state

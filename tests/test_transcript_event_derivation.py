@@ -21,7 +21,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService, GraphPins
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
 from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -61,7 +61,7 @@ def _turns_json(*, path: str = "a.py") -> str:
     )
 
 
-def _segment_record(**overrides: object) -> SegmentRecord:
+def _segment_record(**overrides: object) -> TranscriptSlice:
     values: dict[str, object] = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
@@ -78,7 +78,7 @@ def _segment_record(**overrides: object) -> SegmentRecord:
         "turns_json": _turns_json(),
     }
     values.update(overrides)
-    return SegmentRecord(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)  # type: ignore[arg-type]
 
 
 class _Fixture:

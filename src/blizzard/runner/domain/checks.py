@@ -6,11 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-__all__ = ["CheckResultRecord", "IReadCheckRepository", "IWriteCheckRepository"]
+from blizzard.foundation.roles import dto
+
+__all__ = ["ExecutedCheck", "IReadCheckRepository", "IWriteCheckRepository"]
 
 
+@dto
 @dataclass(frozen=True)
-class CheckResultRecord:
+class ExecutedCheck:
     """One check command's runner-executed outcome, read back from the durable store.
     ``output_tail`` is runner-local evidence and never rides the wire."""
 
@@ -37,7 +40,7 @@ class IReadCheckRepository(Protocol):
         this ``False``, which safely re-runs."""
         ...
 
-    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
+    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[ExecutedCheck]:
         """This attempt's recorded check results, in run order. Empty for an
         attempt whose checks never ran (or a node with no ``checks:``)."""
         ...
@@ -61,7 +64,7 @@ class IWriteCheckRepository(IReadCheckRepository, Protocol):
         chunk_id: str,
         node_id: str,
         epoch: int,
-        results: list[CheckResultRecord],
+        results: list[ExecutedCheck],
         at: datetime,
     ) -> None:
         """Append this attempt's check result rows, one committed transaction

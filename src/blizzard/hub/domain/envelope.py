@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.work import Chunk, ChunkFacts, MovementKind, TransitionFact
@@ -25,15 +26,16 @@ from blizzard.wire.envelope import (
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
 
+@domain_model
 @dataclass(frozen=True)
 class LatestArtifacts:
     """Artifact rows resolved to one per ``{node_name}.{name}``, newest epoch wins."""
 
-    rows: list[ArtifactRow]
+    rows: list[StoredArtifact]
 
     @classmethod
-    def of(cls, rows: list[ArtifactRow]) -> LatestArtifacts:
-        latest: dict[tuple[str, str], ArtifactRow] = {}
+    def of(cls, rows: list[StoredArtifact]) -> LatestArtifacts:
+        latest: dict[tuple[str, str], StoredArtifact] = {}
         for row in rows:
             key = (row.node_name, row.name)
             current = latest.get(key)
@@ -46,7 +48,7 @@ class LatestArtifacts:
         return [self._projected(row) for row in self.rows]
 
     @staticmethod
-    def _projected(row: ArtifactRow) -> EnvelopeArtifact:
+    def _projected(row: StoredArtifact) -> EnvelopeArtifact:
         if row.kind is ArtifactKind.GIT_COMMIT:
             branch_name, _, commit_hash = row.data.partition(":")
             return EnvelopeArtifact(
@@ -63,6 +65,7 @@ class LatestArtifacts:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class Arrival:
     """The edge a chunk took into its current node, and the addendum that edge inlines."""
@@ -96,6 +99,7 @@ class Arrival:
         return self.edge.prompt_addendum if self.edge is not None else None
 
 
+@domain_model
 @dataclass(frozen=True)
 class EffectiveSession:
     """A node's session facets resolved **declaration > chunk default**, merged *field by field*
@@ -131,6 +135,7 @@ class EffectiveSession:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class Envelope:
     """The envelope ``node`` is worked from. ``graph`` carries no default, so omitting it is a
@@ -140,7 +145,7 @@ class Envelope:
     chunk: Chunk
     graph: Graph
     node: Node
-    artifacts: list[ArtifactRow]
+    artifacts: list[StoredArtifact]
     epoch: int
     arrival_addendum: str | None = None
     # This visit was forced by an operator restart, which overrides the node's

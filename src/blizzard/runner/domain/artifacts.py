@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.roles import dto
 
-__all__ = ["GraphArtifactRecord", "IReadGraphArtifactRepository", "IWriteGraphArtifactRepository"]
+__all__ = ["IReadGraphArtifactRepository", "IWriteGraphArtifactRepository", "PinnedGraphArtifact"]
 
 
+@dto
 @dataclass(frozen=True)
-class GraphArtifactRecord:
+class PinnedGraphArtifact:
     """One graph-scoped ``artifacts:`` declaration, pinned to the mint it was baked into
     — the runner's own mirror of the hub's ``graph_artifacts`` row, keyed
     ``(graph_id, name)``. ``ordinal`` is the authored ``artifacts:`` position, carried
@@ -27,7 +29,7 @@ class GraphArtifactRecord:
 class IReadGraphArtifactRepository(Protocol):
     """Read-only graph-artifact queries (held by read-path edges)."""
 
-    def graph_artifacts_for_graph(self, graph_id: str) -> list[GraphArtifactRecord]:
+    def graph_artifacts_for_graph(self, graph_id: str) -> list[PinnedGraphArtifact]:
         """This mint's pinned graph-scoped declarations, in authored order. Keyed on
         the mint's own ``graph_id``, never the lease — a lease pinned to a superseded mint
         keeps reading that mint's own rows. Empty for a mint that declared none, or one
@@ -39,7 +41,7 @@ class IWriteGraphArtifactRepository(IReadGraphArtifactRepository, Protocol):
     """Read-write graph-artifact store — held only by the domain."""
 
     def record_graph_artifacts(
-        self, *, graph_id: str, artifacts: list[GraphArtifactRecord], recorded_at: datetime
+        self, *, graph_id: str, artifacts: list[PinnedGraphArtifact], recorded_at: datetime
     ) -> None:
         """Pin a mint's graph-scoped declarations, insert-if-absent: a second call
         for the same ``graph_id`` — a second lease against the same mint — writes nothing

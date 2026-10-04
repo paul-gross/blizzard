@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, SelfTestResultRecord
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import selftest_results
 
@@ -20,7 +20,7 @@ class SelfTestResultStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def latest_selftest_result(self, harness_id: str) -> SelfTestResultRecord | None:
+    def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         # Ordered on the autoincrement pk, not `recorded_at` or insert order (`bzh:sql-portable`)
         # — mirrors `LeaseSessionStore.session_preamble_fingerprint`'s own latest-row read.
         rows = self._store.all(
@@ -36,7 +36,7 @@ class SelfTestResultStore:
         if not rows:
             return None
         row = rows[0]
-        return SelfTestResultRecord(
+        return LatestSelfTestResult(
             harness_id=harness_id,
             status=str(row.status),
             error=str(row.error) if row.error is not None else None,

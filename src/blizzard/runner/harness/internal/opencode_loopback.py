@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.internal.opencode_process import OpenCodeStartedProcess
 
 LOCAL_SERVER_HOST = "127.0.0.1"
@@ -81,6 +82,7 @@ class LoopbackTransportError(RuntimeError):
     """The local control request was invalid or could not reach its loopback server."""
 
 
+@dto
 @dataclass(frozen=True)
 class LoopbackRequest:
     """The complete local request needed by an OpenCode control operation."""

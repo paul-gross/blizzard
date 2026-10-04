@@ -18,11 +18,11 @@ from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import MIGRATION_PREFIX, Id
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import MigrationSource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -82,8 +82,8 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
@@ -142,8 +142,8 @@ class ChunkMovementStore:
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,

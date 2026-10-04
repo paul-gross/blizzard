@@ -23,9 +23,10 @@ from blizzard.foundation.ids import (
     Id,
 )
 from blizzard.foundation.node_steps import Executor, JudgedBy
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
@@ -38,7 +39,7 @@ from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Graph, Node
 from blizzard.hub.domain.produces_auth import Produces
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
@@ -55,6 +56,7 @@ _CP_MIGRATE_AFTER_RECORD = crashpoint(
 )
 
 
+@dto
 @dataclass(frozen=True)
 class ApplyResult:
     """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus the
@@ -149,6 +151,7 @@ class ApplyResult:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class Destination:
     """Where an edge routes inside its own graph: the reserved terminal, a node id, or ``None``
@@ -690,10 +693,10 @@ class ApplyService:
         ).rejection(mode=route_token_mode)
         return ApplyResult.failure(detail) if detail is not None else None
 
-    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
+    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> StoredArtifact:
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
         data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
-        return ArtifactRow(
+        return StoredArtifact(
             kind=artifact.kind,
             name=artifact.name,
             data=data,
@@ -708,9 +711,9 @@ class ApplyService:
 
     def _proposal_rows(
         self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
-    ) -> list[WorkItemProposalRow]:
+    ) -> list[StampedWorkItemProposal]:
         return [
-            WorkItemProposalRow.of(
+            StampedWorkItemProposal.of(
                 p,
                 proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
                 chunk_id=chunk.chunk_id,

@@ -6,10 +6,12 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
 from blizzard.foundation.platform_tracing.attributes import CLI_SCOPE
+from blizzard.foundation.roles import domain_model
 
 RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", "blizzard-chunk", CLI_SERVICE_NAME})
 
 
+@domain_model
 @dataclass(frozen=True)
 class TracingConfig:
     """Resolved ``[tracing]`` config — the trace sweep's own knobs, each an integer

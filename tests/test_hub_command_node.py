@@ -34,7 +34,7 @@ from blizzard.hub.delivery.hub_node import (
     PrintedChoice,
     UnconvergedDeliveryError,
 )
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
@@ -417,7 +417,7 @@ def _yaml_nodes() -> dict:
 def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> None:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    artifact = ArtifactRow(
+    artifact = StoredArtifact(
         kind=ArtifactKind.GIT_COMMIT,
         name="work",
         data="blizzard/ch-x:abc123",
@@ -464,12 +464,12 @@ def _commit_row(
     repo: str = "acme/widget",
     branch: str = "feat/x",
     forge: str | None = None,
-) -> ArtifactRow:
+) -> StoredArtifact:
     """One repo's declared git pointer, as the node at ``epoch`` recorded it.
 
     ``forge`` defaults to the origin the repo's own name implies, so a fixture naming two
     repos describes two distinct origins."""
-    return ArtifactRow(
+    return StoredArtifact(
         kind=ArtifactKind.GIT_COMMIT,
         name=repo.rpartition("/")[2],  # named after the repo, never the literal produces name
         data=f"{branch}:{commit}",
@@ -487,7 +487,7 @@ def _commits_in(env: dict[str, str]) -> list[dict[str, str]]:
     return cast(list[dict[str, str]], json.loads(env["BZ_HUB_GIT_COMMITS"]))
 
 
-def _env_with(artifacts: list[ArtifactRow]) -> dict[str, str]:
+def _env_with(artifacts: list[StoredArtifact]) -> dict[str, str]:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     return HubEnv(

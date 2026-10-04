@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model, dto
 
 FACT_KINDS = frozenset(
     {
@@ -60,6 +61,7 @@ class FindingNoteRequiredError(ValueError):
         super().__init__(f"{kind!r} requires a non-empty note")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Finding:
     finding_id: str
@@ -92,6 +94,7 @@ class Finding:
     actor: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class FindingFact:
     """One `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation
@@ -108,6 +111,7 @@ class FindingFact:
     superseded_by: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class FindingLiveness:
     """The newest-fact-wins read over a finding's facts — never
@@ -157,6 +161,7 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
+@dto
 @dataclass(frozen=True)
 class FindingPage:
     """A bounded, keyset-paginated page of :meth:`IReadFindingRepository.list_page`
@@ -278,6 +283,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         ...
 
 
+@dto
 @dataclass(frozen=True)
 class FactEntry:
     """One `record_facts` row — the bulk-write shape for a single finding's fact."""
@@ -364,6 +370,7 @@ class FindingExitService:
         self._repo.record_facts(entries)
 
 
+@domain_model
 @dataclass(frozen=True)
 class FindingSet:
     """The set a delivered finding list mints, one per artifact — scope, the

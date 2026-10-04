@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from blizzard.foundation.roles import dto
+
 #: The point in a node's lifecycle an invocation is attributed to. Supplied by the
 #: caller, which knows the operation it just ran, never inferred by the adapter.
 UsageKind = Literal["spawn", "resume", "judge"]
@@ -18,6 +20,7 @@ UsageKind = Literal["spawn", "resume", "judge"]
 __all__ = ["SessionCostBasis", "UsageKind", "UsageLimit", "UsageSample", "invocation_cost"]
 
 
+@dto
 @dataclass(frozen=True)
 class UsageSample:
     """Token usage + cost for one harness invocation.
@@ -51,6 +54,7 @@ class UsageSample:
         return self.input_tokens + self.output_tokens + self.cache_read_tokens + self.cache_create_tokens
 
 
+@dto
 @dataclass(frozen=True)
 class UsageLimit:
     """One invocation classified as exited over the account's own subscription usage
@@ -68,6 +72,7 @@ class UsageLimit:
     detail: str
 
 
+@dto
 @dataclass(frozen=True)
 class SessionCostBasis:
     """What one session's banked facts establish, for reading its next reported figure."""

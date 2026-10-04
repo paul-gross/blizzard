@@ -9,14 +9,14 @@ import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, QuestionRow
+from blizzard.hub.cli.views import Listing, QuestionLine
 
 
 class QuestionListing(Listing):
     empty = "no open questions"
 
     def line(self, row: Any) -> str:
-        return QuestionRow(row).line()
+        return QuestionLine(row).line()
 
 
 @click.group("question")

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import jwt
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 
@@ -26,6 +27,7 @@ class FederationTokenError(Exception):
     audience, expired (past the leeway), malformed, or a replayed ``jti``."""
 
 
+@dto
 @dataclass(frozen=True)
 class FederatedIdentity:
     """The claims a validated federation token resolves to — what

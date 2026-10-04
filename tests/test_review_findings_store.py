@@ -16,7 +16,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.review_findings_materialize import (
     NewReviewFinding,
-    ReviewFindingFactRecord,
+    NewReviewFindingFact,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
@@ -60,7 +60,7 @@ def _plan(*, chunk_id: str = "ch_1", node_id: str = "nd_1", epoch: int = 1, at: 
                 raised_by_chunk_id="ch_1",
             )
         ],
-        facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
+        facts=[NewReviewFindingFact(finding_id="fin_1", ref="F1")],
     )
 
 
@@ -118,7 +118,7 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
                 raised_by_chunk_id="ch_1",
             )
         ],
-        facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
+        facts=[NewReviewFindingFact(finding_id="fin_1", ref="F1")],
     )
 
     outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
@@ -206,7 +206,7 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
                 raised_by_chunk_id="ch_1",
             )
         ],
-        facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
+        facts=[NewReviewFindingFact(finding_id="fin_1", ref="F1")],
     )
 
     outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)

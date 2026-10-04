@@ -18,7 +18,7 @@ from blizzard.hub.domain.analytics.operational import (
     ChunkSpendPage,
     DurationStats,
     IReadOperationalAnalytics,
-    JudgedChoiceRow,
+    JudgedChoiceCount,
     LeaseEpoch,
     MigrationMovement,
     OperationalCriteria,
@@ -394,7 +394,7 @@ class AnalyticsOperationalStore:
 
         judged = group_judged_choices(
             [
-                JudgedChoiceRow(from_node_id=r.from_node_id, choice_name=r.choice_name, occurrences=r.occurrences)
+                JudgedChoiceCount(from_node_id=r.from_node_id, choice_name=r.choice_name, occurrences=r.occurrences)
                 for r in judged_rows
             ]
         )

@@ -12,17 +12,19 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
-    from blizzard.runner.domain.leases import LeaseRecord
+    from blizzard.runner.domain.leases import Lease
 
-__all__ = ["AskRecord", "AskService", "IReadAskRepository", "IWriteAskRepository", "ParkRecord"]
+__all__ = ["AskService", "IReadAskRepository", "IWriteAskRepository", "OpenAsk", "QuestionPark"]
 
 
+@dto
 @dataclass(frozen=True)
-class AskRecord:
+class OpenAsk:
     """The worker's local open-ask fact.
 
     ``question_id`` is runner-minted so the answer polls back by it; ``session_id`` is
@@ -46,8 +48,9 @@ class AskRecord:
         return SessionReference(self.harness_id, self.session_id)
 
 
+@dto
 @dataclass(frozen=True)
-class ParkRecord:
+class QuestionPark:
     """A lease's park on a question — dormant, no live worker."""
 
     lease_id: str
@@ -59,7 +62,7 @@ class ParkRecord:
 class IReadAskRepository(Protocol):
     """Read-only ask/park queries (held by read-path edges)."""
 
-    def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
+    def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
         """The lease's newest ask not yet parked — its question_id has no park fact.
 
         Once parked, the park fact references the question_id, so the same ask is not
@@ -80,11 +83,11 @@ class IReadAskRepository(Protocol):
         The ask-park half of :meth:`parked_lease_ids`'s union."""
         ...
 
-    def open_park(self, lease_id: str) -> ParkRecord | None:
+    def open_park(self, lease_id: str) -> QuestionPark | None:
         """The lease's open park (park fact, no resume), or None — its question_id."""
         ...
 
-    def open_asks(self) -> list[AskRecord]:
+    def open_asks(self) -> list[OpenAsk]:
         """Every ask with no answer yet — forwarded-and-parked or still unforwarded.
 
         An ask is open while its ``question_id`` carries no
@@ -129,7 +132,7 @@ class AskService:
         self._clock = clock
         self._events = events
 
-    def record_ask(self, lease: LeaseRecord, *, question: str, options: list[str]) -> str:
+    def record_ask(self, lease: Lease, *, question: str, options: list[str]) -> str:
         """Record a worker's ask against its lease, minting the question id.
 
         ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""

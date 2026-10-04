@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.overload import BACKOFF_LIMIT, InvocationKind, backoff_delay
 from blizzard.runner.harness.adapter import IHarnessProviderOverload
 from blizzard.runner.harness.identity import SessionReference
@@ -31,7 +31,7 @@ _log = get_logger("blizzard.runner.loop")
 
 
 def classify_worker_overload(
-    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
+    ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
@@ -46,9 +46,7 @@ def classify_worker_overload(
     return harness.classify_provider_overload(output, lines)
 
 
-def record_worker_overload(
-    ctx: LoopContext, lease: LeaseRecord, overload: ProviderOverload, *, generation: int
-) -> bool:
+def record_worker_overload(ctx: LoopContext, lease: Lease, overload: ProviderOverload, *, generation: int) -> bool:
     """Record this worker generation's overload fact. Returns ``True`` iff the lease should
     now back off in place — ``False`` on the streak's fall-through, where the caller
     proceeds on today's ordinary path (a worker judged as usual)."""
@@ -58,7 +56,7 @@ def record_worker_overload(
 
 
 def classify_judge_overload(
-    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
+    ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
     """This generation's own judge elicitation, classified over its already-read output and
     transcript range (judge boundary to tail, shared with usage-limit classification)
@@ -73,7 +71,7 @@ def classify_judge_overload(
 
 
 def record_judge_overload(
-    ctx: LoopContext, lease: LeaseRecord, overload: ProviderOverload, *, generation: int, invocation_identity: str
+    ctx: LoopContext, lease: Lease, overload: ProviderOverload, *, generation: int, invocation_identity: str
 ) -> bool:
     """Record this judge elicitation's overload fact. Returns ``True`` iff the lease should
     now back off in place — ``False`` on the streak's fall-through, where the caller
@@ -83,7 +81,7 @@ def record_judge_overload(
     )
 
 
-def reset_if_streak_open(ctx: LoopContext, lease: LeaseRecord) -> None:
+def reset_if_streak_open(ctx: LoopContext, lease: Lease) -> None:
     """Close an open streak on a clean exit — written only when one is actually open,
     so a lease that has never overloaded never gains a reset row of its own."""
     if ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch) > 0:
@@ -92,7 +90,7 @@ def reset_if_streak_open(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 def _record(
     ctx: LoopContext,
-    lease: LeaseRecord,
+    lease: Lease,
     overload: ProviderOverload,
     *,
     generation: int,

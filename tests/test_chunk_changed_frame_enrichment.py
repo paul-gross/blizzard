@@ -92,7 +92,7 @@ def test_ingest_frame_carries_graph_id_and_omits_runner_id(tmp_path: Path) -> No
     assert "prev_status" not in frame
     assert "prev_node" not in frame
     assert "graph_id" in frame
-    # `key` matches `ActivityRow`'s `chunks:{chunk_id}` format.
+    # `key` matches `ActivityEntry`'s `chunks:{chunk_id}` format.
     assert frame["key"] == f"chunks:{chunk_id}"
 
 
@@ -132,7 +132,7 @@ def test_claim_carries_cause_claimed_and_runner_id(tmp_path: Path) -> None:
     assert frame["runner_id"] == "r1"
     assert frame["status"] == "running"
     # `key` names the freshly-created route — a table-qualified
-    # `route_created:<route_id>` natural key, matching `ActivityRow`'s format exactly.
+    # `route_created:<route_id>` natural key, matching `ActivityEntry`'s format exactly.
     assert frame["key"].startswith("route_created:")
 
 

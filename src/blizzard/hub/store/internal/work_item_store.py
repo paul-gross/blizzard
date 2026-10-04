@@ -22,11 +22,11 @@ from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
+    HubWorkItem,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemAuthorKind,
     WorkItemMaterializationOutcome,
-    WorkItemRecord,
     WorkRef,
 )
 from blizzard.hub.store import schema as s
@@ -50,14 +50,14 @@ class WorkItemStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def get(self, source: str, ref: str) -> WorkItemRecord | None:
+    def get(self, source: str, ref: str) -> HubWorkItem | None:
         with self._store.read("get") as conn:
             row = conn.execute(
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
         return self._record(row) if row is not None else None
 
-    def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
+    def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
         with self._store.read("list") as conn:
             rows = conn.execute(
                 select(s.work_items)
@@ -69,7 +69,7 @@ class WorkItemStore:
             ).all()
         return [self._record(row) for row in rows]
 
-    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
+    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, HubWorkItem]:
         """``get``'s batched sibling — ``work_items`` carries no cross-source uniqueness
         on ``ref`` alone, so pointers are grouped by ``source`` first and each source's
         refs batched through a plain single-column ``IN`` (``bzh:sql-portable``)."""
@@ -79,7 +79,7 @@ class WorkItemStore:
         for pointer in pointers:
             refs_by_source[pointer.source].append(pointer.ref)
 
-        result: dict[WorkRef, WorkItemRecord] = {}
+        result: dict[WorkRef, HubWorkItem] = {}
         with self._store.read("get_many") as conn:
             for source, refs in refs_by_source.items():
                 for batch in id_batches(refs):
@@ -100,7 +100,7 @@ class WorkItemStore:
         stated_priority: str | None,
         at: datetime,
         chunk: Chunk,
-    ) -> WorkItemRecord:
+    ) -> HubWorkItem:
         """Insert the item row and ``chunk``'s own rows on one ``engine.begin()``
         connection — the mechanism behind
         :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.create_with_chunk`'s
@@ -117,7 +117,7 @@ class WorkItemStore:
                 at=at,
             )
             insert_chunk_rows(conn, chunk)
-        return WorkItemRecord(
+        return HubWorkItem(
             work_item_id=work_item_id,
             source=pointer.source,
             ref=pointer.ref,
@@ -141,7 +141,7 @@ class WorkItemStore:
         run_mode: str,
         at: datetime,
         chunk: Chunk,
-    ) -> WorkItemRecord:
+    ) -> HubWorkItem:
         """:meth:`create_with_chunk` plus the run's own identity row
         (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`) and
         the item's run columns, on one ``engine.begin()`` connection — a routine run's own
@@ -164,7 +164,7 @@ class WorkItemStore:
             insert_run_context_row(
                 conn, work_item_id, RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode)
             )
-        record = WorkItemRecord(
+        record = HubWorkItem(
             work_item_id=work_item_id,
             source=pointer.source,
             ref=pointer.ref,
@@ -227,7 +227,7 @@ class WorkItemStore:
 
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> WorkItemRecord | None:
+    ) -> HubWorkItem | None:
         with self._store.write("edit") as conn:
             result = conn.execute(
                 update(s.work_items)
@@ -241,7 +241,7 @@ class WorkItemStore:
             ).one()
         return self._record(row)
 
-    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
+    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> HubWorkItem:
         with self._store.write("close") as conn:
             self._close_conn(conn, source, ref, closure=closure, at=at)
             row = conn.execute(
@@ -348,7 +348,7 @@ class WorkItemStore:
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
-    ) -> WorkItemRecord | None:
+    ) -> HubWorkItem | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
         ``chunk``'s own rows on one ``engine.begin()`` connection —
         :meth:`materialize_create`'s shape, the closure row checked first so an
@@ -376,7 +376,7 @@ class WorkItemStore:
                 at=at,
             )
             insert_chunk_rows(conn, chunk)
-        return WorkItemRecord(
+        return HubWorkItem(
             work_item_id=work_item_id,
             source=pointer.source,
             ref=pointer.ref,
@@ -426,7 +426,7 @@ class WorkItemStore:
         return str(row.next_ref - 1)
 
     @staticmethod
-    def _record(row) -> WorkItemRecord:  # type: ignore[no-untyped-def]
+    def _record(row) -> HubWorkItem:  # type: ignore[no-untyped-def]
         payload = json.loads(row.author_payload)
         author_kind = WorkItemAuthorKind(row.author_kind)
         author = (
@@ -436,7 +436,7 @@ class WorkItemStore:
                 runner_id=payload["runner_id"], chunk_id=payload["chunk_id"], node_name=payload["node_name"]
             )
         )
-        return WorkItemRecord(
+        return HubWorkItem(
             work_item_id=row.work_item_id,
             source=row.source,
             ref=row.ref,

@@ -9,10 +9,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
-    from blizzard.runner.domain.leases import LeaseRecord
+    from blizzard.runner.domain.leases import Lease
 
 __all__ = [
     "IReadLeaseLivenessRepository",
@@ -22,6 +23,7 @@ __all__ = [
 ]
 
 
+@dto
 @dataclass(frozen=True)
 class LeaseLivenessFacts:
     """One lease's :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` and
@@ -161,7 +163,7 @@ class LeaseLivenessService:
         self._store = store
         self._clock = clock
 
-    def record_heartbeat(self, lease: LeaseRecord) -> None:
+    def record_heartbeat(self, lease: Lease) -> None:
         """Record a lease heartbeat, stamped with the injected clock.
 
         ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""

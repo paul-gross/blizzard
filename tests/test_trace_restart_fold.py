@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.tracing.facts import MigrationRecord, RestartRecord
+from blizzard.hub.domain.tracing.facts import TracedMigration, TracedRestart
 from blizzard.hub.domain.tracing.position import movement_arrivals, position_at
 from blizzard.hub.domain.work import MigrationSource
 from tests import trace_fixtures as fx
@@ -15,8 +15,8 @@ pytestmark = pytest.mark.unit
 def _cross_graph_restart(from_node: str | None = "g1-review"):
     return fx.make_facts(
         transitions=(fx.to("g1", "review", 10, 1),),
-        migrations=(MigrationRecord(2, fx.at(20), "g1", "g2", from_node_id=from_node, source=MigrationSource.RESTART),),
-        restarts=(RestartRecord(2, fx.at(20), "g2", "g2-review", from_graph_id="g1", from_node_id=from_node),),
+        migrations=(TracedMigration(2, fx.at(20), "g1", "g2", from_node_id=from_node, source=MigrationSource.RESTART),),
+        restarts=(TracedRestart(2, fx.at(20), "g2", "g2-review", from_graph_id="g1", from_node_id=from_node),),
     )
 
 
@@ -37,9 +37,9 @@ def test_a_cross_graph_restart_counts_one_visit_at_the_destination() -> None:
 def test_a_restart_as_the_first_movement_starts_in_its_source_graph() -> None:
     facts = fx.make_facts(
         migrations=(
-            MigrationRecord(1, fx.at(10), "g1", "g2", from_node_id="g1-build", source=MigrationSource.RESTART),
+            TracedMigration(1, fx.at(10), "g1", "g2", from_node_id="g1-build", source=MigrationSource.RESTART),
         ),
-        restarts=(RestartRecord(1, fx.at(10), "g2", "g2-review", from_graph_id="g1", from_node_id="g1-build"),),
+        restarts=(TracedRestart(1, fx.at(10), "g2", "g2-review", from_graph_id="g1", from_node_id="g1-build"),),
     )
     assert position_at(facts, fx.at(5)).graph_id == "g1"
     after = position_at(facts, fx.at(15))
@@ -48,7 +48,7 @@ def test_a_restart_as_the_first_movement_starts_in_its_source_graph() -> None:
 
 def test_a_non_restart_migration_still_arrives_alongside_a_restart_elsewhere() -> None:
     facts = fx.make_facts(
-        migrations=(MigrationRecord(1, fx.at(10), "g1", "g2", from_node_id="g1-build", source=MigrationSource.INTENT),),
-        restarts=(RestartRecord(2, fx.at(20), "g2", "g2-build"),),
+        migrations=(TracedMigration(1, fx.at(10), "g1", "g2", from_node_id="g1-build", source=MigrationSource.INTENT),),
+        restarts=(TracedRestart(2, fx.at(20), "g2", "g2-build"),),
     )
     assert [(a.epoch, a.node_id) for a in movement_arrivals(facts)] == [(1, "g2-build"), (2, "g2-build")]

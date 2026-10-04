@@ -10,6 +10,7 @@ import click
 import httpx
 
 from blizzard.cli.window import replay_windows, resume_since, since_option, until_option
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -20,6 +21,7 @@ _REPLAY_TIMEOUT = 600.0
 _COLLECTOR_HINT = "point the hub at an OpenTelemetry Collector that receives OTLP over HTTP, and fan out from there"
 
 
+@dto
 @dataclass(frozen=True)
 class StatusView:
     status: dict[str, Any]

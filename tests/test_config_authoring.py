@@ -15,20 +15,20 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind, RecordRef
 from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
     RepositoryCoordinateTaken,
     RepositoryEdit,
     RepositoryFields,
     RepositoryNameTaken,
-    RepositoryRecord,
     RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
+    ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceLocatorTaken,
     WorkSourceNameTaken,
-    WorkSourceRecord,
     WorkSourceSecretUnavailable,
 )
 from blizzard.hub.domain.secrets import SecretName, SecretReferenced
@@ -76,12 +76,12 @@ class _World:
         with self.engine.connect() as conn:
             return conn.execute(select(func.count()).select_from(config_changes)).scalar_one()
 
-    def source(self, name: str = "demo") -> WorkSourceRecord:
+    def source(self, name: str = "demo") -> ConfiguredWorkSource:
         record = self.sources.get(name)
         assert record is not None
         return record
 
-    def repo(self, name: str = "demo") -> RepositoryRecord:
+    def repo(self, name: str = "demo") -> ConfiguredRepository:
         record = self.repos.get(name)
         assert record is not None
         return record

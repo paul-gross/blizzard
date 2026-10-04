@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.secrets import (
     IHubKeyProvider,
@@ -65,6 +66,7 @@ def _conforms_store_secret_reader(x: StoreSecretReader) -> ISecretReader:
     return x
 
 
+@domain_model
 @dataclass(frozen=True)
 class KeyCoverage:
     """Every key generation a stored row is sealed under that no provider generation answers."""

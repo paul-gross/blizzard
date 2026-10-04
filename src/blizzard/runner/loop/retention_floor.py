@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from blizzard.foundation.roles import domain_model
+
 #: 1/24 of the shortest retention window (a day, for heartbeats and external-usage samples), so
 #: an aged row outlives its window by at most one floor.
 RETENTION_FLOOR = timedelta(hours=1)
 
 
+@domain_model
 @dataclass
 class RetentionPasses:
     """When the last retention pass ran, held **across ticks** in memory — composition-root-owned

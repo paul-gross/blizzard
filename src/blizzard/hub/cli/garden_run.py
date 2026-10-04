@@ -12,6 +12,7 @@ import click
 import httpx
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -50,6 +51,7 @@ def run_list(cli: CliContext, since: datetime | None, until: datetime | None) ->
     cli.show(rows, RunListing(rows))
 
 
+@dto
 @dataclass(frozen=True)
 class RunDetail:
     """``run show``'s own render — identity and outcome, the open escalation when the

@@ -14,11 +14,11 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
     IWriteRepositoryRecordRepository,
     RepositoryCoordinateTaken,
     RepositoryFields,
     RepositoryNameTaken,
-    RepositoryRecord,
     RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
@@ -39,7 +39,7 @@ def _check_secret(conn: Connection, secret: str) -> None:
         raise RepositorySecretUnavailable(secret, retired=retired)
 
 
-def _coordinate_holder(conn: Connection, record: RepositoryRecord) -> str | None:
+def _coordinate_holder(conn: Connection, record: ConfiguredRepository) -> str | None:
     f = record.fields
     row = conn.execute(
         select(repositories.c.name).where(
@@ -52,12 +52,12 @@ def _coordinate_holder(conn: Connection, record: RepositoryRecord) -> str | None
     return None if row is None else row.name
 
 
-def _coordinate_taken(record: RepositoryRecord, holder: str) -> RepositoryCoordinateTaken:
+def _coordinate_taken(record: ConfiguredRepository, holder: str) -> RepositoryCoordinateTaken:
     f = record.fields
     return RepositoryCoordinateTaken(f.forge_api_url, f.owner, f.repo, holder=holder)
 
 
-def _columns(record: RepositoryRecord) -> dict[str, object]:
+def _columns(record: ConfiguredRepository) -> dict[str, object]:
     f = record.fields
     return {
         "forge_api_url": f.forge_api_url,
@@ -74,7 +74,7 @@ class RepositoryRecordStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def create(self, record: RepositoryRecord, *, change: ConfigChange) -> RepositoryRecord:
+    def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
         try:
             with self._store.write(
                 "create", expect=(RepositorySecretUnavailable, RepositoryNameTaken, RepositoryCoordinateTaken)
@@ -99,7 +99,7 @@ class RepositoryRecordStore:
             raise RepositoryNameTaken(record.name) from exc
         return record
 
-    def update(self, record: RepositoryRecord, *, from_revision: int, change: ConfigChange) -> RepositoryRecord:
+    def update(self, record: ConfiguredRepository, *, from_revision: int, change: ConfigChange) -> ConfiguredRepository:
         with self._store.write(
             "update", expect=(RepositorySecretUnavailable, RepositoryCoordinateTaken, ConfigRevisionConflict)
         ) as conn:
@@ -119,14 +119,14 @@ class RepositoryRecordStore:
 
     def record_lifecycle(
         self,
-        record: RepositoryRecord,
+        record: ConfiguredRepository,
         *,
         retired: bool,
         from_revision: int,
         at: datetime,
         by: str,
         change: ConfigChange,
-    ) -> RepositoryRecord:
+    ) -> ConfiguredRepository:
         with self._store.write(
             "record_lifecycle", expect=(RepositorySecretUnavailable, ConfigRevisionConflict)
         ) as conn:
@@ -149,10 +149,10 @@ class RepositoryRecordStore:
     def _revision(conn: Connection, name: str) -> int:
         return conn.execute(select(repositories.c.revision).where(repositories.c.name == name)).scalar_one()
 
-    def get(self, name: str) -> RepositoryRecord | None:
+    def get(self, name: str) -> ConfiguredRepository | None:
         return self.get_many([name]).get(name)
 
-    def get_many(self, names: list[str]) -> dict[str, RepositoryRecord]:
+    def get_many(self, names: list[str]) -> dict[str, ConfiguredRepository]:
         if not names:
             return {}
         with self._store.read("get_many") as conn:
@@ -162,7 +162,7 @@ class RepositoryRecordStore:
             )
         return {row.name: self._of(row, retired=row.name in retired) for row in rows}
 
-    def list_all(self, *, include_retired: bool) -> list[RepositoryRecord]:
+    def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(repositories).order_by(repositories.c.name)).all()
             retired = set(conn.execute(_retired_names_query()).scalars())
@@ -171,8 +171,8 @@ class RepositoryRecordStore:
         ]
 
     @staticmethod
-    def _of(row, *, retired: bool) -> RepositoryRecord:  # type: ignore[no-untyped-def]
-        return RepositoryRecord(
+    def _of(row, *, retired: bool) -> ConfiguredRepository:  # type: ignore[no-untyped-def]
+        return ConfiguredRepository(
             name=row.name,
             fields=RepositoryFields(
                 forge_api_url=row.forge_api_url,

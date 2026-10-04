@@ -16,15 +16,17 @@ from decimal import Context, Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = [
+    "ColumnSpec",
     "ColumnType",
-    "DatasetColumn",
     "DatasetSchema",
     "EgressBatch",
     "EgressFailure",
     "EgressFailureCause",
     "EgressPass",
-    "EgressRow",
+    "EgressValues",
     "EgressWriterSettings",
     "FilesWritten",
     "IEgressWriter",
@@ -55,23 +57,26 @@ class ColumnType(StrEnum):
     STRING_LIST = "list<string>"
 
 
+@dto
 @dataclass(frozen=True)
-class DatasetColumn:
+class ColumnSpec:
     name: str
     type: ColumnType
     nullable: bool
     meaning: str
 
 
+@dto
 @dataclass(frozen=True)
 class DatasetSchema:
     """A dataset's name, contract major version, and ordered columns."""
 
     name: str
     major_version: int
-    columns: tuple[DatasetColumn, ...]
+    columns: tuple[ColumnSpec, ...]
 
 
+@dto
 @dataclass(frozen=True)
 class EgressPass:
     """One export pass's identity: the caller's start instant (UTC), whether it is a backfill, and the hub's extractor
@@ -82,14 +87,16 @@ class EgressPass:
     extractor_version: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class EgressRow:
+class EgressValues:
     """One row's values by column name, with the opaque cursor position it was read at."""
 
     position: str
     values: Mapping[str, object]
 
 
+@dto
 @dataclass(frozen=True)
 class EgressBatch:
     """The rows of one dataset that fall in one date partition."""
@@ -97,15 +104,17 @@ class EgressBatch:
     schema: DatasetSchema
     partition: date
     egress_pass: EgressPass
-    rows: Sequence[EgressRow]
+    rows: Sequence[EgressValues]
 
 
+@dto
 @dataclass(frozen=True)
 class EgressWriterSettings:
     max_rows_per_file: int
     min_free_bytes: int = 1024**3
 
 
+@dto
 @dataclass(frozen=True)
 class PlacedFile:
     """A data file in its final place; ``path`` is relative to the export directory."""
@@ -129,6 +138,7 @@ class EgressFailureCause(StrEnum):
     HARD_LINKS_UNSUPPORTED = "hard-links-unsupported"
 
 
+@dto
 @dataclass(frozen=True)
 class EgressFailure:
     """A write that placed nothing further; ``free_bytes``/``required_bytes`` are set for ``LOW_DISK``."""
@@ -139,11 +149,13 @@ class EgressFailure:
     required_bytes: int | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class FilesWritten:
     files: tuple[PlacedFile, ...]
 
 
+@dto
 @dataclass(frozen=True)
 class ManifestCommitted:
     path: str
@@ -183,7 +195,7 @@ def _invalid(index: int, column: str, problem: str) -> EgressFailure:
     return EgressFailure(EgressFailureCause.INVALID_ROW, f"row {index}, column {column}: {problem}")
 
 
-def _value_problem(column: DatasetColumn, value: object) -> str | None:
+def _value_problem(column: ColumnSpec, value: object) -> str | None:
     if value is None:
         return None if column.nullable else "null in a non-nullable column"
     match column.type:

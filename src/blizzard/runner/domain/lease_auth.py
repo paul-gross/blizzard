@@ -10,6 +10,7 @@ import hmac
 import secrets
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
 
 __all__ = ["LeaseToken"]
@@ -18,6 +19,7 @@ __all__ = ["LeaseToken"]
 _LEASE_TOKEN_BYTES = 32
 
 
+@domain_model
 @dataclass(frozen=True)
 class LeaseToken:
     """A presented lease capability token, against the digest its lease recorded."""

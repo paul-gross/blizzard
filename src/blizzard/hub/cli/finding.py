@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -23,6 +24,7 @@ class FindingListing(Listing):
         return f"{row['finding_id']}  {marker}  class={row['class']}  {row['locus']}{suffix}"
 
 
+@dto
 @dataclass(frozen=True)
 class FindingDetail:
     body: dict[str, Any]

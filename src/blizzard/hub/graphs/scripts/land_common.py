@@ -17,6 +17,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from blizzard.foundation.roles import domain_model
+
 _HUB_USER = "blizzard-hub"
 
 # Delivery credential, restated to keep this package pure stdlib.
@@ -53,6 +55,7 @@ _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 _CLOSED_PULLS_PAGE_MAX = 10
 
 
+@domain_model
 @dataclass(frozen=True)
 class ScriptEnv:
     """The env a hub node injects (``bzh:hub-node-env-contract``) — a land script's only
@@ -120,6 +123,7 @@ class MarkerWriteError(Exception):
     over an unrecorded merge, and must not carry on to the next repo."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class MarkerWriter:
     """The run's durable marker channel, carrying its capability
@@ -202,6 +206,7 @@ def deliver_and_report(
     return 1
 
 
+@domain_model
 @dataclass(frozen=True)
 class LandRun:
     """One ``deliver`` node visit: the env the executor injected, and the two channels out
@@ -422,6 +427,7 @@ class MergeDidNotLand(Exception):
         self.result = result
 
 
+@domain_model
 @dataclass(frozen=True)
 class PullRequest:
     """One repo's PR for a chunk's branch, and the sole owner of the forge's ``pulls``

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model, dto
 
 _log = get_logger("blizzard.runner.harness")
 
@@ -27,6 +28,7 @@ _CONTEXT_OVER_200K_THRESHOLD = 200_000
 _TOKENS_PER_RATE_UNIT = 1_000_000.0
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeRate:
     """One ``cost``-shaped rate: dollars per 1,000,000 tokens, by token class. A missing
@@ -39,6 +41,7 @@ class OpenCodeRate:
     cache_write: float = 0.0
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeContextTier:
     """One ``cost.tiers[]`` entry whose ``tier.type`` is ``"context"``: ``rate`` applies once
@@ -48,6 +51,7 @@ class OpenCodeContextTier:
     rate: OpenCodeRate
 
 
+@dto
 @dataclass(frozen=True)
 class OpenCodeStepTokens:
     """One step's token counts, split the way a priced rate is."""
@@ -59,6 +63,7 @@ class OpenCodeStepTokens:
     cache_write: int = 0
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeModelPrice:
     """One model's cache entry, priceable because its ``base`` rate carries both an

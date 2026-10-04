@@ -11,10 +11,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.internal.opencode_cursor import MessagePartCursor, MessagePartIdentity, records_for_export
 from blizzard.runner.harness.internal.opencode_shapes import OpenCodeSessionExport
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptExportSample:
     """One parsed export, the phase that captured it, and whether its producer was still alive."""
@@ -25,6 +27,7 @@ class TranscriptExportSample:
     phase: Literal["turn", "compaction"] = "turn"
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptProof:
     """The observable claims required before transcript compatibility is admitted."""

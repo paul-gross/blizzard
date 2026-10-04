@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.findings import Finding, IReadFindingRepository
@@ -27,6 +28,7 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 
 
+@dto
 @dataclass(frozen=True)
 class DeliveredSet:
     """One `finding_sets` row a run delivered — the list read's own per-set shape
@@ -46,6 +48,7 @@ class DeliveredSet:
     gone_count: int
 
 
+@dto
 @dataclass(frozen=True)
 class RunEscalation:
     """The two things an escalated run carries, and nothing else (the hub records no
@@ -58,8 +61,9 @@ class RunEscalation:
     wrapped_takeover_command: str
 
 
+@dto
 @dataclass(frozen=True)
-class RunRow:
+class RunSummary:
     """One run in a time window — `list_runs`'s own row."""
 
     chunk_id: str
@@ -72,6 +76,7 @@ class RunRow:
     delivered: list[DeliveredSet]
 
 
+@dto
 @dataclass(frozen=True)
 class AddedFinding:
     """One `add` op a delivered set's artifact named — `finding_id` is the finding it
@@ -85,6 +90,7 @@ class AddedFinding:
     introduced: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class ObservedFinding:
     """One `observed` op a delivered set's artifact named. The artifact repeats no
@@ -98,6 +104,7 @@ class ObservedFinding:
     summary: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class GoneFinding:
     """One `gone` op a delivered set's artifact named."""
@@ -106,6 +113,7 @@ class GoneFinding:
     note: str
 
 
+@dto
 @dataclass(frozen=True)
 class DeliveredSetDelta:
     """One delivered set's own published delta — added, observed, and gone kept as
@@ -119,6 +127,7 @@ class DeliveredSetDelta:
     gone: list[GoneFinding]
 
 
+@dto
 @dataclass(frozen=True)
 class RunDelta:
     """One run's full detail — `run_delta`'s own read: its identity, its derived
@@ -134,6 +143,7 @@ class RunDelta:
     sets: list[DeliveredSetDelta]
 
 
+@dto
 @dataclass(frozen=True)
 class RunIdentity:
     """One chunk's own run identity, joined through its `chunk_work_refs`/`work_items`
@@ -146,8 +156,9 @@ class RunIdentity:
     minted_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class RunRecord:
+class RunDeliveries:
     """One run in a time window, plus every `finding_sets` row it delivered —
     `runs_in_window`'s own row, before outcome is derived from the chunk's own facts."""
 
@@ -155,6 +166,7 @@ class RunRecord:
     delivered: list[DeliveredSet]
 
 
+@dto
 @dataclass(frozen=True)
 class DeliveredSetRaw:
     """One delivered set's own artifact text, plus the finding ids its `add` facts
@@ -169,7 +181,7 @@ class DeliveredSetRaw:
 
 
 class IReadGardenRunRepository(Protocol):
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunRecord]:
+    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
         """Every `work_item_runs`-backed chunk minted in `[since, until)`, newest first
         (an explicit SQL `order_by`, never incidental row order) — each with the
         `finding_sets` rows it delivered, if any."""
@@ -301,7 +313,7 @@ class GardenRunService:
         self._chunk_facts = chunk_facts
         self._findings = findings
 
-    def list_runs(self, *, since: datetime, until: datetime) -> list[RunRow]:
+    def list_runs(self, *, since: datetime, until: datetime) -> list[RunSummary]:
         """One bulk `get_many` and one bulk `load_facts_for` resolve every window run's
         chunk and chunk facts (`bzh:bulk-reconstitution`) — `records` is already the
         window's own bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost
@@ -310,7 +322,7 @@ class GardenRunService:
         chunk_ids = [record.identity.chunk_id for record in records]
         chunks_by_id = self._chunk_records.get_many(chunk_ids)
         facts_by_id = self._chunk_facts.load_facts_for(chunk_ids)
-        rows: list[RunRow] = []
+        rows: list[RunSummary] = []
         for record in records:
             chunk = chunks_by_id.get(record.identity.chunk_id)
             if chunk is None:
@@ -318,7 +330,7 @@ class GardenRunService:
             facts = facts_by_id.get(record.identity.chunk_id) or ChunkFacts(minted=True)
             outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
             rows.append(
-                RunRow(
+                RunSummary(
                     chunk_id=record.identity.chunk_id,
                     routine_name=record.identity.routine_name,
                     scope_slug=record.identity.scope_slug,

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.auth_core import Role
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.config import RunnerConfig
 
 #: ``[auth].hub_role_default`` sentinel meaning "reproduce the hub's own claimed role"
@@ -17,6 +18,7 @@ from blizzard.runner.config import RunnerConfig
 MIRROR = "mirror"
 
 
+@domain_model
 @dataclass(frozen=True)
 class LocalRole:
     """A hub-federated ``username``/``hub_role`` pair, resolved against this runner's config.

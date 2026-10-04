@@ -14,7 +14,10 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
 
+
+@dto
 @dataclass(frozen=True)
 class Event:
     """One broadcast event: its monotonic id, its type, and its JSON payload."""

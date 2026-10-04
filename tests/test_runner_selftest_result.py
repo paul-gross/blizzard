@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, SelfTestResultRecord
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -67,7 +67,7 @@ class _SlowWriter:
     def __init__(self, store: IWriteSelfTestResultRepository) -> None:
         self._store = store
 
-    def latest_selftest_result(self, harness_id: str) -> SelfTestResultRecord | None:
+    def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         return self._store.latest_selftest_result(harness_id)
 
     def record_selftest_result(self, *, harness_id: str, status: str, error: str | None, recorded_at: datetime) -> None:

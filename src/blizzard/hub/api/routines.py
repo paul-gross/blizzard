@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -127,6 +128,7 @@ def _require_until_after_since(since: datetime, until: datetime) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
 
 
+@dto
 @dataclass(frozen=True)
 class _TrendWindow:
     """One ``GET /routines/trend`` request's parsed window (`SpendWindow`'s own shape,
@@ -435,6 +437,7 @@ def enable_routine(
     return _routine_view(routine, retired=False)
 
 
+@dto
 @dataclass(frozen=True)
 class _SweepWindow:
     """One ``GET /routines/{routine_id}/sweeps`` request's parsed window — the

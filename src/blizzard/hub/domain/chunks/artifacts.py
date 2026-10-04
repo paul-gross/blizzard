@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliverySources
 
@@ -15,7 +15,7 @@ from blizzard.hub.domain.delivery_read import DeliverySources
 class IReadChunkArtifactsRepository(Protocol):
     """Read-only chunk-artifacts access."""
 
-    def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
+    def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
         ...
 
@@ -24,12 +24,12 @@ class IReadChunkArtifactsRepository(Protocol):
         per-repo landing hashes and PR closures, batched by caller-supplied ids."""
         ...
 
-    def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
+    def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
         """The chunk's newest artifact row named ``name`` — highest epoch, then latest
         ``produced_at``. ``None`` when no artifact of that name exists."""
         ...
 
-    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, ArtifactRow]:
+    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, StoredArtifact]:
         """`latest_artifact`'s batched sibling (`bzh:bulk-reconstitution`) — each name's
         newest row, keyed by name, the same row `latest_artifact` picks. A name with no
         artifact is dropped."""

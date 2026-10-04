@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.git_commit_declaration import (
-    GitCommitDeclarationRecord,
+    GitCommitDeclaration,
     IWriteGitCommitDeclarationRepository,
 )
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -23,7 +23,7 @@ class GitCommitDeclarationStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
         newest = (
             select(
                 git_commit_declarations.c.environment_id,
@@ -41,7 +41,7 @@ class GitCommitDeclarationStore:
             git_commit_declarations.c.commit,
         ).join(newest, git_commit_declarations.c.id == newest.c.id)
         return {
-            (str(r.environment_id), str(r.repo)): GitCommitDeclarationRecord(
+            (str(r.environment_id), str(r.repo)): GitCommitDeclaration(
                 environment_id=str(r.environment_id),
                 repo=str(r.repo),
                 branch=str(r.branch),

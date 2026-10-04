@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
@@ -22,6 +23,7 @@ __all__ = [
 ]
 
 
+@dto
 @dataclass(frozen=True)
 class ContextSampleState:
     """What a lease's recorded context samples establish so far — the sampler's own memory."""
@@ -32,6 +34,7 @@ class ContextSampleState:
     max_context_tokens: int | None
 
 
+@dto
 @dataclass(frozen=True)
 class ExternalUsageAttemptSummary:
     """This ``slug``'s own newest sampling attempt — what the probe, ``runner
@@ -46,6 +49,7 @@ class ExternalUsageAttemptSummary:
     renewal: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class InvocationCost:
     """The two cost figures one usage fact persists, decided by :func:`derive_invocation_cost`."""
@@ -69,6 +73,7 @@ def derive_invocation_cost(sample: UsageSample, basis: SessionCostBasis | None) 
     )
 
 
+@dto
 @dataclass(frozen=True)
 class UsageTotals:
     """A summed window of usage facts. ``cost_partial`` carries the

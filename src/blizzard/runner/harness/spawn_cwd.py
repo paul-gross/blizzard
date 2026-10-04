@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 
+
+@domain_model
 @dataclass(frozen=True)
 class SpawnCwd:
     """The cwd a worker was spawned into: ``workspace_root`` if set, else the fallback.

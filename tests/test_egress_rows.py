@@ -9,10 +9,10 @@ from decimal import Decimal
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, money, step_row
+from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, money, step_row
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.facts import DecisionRecord, DecisionResolutionRecord, QuestionRecord, StepFacts
+from blizzard.hub.domain.tracing.facts import StepFacts, TracedDecision, TracedDecisionResolution, TracedQuestion
 from blizzard.hub.domain.tracing.steps import StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.tracing.summary import StepSummary, summarize_step
 from tests import trace_fixtures as fx
@@ -46,13 +46,13 @@ def _all() -> list[tuple[str, StepSummary]]:
     return [(name, summary) for name, facts in fx.scenarios().items() for summary in _summaries(facts)]
 
 
-def _usage_row(fact: object, usage_id: int = 1, chunk_id: str = "ch_1") -> UsageRow:
-    return UsageRow(usage_id, chunk_id, "r-1", fact)  # type: ignore[arg-type]
+def _usage_row(fact: object, usage_id: int = 1, chunk_id: str = "ch_1") -> AttributedUsage:
+    return AttributedUsage(usage_id, chunk_id, "r-1", fact)  # type: ignore[arg-type]
 
 
 def test_row_fields_are_the_contract_columns_in_order() -> None:
-    assert [f.name for f in fields(StepRow)] == STEP_COLUMNS
-    assert [f.name for f in fields(InvocationRow)] == INVOCATION_COLUMNS
+    assert [f.name for f in fields(ExportedStep)] == STEP_COLUMNS
+    assert [f.name for f in fields(ExportedInvocation)] == INVOCATION_COLUMNS
 
 
 @pytest.mark.parametrize(("name", "summary"), _all(), ids=lambda v: v if isinstance(v, str) else v.step_key.text())
@@ -188,7 +188,7 @@ def test_an_open_steps_invocation_matches_its_row_once_it_closes() -> None:
 def test_an_invocation_row_renames_its_usage_fact() -> None:
     fact = fx.usage(cost_usd=None, estimated_cost_usd=0.25, harness_id=None, harness_version=None)
     facts = fx.make_facts(usage=(fact,), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
-    row = fx.invocation_of(facts, UsageRow(7, "ch_1", "r-9", fact), EXPORTED)
+    row = fx.invocation_of(facts, AttributedUsage(7, "ch_1", "r-9", fact), EXPORTED)
     assert (row.usage_id, row.runner_id, row.kind, row.model) == (7, "r-9", "spawn", "claude-x")
     assert (row.harness_id, row.harness_version) == (None, None)
     assert (row.cost_billed_usd, row.cost_estimated_usd) == (None, Decimal("0.25"))
@@ -221,23 +221,23 @@ def _planted() -> StepFacts:
         work_refs=("blizzard#1",),
         work_sources=("blizzard",),
         usage=(fx.usage(),),
-        questions=(QuestionRecord("q1", 1, fx.at(15), fx.at(16)),),
-        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
-        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
+        questions=(TracedQuestion("q1", 1, fx.at(15), fx.at(16)),),
+        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
+        decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
         transitions=(fx.to("g1", "review", 90, 2, decision_id="d1", choice_name="approve"),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 70)),
     )
 
 
-def scan(rows: list[StepRow | InvocationRow], needle: str) -> list[str]:
+def scan(rows: list[ExportedStep | ExportedInvocation], needle: str) -> list[str]:
     """The column of every value, anywhere in any row, that carries ``needle``."""
     return [f.name for row in rows for f in fields(row) if needle in repr(getattr(row, f.name))]
 
 
 def test_planted_content_never_reaches_a_row() -> None:
     planted = _planted()
-    rows: list[StepRow | InvocationRow] = [step_row(s, EXPORTED) for s in _summaries(planted)]
-    assert {r.step_kind for r in rows if isinstance(r, StepRow)} == {"runner", "gate"}
+    rows: list[ExportedStep | ExportedInvocation] = [step_row(s, EXPORTED) for s in _summaries(planted)]
+    assert {r.step_kind for r in rows if isinstance(r, ExportedStep)} == {"runner", "gate"}
     rows += [fx.invocation_of(planted, _usage_row(u), EXPORTED) for u in planted.usage]
     assert len(rows) >= 3
     assert scan(rows, SENTINEL) == []

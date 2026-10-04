@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import USER_MANAGE
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolve_identity
 from blizzard.hub.api.deps import get_services
@@ -39,6 +40,7 @@ _CLI_LOOPBACK_REDIRECT_RE = re.compile(r"^http://127\.0\.0\.1:\d+/callback$")
 CLI_OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 
 
+@domain_model
 @dataclass(frozen=True)
 class CliRedirect:
     """The ``cli`` client id's built-in redirect form — an ephemeral ``127.0.0.1``
@@ -55,6 +57,7 @@ class CliRedirect:
         return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
+@domain_model
 @dataclass(frozen=True)
 class IdpSurface:
     """The hub's own IdP, resolved for one request — absent, and so a ``404``, without an
@@ -84,6 +87,7 @@ class IdpSurface:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
 
 
+@dto
 @dataclass(frozen=True)
 class Delivery:
     """One rendered handoff of an authorize result back to the client that asked for it."""
@@ -108,6 +112,7 @@ class Delivery:
         raise NotImplementedError
 
 
+@dto
 @dataclass(frozen=True)
 class PasteCode(Delivery):
     """The out-of-band fallback: the code rendered for the operator to copy by hand."""
@@ -125,6 +130,7 @@ class PasteCode(Delivery):
         return HTMLResponse(body)
 
 
+@dto
 @dataclass(frozen=True)
 class LoopbackCode(Delivery):
     """The loopback callback: a ``302`` carrying the code in the query string."""
@@ -137,6 +143,7 @@ class LoopbackCode(Delivery):
         return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
 
 
+@dto
 @dataclass(frozen=True)
 class FragmentToken(Delivery):
     """A client-side redirect that carries the token in the URL fragment."""
@@ -152,6 +159,7 @@ class FragmentToken(Delivery):
         return HTMLResponse(body)
 
 
+@dto
 @dataclass(frozen=True)
 class FormPostToken(Delivery):
     """An auto-submitting form that POSTs the token to the redirect target."""

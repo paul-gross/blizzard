@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.auth_core import Role
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 
 _COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
@@ -25,6 +26,7 @@ _COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
 SESSION_TTL = timedelta(hours=8)
 
 
+@domain_model
 @dataclass(frozen=True)
 class CookieNames:
     """The runner's cookie names, namespaced by ``runner_id``. Browsers scope cookies by host and
@@ -50,6 +52,7 @@ class CookieNames:
         return f"bz_runner_bounce_return_{self._suffix}"
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunnerSession:
     username: str
@@ -58,6 +61,7 @@ class RunnerSession:
     expires_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class SessionCookie:
     """The cookie's two halves — a base64url JSON payload and its HMAC-SHA256 tag — under

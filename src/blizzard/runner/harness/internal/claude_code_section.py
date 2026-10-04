@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 
@@ -21,6 +22,7 @@ ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
 
 
+@dto
 @dataclass(frozen=True)
 class ClaudeCodeSection:
     """Claude Code's parsed section."""
@@ -78,6 +80,7 @@ class ClaudeCodeSection:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class ClaudeCodeSectionKind:
     """Reads, defaults, and scaffolds :class:`ClaudeCodeSection`."""

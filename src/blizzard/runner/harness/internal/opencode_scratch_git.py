@@ -15,9 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 
 
+@dto
 @dataclass(frozen=True)
 class OpenCodeScratchRepo:
     """An initialized, single-commit repository for one compatibility run."""

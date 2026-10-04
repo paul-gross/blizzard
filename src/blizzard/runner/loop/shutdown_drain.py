@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.owned_process import IOwnedProcessControl, interrupt_owned_process
 
 _log = get_logger("blizzard.runner.loop")
@@ -33,7 +33,7 @@ class ShutdownDrain:
     sleep: Callable[[float], None]
     deadline_seconds: float = SHUTDOWN_DRAIN_DEADLINE
 
-    def run(self, leases: Sequence[LeaseRecord]) -> None:
+    def run(self, leases: Sequence[Lease]) -> None:
         pgids: set[int] = set()
         for lease in leases:
             if self._interrupt(lease):
@@ -57,7 +57,7 @@ class ShutdownDrain:
             killed=len(survivors),
         )
 
-    def _interrupt(self, lease: LeaseRecord) -> bool:
+    def _interrupt(self, lease: Lease) -> bool:
         """The shared guarded interrupt over this lease's recorded group — ``False`` for a
         lease with nothing recorded to signal (no pgid, or an already-dead leader)."""
         return interrupt_owned_process(

@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -48,6 +49,7 @@ class ChunkNotFoundError(HubClientError):
     :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
 
 
+@dto
 @dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /

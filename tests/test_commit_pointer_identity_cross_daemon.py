@@ -15,7 +15,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -83,7 +83,7 @@ def _deliver_payload(tmp_path: Path, submitted: list[SubmittedArtifact]) -> list
     hub = build_hub(tmp_path / "hub", hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
     chunk_id, nodes = _mint_and_claim(hub)
     rows = [
-        ArtifactRow(
+        StoredArtifact(
             kind=ArtifactKind.GIT_COMMIT,
             name=a.name,
             data=f"{a.branch_name}:{a.commit_hash}",

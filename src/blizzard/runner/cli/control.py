@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import click
 
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.roles import dto
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
@@ -44,6 +45,7 @@ def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str 
         )
 
 
+@dto
 @dataclass(frozen=True)
 class SessionLabel:
     """A parked session's identity as a trailing clause — ``"  session=code (opus, high)"``.

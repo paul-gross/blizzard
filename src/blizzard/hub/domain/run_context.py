@@ -6,9 +6,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.work import Chunk
 
 
+@dto
 @dataclass(frozen=True)
 class RunContext:
     routine_name: str

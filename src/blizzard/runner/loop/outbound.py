@@ -10,8 +10,8 @@ from datetime import datetime
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.asks import AskRecord
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.asks import OpenAsk
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.outbound import event_payload
 from blizzard.runner.loop.context import LoopContext
 from blizzard.wire.completion import CompletionSubmission
@@ -52,7 +52,7 @@ class OutboundFacts:
 
     def escalation(
         self,
-        lease: LeaseRecord,
+        lease: Lease,
         *,
         takeover: str,
         wrapped_takeover: str,
@@ -73,7 +73,7 @@ class OutboundFacts:
         }
         self._enqueue(ESCALATION_RECORDED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def question_asked(self, lease: LeaseRecord, ask: AskRecord, *, at: datetime) -> None:
+    def question_asked(self, lease: Lease, ask: OpenAsk, *, at: datetime) -> None:
         payload = {
             "question_id": ask.question_id,
             "chunk_id": lease.chunk_id,
@@ -89,15 +89,15 @@ class OutboundFacts:
         }
         self._enqueue(QUESTION_ASKED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def answer_delivered(self, lease: LeaseRecord, question_id: str, *, at: datetime) -> None:
+    def answer_delivered(self, lease: Lease, question_id: str, *, at: datetime) -> None:
         payload = {"chunk_id": lease.chunk_id, "question_id": question_id}
         self._enqueue(ANSWER_DELIVERED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def completion(self, lease: LeaseRecord, submission: CompletionSubmission, *, at: datetime) -> None:
+    def completion(self, lease: Lease, submission: CompletionSubmission, *, at: datetime) -> None:
         payload = {"submission": submission.model_dump(mode="json")}
         self._enqueue(COMPLETION_KIND, lease.chunk_id, lease.lease_id, payload, at)
 
-    def decision(self, lease: LeaseRecord, submission: DecisionSubmission, *, at: datetime) -> None:
+    def decision(self, lease: Lease, submission: DecisionSubmission, *, at: datetime) -> None:
         payload = {"submission": submission.model_dump(mode="json")}
         self._enqueue(DECISION_KIND, lease.chunk_id, lease.lease_id, payload, at)
 

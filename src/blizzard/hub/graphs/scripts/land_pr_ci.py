@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.graphs.scripts.land_common import (
     ForgeReadDegraded,
     LandedRevisionUnknown,
@@ -79,6 +80,7 @@ _OWN = "own"
 _INHERITED = "inherited"
 
 
+@domain_model
 @dataclass(frozen=True)
 class Route:
     """Where one repo goes, from its PR's live ``(merged, mergeable_state, verdict)`` —
@@ -106,6 +108,7 @@ class Route:
         return _WAIT
 
 
+@domain_model
 @dataclass(frozen=True)
 class Verdict:
     """One ref's live check runs, classified. ``None`` is a degraded read —
@@ -192,6 +195,7 @@ class Verdict:
         ]
 
 
+@domain_model
 @dataclass(frozen=True)
 class HeadGate:
     """Whether a live PR head is still the submitted work; ``offenders`` names what broke it."""
@@ -309,6 +313,7 @@ def _rerun_marker(repo: str, name: str, head_sha: str) -> str:
     return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
 
 
+@dto
 @dataclass(frozen=True)
 class Findings:
     """The ``delivery-findings`` marker body — plain markdown a resolve worker reads, not
@@ -320,6 +325,7 @@ class Findings:
         return "\n\n".join(_Section.of(record).render() for record in self.records)
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Section:
     """One repo's section: a header, a label, and one line per check."""
@@ -646,6 +652,7 @@ def _land() -> int:
     return 0
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Table:
     """One selftest table: its cases printed a line each, then a PASS/FAIL tally."""

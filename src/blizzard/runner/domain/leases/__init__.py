@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.leases import LeaseState
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.leases.liveness import (
     IReadLeaseLivenessRepository,
@@ -47,8 +48,8 @@ if TYPE_CHECKING:
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
     "RECENT_LEASE_LIMIT",
+    "ClosedLease",
     "ClosedLeaseActivity",
-    "ClosedLeaseRecord",
     "IProcessProbe",
     "IReadLeaseLivenessRepository",
     "IReadLeaseRecordRepository",
@@ -58,9 +59,9 @@ __all__ = [
     "IWriteLeaseRecordRepository",
     "IWriteLeaseResumeIntentRepository",
     "IWriteLeaseSessionRepository",
+    "Lease",
     "LeaseActivity",
     "LeaseLivenessFacts",
-    "LeaseRecord",
     "Liveness",
     "LocalLeaseService",
     "NewLease",
@@ -70,6 +71,7 @@ __all__ = [
 ]
 
 
+@dto
 @dataclass(frozen=True)
 class WorkRefStamp:
     """One work ref as the mint's envelope delivered it; ``label`` is the hub-rendered source-native
@@ -80,6 +82,7 @@ class WorkRefStamp:
     label: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class NewLease:
     """A node-step lease at mint — before the worker exists."""
@@ -104,6 +107,7 @@ class NewLease:
     work_refs: tuple[WorkRefStamp, ...] | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class PoolHead:
     """A named session pool's current head. ``resolved_model``/
@@ -121,8 +125,9 @@ class PoolHead:
         return SessionReference(harness_id=self.harness_id, session_id=self.session_id)
 
 
+@domain_model
 @dataclass(frozen=True)
-class LeaseRecord:
+class Lease:
     """A lease joined with its node context — the loop's per-attempt fact.
 
     ``pid`` / ``process_start_time`` / ``session_id`` are ``None`` until spawn-return."""
@@ -161,14 +166,15 @@ class LeaseRecord:
         return SessionReference(harness_id=self.harness_id, session_id=self.session_id)
 
 
+@dto
 @dataclass(frozen=True)
-class ClosedLeaseRecord:
+class ClosedLease:
     """A lease joined with its closure fact — the panel's recent-history read.
     ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
     ``escalated`` | ``parked`` | ``released`` | ``owner-unresolvable-mint`` | ``no-acceptable-harness-mint``
     (both zero-budget, minted only to escalate a resume owner or mint selection that failed)."""
 
-    lease: LeaseRecord
+    lease: Lease
     reason: str
     closed_at: datetime
 
@@ -192,6 +198,7 @@ class _Unread:
 _UNREAD = _Unread()
 
 
+@domain_model
 @dataclass(frozen=True)
 class Liveness:
     """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
@@ -205,7 +212,7 @@ class Liveness:
     def of(
         cls,
         store: IReadLeaseLivenessRepository,
-        lease: LeaseRecord,
+        lease: Lease,
         *,
         heartbeat: datetime | None | _Unread = _UNREAD,
         spawn: datetime | None | _Unread = _UNREAD,
@@ -230,13 +237,14 @@ class Liveness:
 # --- Derived lease state — the panel's read model ----------------
 
 
+@dto
 @dataclass(frozen=True)
 class LeaseActivity:
     """An active lease with the facts its state derives from, plus its binding — the panel's read model.
 
     A closed lease is a :class:`ClosedLeaseActivity` instead, so it cannot carry liveness facts."""
 
-    lease: LeaseRecord
+    lease: Lease
     parked: bool
     alive: bool
     stale: bool
@@ -270,11 +278,12 @@ class LeaseActivity:
         return "running"
 
 
+@dto
 @dataclass(frozen=True)
 class ClosedLeaseActivity:
     """A closed lease and its closure fact — no liveness facts, no binding (long released)."""
 
-    lease: LeaseRecord
+    lease: Lease
     closed_at: datetime
     closure_reason: str
 
@@ -374,7 +383,7 @@ class LocalLeaseService:
             for record in self._stores.lease_record.list_closed_leases(self._recent_limit)
         ]
 
-    def _is_alive(self, lease: LeaseRecord) -> bool:
+    def _is_alive(self, lease: Lease) -> bool:
         if lease.pid is None:
             return False  # spawning — `LeaseActivity.state` short-circuits before this matters
         return self._process.is_alive(lease.pid, lease.process_start_time or "")

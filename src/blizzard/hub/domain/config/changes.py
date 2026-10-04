@@ -11,6 +11,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 
 class Door(StrEnum):
     """The surface a write arrived through. ``apply`` and ``migration`` are set
@@ -37,6 +39,7 @@ class ChangeOp(StrEnum):
     REPLACE = "replace"
 
 
+@dto
 @dataclass(frozen=True)
 class ChangeContext:
     """Who is writing and through which door — built at the edge, never from a body field."""
@@ -45,6 +48,7 @@ class ChangeContext:
     door: Door
 
 
+@dto
 @dataclass(frozen=True)
 class FieldChange:
     """One field's change, named by its wire name."""
@@ -54,6 +58,7 @@ class FieldChange:
     new: object
 
 
+@dto
 @dataclass(frozen=True)
 class ConfigChange:
     """One row of the change log. ``id`` is ``None`` until the store assigns it."""
@@ -70,6 +75,7 @@ class ConfigChange:
     id: int | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class RecordRef:
     """A configured record named by kind and key."""

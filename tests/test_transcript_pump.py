@@ -44,7 +44,7 @@ from blizzard.runner.loop.transcript_pump import (
 )
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
-    TranscriptSegmentLedgerRow,
+    TranscriptSegmentState,
 )
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.runner_fakes import (
@@ -85,10 +85,10 @@ def _empty_edits_over_cap(fraction: float) -> int:
     return _cap_share(fraction) // per_edit
 
 
-def _ledger_row_stub() -> TranscriptSegmentLedgerRow:
+def _ledger_row_stub() -> TranscriptSegmentState:
     """The ledger fields `_build_records` reads off a segment. Typed as the real row so a
     field added to that seam fails `blizzard:typecheck`, not at runtime inside a test."""
-    return TranscriptSegmentLedgerRow(
+    return TranscriptSegmentState(
         segment_id="seg_x",
         chunk_id="ch_1",
         node_id="nd_build",

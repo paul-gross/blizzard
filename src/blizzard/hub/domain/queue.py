@@ -20,6 +20,7 @@ from enum import Enum
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
@@ -61,6 +62,7 @@ class QueueMatchPolicy(Enum):
         return cls.HOLD if value == cls.HOLD.value else cls.PASS_OVER
 
 
+@dto
 @dataclass(frozen=True)
 class MatchedEntry:
     """The one ready chunk :func:`select_matched_entry` returns, at its own position in
@@ -155,6 +157,7 @@ def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
     return float(parts[0]), parts[1]
 
 
+@dto
 @dataclass(frozen=True)
 class QueueEntry:
     """One paged queue/backlog row — the chunk plus its absolute
@@ -164,6 +167,7 @@ class QueueEntry:
     position: int
 
 
+@dto
 @dataclass(frozen=True)
 class QueuePage:
     """A bounded, keyset-paginated page of :meth:`QueueService.page` —
@@ -317,6 +321,7 @@ class QueueService:
         return promoted_at.timestamp() if promoted_at is not None else chunk.minted_at.timestamp()
 
 
+@dto
 @dataclass(frozen=True)
 class GroupResult:
     """A completed group: the survivor and the status it is left at.

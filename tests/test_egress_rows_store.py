@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, step_row
+from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
@@ -138,11 +138,13 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
     steps = identify_steps(facts)
     closed = [st for st in steps if st.close is not None]
     assert {st.kind for st in closed} == {StepKind.RUNNER, StepKind.GATE}
-    rows: list[StepRow | InvocationRow] = [step_row(summarize_step(facts, st, steps), hub.clock.now()) for st in closed]
-    rows += [fx.invocation_of(facts, UsageRow(1, chunk_id, "r1", u), hub.clock.now()) for u in facts.usage]
+    rows: list[ExportedStep | ExportedInvocation] = [
+        step_row(summarize_step(facts, st, steps), hub.clock.now()) for st in closed
+    ]
+    rows += [fx.invocation_of(facts, AttributedUsage(1, chunk_id, "r1", u), hub.clock.now()) for u in facts.usage]
 
     assert len(facts.usage) == 1
-    assert any(isinstance(r, StepRow) and r.asks == 1 for r in rows)
+    assert any(isinstance(r, ExportedStep) and r.asks == 1 for r in rows)
     blob = " ".join(repr(getattr(row, f.name)) for row in rows for f in fields(row))
     assert chunk_id in blob
     leaked = [kind for kind, needle in SENTINELS.items() if needle in blob]

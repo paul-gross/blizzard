@@ -10,10 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 
+from blizzard.foundation.roles import domain_model
+
 _XFF_HEADER = "x-forwarded-for"
 _XFP_HEADER = "x-forwarded-proto"
 
 
+@domain_model
 @dataclass(frozen=True)
 class TrustedProxies:
     """The configured reverse-proxy trust set. ``networks`` is empty by default, in which case every

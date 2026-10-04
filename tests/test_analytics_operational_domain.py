@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.domain.analytics.operational import (
-    JudgedChoiceRow,
+    JudgedChoiceCount,
     LeaseEpoch,
     MigrationMovement,
     MissingGraphFact,
@@ -26,7 +26,7 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
-from blizzard.hub.domain.analytics.queries import CountRow, fold_counts_by_name
+from blizzard.hub.domain.analytics.queries import KeyedCount, fold_counts_by_name
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import UsageTotal
 
@@ -431,9 +431,9 @@ def test_fold_step_durations_then_steps_in_window_does_not_break_a_chained_epoch
 def test_group_judged_choices_groups_by_node_then_choice() -> None:
     """The judged-distribution grouping is a domain fold, not adapter-only logic."""
     rows = [
-        JudgedChoiceRow(from_node_id="nd_build", choice_name="pass", occurrences=3),
-        JudgedChoiceRow(from_node_id="nd_build", choice_name="fail", occurrences=1),
-        JudgedChoiceRow(from_node_id="nd_review", choice_name="pass", occurrences=2),
+        JudgedChoiceCount(from_node_id="nd_build", choice_name="pass", occurrences=3),
+        JudgedChoiceCount(from_node_id="nd_build", choice_name="fail", occurrences=1),
+        JudgedChoiceCount(from_node_id="nd_review", choice_name="pass", occurrences=2),
     ]
 
     assert group_judged_choices(rows) == {
@@ -571,12 +571,12 @@ def test_spend_folds_graph_rows_by_graph_name() -> None:
 
 def test_counts_fold_sums_and_orders_by_count_then_key() -> None:
     rows = [
-        CountRow("nd_1", 2, "adv", "build"),
-        CountRow("nd_2", 3, "adv", "build"),
-        CountRow("nd_3", 5, "bas", "build"),
-        CountRow("nd_4", 5),
-        CountRow("nd_5", 7, "cas", "review"),
-        CountRow("nd_6", 1, "cas", "build"),
+        KeyedCount("nd_1", 2, "adv", "build"),
+        KeyedCount("nd_2", 3, "adv", "build"),
+        KeyedCount("nd_3", 5, "bas", "build"),
+        KeyedCount("nd_4", 5),
+        KeyedCount("nd_5", 7, "cas", "review"),
+        KeyedCount("nd_6", 1, "cas", "build"),
     ]
 
     folded = fold_counts_by_name(rows)

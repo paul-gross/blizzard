@@ -14,10 +14,11 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.egress.event_rows import missing_key_reason
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, EventsPosition, IWriteEgressCursor, UsagePosition
+from blizzard.hub.domain.egress.repository import EgressCheckpoint, EventsPosition, IWriteEgressCursor, UsagePosition
 from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import CursorKey
@@ -31,6 +32,7 @@ class ResetUnavailable(Exception):
     """The export is off or rejected, so there is no cursor to move."""
 
 
+@dto
 @dataclass(frozen=True)
 class ResetResult:
     """``previous`` is where the dataset stood, ``None`` before its first pass; ``direction`` says whether the
@@ -98,18 +100,18 @@ class EgressReset:
         return ResetResult(dataset, previous, to, direction)
 
 
-def _moved(dataset: str, to: datetime, now: datetime) -> EgressCursorRecord:
+def _moved(dataset: str, to: datetime, now: datetime) -> EgressCheckpoint:
     """``dataset``'s cursor at ``to``: before every fact at or after it, in that dataset's own order."""
     if dataset == STEPS_SCHEMA.name:
-        return EgressCursorRecord(dataset, CursorKey.opening(to), UsagePosition(to), 0, (), now)
+        return EgressCheckpoint(dataset, CursorKey.opening(to), UsagePosition(to), 0, (), now)
     if dataset == INVOCATIONS_SCHEMA.name:
-        return EgressCursorRecord(dataset, None, UsagePosition(to), 0, (), now)
+        return EgressCheckpoint(dataset, None, UsagePosition(to), 0, (), now)
     if dataset == EVENTS_SCHEMA.name:
-        return EgressCursorRecord(dataset, None, UsagePosition(to), 0, (), now, EventsPosition(to))
+        return EgressCheckpoint(dataset, None, UsagePosition(to), 0, (), now, EventsPosition(to))
     raise ResetRefused(f"no cursor to reset for dataset {dataset!r}")
 
 
-def _position_at(cursor: EgressCursorRecord | None) -> datetime | None:
+def _position_at(cursor: EgressCheckpoint | None) -> datetime | None:
     if cursor is None:
         return None
     if cursor.step is not None:

@@ -9,14 +9,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE, ShutdownDrain
 from tests.runner_fakes import FakeProbe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _lease_record(**overrides: object) -> LeaseRecord:
+def _lease_record(**overrides: object) -> Lease:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -33,7 +33,7 @@ def _lease_record(**overrides: object) -> LeaseRecord:
         "pgid": 100,
     }
     fields.update(overrides)
-    return LeaseRecord(**fields)  # type: ignore[arg-type]
+    return Lease(**fields)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit

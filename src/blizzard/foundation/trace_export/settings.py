@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlsplit
 
+from blizzard.foundation.roles import domain_model
+
 ENV_TRACES_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 ENV_ENDPOINT = "OTEL_EXPORTER_OTLP_ENDPOINT"
 ENV_TRACES_EXPORTER = "OTEL_TRACES_EXPORTER"
@@ -58,6 +60,7 @@ def export_switched_off(environ: Mapping[str, str]) -> bool:
     )
 
 
+@domain_model
 @dataclass(frozen=True)
 class TracingSettings:
     """Whether fleet tracing runs: ``enabled``, ``disabled``, or ``rejected`` — configured

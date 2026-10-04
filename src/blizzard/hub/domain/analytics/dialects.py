@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 
 
+@domain_model
 @dataclass(frozen=True)
 class DialectEntry:
     """One kind's recognition parameters for one dialect: the tool name that

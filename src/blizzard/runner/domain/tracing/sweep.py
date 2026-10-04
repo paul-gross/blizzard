@@ -19,11 +19,11 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.domain.outbound import IWriteOutboundRepository, event_payload
 from blizzard.runner.domain.tracing.assembly import assemble_lease
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseCursorRecord
+from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.wire.facts import EVENT_RECORDED
 
 _log = get_logger("blizzard.runner.trace_export")
@@ -110,17 +110,17 @@ class LeaseTraceSweep:
         spans = tuple(span for k in keys if k.lease_id in facts for span in assemble_lease(facts[k.lease_id]))
         if not spans:
             # A window of leases never minted to completion tells nothing, so there is nothing to export.
-            self._leases.append_trace_cursor(LeaseCursorRecord(keys[-1], 0, now))
+            self._leases.append_trace_cursor(LeaseTraceCheckpoint(keys[-1], 0, now))
             return
         if not self._export(spans):
             self._failed(now, len(keys))
             return
         _CP_LEASETRACE_AFTER_EXPORT_BEFORE_CURSOR.reached()
-        self._leases.append_trace_cursor(LeaseCursorRecord(keys[-1], len(spans), self._clock.now()))
+        self._leases.append_trace_cursor(LeaseTraceCheckpoint(keys[-1], len(spans), self._clock.now()))
         self._recovered()
         _log.info("lease trace sweep completed", leases=len(keys), spans=len(spans))
 
-    def _export(self, spans: tuple[SpanRecord, ...]) -> bool:
+    def _export(self, spans: tuple[FinishedSpan, ...]) -> bool:
         try:
             return self._exporter.export(spans)
         except Exception:
@@ -163,4 +163,4 @@ class LeaseTraceSweep:
                 payload=_report(_SKIPPED, message, detail),
                 created_at=now,
             )
-        self._leases.append_trace_cursor(LeaseCursorRecord(jump.to, 0, now))
+        self._leases.append_trace_cursor(LeaseTraceCheckpoint(jump.to, 0, now))

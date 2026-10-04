@@ -10,17 +10,18 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import step_traceparent
-from blizzard.runner.domain.artifacts import GraphArtifactRecord
+from blizzard.runner.domain.artifacts import PinnedGraphArtifact
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
-    LeaseRecord,
+    Lease,
     NewLease,
     WorkRefStamp,
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
@@ -59,17 +60,19 @@ _CP_AFTER_IDENTITY = crashpoint(
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 
+@dto
 @dataclass(frozen=True)
 class Environments:
     """A chunk's held env bindings, as the spawn primitives want them."""
 
-    bindings: list[EnvBindingRecord]
+    bindings: list[EnvBinding]
 
     @property
     def acquired(self) -> list[AcquiredEnvironment]:
         return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in self.bindings]
 
 
+@dto
 @dataclass(frozen=True)
 class MintedLease:
     """A lease recorded and announced to the hub, with no worker behind it yet."""
@@ -364,7 +367,7 @@ class Spawner:
     def stdout_path(self, lease_id: str) -> str:
         return self.ctx.worker_files.stdout_path(lease_id, self.generation(lease_id))
 
-    def preamble(self, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> WorkerPreamble:
+    def preamble(self, lease: Lease, bindings: list[EnvBinding]) -> WorkerPreamble:
         """The per-lease identity a resumed worker needs to reach the runner for its lease.
 
         A resume inherits none of the spawn env, so the identity is re-supplied. Only the
@@ -419,7 +422,7 @@ class Spawner:
         self.ctx.stores.graph_artifacts.record_graph_artifacts(
             graph_id=envelope.graph_id,
             artifacts=[
-                GraphArtifactRecord(name=a.name, ordinal=i, kind=a.kind, content=a.content)
+                PinnedGraphArtifact(name=a.name, ordinal=i, kind=a.kind, content=a.content)
                 for i, a in enumerate(envelope.graph_artifacts)
             ],
             recorded_at=at,

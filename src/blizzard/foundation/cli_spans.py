@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import SAMPLED, DerivedContext, format_traceparent
 
 SCOPE_NAME = "blizzard.cli"
@@ -44,6 +45,7 @@ class Poster(Protocol):
     def post(self, url: str, *, content: bytes, headers: Mapping[str, str], timeout: float) -> object: ...
 
 
+@domain_model
 @dataclass(frozen=True)
 class Clock:
     """Epoch nanoseconds from one wall-clock anchor plus monotonic deltas, so a span's duration

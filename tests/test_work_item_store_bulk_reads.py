@@ -15,7 +15,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import hub_store_connections, seed_graph, seed_work_item
@@ -34,7 +34,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[WorkItemStore, Engine]:
     return WorkItemStore(hub_store_connections(engine)), engine
 
 
-def _seed(store: WorkItemStore, *, source: str, chunk_id: str) -> WorkItemRecord:
+def _seed(store: WorkItemStore, *, source: str, chunk_id: str) -> HubWorkItem:
     """``seed_work_item``'s shape, with an explicit ``chunk_id`` — its own ``ch_{ref}``
     naming collides across sources, since each source's ``ref`` allocation starts at 1
     independently."""

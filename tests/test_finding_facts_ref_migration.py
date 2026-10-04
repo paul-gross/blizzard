@@ -18,8 +18,8 @@ from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
     DeliveryPlan,
     DeltaMaterialization,
-    FindingFactRecord,
     NewFinding,
+    NewFindingFact,
     NewFindingSet,
     NewProposal,
 )
@@ -176,7 +176,7 @@ def _republish_plan() -> DeliveryPlan:
                     )
                 ],
                 facts=[
-                    FindingFactRecord(finding_id="fin_a_phantom", kind="add", finding_set_id="fins_a_replay", ref="F1")
+                    NewFindingFact(finding_id="fin_a_phantom", kind="add", finding_set_id="fins_a_replay", ref="F1")
                 ],
             )
         ],

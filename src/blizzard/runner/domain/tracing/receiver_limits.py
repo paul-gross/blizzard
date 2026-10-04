@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 
 __all__ = [
     "BUCKET_CAPACITY",
@@ -26,6 +27,7 @@ BUCKET_CAPACITY = 1000
 BUCKET_REFILL_PER_SECOND = 50.0
 
 
+@dto
 @dataclass(frozen=True)
 class ReceiverCount:
     """Items accepted and dropped since the runner started."""

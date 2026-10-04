@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.elicitation import IReadElicitationRepository
 
@@ -22,7 +23,7 @@ __all__ = [
     "IReadOverloadRepository",
     "IWriteOverloadRepository",
     "InvocationKind",
-    "OverloadFactRecord",
+    "OverloadExit",
     "backing_off_facts",
     "backoff_delay",
 ]
@@ -37,8 +38,9 @@ BACKOFF_CAP_SECONDS = 15 * 60
 BACKOFF_LIMIT = 5
 
 
+@dto
 @dataclass(frozen=True)
-class OverloadFactRecord:
+class OverloadExit:
     """One recorded overload exit on a (lease, epoch) — ``resume_after`` is ``None`` for a
     fall-through (the streak hit :data:`BACKOFF_LIMIT`) rather than a scheduled wake.
     ``invocation_identity`` is the generation (worker) or the elicitation's own launch
@@ -71,7 +73,7 @@ class IReadOverloadRepository(Protocol):
         fresh each classification, never cached (``bzh:facts-not-status``)."""
         ...
 
-    def open_overload_facts(self) -> list[OverloadFactRecord]:
+    def open_overload_facts(self) -> list[OverloadExit]:
         """Every un-reset overload fact with a non-null ``resume_after`` — the backing-off
         candidates a caller narrows further against the lease's own current generation or
         elicitation launch, read once per tick like ``pause_parked_lease_ids``. A fact
@@ -121,7 +123,7 @@ class _IReadLeaseGeneration(Protocol):
 
 def backing_off_facts(
     overload: IReadOverloadRepository, liveness: _IReadLeaseGeneration, elicitations: IReadElicitationRepository
-) -> dict[str, OverloadFactRecord]:
+) -> dict[str, OverloadExit]:
     """Every active lease currently backing off, keyed by lease id — read once per tick
     like ``pause_parked_lease_ids``. A candidate closes implicitly: a worker's own
     generation moving past the recorded one, or a judge's elicitation relaunching under a
@@ -134,7 +136,7 @@ def backing_off_facts(
     elicitations_by_pair = elicitations.in_flight_elicitations(
         [(fact.lease_id, fact.epoch) for fact in facts if fact.invocation_kind != "worker"]
     )
-    result: dict[str, OverloadFactRecord] = {}
+    result: dict[str, OverloadExit] = {}
     for fact in facts:
         if fact.invocation_kind == "worker":
             if str(generations.get(fact.lease_id, 0)) != fact.invocation_identity:

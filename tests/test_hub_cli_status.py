@@ -229,7 +229,7 @@ def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`hub status` shares `ChunkRow` with `hub chunk list`, so the blocked marking
+    """`hub status` shares `ChunkLine` with `hub chunk list`, so the blocked marking
     is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)

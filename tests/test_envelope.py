@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.envelope import Arrival, Envelope, LatestArtifacts
 from blizzard.hub.domain.graph import Choice, Edge, Graph, GraphArtifact, Node, ProducesSpec, RotatePolicy, SessionDecl
 from blizzard.hub.domain.work import Chunk, ChunkFacts, RestartFact, TransitionFact, WorkRef
@@ -19,8 +19,8 @@ from blizzard.wire.envelope import EnvelopeArtifact
 pytestmark = pytest.mark.unit
 
 
-def _row(name: str, epoch: int, *, node_name: str = "build") -> ArtifactRow:
-    return ArtifactRow(
+def _row(name: str, epoch: int, *, node_name: str = "build") -> StoredArtifact:
+    return StoredArtifact(
         kind=ArtifactKind.ASSET,
         name=name,
         data=f"v{epoch}",

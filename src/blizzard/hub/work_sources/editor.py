@@ -11,7 +11,7 @@ from typing import Protocol
 
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
 
 
@@ -26,11 +26,11 @@ class WorkItemRefUnknownError(Exception):
 class IWorkEditor(Protocol):
     """One work-source binding's full item surface — browsing plus the three write verbs."""
 
-    def list(self, *, limit: int = 200) -> list[WorkItemRecord]:
+    def list(self, *, limit: int = 200) -> list[HubWorkItem]:
         """Up to ``limit`` items at this source, newest first, open and closed alike."""
         ...
 
-    def get(self, pointer: WorkRef) -> WorkItemRecord:
+    def get(self, pointer: WorkRef) -> HubWorkItem:
         """One item by its pointer, open or closed.
 
         Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``."""
@@ -44,7 +44,7 @@ class IWorkEditor(Protocol):
         :class:`~blizzard.hub.domain.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 
-    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:
+    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> HubWorkItem:
         """Resolve ``edit``'s sentinel-tagged fields against the record ``pointer`` names
         and replace them in place, stamping ``edited_at``.
 

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config_table import ConfigError, Table
@@ -117,6 +118,7 @@ def resolve_session_secret(env_name: str) -> bytes:
     return decoded
 
 
+@dto
 @dataclass(frozen=True)
 class WorkspaceRepo:
     """A repository cloned into a basic workspace's shared projects directory."""
@@ -193,6 +195,7 @@ def _cap_line(key: str, value: int | None, default: int) -> str:
     return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
 
 
+@dto
 @dataclass(frozen=True)
 class Spend:
     """The ``[cost]`` table's spend controls (epic #57) — absent means uncapped."""
@@ -218,6 +221,7 @@ class Spend:
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
 
 
+@dto
 @dataclass(frozen=True)
 class Context:
     """The ``[context]`` table — the live session-context warn lane.
@@ -242,6 +246,7 @@ class Context:
         return self.table.count("sample_interval_seconds", DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS)
 
 
+@dto
 @dataclass(frozen=True)
 class ExternalUsage:
     """The ``[external_subscription_usage]`` table."""
@@ -261,6 +266,7 @@ class ExternalUsage:
         return self.table.text("credentials_path")
 
 
+@domain_model
 @dataclass(frozen=True)
 class SubscriptionDeclaration:
     """One declared provider subscription — the runner-unique, immutable
@@ -334,6 +340,7 @@ class SubscriptionDeclaration:
         )
 
 
+@dto
 @dataclass(frozen=True)
 class Queue:
     """The ``[queue]`` table — this runner's selection policy over the peeked
@@ -353,6 +360,7 @@ class Queue:
         return self.table.boolean("strict", False)
 
 
+@dto
 @dataclass(frozen=True)
 class WorkerStdout:
     """The ``[worker_stdout]`` table — the periodic sweep's own retention window
@@ -369,6 +377,7 @@ class WorkerStdout:
         return self.table.count("retention_days", DEFAULT_WORKER_STDOUT_RETENTION_DAYS)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Transcripts:
     """The ``[transcripts]`` table — the dedicated outbound lane's own switch,
@@ -412,6 +421,7 @@ class Transcripts:
         return value
 
 
+@dto
 @dataclass(frozen=True)
 class Auth:
     """The ``[auth]`` table — runner-local role resolution, keyed by hub username."""
@@ -435,6 +445,7 @@ class Auth:
         return self.table.pairs("users")
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunnerConfig:
     """Resolved runner runtime configuration."""

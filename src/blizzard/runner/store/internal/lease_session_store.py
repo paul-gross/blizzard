@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import IWriteLeaseSessionRepository, LeaseRecord, PoolHead
+from blizzard.runner.domain.leases import IWriteLeaseSessionRepository, Lease, PoolHead
 from blizzard.runner.domain.leases.closure import RELEASED
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
@@ -107,7 +107,7 @@ class LeaseSessionStore:
         rows = self._store.all(stmt)
         return int(rows[0][0]) if rows else 0
 
-    def lease_for_session(self, session: SessionReference) -> LeaseRecord | None:
+    def lease_for_session(self, session: SessionReference) -> Lease | None:
         """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
         stmt = (
             lease_select()

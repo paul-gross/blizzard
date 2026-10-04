@@ -18,10 +18,11 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 
 if TYPE_CHECKING:
     # Deferred: ``chunks.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 # --- Domain objects ---------------------------------------------------------
 
 
+@domain_model
 @dataclass(frozen=True)
 class WorkRef:
     """One wrapped work item — ``{source, ref}``, superseding ``{provider, url}``.
@@ -50,6 +52,7 @@ class WorkItemAuthorKind(StrEnum):
     FLEET = "fleet"
 
 
+@domain_model
 @dataclass(frozen=True)
 class WorkItemAuthor:
     """One hub-owned work item's author — the variant :class:`WorkItemAuthorKind`
@@ -72,8 +75,9 @@ class WorkItemAuthor:
         return cls(kind=WorkItemAuthorKind.FLEET, runner_id=runner_id, chunk_id=chunk_id, node_name=node_name)
 
 
+@dto
 @dataclass(frozen=True)
-class WorkItemRecord:
+class HubWorkItem:
     """One hub-owned work item — the ``work_items`` row. A mutable
     entity, not a fact: title/body/edited_at change in place, and
     ``closed_at``/``closure`` are unset while open, set together once when it closes."""
@@ -122,6 +126,7 @@ class WorkItemMaterializationOutcome(StrEnum):
     UNRESOLVED = "unresolved"
 
 
+@dto
 @dataclass(frozen=True)
 class PendingCloseIntent:
     """One ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row
@@ -143,6 +148,7 @@ class PendingCloseIntent:
     last_attempt_at: datetime | None = field(default=None, compare=False)
 
 
+@domain_model
 @dataclass(frozen=True)
 class IntendedMigration:
     """A chunk's standing intent to move onto another graph, consulted —
@@ -155,6 +161,7 @@ class IntendedMigration:
     node_name: str | None
 
 
+@domain_model
 @dataclass(frozen=True)
 class Chunk:
     """The unit of work that travels the workflow graph."""
@@ -199,6 +206,7 @@ def mint_chunk(
     )
 
 
+@domain_model
 @dataclass(frozen=True)
 class DependencyEdge:
     """One ``chunk_dependencies`` row (shape: ``hub/store/schema.py``) — a declared
@@ -224,6 +232,7 @@ class DependencyEdge:
 # Each is the domain-object form of a fact row; a hydrating repository fills them.
 
 
+@domain_model
 @dataclass(frozen=True)
 class RouteCreatedFact:
     """A ``route.created`` fact — the claim.
@@ -235,6 +244,7 @@ class RouteCreatedFact:
     seq: int = 0
 
 
+@domain_model
 @dataclass(frozen=True)
 class RouteReleasedFact:
     """A ``route.released`` fact — forcible detach. ``seq`` — see :class:`RouteCreatedFact`."""
@@ -243,6 +253,7 @@ class RouteReleasedFact:
     seq: int = 0
 
 
+@domain_model
 @dataclass(frozen=True)
 class RouteTokenMintedFact:
     """A ``route_token_minted`` fact — the route capability token, hashed.
@@ -255,6 +266,7 @@ class RouteTokenMintedFact:
     seq: int = 0
 
 
+@domain_model
 @dataclass(frozen=True)
 class LeaseFact:
     """A ``lease.minted`` fact reported up from a runner."""
@@ -263,6 +275,7 @@ class LeaseFact:
     minted_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class EpochOwnerFact:
     """One fencing epoch's recorded owner — ``runner_id`` ``None`` meaning the hub."""
@@ -271,6 +284,7 @@ class EpochOwnerFact:
     runner_id: str | None
 
 
+@domain_model
 @dataclass(frozen=True)
 class TransitionFact:
     """A ``transition.recorded`` fact with its target node's executor, resolved by the
@@ -287,6 +301,7 @@ class TransitionFact:
     graph_id: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class EscalationFact:
     """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
@@ -302,6 +317,7 @@ class EscalationFact:
     detail: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class QuestionFact:
     """A ``question.asked`` row and whether it has been answered. Open/answered is
@@ -314,6 +330,7 @@ class QuestionFact:
     answered: bool = False
 
 
+@domain_model
 @dataclass(frozen=True)
 class DecisionFact:
     """A gate's ``decision.submitted`` row and whether anything has closed it. An **open**
@@ -326,6 +343,7 @@ class DecisionFact:
     resolved: bool = False
 
 
+@domain_model
 @dataclass(frozen=True)
 class BounceFact:
     """A ``chunk_bounces`` row — one delivery kick-back (#64). Contention, not failure: a
@@ -339,6 +357,7 @@ class BounceFact:
     recorded_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class HubNodePollFact:
     """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node (#66).
@@ -367,6 +386,7 @@ class MigrationSource(StrEnum):
     RESTART = "restart"
 
 
+@domain_model
 @dataclass(frozen=True)
 class MigrationFact:
     """A ``chunk_migrations`` fact — a cross-graph migration re-pinned the chunk.
@@ -398,6 +418,7 @@ class MigrationFact:
         return target_graph.entry_node_id
 
 
+@domain_model
 @dataclass(frozen=True)
 class RestartFact:
     """A ``chunk.restarted`` fact — an operator forced the chunk onto a node, now (#370).
@@ -428,6 +449,7 @@ class MovementKind(StrEnum):
     RESTART = "restart"
 
 
+@domain_model
 @dataclass(frozen=True)
 class Movement:
     """A chunk's newest movement fact, whichever family wrote it — the one owner of
@@ -438,6 +460,7 @@ class Movement:
     executor: Executor
 
 
+@domain_model
 @dataclass(frozen=True)
 class RequeueFact:
     """A ``requeue.recorded`` fact — closes an open escalation by supersession."""
@@ -445,6 +468,7 @@ class RequeueFact:
     requeued_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class PauseFact:
     """A ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins."""
@@ -454,6 +478,7 @@ class PauseFact:
     set_by: str
 
 
+@domain_model
 @dataclass(frozen=True)
 class UsageFact:
     """A ``usage.recorded`` fact — one harness invocation's usage/cost telemetry.
@@ -479,8 +504,9 @@ class UsageFact:
     estimated_cost_usd: float | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class EventRow:
+class OperationalEvent:
     """One ``event_log`` row — a durable, typed operational fact.
     ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
     respectively; ``detail`` is the event-specific payload, already decoded from JSON. A
@@ -498,6 +524,7 @@ class EventRow:
     detail: dict | None
 
 
+@dto
 @dataclass(frozen=True)
 class EscalationOpen:
     """One fleet-wide **open** escalation — the input :class:`EventFeed` folds into the
@@ -517,25 +544,26 @@ DEFAULT_EVENT_LIST_LIMIT = 200
 _EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
 
 
+@domain_model
 @dataclass(frozen=True)
 class EventFeed:
     """``event_log`` rows unified with every currently-open escalation.
 
     Sorted newest ``recorded_at`` first, ``id`` descending as the tiebreak, whatever the severity."""
 
-    rows: list[EventRow]
+    rows: list[OperationalEvent]
 
     @classmethod
-    def of(cls, events: list[EventRow], escalations: list[EscalationOpen]) -> EventFeed:
+    def of(cls, events: list[OperationalEvent], escalations: list[EscalationOpen]) -> EventFeed:
         projected = [cls._projected(i, esc) for i, esc in enumerate(escalations)]
         merged = [*events, *projected]
         return cls(sorted(merged, key=lambda e: (e.recorded_at, e.id), reverse=True))
 
     @staticmethod
-    def _projected(index: int, esc: EscalationOpen) -> EventRow:
+    def _projected(index: int, esc: EscalationOpen) -> OperationalEvent:
         """One open escalation as a synthetic row carrying a **negative** ``id`` — it is
         not an ``event_log`` row."""
-        return EventRow(
+        return OperationalEvent(
             id=-(index + 1),
             recorded_at=esc.recorded_at,
             severity=EVENT_LOG_SEVERITY[_EVENT_NEEDS_HUMAN],
@@ -555,8 +583,9 @@ class EventFeed:
         )
 
 
+@dto
 @dataclass(frozen=True)
-class ActivityRow:
+class ActivityEntry:
     """One row of the activity feed — a historical fact reshaped into the
     same vocabulary a live SSE frame carries. ``type`` mirrors a frame-type constant as a
     plain string (``bzh:domain-core``); ``key`` is a table-qualified natural key used only
@@ -582,6 +611,7 @@ class ActivityRow:
     reason: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class ActivityFeed:
     """The activity feed's three already-bounded per-source reads, merged.
@@ -589,14 +619,14 @@ class ActivityFeed:
     Merge only: sorts by ``(at desc, key desc)`` — ``key`` breaking an exact-instant tie
     — and caps to ``limit``."""
 
-    rows: list[ActivityRow]
+    rows: list[ActivityEntry]
 
     @classmethod
     def of(
         cls,
-        chunk_changed: Sequence[ActivityRow],
-        events: Sequence[EventRow],
-        runner_changed: Sequence[ActivityRow],
+        chunk_changed: Sequence[ActivityEntry],
+        events: Sequence[OperationalEvent],
+        runner_changed: Sequence[ActivityEntry],
         *,
         limit: int,
     ) -> ActivityFeed:
@@ -605,10 +635,10 @@ class ActivityFeed:
         return cls(merged[:limit])
 
     @staticmethod
-    def _of_event(row: EventRow) -> ActivityRow:
+    def _of_event(row: OperationalEvent) -> ActivityEntry:
         """One ``event_log`` row reshaped into the feed's common row type — its
         ``event-logged`` half."""
-        return ActivityRow(
+        return ActivityEntry(
             type="event-logged",
             key=f"event_log:{row.id}",
             at=row.recorded_at,
@@ -619,6 +649,7 @@ class ActivityFeed:
         )
 
 
+@dto
 @dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome."""
@@ -627,20 +658,22 @@ class DecisionChoice:
     description: str
 
 
+@dto
 @dataclass(frozen=True)
 class DocketEntry:
     """One of a chunk's not-yet-materialized proposals, as it stands at a gate — a
-    :class:`~blizzard.hub.domain.proposals.WorkItemProposalRow` plus whether an operator
+    :class:`~blizzard.hub.domain.proposals.StampedWorkItemProposal` plus whether an operator
     has struck it. ``struck_by``/``struck_at`` are set only when :attr:`struck` is true."""
 
-    proposal: WorkItemProposalRow
+    proposal: StampedWorkItemProposal
     struck: bool = False
     struck_by: str | None = None
     struck_at: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class DecisionRow:
+class GateDecision:
     """A gate decision in full — the surfacing/read model.
 
     Resolution state is **derived**: ``resolved_choice`` is set once a resolution row
@@ -675,6 +708,7 @@ def holds_claim(status: ChunkStatus) -> bool:
     return status not in TERMINAL_STATUSES
 
 
+@domain_model
 @dataclass(frozen=True)
 class ChunkFacts:
     """Every fact a chunk's status derives from, already loaded. The derivation is a
@@ -955,7 +989,7 @@ class ChunkFacts:
         """A ``route.created`` with no later ``route.released``."""
         return self.routes.newest is not None
 
-    def has_landed_repos(self, artifacts: Sequence[ArtifactRow] = ()) -> bool:
+    def has_landed_repos(self, artifacts: Sequence[StoredArtifact] = ()) -> bool:
         """True iff any repo has landed for this chunk — informational, never a status (#63).
 
         ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
@@ -1013,6 +1047,7 @@ class ChunkFacts:
 _MARKER_PREFIX = "merged/"
 
 
+@domain_model
 @dataclass(frozen=True)
 class LandedRepos:
     """Repos landed via a hub command node's ``merged/<repo>`` marker artifact (#67).
@@ -1023,12 +1058,13 @@ class LandedRepos:
     names: frozenset[str]
 
     @classmethod
-    def of(cls, artifacts: Sequence[ArtifactRow]) -> LandedRepos:
+    def of(cls, artifacts: Sequence[StoredArtifact]) -> LandedRepos:
         return cls(
             frozenset(a.name.removeprefix(_MARKER_PREFIX) for a in artifacts if a.name.startswith(_MARKER_PREFIX))
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class RouteHistory:
     """A chunk's route facts and the liveness they derive."""
@@ -1072,6 +1108,7 @@ class RouteHistory:
         return max(candidates, key=lambda t: (t.minted_at, t.seq))
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkChange:
     """A ``chunk-changed`` frame's derived content — the current status
@@ -1130,6 +1167,7 @@ class ChunkChange:
         )
 
 
+@dto
 @dataclass(frozen=True)
 class UsageTotal:
     """A usage/cost total summed at read time, never a stored column. **The one canonical owner of the
@@ -1198,6 +1236,7 @@ class UsageTotal:
         )
 
 
+@dto
 @dataclass(frozen=True)
 class FleetSummary:
     """Fleet-pulse counts — every chunk's derived status folded to four
@@ -1229,8 +1268,9 @@ class FleetSummary:
 # --- Question rows (the ask/answer rendezvous) -------------------------------
 
 
+@dto
 @dataclass(frozen=True)
-class QuestionRow:
+class NodeQuestion:
     """A durable question row with its derived answer *and delivery* state. Every state
     here is **derived**: answered exactly while an answer row exists (the winning
     first-write-wins CAS row), delivered exactly while an ``answer_deliveries`` row
@@ -1254,6 +1294,7 @@ class QuestionRow:
     harness_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class AnswerOutcome:
     """The result of an answer write — first-write-wins CAS. ``won`` is True for the
@@ -1275,19 +1316,19 @@ class IReadWorkItemRepository(Protocol):
     <blizzard.hub.work_sources.internal.hub_work_source.HubWorkSource>` depends on this
     variant only."""
 
-    def get(self, source: str, ref: str) -> WorkItemRecord | None:
+    def get(self, source: str, ref: str) -> HubWorkItem | None:
         """The item at ``(source, ref)``, open or closed, or ``None`` when no such
         item was ever allocated."""
         ...
 
-    def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
+    def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
         """Up to ``limit`` items at ``source``, newest first (a total order —
         ``work_item_id`` breaks a same-instant ``created_at`` tie, ULIDs sorting lexically
         by creation), open and closed alike — bounded the same way every other operator
         feed in this hub is (the activity feed, ``/api/events``)."""
         ...
 
-    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
+    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, HubWorkItem]:
         """``get``'s batched sibling (`bzh:bulk-reconstitution`) — every requested
         pointer's item, keyed by pointer. A pointer naming no item is absent, the same
         as ``get`` returning ``None`` for it."""
@@ -1317,7 +1358,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         stated_priority: str | None,
         at: datetime,
         chunk: Chunk,
-    ) -> WorkItemRecord:
+    ) -> HubWorkItem:
         """Insert the item row keyed by ``pointer`` — the ref :meth:`allocate_ref`
         already minted for it, taken as its own explicit parameter — and ``chunk``'s own
         rows, atomically in one transaction: a store failure leaves
@@ -1336,7 +1377,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         run_mode: str,
         at: datetime,
         chunk: Chunk,
-    ) -> WorkItemRecord:
+    ) -> HubWorkItem:
         """A routine run's own one-act mint: the item row with its run columns,
         ``chunk``'s own rows, and the run's identity row, atomically in one transaction —
         no window in which the item exists without its chunk, or the chunk without its
@@ -1346,14 +1387,14 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
 
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> WorkItemRecord | None:
+    ) -> HubWorkItem | None:
         """Replace an open item's title/body/stated priority in place and stamp
         ``edited_at``; ``created_at`` and ``ref`` are untouched. ``None`` when the item
         already carries a closure — the write matches zero rows, a closure race is not
         silently overwritten."""
         ...
 
-    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
+    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> HubWorkItem:
         """Record ``closed_at``/``closure`` on an open item, once."""
         ...
 
@@ -1405,7 +1446,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
-    ) -> WorkItemRecord | None:
+    ) -> HubWorkItem | None:
         """Mint the item and ``chunk``'s own rows, plus ``proposal_id``'s
         accepted-and-minted ``garden_proposal_closures`` row, atomically in one
         transaction — mirrors :meth:`materialize_create`, the closure row

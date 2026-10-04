@@ -12,10 +12,10 @@ import json
 import pytest
 
 from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
-from blizzard.runner.harness.internal.claude_code_normalizer import NormalizedFile, Record, Run
+from blizzard.runner.harness.internal.claude_code_normalizer import NormalizedFile, Run, TranscriptEntry
 from tests import transcript_fixtures as fx
 
-# --- Record collapse — env/asst/tool ---
+# --- TranscriptEntry collapse — env/asst/tool ---
 
 
 @pytest.mark.unit
@@ -470,7 +470,7 @@ def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_ma
 
 @pytest.mark.unit
 def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -> None:
-    """`Record.at` coerces an offset-less stamp to UTC rather than leaving it naive,
+    """`TranscriptEntry.at` coerces an offset-less stamp to UTC rather than leaving it naive,
     so comparing an offset-less and an aware timestamp never raises `TypeError`."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
@@ -522,7 +522,7 @@ def test_threading_stays_fast_under_duplicate_uuid_values() -> None:
         )
 
     start = time.monotonic()
-    runs = Run.thread([Record(r) for r in records])
+    runs = Run.thread([TranscriptEntry(r) for r in records])
     elapsed = time.monotonic() - start
 
     assert elapsed < 5.0, (

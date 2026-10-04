@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.domain.asks import AskRecord
-from blizzard.runner.domain.outbound import OutboundFactRecord
+from blizzard.foundation.roles import dto
+from blizzard.runner.domain.asks import OpenAsk
+from blizzard.runner.domain.outbound import OutboundFactEntry
 from blizzard.runner.domain.takeover import TakeoverCommand
-from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
+from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.stores import RunnerReadStores
@@ -36,6 +37,7 @@ __all__ = [
 HUB_CONTACT_STALENESS_THRESHOLD = timedelta(minutes=5)
 
 
+@dto
 @dataclass(frozen=True)
 class PauseState:
     """The pause brake's two independent surfaces, plus their effective OR.
@@ -51,6 +53,7 @@ class PauseState:
     local_reason: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class Capacities:
     """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
@@ -60,6 +63,7 @@ class Capacities:
     free: int
 
 
+@dto
 @dataclass(frozen=True)
 class HubConnectivity:
     """Hub reachability, derived from staleness, plus the outbound backlog depth.
@@ -73,6 +77,7 @@ class HubConnectivity:
     buffer_depth: int
 
 
+@dto
 @dataclass(frozen=True)
 class RunnerStatusSummary:
     """Identity, pause state, capacities, hub connectivity, and last tick — ``GET /runner``."""
@@ -87,6 +92,7 @@ class RunnerStatusSummary:
     gates: tuple[str, ...] = ()
 
 
+@dto
 @dataclass(frozen=True)
 class EnvironmentSlot:
     """One environment in the runner's configured pool. Every pool
@@ -98,6 +104,7 @@ class EnvironmentSlot:
     held_since: datetime | None
 
 
+@dto
 @dataclass(frozen=True)
 class EscalationView:
     """One parked escalation with its literal, ready-to-paste resume command. The
@@ -120,6 +127,7 @@ class EscalationView:
     cause: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class OpenTakeoverView:
     """One open operator takeover — the recovery surface
@@ -198,7 +206,7 @@ class RunnerStatusService:
         A bound environment never silently vanishes: a binding whose id has fallen out of
         the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
         ``environment_id`` — so does every extra binding past the first on one id."""
-        held_by_env: dict[str, list[EnvBindingRecord]] = {}
+        held_by_env: dict[str, list[EnvBinding]] = {}
         for binding in self._stores.environments.held_bindings():
             held_by_env.setdefault(binding.environment_id, []).append(binding)
         slots = []
@@ -233,10 +241,10 @@ class RunnerStatusService:
                     )
         return slots
 
-    def open_asks(self) -> list[AskRecord]:
+    def open_asks(self) -> list[OpenAsk]:
         return self._stores.asks.open_asks()
 
-    def recent_facts(self, limit: int) -> list[OutboundFactRecord]:
+    def recent_facts(self, limit: int) -> list[OutboundFactEntry]:
         """The newest hub-bound facts, acked or not — the local panel's fact log."""
         return self._stores.outbound.recent_outbound(limit)
 

@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.internal.opencode_cursor import (
     CursorAdmission,
     CursorError,
-    CursorRecord,
     MessagePartCursor,
     MessagePartIdentity,
+    MessagePartRevision,
     records_for_export,
 )
 from blizzard.runner.harness.internal.opencode_export import IOpenCodeExporter, OpenCodeExportError
@@ -47,6 +48,7 @@ from blizzard.runner.harness.transcript import (
 _EXPORT_ERRORS = (OpenCodeExportError, json.JSONDecodeError, OpenCodeShapeError)
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Position:
     """This source's own opaque :class:`TranscriptPosition` token: the identity cursor plus
@@ -116,6 +118,7 @@ def _split_admissions(
     return frozenset(admitted), late_outputs
 
 
+@dto
 @dataclass(frozen=True)
 class _ChildLinkResult:
     """One tick's child-session linking pass — see
@@ -240,7 +243,7 @@ class OpenCodeTranscriptSource:
 
     @staticmethod
     def _in_range_identities(
-        records: tuple[CursorRecord, ...], *, start: TranscriptPosition | None, end: TranscriptPosition | None
+        records: tuple[MessagePartRevision, ...], *, start: TranscriptPosition | None, end: TranscriptPosition | None
     ) -> frozenset[MessagePartIdentity]:
         """``[start, end)`` decoded as identity sets; ``None, None`` names every identity the
         export currently carries — the whole-session read a caller wanting "today" passes."""

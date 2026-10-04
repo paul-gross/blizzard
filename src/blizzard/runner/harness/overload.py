@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
+
 __all__ = ["ProviderOverload"]
 
 
+@dto
 @dataclass(frozen=True)
 class ProviderOverload:
     """One invocation classified as exited on a provider-side overload (529) rather than

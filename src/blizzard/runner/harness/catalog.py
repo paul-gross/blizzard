@@ -15,7 +15,7 @@ from blizzard.runner.harness.declaration import IHarnessDeclaration, SharedHarne
 from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.claude_code_declaration import CLAUDE_CODE_DECLARATION
 from blizzard.runner.harness.internal.opencode_declaration import OPENCODE_DECLARATION
-from blizzard.runner.harness.sections import HARNESS_SECTION_KINDS, HarnessSections, IHarnessSection
+from blizzard.runner.harness.sections import HARNESS_SECTION_KINDS, HarnessSections, IHarnessSection, section_of
 
 _DECLARED: dict[str, IHarnessDeclaration[Any]] = {
     declaration.harness_id: declaration for declaration in (CLAUDE_CODE_DECLARATION, OPENCODE_DECLARATION)
@@ -32,7 +32,7 @@ HARNESS_CATALOG: tuple[IHarnessDeclaration[Any], ...] = tuple(
 def declared(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], IHarnessSection]]:
     """Each declaration paired with its parsed section, in catalog order."""
     for declaration in HARNESS_CATALOG:
-        yield declaration, sections.of(declaration.harness_id)
+        yield declaration, section_of(sections, declaration.harness_id)
 
 
 def enabled(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], IHarnessSection]]:

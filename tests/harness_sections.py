@@ -8,17 +8,17 @@ from dataclasses import replace
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
-from blizzard.runner.harness.sections import HarnessSections, IHarnessSection
+from blizzard.runner.harness.sections import HarnessSections, IHarnessSection, section_of, with_section
 
 
 def claude_code(config: RunnerConfig) -> ClaudeCodeSection:
-    section = config.harness_sections.of(ClaudeCodeSection().harness_id)
+    section = section_of(config.harness_sections, ClaudeCodeSection().harness_id)
     assert isinstance(section, ClaudeCodeSection)
     return section
 
 
 def opencode(config: RunnerConfig) -> OpenCodeSection:
-    section = config.harness_sections.of(OpenCodeSection().harness_id)
+    section = section_of(config.harness_sections, OpenCodeSection().harness_id)
     assert isinstance(section, OpenCodeSection)
     return section
 
@@ -27,7 +27,7 @@ def sections(*overrides: IHarnessSection, base: HarnessSections | None = None) -
     """``base`` (every binding's default when absent) with each of ``overrides`` standing in."""
     result = base or HarnessSections.defaults()
     for section in overrides:
-        result = result.replaced(section)
+        result = with_section(result, section)
     return result
 
 

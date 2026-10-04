@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
     NormalizedTurn,
@@ -32,6 +33,7 @@ MAX_TURNS = 1000
 MAX_BLOCK_CHARS = 1024 * 1024
 
 
+@dto
 @dataclass(frozen=True)
 class CappedToolCall:
     """A tool call's ``input``, degraded to a capped raw string only once its serialized form

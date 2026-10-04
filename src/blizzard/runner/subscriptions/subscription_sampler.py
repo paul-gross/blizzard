@@ -13,6 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 __all__ = [
@@ -39,6 +40,7 @@ ANTHROPIC_DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials
 PROVIDER_OPENAI = "openai"
 
 
+@dto
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
     """One rate-limit window's utilization, as the provider's own account reports it.
@@ -52,6 +54,7 @@ class ExternalSubscriptionUsageWindow:
     window_seconds: int
 
 
+@dto
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageSnapshot:
     """One sample of every window a declared subscription's account reported at ``sampled_at``.
@@ -84,6 +87,7 @@ MISS_REASON_TEXT: dict[SampleMissReason, str] = {
 }
 
 
+@dto
 @dataclass(frozen=True)
 class SampleMiss:
     """One sampling attempt that produced nothing, with why — replaces a

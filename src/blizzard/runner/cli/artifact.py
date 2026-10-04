@@ -8,6 +8,7 @@ import click
 import httpx
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
+from blizzard.foundation.roles import dto
 from blizzard.runner.cli.worker_call import WorkerCall
 
 
@@ -20,6 +21,7 @@ def artifact_group() -> None:
     ``create`` *stages* a submission, published on completion (#169)."""
 
 
+@dto
 @dataclass(frozen=True)
 class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to

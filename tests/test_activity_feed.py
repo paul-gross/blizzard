@@ -1,6 +1,6 @@
 """``ActivityFeed`` (unit tier) — the pure merge/sort/cap behind the board's
 Event log page-load backfill. Built from already-loaded
-:class:`ActivityRow`/:class:`EventRow` literals — no store; the per-source bounded reads
+:class:`ActivityEntry`/:class:`OperationalEvent` literals — no store; the per-source bounded reads
 are exercised at the component tier (``tests/test_activity_feed_store.py``).
 """
 
@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventRow
+from blizzard.hub.domain.work import ActivityEntry, ActivityFeed, OperationalEvent
 
 pytestmark = pytest.mark.unit
 
@@ -21,12 +21,12 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _chunk_changed(key: str, *, at: datetime, cause: str = "claimed", chunk_id: str = "ch_1") -> ActivityRow:
-    return ActivityRow(type="chunk-changed", key=key, at=at, chunk_id=chunk_id, cause=cause)
+def _chunk_changed(key: str, *, at: datetime, cause: str = "claimed", chunk_id: str = "ch_1") -> ActivityEntry:
+    return ActivityEntry(type="chunk-changed", key=key, at=at, chunk_id=chunk_id, cause=cause)
 
 
-def _event(id_: int, *, at: datetime) -> EventRow:
-    return EventRow(
+def _event(id_: int, *, at: datetime) -> OperationalEvent:
+    return OperationalEvent(
         id=id_,
         recorded_at=at,
         severity="info",
@@ -40,8 +40,8 @@ def _event(id_: int, *, at: datetime) -> EventRow:
     )
 
 
-def _runner_changed(key: str, *, at: datetime) -> ActivityRow:
-    return ActivityRow(type="runner-changed", key=key, at=at, runner_id="runner-a", kind="paused")
+def _runner_changed(key: str, *, at: datetime) -> ActivityEntry:
+    return ActivityEntry(type="runner-changed", key=key, at=at, runner_id="runner-a", kind="paused")
 
 
 def test_empty_source_set_returns_empty_list() -> None:
@@ -83,7 +83,7 @@ def test_caps_to_limit_keeping_the_newest() -> None:
 def test_event_row_reshapes_into_an_event_logged_activity_row() -> None:
     feed = ActivityFeed.of([], [_event(7, at=_at(3))], [], limit=200).rows
     assert feed == [
-        ActivityRow(
+        ActivityEntry(
             type="event-logged",
             key="event_log:7",
             at=_at(3),

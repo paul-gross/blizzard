@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol, Self
 
+from blizzard.foundation.roles import domain_model
+
 
 class CursorPosition(Protocol):
     @property
@@ -23,6 +25,7 @@ class JumpReason(StrEnum):
     LAG_CAP = "lag-cap"
 
 
+@domain_model
 @dataclass(frozen=True)
 class CursorJump[K: CursorPosition]:
     """A cursor move that tells nothing. ``skipped_from`` opens the window ``[skipped_from, to)``

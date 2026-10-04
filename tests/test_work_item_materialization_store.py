@@ -18,7 +18,7 @@ from sqlalchemy import select
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import (
     IWriteWorkItemRepository,
     WorkItemAuthor,
@@ -196,8 +196,8 @@ def _stored_runner_ids(hub: HubHarness, chunk_id: str) -> list[str | None]:
     return [r.runner_id for r in rows]
 
 
-def _proposal_row(chunk_id: str, proposal_id: str, *, node_id: str = "nd_1") -> WorkItemProposalRow:
-    return WorkItemProposalRow(
+def _proposal_row(chunk_id: str, proposal_id: str, *, node_id: str = "nd_1") -> StampedWorkItemProposal:
+    return StampedWorkItemProposal(
         proposal_id=proposal_id,
         chunk_id=chunk_id,
         node_id=node_id,

@@ -20,7 +20,7 @@ import duckdb
 import pyarrow.parquet as pq
 import pytest
 
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, step_row
+from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
 from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA, invocation_egress_row, step_egress_row
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
@@ -30,12 +30,12 @@ from blizzard.hub.egress.internal.ndjson import NdjsonEncoder
 from blizzard.hub.egress.internal.parquet import ParquetEncoder, arrow_schema
 from blizzard.hub.egress.writer import (
     MONEY_SCALE,
+    ColumnSpec,
     ColumnType,
-    DatasetColumn,
     DatasetSchema,
     EgressBatch,
     EgressPass,
-    EgressRow,
+    EgressValues,
     EgressWriterSettings,
     PlacedFile,
     rfc3339_utc,
@@ -79,7 +79,7 @@ def _datasets() -> dict[str, dict[str, Any]]:
 
 def _contract_schema(dataset: dict[str, Any]) -> DatasetSchema:
     columns = tuple(
-        DatasetColumn(c["name"], ColumnType(c["type"]), c["nullable"], c["meaning"]) for c in dataset["columns"]
+        ColumnSpec(c["name"], ColumnType(c["type"]), c["nullable"], c["meaning"]) for c in dataset["columns"]
     )
     return DatasetSchema(dataset["name"], dataset["major_version"], columns)
 
@@ -95,10 +95,10 @@ def _view_sql(name: str) -> str:
 # -- the seeded scenario ---------------------------------------------------------------------------------------------
 
 
-def _scenario_rows() -> tuple[list[tuple[StepRow, CursorKey]], list[InvocationRow]]:
+def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """Every closed step and every usage fact of the shared tracing scenarios, as the first pass exports them."""
-    steps: list[tuple[StepRow, CursorKey]] = []
-    invocations: list[InvocationRow] = []
+    steps: list[tuple[ExportedStep, CursorKey]] = []
+    invocations: list[ExportedInvocation] = []
     usage_id = 0
     for name, scenario in fx.scenarios().items():
         facts = replace(scenario, chunk_id=f"ch_{name}")
@@ -112,7 +112,7 @@ def _scenario_rows() -> tuple[list[tuple[StepRow, CursorKey]], list[InvocationRo
             usage_id += 1
             try:
                 invocations.append(
-                    fx.invocation_of(facts, UsageRow(usage_id, facts.chunk_id, "r-1", fact), _FIRST_PASS)
+                    fx.invocation_of(facts, AttributedUsage(usage_id, facts.chunk_id, "r-1", fact), _FIRST_PASS)
                 )
             except LookupError:
                 continue
@@ -120,8 +120,8 @@ def _scenario_rows() -> tuple[list[tuple[StepRow, CursorKey]], list[InvocationRo
 
 
 def _rewritten(
-    steps: list[tuple[StepRow, CursorKey]], invocations: list[InvocationRow]
-) -> tuple[list[tuple[StepRow, CursorKey]], list[InvocationRow]]:
+    steps: list[tuple[ExportedStep, CursorKey]], invocations: list[ExportedInvocation]
+) -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """The second pass: one step and one invocation exported again, newer and with changed values, as a late-usage
     rewrite produces."""
     step, key = next((s, k) for s, k in steps if s.invocations > 0)
@@ -136,8 +136,8 @@ def _rewritten(
 def _write_pass(
     writer: DirectoryEgressWriter,
     started_at: datetime,
-    steps: list[tuple[StepRow, CursorKey]],
-    invs: list[InvocationRow],
+    steps: list[tuple[ExportedStep, CursorKey]],
+    invs: list[ExportedInvocation],
 ) -> None:
     egress_pass = EgressPass(started_at)
     placed: list[PlacedFile] = []
@@ -147,7 +147,7 @@ def _write_pass(
     )
     for schema, timed in batches:
         for day in sorted({at.astimezone(UTC).date() for at, _ in timed}):
-            rows: list[EgressRow] = [row for at, row in timed if at.astimezone(UTC).date() == day]
+            rows: list[EgressValues] = [row for at, row in timed if at.astimezone(UTC).date() == day]
             written = writer.write(EgressBatch(schema, day, egress_pass, rows))
             assert not hasattr(written, "cause"), written
             placed += written.files  # type: ignore[union-attr]
@@ -321,8 +321,8 @@ def test_the_scenario_covers_every_closed_value() -> None:
 
 
 def test_the_row_fields_are_the_contract_columns() -> None:
-    assert [f.name for f in fields(StepRow)] == [c["name"] for c in _datasets()["steps"]["columns"]]
-    assert [f.name for f in fields(InvocationRow)] == [c["name"] for c in _datasets()["invocations"]["columns"]]
+    assert [f.name for f in fields(ExportedStep)] == [c["name"] for c in _datasets()["steps"]["columns"]]
+    assert [f.name for f in fields(ExportedInvocation)] == [c["name"] for c in _datasets()["invocations"]["columns"]]
 
 
 # -- _schema ---------------------------------------------------------------------------------------------------------
