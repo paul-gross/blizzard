@@ -58,6 +58,7 @@ def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> Segm
         harness_version=record.harness_version,
         model=record.model,
         effort=record.effort,
+        spawn_cwd=record.spawn_cwd,
         record_truncated=record.record_truncated,
         supersedes=record.supersedes,
         turns_json=turns_json,

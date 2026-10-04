@@ -51,6 +51,8 @@ class TranscriptSegmentLedgerRow:
     #: Frozen at segment open from the lease's own resolved pair; ``None`` when unresolved.
     model: str | None
     effort: str | None
+    #: The worker's working directory, frozen at segment open; ``None`` when unknown.
+    spawn_cwd: str | None
     #: agent_id -> spawning `tool_use_id`, accumulated across every window
     #: this segment has read; empty until one names a pair.
     agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
@@ -215,12 +217,13 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         stamped_at: datetime,
         session: SessionReference,
         supersedes: str | None = None,
+        spawn_cwd: str | None = None,
     ) -> str:
         """Stamp a segment boundary outside a spawn and return its id, cursor
         unset so the pump reads the session from the start. Every boundary the *live* lane
         stamps stays :meth:`~blizzard.runner.domain.leases.IWriteLeaseLivenessRepository.record_spawn`'s;
         this one is the backfill's alone. ``supersedes`` is the re-ship's own pointer at the
-        segment this one replaces on the hub."""
+        segment this one replaces on the hub. ``spawn_cwd`` is the worker's working directory, when known."""
         ...
 
     def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:

@@ -572,6 +572,7 @@ def _record_envelope(
         "harness_version": batch.harness_version,
         "model": segment.model,
         "effort": segment.effort,
+        "spawn_cwd": segment.spawn_cwd,
         "record_truncated": False,
         "supersedes": segment.supersedes,
         "turns": [],

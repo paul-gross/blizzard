@@ -222,6 +222,7 @@ def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSe
         harness_version=segment.harness_version,
         model=segment.model,
         effort=segment.effort,
+        spawn_cwd=segment.spawn_cwd,
         record_truncated=record_truncated,
         supersedes=segment.supersedes,
         turns=[],

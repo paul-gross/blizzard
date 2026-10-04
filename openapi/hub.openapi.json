@@ -9087,6 +9087,17 @@
             "title": "Seq",
             "type": "integer"
           },
+          "spawn_cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spawn Cwd"
+          },
           "spawn_generation": {
             "title": "Spawn Generation",
             "type": "integer"

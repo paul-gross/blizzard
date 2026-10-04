@@ -103,12 +103,14 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         session: SessionReference,
         harness_version: str | None = None,
         pgid: int | None = None,
+        spawn_cwd: str | None = None,
     ) -> None:
         """Fill a lease's spawn-return facts in one shot: pid, process start time, process
         group, session id — for identity known at spawn time (a fresh mint instead splits
         this across :meth:`record_provisional_spawn`/:meth:`record_identified_spawn`).
         ``pgid`` defaults to ``None`` when the launch's owned group is unknown. ``spawned_at``
-        appends the lease's spawn generation, distinguishing this fact from a stale one."""
+        appends the lease's spawn generation, distinguishing this fact from a stale one.
+        ``spawn_cwd`` is the worker's working directory, frozen onto the opened transcript segment."""
         ...
 
     def record_provisional_spawn(
@@ -135,11 +137,12 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         session: SessionReference,
         identified_at: datetime,
         harness_version: str | None = None,
+        spawn_cwd: str | None = None,
     ) -> None:
         """Phase two: fill the open provisional generation's authoritative session
         id — the newest ``lease_spawns`` row for this lease with no ``session_id`` yet —
         and the lease's own ``session_id``/``harness_id``. Also opens/carries-forward the
-        lease's transcript segment, mirroring :meth:`record_spawn`'s own segment handling."""
+        lease's transcript segment, mirroring :meth:`record_spawn`'s own segment handling, ``spawn_cwd`` included."""
         ...
 
     def record_identity_failed(self, lease_id: str, *, at: datetime) -> None:

@@ -542,8 +542,9 @@ class DormantSession:
         # Observed BEFORE the resume, the same as a fresh spawn (spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
+        spawn_cwd = SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir)
         resumed = harness.resume_with_message(
-            SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir),
+            spawn_cwd,
             session.session_id,
             message,
             stdout_path=spawner.stdout_path(lease.lease_id),
@@ -571,6 +572,7 @@ class DormantSession:
                 session=lease.session,  # unchanged — same concrete session under the same lease
                 spawned_at=stamped,
                 harness_version=version,
+                spawn_cwd=spawn_cwd,
             )
         except Exception:
             # A plain raise here never disarms the trampoline on its own — kill it

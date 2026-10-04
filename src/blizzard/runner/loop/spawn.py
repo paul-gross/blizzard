@@ -252,6 +252,7 @@ class Spawner:
             session=spawned_session,
             identified_at=self.ctx.clock.now(),
             harness_version=version,
+            spawn_cwd=SpawnCwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None).path,
         )
         if self.ctx.events is not None:
             # The 'created' mint alone leaves `spawning` -> `running` unannounced.

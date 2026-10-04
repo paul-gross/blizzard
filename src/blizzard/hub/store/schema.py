@@ -1323,6 +1323,8 @@ transcript_segments = Table(
     # Frozen at the runner's segment open; nullable, no backfill.
     Column("model", String, nullable=True),
     Column("effort", String, nullable=True),
+    # The worker's working directory, frozen at the runner's segment open; nullable, no backfill.
+    Column("spawn_cwd", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
     Column("record_truncated", Boolean, nullable=True),
     # Re-ship only: the segment this replaces — dropped from a bounded per-lease read.

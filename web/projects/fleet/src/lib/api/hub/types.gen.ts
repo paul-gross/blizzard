@@ -5764,6 +5764,10 @@ export type TranscriptSegmentRecord = {
      */
     seq: number;
     /**
+     * Spawn Cwd
+     */
+    spawn_cwd?: string | null;
+    /**
      * Spawn Generation
      */
     spawn_generation: number;

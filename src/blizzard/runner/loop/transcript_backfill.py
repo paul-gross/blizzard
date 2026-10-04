@@ -217,6 +217,7 @@ class TranscriptBackfill:
             session=source.session,
             stamped_at=self.ctx.clock.now(),
             supersedes=source.segment_id,
+            spawn_cwd=source.spawn_cwd,
         )
 
     def _open(self, lease: TranscriptBackfillLease) -> str:
@@ -228,6 +229,7 @@ class TranscriptBackfill:
             lease_id=lease.lease_id,
             session=lease.session,
             stamped_at=self.ctx.clock.now(),
+            spawn_cwd=self._spawn_cwd(lease.chunk_id),
         )
 
     def _finish(self, segment_id: str) -> bool:
