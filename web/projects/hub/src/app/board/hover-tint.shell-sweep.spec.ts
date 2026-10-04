@@ -47,7 +47,7 @@ function channelDelta(a: string, b: string): number {
 }
 
 /**
- * The design tokens are a global stylesheet (`design/tokens.css`'s own doc comment),
+ * The design tokens are a global stylesheet (`core/design/tokens.css`'s own doc comment),
  * loaded via each app's build `styles` — never by a standalone component test, and a
  * plain module import of a `.css` file does not reach the document either under this
  * builder (checked: it lands as an unreferenced lazy chunk). This spec's whole claim is

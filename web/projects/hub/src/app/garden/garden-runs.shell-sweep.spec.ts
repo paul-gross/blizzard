@@ -10,7 +10,7 @@ import { FleetScopePanel, type ScopePanelVm } from './scopes/scope-panel';
 import { FleetRunList, type RunListRowVm } from './runs/run-list';
 
 /**
- * The design tokens are a global stylesheet (`design/tokens.css`'s own doc comment),
+ * The design tokens are a global stylesheet (`core/design/tokens.css`'s own doc comment),
  * loaded via each app's build `styles` — never by a standalone component test
  * (`hover-tint.shell-sweep.spec.ts`'s own note). The escalated-row claim below is about
  * a resolved `var(--red)`-derived color, so it reads the sheet's real text

@@ -69,13 +69,13 @@ module.exports = defineConfig([
     ],
     rules: {},
   },
-  // A sub-barrel names what's re-stackable outside its feature directory (issue #82,
-  // `bzh:frontend-disjoint-diffs`); a blanket `export *` makes that decision unmakeable,
+  // A sub-barrel names what's re-stackable outside its feature directory
+  // (`bzh:frontend-disjoint-diffs`); a blanket `export *` makes that decision unmakeable,
   // since every symbol added under the feature directory becomes public with no diff on
-  // the barrel. Scoped to `projects/*/src/lib/*/index.ts` so fleet's own top-level
+  // the barrel. Scoped to `projects/*/src/lib/**/index.ts` so fleet's own top-level
   // `public-api.ts` — which legitimately stars its sub-barrels — stays legal.
   {
-    files: ["projects/*/src/lib/*/index.ts"],
+    files: ["projects/*/src/lib/**/index.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",

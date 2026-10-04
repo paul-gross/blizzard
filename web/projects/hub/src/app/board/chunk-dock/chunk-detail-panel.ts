@@ -16,7 +16,7 @@ export type { EditGraphEvent } from 'fleet';
  * selected chunk, filling the centre column under the board without reflowing it.
  *
  * A thin **composition** of seven sibling presentational
- * components under `lib/chunk-detail/`, each owning one region: the
+ * components under `lib/chunk/chunk-detail/`, each owning one region: the
  * {@link ChunkDetailHeader} (identity, pause/detach/resume, close), the
  * work-item column ({@link ChunkFacts} + {@link ChunkTokenBreakdown} +
  * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}), the node-history
