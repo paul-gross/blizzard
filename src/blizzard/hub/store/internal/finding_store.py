@@ -9,11 +9,12 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import desc, func, insert, select
+from sqlalchemy import ColumnElement, and_, desc, exists, func, insert, or_, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.findings import (
     FACT_KINDS,
+    LIVE_KINDS,
     FactEntry,
     Finding,
     FindingFact,
@@ -30,6 +31,26 @@ from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
 #: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
+
+
+def _newest_fact_is_live() -> ColumnElement[bool]:
+    """True exactly when no fact of the finding is both outside `LIVE_KINDS` and its newest —
+    `derive_liveness`'s answer, so a finding with no facts reads live. Newest is
+    `(recorded_at, id)` descending, correlated to `findings.finding_id`."""
+    fact = finding_facts.alias("fact")
+    newer = finding_facts.alias("newer")
+    has_newer = exists().where(
+        newer.c.finding_id == fact.c.finding_id,
+        or_(
+            newer.c.recorded_at > fact.c.recorded_at,
+            and_(newer.c.recorded_at == fact.c.recorded_at, newer.c.id > fact.c.id),
+        ),
+    )
+    return ~exists().where(
+        fact.c.finding_id == findings.c.finding_id,
+        fact.c.kind.not_in(sorted(LIVE_KINDS)),
+        ~has_newer,
+    )
 
 
 def _encode_finding_cursor(finding: Finding) -> str:
@@ -231,37 +252,28 @@ class FindingStore:
         limit: int,
     ) -> FindingPage:
         """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
-        keyset-paginated read. Liveness is derived in Python after
-        each SQL window, so a short window tops up — narrowed by `finding_id` each
-        retry — until `limit` matches accumulate or the table is exhausted, rather than
-        returning a short page while more findings still stand."""
+        keyset-paginated read. With `include_gone=False` the query itself drops every finding
+        whose newest fact is not live, so `LIMIT limit+1` bounds the page: one page query plus
+        one `_facts_for_many` read over the page's own ids. The only per-skipped-finding cost
+        is the indexed newest-fact probe."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        window_after = _decode_finding_cursor(cursor) if cursor is not None else None
-        window_size = limit + 1
-        matched: list[Finding] = []
+        stmt = select(findings).order_by(findings.c.finding_id).limit(limit + 1)
+        if routine_name is not None:
+            stmt = stmt.where(findings.c.routine_name == routine_name)
+        if scope_slug is not None:
+            stmt = stmt.where(findings.c.scope_slug == scope_slug)
+        if source is not None:
+            stmt = stmt.where(findings.c.source == source)
+        if cursor is not None:
+            stmt = stmt.where(findings.c.finding_id > _decode_finding_cursor(cursor))
+        if not include_gone:
+            stmt = stmt.where(_newest_fact_is_live())
         with self._store.read("list_page") as conn:
-            while len(matched) <= limit:
-                stmt = select(findings).order_by(findings.c.finding_id).limit(window_size)
-                if routine_name is not None:
-                    stmt = stmt.where(findings.c.routine_name == routine_name)
-                if scope_slug is not None:
-                    stmt = stmt.where(findings.c.scope_slug == scope_slug)
-                if source is not None:
-                    stmt = stmt.where(findings.c.source == source)
-                if window_after is not None:
-                    stmt = stmt.where(findings.c.finding_id > window_after)
-                rows = conn.execute(stmt).all()
-                if not rows:
-                    break
-                facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-                window_findings = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
-                matched.extend(f for f in window_findings if include_gone or f.live)
-                window_after = rows[-1].finding_id
-                if len(rows) < window_size:
-                    break
-        page = matched[:limit]
-        next_cursor = _encode_finding_cursor(page[-1]) if len(matched) > limit else None
+            rows = conn.execute(stmt).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows[:limit]])
+        page = [self._of(row, facts_by_id[row.finding_id]) for row in rows[:limit]]
+        next_cursor = _encode_finding_cursor(page[-1]) if len(rows) > limit else None
         return FindingPage(findings=page, next_cursor=next_cursor)
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
