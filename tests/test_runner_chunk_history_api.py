@@ -25,7 +25,7 @@ from blizzard.runner.leases import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -437,6 +437,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_pat
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "1"})]}
     ).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},

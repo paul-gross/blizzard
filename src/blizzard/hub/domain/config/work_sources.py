@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Protocol
+from typing import ClassVar, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import KNOWN_WORK_SOURCE_PROVIDERS, RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.config.changes import ConfigChange, FieldChange
+from blizzard.hub.domain.config.changes import (
+    FIELDED_RECORD_TRANSITIONS,
+    RETIRED_FIELD,
+    ChangeContext,
+    ChangeOp,
+    ConfigChange,
+    FieldChange,
+    RecordKind,
+    RecordState,
+    Verdict,
+)
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 #: Providers whose items cannot be read without a credential.
@@ -80,10 +91,15 @@ class WorkSourceFields:
     secret: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ConfiguredWorkSource:
-    """A stored work source. ``retired`` derives from the newest lifecycle fact."""
+    """A stored work source. ``retired`` derives from the newest lifecycle fact.
+
+    Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
+    or ``None`` when the verb changes nothing and so writes nothing."""
+
+    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
 
     name: str
     fields: WorkSourceFields
@@ -91,6 +107,48 @@ class ConfiguredWorkSource:
     created_at: datetime
     created_by: str
     retired: bool = False
+
+    @classmethod
+    def new(
+        cls, name: str, fields: WorkSourceFields, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[ConfiguredWorkSource, ConfigChange]:
+        validate_name(name)
+        validate_fields(fields)
+        record = cls(name=name, fields=fields, revision=1, created_at=at, created_by=ctx.actor)
+        return record, ConfigChange.of(ctx, RecordKind.WORK_SOURCE, name, 1, ChangeOp.CREATE, diff(None, fields), at)
+
+    def require_revision(self, if_match: int | None) -> None:
+        """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
+        if if_match is not None and if_match != self.revision:
+            raise ConfigRevisionConflict("work source", self.name, current=self.revision)
+
+    def edit(
+        self, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
+        """Apply a sparse edit, legal from either state. The revision check comes first, even
+        for an edit that changes nothing; an empty diff never re-validates the stored fields."""
+        self.require_revision(if_match)
+        merged = merge(self.fields, edit)
+        changes = diff(self.fields, merged)
+        if not changes:
+            return None
+        validate_fields(merged)
+        edited = replace(self, fields=merged, revision=self.revision + 1)
+        return edited, ConfigChange.of(
+            ctx, RecordKind.WORK_SOURCE, self.name, edited.revision, ChangeOp.EDIT, changes, at
+        )
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
+        """Retire or enable; ``None`` when the record already stands there (a redundant verb writes nothing)."""
+        self.require_revision(if_match)
+        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
+        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+            return None
+        moved = replace(self, revision=self.revision + 1, retired=retired)
+        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        return moved, ConfigChange.of(ctx, RecordKind.WORK_SOURCE, self.name, moved.revision, op, flip, at)
 
 
 @dto
@@ -106,13 +164,24 @@ class WorkSourceEdit:
     secret: str | None | UnsetType = UNSET
 
 
+def is_built_in(name: str) -> bool:
+    """Whether ``name`` is the built-in hub source, which no configured record may claim or change."""
+    return name == RESERVED_HUB_SOURCE_NAME
+
+
+def require_configurable(name: str) -> None:
+    """:class:`BuiltInWorkSource` when ``name`` is the built-in hub source."""
+    if is_built_in(name):
+        raise BuiltInWorkSource()
+
+
 def validate_name(name: str) -> None:
     if not name or not name.strip():
         raise ConfigFieldError("name", "must not be blank")
     if ":" in name:
         # A colon breaks the ingest-token grammar's first-colon split.
         raise ConfigFieldError("name", f"{name!r} must not contain ':'")
-    if name == RESERVED_HUB_SOURCE_NAME:
+    if is_built_in(name):
         raise ConfigFieldError("name", f"{name!r} is reserved for the built-in hub source")
 
 

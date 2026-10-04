@@ -873,7 +873,7 @@ def test_artifact_lookups_are_flat_as_the_delta_names_grow(tmp_path: Path) -> No
         for name in names:
             _record_artifact(hub, chunk_id, name=name, content=_delta())
         with capture_statements(hub.engine) as statements:
-            resp = _post(hub, chunk_id, delta=[*names, "missing"])
+            resp = _post(hub, chunk_id, delta=names, proposals=["missing"])
         assert resp.status_code == 200, resp.text
         assert resp.json()["outcome"] == "recorded"
         return sum(1 for statement, _ in statements if "FROM artifacts" in statement)

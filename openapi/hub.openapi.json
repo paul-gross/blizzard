@@ -4410,7 +4410,7 @@
       },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the minted item's\nbody, wrapped in the \"Related findings\" template when the proposal cites findings and\nminted bare otherwise; ignored when `mint_work_item` is `False`.",
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the minted item's\nbody, wrapped in the \"Related findings\" template when the proposal cites findings and\nminted bare otherwise; refused (422) when `mint_work_item` is `False`. A blank\n`reason` is stored as none.",
         "properties": {
           "body": {
             "anyOf": [
@@ -9251,7 +9251,7 @@
         "type": "object"
       },
       "TranscriptSegmentAck": {
-        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is the cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
+        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` records are acknowledged and content-dropped, a durable decision never re-adjudicated on\nreplay; ``refused`` records, whose lease epoch another holder owns, are acknowledged and never stored.",
         "properties": {
           "already_applied": {
             "default": [],
@@ -9280,6 +9280,14 @@
           "high_water": {
             "title": "High Water",
             "type": "integer"
+          },
+          "refused": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Refused",
+            "type": "array"
           },
           "runner_id": {
             "title": "Runner Id",
@@ -14033,7 +14041,7 @@
     },
     "/api/chunks/{chunk_id}/dependencies": {
       "post": {
-        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id``.\n\nIdempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone\nephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this\nwrite; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
+        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id``.\n\nIdempotent: an already-standing pair is reported back, even past the dependent's window or once the\nprerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;\n409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
         "operationId": "declare_dependency_api_chunks__chunk_id__dependencies_post",
         "parameters": [
           {
@@ -14474,7 +14482,7 @@
     },
     "/api/chunks/{chunk_id}/promote": {
       "post": {
-        "description": "Promote a not-ready chunk to ready so a runner may claim it.\n\nIdempotent: promoting an already-ready or already-running chunk is a harmless no-op.\n404 only when the chunk is unknown.",
+        "description": "Promote a not-ready chunk to ready so a runner may claim it.\n\nIdempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk\nis unknown; 409 when a never-promoted chunk is already ``done`` or ``stopped``.",
         "operationId": "promote_chunk_api_chunks__chunk_id__promote_post",
         "parameters": [
           {
@@ -15133,7 +15141,7 @@
     },
     "/api/egress/backfill": {
       "post": {
-        "description": "Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window\nor dataset is 422, a backfill while the export is off or rejected \u2014 even a dry run \u2014 is 409, and a writer that\nrefuses is 502 with the counts committed before.",
+        "description": "Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window\n\u2014 inverted, too wide, or reaching past now \u2014 or dataset is 422, a wet backfill while the export is off or\nrejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts\ncommitted before.",
         "operationId": "egress_backfill_api_egress_backfill_post",
         "requestBody": {
           "content": {
@@ -15249,7 +15257,7 @@
     },
     "/api/events": {
       "get": {
-        "description": "The ``event_log`` unified with open escalations, newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;\nthe open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the\nprojection's aware ``recorded_at`` comparison below never raises against it.",
+        "description": "The ``event_log`` unified with open escalations, newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to both halves, the event\nlog and the open escalations alike. A tz-naive\n``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it.",
         "operationId": "list_events_api_events_get",
         "parameters": [
           {
@@ -15485,7 +15493,7 @@
     },
     "/api/findings/confirm-gone": {
       "post": {
-        "description": "Confirm by hand that every finding in `finding_ids` no longer reproduces,\nrecording NOTE. 404 for an unknown id, 422 for a blank note.",
+        "description": "Confirm by hand that every finding in `finding_ids` no longer reproduces,\nrecording NOTE. 404 for an unknown id, 409 for a finding already exited, 422 for a\nblank note or a duplicate id.",
         "operationId": "confirm_gone_findings_api_findings_confirm_gone_post",
         "requestBody": {
           "content": {
@@ -15531,7 +15539,7 @@
     },
     "/api/findings/not-a-finding": {
       "post": {
-        "description": "Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for\nan unknown id, 422 for a blank note.",
+        "description": "Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for\nan unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id.",
         "operationId": "not_a_finding_findings_api_findings_not_a_finding_post",
         "requestBody": {
           "content": {
@@ -15577,7 +15585,7 @@
     },
     "/api/findings/reopen": {
       "post": {
-        "description": "Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was\nnewest, recording NOTE. 404 for an unknown id, 422 for a blank note.",
+        "description": "Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was\nnewest, recording NOTE. 404 for an unknown id, 409 for a finding already live, 422 for\na blank note or a duplicate id.",
         "operationId": "reopen_findings_api_findings_reopen_post",
         "requestBody": {
           "content": {
@@ -15623,7 +15631,7 @@
     },
     "/api/findings/resolve": {
       "post": {
-        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution happens only when a delivery lands.",
+        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 409 for a finding already exited (reopen it\nfirst), 422 for a blank note or a duplicate id. A hand resolution names\nno garden proposal \u2014 that attribution happens only when a delivery lands.",
         "operationId": "resolve_findings_api_findings_resolve_post",
         "requestBody": {
           "content": {
@@ -15669,7 +15677,7 @@
     },
     "/api/findings/supersede": {
       "post": {
-        "description": "Withdraw every finding in `finding_ids` as superseded by `superseded_by`,\nrecording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422\nfor a blank note, a self-superseding id, or a `superseded_by` that isn't itself live.",
+        "description": "Withdraw every finding in `finding_ids` as superseded by `superseded_by`,\nrecording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`\n(checked first, so a self-naming unknown id is 404), 409 for a finding already exited,\n422 for a blank note, a duplicate id, a self-superseding id, or a `superseded_by` that\nisn't itself live.",
         "operationId": "supersede_findings_api_findings_supersede_post",
         "requestBody": {
           "content": {
@@ -15715,7 +15723,7 @@
     },
     "/api/findings/wont-fix": {
       "post": {
-        "description": "Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground\nhasn't moved, a person has decided it doesn't merit standing regardless. 404 for an\nunknown id, 422 for a blank note.",
+        "description": "Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground\nhasn't moved, a person has decided it doesn't merit standing regardless. 404 for an\nunknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id.",
         "operationId": "wont_fix_findings_api_findings_wont_fix_post",
         "requestBody": {
           "content": {
@@ -16985,7 +16993,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/route-token": {
       "post": {
-        "description": "Rotate the chunk's live route capability token \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403\nwhen the route's runner is retired.",
+        "description": "Rotate the chunk's live route capability token \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403\nwhen the route's runner is retired; 409 when the chunk has ended.",
         "operationId": "rekey_route_token_api_fleet_chunks__chunk_id__route_token_post",
         "parameters": [
           {
@@ -17279,7 +17287,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), not ready, standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -17813,7 +17821,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. 404 unknown proposal, 409 already closed or a raced ingest, 503 the\npackaged default graph retired.",
+        "description": "Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`\nwith `mint_work_item` false or a minted item left with a blank title or body, 409\nalready closed or a raced ingest, 503 the packaged default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {
@@ -17866,7 +17874,7 @@
     },
     "/api/garden-proposals/{proposal_id}/attach": {
       "post": {
-        "description": "Link the given finding ids to PROPOSAL_ID \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, exited, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
+        "description": "Link the given finding ids to PROPOSAL_ID \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,\nexited, or duplicate finding id, or one already linked to this proposal \u2014 the whole\ncall is refused, nothing is linked.",
         "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
         "parameters": [
           {
@@ -17919,7 +17927,7 @@
     },
     "/api/garden-proposals/{proposal_id}/detach": {
       "post": {
-        "description": "Unlink the given finding ids from PROPOSAL_ID \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 an unknown or\nduplicate id, or one not linked to this proposal.",
+        "description": "Unlink the given finding ids from PROPOSAL_ID \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an\nunknown or duplicate id, or one not linked to this proposal.",
         "operationId": "detach_garden_proposal_findings_api_garden_proposals__proposal_id__detach_post",
         "parameters": [
           {
@@ -17972,7 +17980,7 @@
     },
     "/api/garden-proposals/{proposal_id}/pass": {
       "post": {
-        "description": "Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a\ndismissal \u2014 it is the note that stops a later run raising the same response as\nthough it were new. 404 for an unknown proposal, 422 for a blank reason, 409 when\nthe proposal already carries a closure \u2014 closure is terminal.",
+        "description": "Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a\ndismissal \u2014 it is the note that stops a later run raising the same response as\nthough it were new. 404 for an unknown proposal, 409 when the proposal already\ncarries a closure \u2014 closure is terminal, so it wins over every other refusal \u2014 and\n422 for a blank reason.",
         "operationId": "pass_garden_proposal_api_garden_proposals__proposal_id__pass_post",
         "parameters": [
           {
@@ -19200,7 +19208,7 @@
     },
     "/api/routines/trend": {
       "get": {
-        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.",
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `TrendWindow.MAX_PERIODS`.",
         "operationId": "routine_trend_api_routines_trend_get",
         "parameters": [
           {
@@ -20643,7 +20651,7 @@
         ]
       },
       "post": {
-        "description": "Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name.",
+        "description": "Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name\nor a blank value.",
         "operationId": "create_secret_api_secrets_post",
         "parameters": [
           {
@@ -20864,7 +20872,7 @@
     },
     "/api/secrets/{name}/value": {
       "put": {
-        "description": "Replace a secret's value, advancing its revision. 409 naming the current revision\nwhen `If-Match` is stale or a concurrent replace won, and when the secret is retired;\n404 on an unknown name.",
+        "description": "Replace a secret's value, advancing its revision. 409 naming the current revision\nwhen `If-Match` is stale or a concurrent replace won, and when the secret is retired;\n422 on a blank value; 404 on an unknown name.",
         "operationId": "replace_secret_api_secrets__name__value_put",
         "parameters": [
           {
@@ -21008,7 +21016,7 @@
     },
     "/api/traces/replay": {
       "post": {
-        "description": "Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.\nA bad window is 422, a replay that must export while tracing is off is 409, and an exporter that\nrefuses is 502 with the counts it accepted before.",
+        "description": "Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.\nA bad window \u2014 inverted, too wide, or reaching past now \u2014 is 422, a replay that must export while tracing\nis off is 409, and an exporter that refuses is 502 with the counts it accepted before.",
         "operationId": "trace_replay_api_traces_replay_post",
         "requestBody": {
           "content": {

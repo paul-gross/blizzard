@@ -1,6 +1,6 @@
 """RunnerEnrollmentService (unit tier) — mint/rotate a runner's bearer token.
 
-A fake registry stands in for the store — only ``set_token_hash`` is meaningfully
+A fake registry stands in for the store — only ``rotate_token`` is meaningfully
 implemented; anything else raises loudly if called (``bzh:domain-core``)."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
 
 pytestmark = pytest.mark.unit
 
@@ -24,12 +24,13 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 @dataclass
 class _FakeRegistry:
-    """Only ``set_token_hash`` is live; anything else is a bug."""
+    """Only ``rotate_token`` is live; anything else is a bug."""
 
     recorded: list[tuple[str, str, datetime]] = field(default_factory=list)
 
-    def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        self.recorded.append((runner_id, token_hash, at))
+    def rotate_token(self, rotation: TokenRotation) -> int | None:
+        self.recorded.append((rotation.runner_id, rotation.token_hash, rotation.at))
+        return None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"RunnerEnrollmentService should not touch {name!r}")

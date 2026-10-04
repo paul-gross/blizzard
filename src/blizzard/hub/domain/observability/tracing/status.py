@@ -12,6 +12,7 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
+from blizzard.hub.domain.observability.lane_failure import failure_ongoing
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import oldest_unsent
@@ -59,7 +60,7 @@ class TraceStatusReader:
         cursor = self._steps.newest_cursor()
         exported = self._status.newest_export_cursor()
         failure = self._status.newest_export_failure()
-        ongoing = failure is not None and self._steps.newest_export_latch() == "trace-export-failed"
+        ongoing = failure_ongoing(failure, self._steps.newest_export_latch(), failed_kind="trace-export-failed")
         return TraceStatus(
             state=self._settings.state,
             endpoint=self._settings.endpoint,

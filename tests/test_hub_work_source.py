@@ -29,12 +29,11 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.editing import (
-    WorkItemEdit,
     WorkItemEditService,
     WorkItemHeldByDependents,
     WorkItemHeldByLiveChunk,
-    WorkItemNotEditable,
 )
+from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -420,8 +419,8 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
 
 
 def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Path) -> None:
-    """A second withdrawal after the delete cascade already closed ``item`` hits
-    ``_require_open``'s existing ``closed_at IS NULL`` guard — no second write
+    """A second withdrawal after the delete cascade already closed ``item`` is refused by
+    the item's own verb table — withdraw is legal only from open — so no second write
     (idempotent-by-guard)."""
     source, _, _, _, engine, _ = _source(tmp_path)
     created = source.create(
@@ -748,3 +747,81 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
     finding = FindingStore(hub_store_connections(engine)).get("fin_1")
     assert finding is not None
     assert finding.state == "live"
+
+
+# --------------------------------------------------------------------------- #
+# Lost write races and closed-item verbs
+
+
+def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock) -> WorkItemEditService:
+    """The write half on its own, to hand it a record read before a racing write."""
+    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
+    return WorkItemEditService(
+        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+    )
+
+
+def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_path: Path) -> None:
+    """The item reads open with no live holder, then a delivery closes it before the withdrawal's own write,
+    which the store's ``closed_at IS NULL`` guard turns into nothing written: the
+    withdrawal is refused, never answered with the delivered record."""
+    _, items, chunks, _, engine, clock = _source(tmp_path)
+    edits = _edits(items, chunks, clock)
+    created = seed_work_item(
+        items,
+        graph_id=_graph(engine).graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    with chunks.exclusive.locked([f"ch_{created.ref}"]) as handle:
+        chunks.lifecycle.record_stop_locked(handle, f"ch_{created.ref}", by="operator", at=_T0)
+    stale = items.get("hub", created.ref)
+    assert stale is not None and stale.closure is None
+    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+
+    with pytest.raises(WorkItemNotEditable) as caught:
+        edits.withdraw(stale, by="operator")
+
+    assert caught.value.closure is WorkItemClosure.DELIVERED
+    row = items.get("hub", created.ref)
+    assert row is not None and row.closure is WorkItemClosure.DELIVERED
+
+
+def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_path: Path) -> None:
+    """Deliver from withdrawn is a declared no-op: the closure stands and no write is made."""
+    _, items, chunks, _, engine, clock = _source(tmp_path)
+    edits = _edits(items, chunks, clock)
+    created = seed_work_item(
+        items,
+        graph_id=_graph(engine).graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    withdrawn = items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+
+    assert edits.deliver(withdrawn) == withdrawn
+    assert items.get("hub", created.ref) == withdrawn
+
+
+@pytest.mark.parametrize(("title", "body", "field_name"), [(" ", "b", "title"), ("t", "", "body")])
+def test_every_minting_door_refuses_a_blank_title_or_body(
+    tmp_path: Path, title: str, body: str, field_name: str
+) -> None:
+    """The operator create, the fleet materialize-create, and the garden accept-create
+    all hold the item's non-blank text invariant, before any ref is allocated."""
+    _, items, chunks, _, engine, clock = _source(tmp_path)
+    edits = _edits(items, chunks, clock)
+    graph = _graph(engine)
+    author = WorkItemAuthor.user("u_1")
+
+    with pytest.raises(WorkItemFieldBlank) as created:
+        edits.create(source="hub", title=title, body=body, author=author, stated_priority=None, graph=graph)
+    with pytest.raises(WorkItemFieldBlank) as materialized:
+        edits.materialize_create("p_1", title=title, body=body, author=author, stated_priority=None, graph=graph)
+    with pytest.raises(WorkItemFieldBlank) as accepted:
+        edits.accept_create(
+            "gp_1", title=title, body=body, author=author, graph=graph, reason=None, closed_by="operator"
+        )
+
+    assert {created.value.field_name, materialized.value.field_name, accepted.value.field_name} == {field_name}
+    assert items.list("hub", limit=10) == []

@@ -154,3 +154,32 @@ def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(t
     )
     assert retried.status_code == 200, retried.text
     assert retried.json()["outcome"] != "failure"
+
+
+def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx.Response:  # type: ignore[no-untyped-def]
+    body = {"from_node_id": node_id, "epoch": 1, "runner_id": "r1", "artifacts": artifacts}
+    return hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
+
+
+def test_a_decision_missing_a_produces_name_is_rejected_under_enforce_and_parks_nothing(tmp_path: Path) -> None:
+    """A runner-config gate is a dispatch fork too: the step's artifacts land with the decision,
+    so the produces backstop judges them there as it does a completion."""
+    hub = build_hub(tmp_path, produces_mode=PRODUCES_ENFORCE)
+    chunk_id, node_id = _ingest(hub)
+
+    resp = _decide(hub, chunk_id, node_id, artifacts=[])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "failure"
+    assert "notes" in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"] is None
+
+
+def test_a_decision_carrying_its_attached_produces_parks_under_enforce(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, produces_mode=PRODUCES_ENFORCE)
+    chunk_id, node_id = _ingest(hub)
+
+    notes = {"name": "notes", "kind": "asset", "content": "n", "attached": True}
+    resp = _decide(hub, chunk_id, node_id, artifacts=[notes])
+
+    assert resp.json()["outcome"] == "parked_at_gate", resp.text

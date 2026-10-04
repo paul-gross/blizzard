@@ -362,9 +362,9 @@ export const completeChunkApiChunksChunkIdCompletePost = <ThrowOnError extends b
  *
  * Declare that CHUNK depends on ``prerequisite_chunk_id``.
  *
- * Idempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone
- * ephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this
- * write; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.
+ * Idempotent: an already-standing pair is reported back, even past the dependent's window or once the
+ * prerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;
+ * 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.
  */
 export const declareDependencyApiChunksChunkIdDependenciesPost = <ThrowOnError extends boolean = false>(options: Options<DeclareDependencyApiChunksChunkIdDependenciesPostData, ThrowOnError>): RequestResult<DeclareDependencyApiChunksChunkIdDependenciesPostResponses, DeclareDependencyApiChunksChunkIdDependenciesPostErrors, ThrowOnError> => (options.client ?? client).post<DeclareDependencyApiChunksChunkIdDependenciesPostResponses, DeclareDependencyApiChunksChunkIdDependenciesPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/dependencies',
@@ -478,8 +478,8 @@ export const getPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGet = <ThrowOnError
  *
  * Promote a not-ready chunk to ready so a runner may claim it.
  *
- * Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
- * 404 only when the chunk is unknown.
+ * Idempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk
+ * is unknown; 409 when a never-promoted chunk is already ``done`` or ``stopped``.
  */
 export const promoteChunkApiChunksChunkIdPromotePost = <ThrowOnError extends boolean = false>(options: Options<PromoteChunkApiChunksChunkIdPromotePostData, ThrowOnError>): RequestResult<PromoteChunkApiChunksChunkIdPromotePostResponses, PromoteChunkApiChunksChunkIdPromotePostErrors, ThrowOnError> => (options.client ?? client).post<PromoteChunkApiChunksChunkIdPromotePostResponses, PromoteChunkApiChunksChunkIdPromotePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/promote', ...options });
 
@@ -618,8 +618,9 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnErro
  * Egress Backfill
  *
  * Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
- * or dataset is 422, a backfill while the export is off or rejected — even a dry run — is 409, and a writer that
- * refuses is 502 with the counts committed before.
+ * — inverted, too wide, or reaching past now — or dataset is 422, a wet backfill while the export is off or
+ * rejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts
+ * committed before.
  */
 export const egressBackfillApiEgressBackfillPost = <ThrowOnError extends boolean = false>(options: Options<EgressBackfillApiEgressBackfillPostData, ThrowOnError>): RequestResult<EgressBackfillApiEgressBackfillPostResponses, EgressBackfillApiEgressBackfillPostErrors, ThrowOnError> => (options.client ?? client).post<EgressBackfillApiEgressBackfillPostResponses, EgressBackfillApiEgressBackfillPostErrors, ThrowOnError>({
     url: '/api/egress/backfill',
@@ -658,9 +659,9 @@ export const egressStatusApiEgressStatusGet = <ThrowOnError extends boolean = fa
  *
  * The ``event_log`` unified with open escalations, newest first, bounded.
  *
- * The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
- * the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
- * projection's aware ``recorded_at`` comparison below never raises against it.
+ * The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to both halves, the event
+ * log and the open escalations alike. A tz-naive
+ * ``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it.
  */
 export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEventsApiEventsGetData, ThrowOnError>): RequestResult<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError>({ url: '/api/events', ...options });
 
@@ -686,7 +687,8 @@ export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>
  * Confirm Gone Findings
  *
  * Confirm by hand that every finding in `finding_ids` no longer reproduces,
- * recording NOTE. 404 for an unknown id, 422 for a blank note.
+ * recording NOTE. 404 for an unknown id, 409 for a finding already exited, 422 for a
+ * blank note or a duplicate id.
  */
 export const confirmGoneFindingsApiFindingsConfirmGonePost = <ThrowOnError extends boolean = false>(options: Options<ConfirmGoneFindingsApiFindingsConfirmGonePostData, ThrowOnError>): RequestResult<ConfirmGoneFindingsApiFindingsConfirmGonePostResponses, ConfirmGoneFindingsApiFindingsConfirmGonePostErrors, ThrowOnError> => (options.client ?? client).post<ConfirmGoneFindingsApiFindingsConfirmGonePostResponses, ConfirmGoneFindingsApiFindingsConfirmGonePostErrors, ThrowOnError>({
     url: '/api/findings/confirm-gone',
@@ -701,7 +703,7 @@ export const confirmGoneFindingsApiFindingsConfirmGonePost = <ThrowOnError exten
  * Not A Finding Findings
  *
  * Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
- * an unknown id, 422 for a blank note.
+ * an unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id.
  */
 export const notAFindingFindingsApiFindingsNotAFindingPost = <ThrowOnError extends boolean = false>(options: Options<NotAFindingFindingsApiFindingsNotAFindingPostData, ThrowOnError>): RequestResult<NotAFindingFindingsApiFindingsNotAFindingPostResponses, NotAFindingFindingsApiFindingsNotAFindingPostErrors, ThrowOnError> => (options.client ?? client).post<NotAFindingFindingsApiFindingsNotAFindingPostResponses, NotAFindingFindingsApiFindingsNotAFindingPostErrors, ThrowOnError>({
     url: '/api/findings/not-a-finding',
@@ -716,7 +718,8 @@ export const notAFindingFindingsApiFindingsNotAFindingPost = <ThrowOnError exten
  * Reopen Findings
  *
  * Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was
- * newest, recording NOTE. 404 for an unknown id, 422 for a blank note.
+ * newest, recording NOTE. 404 for an unknown id, 409 for a finding already live, 422 for
+ * a blank note or a duplicate id.
  */
 export const reopenFindingsApiFindingsReopenPost = <ThrowOnError extends boolean = false>(options: Options<ReopenFindingsApiFindingsReopenPostData, ThrowOnError>): RequestResult<ReopenFindingsApiFindingsReopenPostResponses, ReopenFindingsApiFindingsReopenPostErrors, ThrowOnError> => (options.client ?? client).post<ReopenFindingsApiFindingsReopenPostResponses, ReopenFindingsApiFindingsReopenPostErrors, ThrowOnError>({
     url: '/api/findings/reopen',
@@ -731,7 +734,8 @@ export const reopenFindingsApiFindingsReopenPost = <ThrowOnError extends boolean
  * Resolve Findings
  *
  * Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
- * finding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names
+ * finding landed. 404 for an unknown id, 409 for a finding already exited (reopen it
+ * first), 422 for a blank note or a duplicate id. A hand resolution names
  * no garden proposal — that attribution happens only when a delivery lands.
  */
 export const resolveFindingsApiFindingsResolvePost = <ThrowOnError extends boolean = false>(options: Options<ResolveFindingsApiFindingsResolvePostData, ThrowOnError>): RequestResult<ResolveFindingsApiFindingsResolvePostResponses, ResolveFindingsApiFindingsResolvePostErrors, ThrowOnError> => (options.client ?? client).post<ResolveFindingsApiFindingsResolvePostResponses, ResolveFindingsApiFindingsResolvePostErrors, ThrowOnError>({
@@ -747,8 +751,10 @@ export const resolveFindingsApiFindingsResolvePost = <ThrowOnError extends boole
  * Supersede Findings
  *
  * Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
- * recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422
- * for a blank note, a self-superseding id, or a `superseded_by` that isn't itself live.
+ * recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`
+ * (checked first, so a self-naming unknown id is 404), 409 for a finding already exited,
+ * 422 for a blank note, a duplicate id, a self-superseding id, or a `superseded_by` that
+ * isn't itself live.
  */
 export const supersedeFindingsApiFindingsSupersedePost = <ThrowOnError extends boolean = false>(options: Options<SupersedeFindingsApiFindingsSupersedePostData, ThrowOnError>): RequestResult<SupersedeFindingsApiFindingsSupersedePostResponses, SupersedeFindingsApiFindingsSupersedePostErrors, ThrowOnError> => (options.client ?? client).post<SupersedeFindingsApiFindingsSupersedePostResponses, SupersedeFindingsApiFindingsSupersedePostErrors, ThrowOnError>({
     url: '/api/findings/supersede',
@@ -764,7 +770,7 @@ export const supersedeFindingsApiFindingsSupersedePost = <ThrowOnError extends b
  *
  * Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
  * hasn't moved, a person has decided it doesn't merit standing regardless. 404 for an
- * unknown id, 422 for a blank note.
+ * unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id.
  */
 export const wontFixFindingsApiFindingsWontFixPost = <ThrowOnError extends boolean = false>(options: Options<WontFixFindingsApiFindingsWontFixPostData, ThrowOnError>): RequestResult<WontFixFindingsApiFindingsWontFixPostResponses, WontFixFindingsApiFindingsWontFixPostErrors, ThrowOnError> => (options.client ?? client).post<WontFixFindingsApiFindingsWontFixPostResponses, WontFixFindingsApiFindingsWontFixPostErrors, ThrowOnError>({
     url: '/api/findings/wont-fix',
@@ -991,7 +997,7 @@ export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends 
  * Rotate the chunk's live route capability token — the lost-plaintext recovery for a
  * claim whose response was never read back. Confined to the live route's own runner; this route
  * presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
- * when the route's runner is retired.
+ * when the route's runner is retired; 409 when the chunk has ended.
  */
 export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError extends boolean = false>(options: Options<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, ThrowOnError>): RequestResult<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError> => (options.client ?? client).post<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/route-token', ...options });
 
@@ -1066,8 +1072,8 @@ export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boole
 /**
  * Claim Route
  *
- * Claim a chunk; 403 if the runner is paused or retired at the hub, 409 if already claimed,
- * already terminal ({done, stopped}), standing on an unmet prerequisite,
+ * Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
+ * already terminal ({done, stopped}), not ready, standing on an unmet prerequisite,
  * or incompatible with the runner's stored capabilities, else the first node envelope.
  */
 export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
@@ -1212,8 +1218,9 @@ export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError
  * hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
  * template when the proposal names findings and bare when it names none. When it is
  * false, mints nothing and records the decline. Promotes nothing and changes no
- * finding's state. 404 unknown proposal, 409 already closed or a raced ingest, 503 the
- * packaged default graph retired.
+ * finding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`
+ * with `mint_work_item` false or a minted item left with a blank title or body, 409
+ * already closed or a raced ingest, 503 the packaged default graph retired.
  */
 export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <ThrowOnError extends boolean = false>(options: Options<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData, ThrowOnError>): RequestResult<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError> => (options.client ?? client).post<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/accept',
@@ -1228,9 +1235,9 @@ export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <Throw
  * Attach Garden Proposal Findings
  *
  * Link the given finding ids to PROPOSAL_ID — works on either origin
- * while open. 404 unknown proposal, 409 already closed, 422 an unknown, exited, or
- * duplicate finding id, or one already linked to this proposal — the whole call is
- * refused, nothing is linked.
+ * while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
+ * exited, or duplicate finding id, or one already linked to this proposal — the whole
+ * call is refused, nothing is linked.
  */
 export const attachGardenProposalFindingsApiGardenProposalsProposalIdAttachPost = <ThrowOnError extends boolean = false>(options: Options<AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostData, ThrowOnError>): RequestResult<AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponses, AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors, ThrowOnError> => (options.client ?? client).post<AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponses, AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/attach',
@@ -1245,8 +1252,8 @@ export const attachGardenProposalFindingsApiGardenProposalsProposalIdAttachPost 
  * Detach Garden Proposal Findings
  *
  * Unlink the given finding ids from PROPOSAL_ID — works on either
- * origin while open. 404 unknown proposal, 409 already closed, 422 an unknown or
- * duplicate id, or one not linked to this proposal.
+ * origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an
+ * unknown or duplicate id, or one not linked to this proposal.
  */
 export const detachGardenProposalFindingsApiGardenProposalsProposalIdDetachPost = <ThrowOnError extends boolean = false>(options: Options<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostData, ThrowOnError>): RequestResult<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses, DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors, ThrowOnError> => (options.client ?? client).post<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses, DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/detach',
@@ -1262,8 +1269,9 @@ export const detachGardenProposalFindingsApiGardenProposalsProposalIdDetachPost 
  *
  * Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a
  * dismissal — it is the note that stops a later run raising the same response as
- * though it were new. 404 for an unknown proposal, 422 for a blank reason, 409 when
- * the proposal already carries a closure — closure is terminal.
+ * though it were new. 404 for an unknown proposal, 409 when the proposal already
+ * carries a closure — closure is terminal, so it wins over every other refusal — and
+ * 422 for a blank reason.
  */
 export const passGardenProposalApiGardenProposalsProposalIdPassPost = <ThrowOnError extends boolean = false>(options: Options<PassGardenProposalApiGardenProposalsProposalIdPassPostData, ThrowOnError>): RequestResult<PassGardenProposalApiGardenProposalsProposalIdPassPostResponses, PassGardenProposalApiGardenProposalsProposalIdPassPostErrors, ThrowOnError> => (options.client ?? client).post<PassGardenProposalApiGardenProposalsProposalIdPassPostResponses, PassGardenProposalApiGardenProposalsProposalIdPassPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/pass',
@@ -1567,7 +1575,7 @@ export const routineProposalCountsApiRoutinesProposalCountsGet = <ThrowOnError e
  * `period_days`-wide period, findings created and per-kind exit counts, the outflow/
  * withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
  * unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
- * non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.
+ * non-positive span, or a span/`period_days` pair bucketing past `TrendWindow.MAX_PERIODS`.
  */
 export const routineTrendApiRoutinesTrendGet = <ThrowOnError extends boolean = false>(options: Options<RoutineTrendApiRoutinesTrendGetData, ThrowOnError>): RequestResult<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError>({ url: '/api/routines/trend', ...options });
 
@@ -1899,7 +1907,8 @@ export const listSecretsApiSecretsGet = <ThrowOnError extends boolean = false>(o
 /**
  * Create Secret
  *
- * Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name.
+ * Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name
+ * or a blank value.
  */
 export const createSecretApiSecretsPost = <ThrowOnError extends boolean = false>(options: Options<CreateSecretApiSecretsPostData, ThrowOnError>): RequestResult<CreateSecretApiSecretsPostResponses, CreateSecretApiSecretsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateSecretApiSecretsPostResponses, CreateSecretApiSecretsPostErrors, ThrowOnError>({
     url: '/api/secrets',
@@ -1937,7 +1946,7 @@ export const retireSecretApiSecretsNameRetirePost = <ThrowOnError extends boolea
  *
  * Replace a secret's value, advancing its revision. 409 naming the current revision
  * when `If-Match` is stale or a concurrent replace won, and when the secret is retired;
- * 404 on an unknown name.
+ * 422 on a blank value; 404 on an unknown name.
  */
 export const replaceSecretApiSecretsNameValuePut = <ThrowOnError extends boolean = false>(options: Options<ReplaceSecretApiSecretsNameValuePutData, ThrowOnError>): RequestResult<ReplaceSecretApiSecretsNameValuePutResponses, ReplaceSecretApiSecretsNameValuePutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceSecretApiSecretsNameValuePutResponses, ReplaceSecretApiSecretsNameValuePutErrors, ThrowOnError>({
     url: '/api/secrets/{name}/value',
@@ -1961,8 +1970,8 @@ export const fleetSpendApiSpendGet = <ThrowOnError extends boolean = false>(opti
  * Trace Replay
  *
  * Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
- * A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
- * refuses is 502 with the counts it accepted before.
+ * A bad window — inverted, too wide, or reaching past now — is 422, a replay that must export while tracing
+ * is off is 409, and an exporter that refuses is 502 with the counts it accepted before.
  */
 export const traceReplayApiTracesReplayPost = <ThrowOnError extends boolean = false>(options: Options<TraceReplayApiTracesReplayPostData, ThrowOnError>): RequestResult<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError> => (options.client ?? client).post<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError>({
     url: '/api/traces/replay',

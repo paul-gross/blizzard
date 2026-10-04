@@ -12,6 +12,7 @@ import pytest
 import sqlalchemy as sa
 from click.testing import CliRunner
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
@@ -39,14 +40,18 @@ _CONFIG = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600
     ],
 )
 def test_a_bad_window_is_refused_naming_its_bound(since: datetime, until: datetime, named: str) -> None:
-    replay = TraceReplay(steps=cast(IReadTraceSteps, object()), exporter=None, config=_CONFIG)
+    replay = TraceReplay(
+        steps=cast(IReadTraceSteps, object()), exporter=None, clock=FixedClock(_T0 + timedelta(days=1)), config=_CONFIG
+    )
     with pytest.raises(ReplayWindowRefused, match=named.replace("(", r"\(").replace(")", r"\)")):
         replay.replay(since, until, dry_run=True)
 
 
 @pytest.mark.unit
 def test_a_wet_replay_with_no_exporter_is_unavailable() -> None:
-    replay = TraceReplay(steps=cast(IReadTraceSteps, object()), exporter=None, config=_CONFIG)
+    replay = TraceReplay(
+        steps=cast(IReadTraceSteps, object()), exporter=None, clock=FixedClock(_T0 + timedelta(days=1)), config=_CONFIG
+    )
     with pytest.raises(ReplayUnavailable):
         replay.replay(_T0, _T0 + timedelta(seconds=1), dry_run=False)
 
@@ -68,7 +73,10 @@ def _hub(
 
 
 def _window(hub: HubHarness, **extra: object) -> dict[str, object]:
-    return {"since": _T0.isoformat(), "until": (hub.clock.now() + timedelta(seconds=1)).isoformat(), **extra}
+    """The window from ``_T0`` through just past now, with the clock then moved past its end."""
+    until = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
+    return {"since": _T0.isoformat(), "until": until.isoformat(), **extra}
 
 
 def _cursor_rows(hub: HubHarness) -> list[tuple]:  # type: ignore[type-arg]
@@ -131,6 +139,7 @@ def test_the_window_is_half_open(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path)
     _told_live(hub)
     closed = hub.clock.now()
+    hub.clock.advance(timedelta(seconds=1))
 
     at_close = {"since": _T0.isoformat(), "until": closed.isoformat()}
     assert hub.client.post("/api/traces/replay", json=at_close).json()["steps"] == 0
@@ -225,6 +234,7 @@ def test_the_cli_is_a_pure_client_and_renders_both_outcomes(tmp_path: Path, monk
     _told_live(hub)
     bodies = _relay(hub, monkeypatch)
     since, until = _local(_T0), _local(hub.clock.now() + timedelta(seconds=1))
+    hub.clock.advance(timedelta(seconds=1))
 
     dry = CliRunner().invoke(hub_group, ["traces", "replay", "--since", since, "--until", until, "--dry-run"], env=_ENV)
     assert dry.exit_code == 0, dry.output
@@ -245,6 +255,7 @@ def test_the_cli_splits_a_range_wider_than_the_limit_and_reports_each_window(
     before = len(exporter.batches)
     bodies = _relay(hub, monkeypatch)
     end = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
     start = end - timedelta(seconds=3600 * 2 + 1800)
 
     result = CliRunner().invoke(
@@ -271,6 +282,7 @@ def test_the_cli_stops_on_a_failing_window_and_names_where_to_resume(
     bodies = _relay(hub, monkeypatch)
     exporter.fail = True
     end = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
     start = end - timedelta(seconds=3600 * 3 + 1800)
     # The told spans sit in the last of four windows; the three before it are empty and pass.
     failing_start = start + timedelta(seconds=3600 * 3)
@@ -300,6 +312,7 @@ def test_the_cli_names_where_to_resume_when_a_window_request_itself_fails(
 
     monkeypatch.setattr(httpx, "post", post)
     end = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
     start = end - timedelta(seconds=3600 + 1800)
 
     result = CliRunner().invoke(

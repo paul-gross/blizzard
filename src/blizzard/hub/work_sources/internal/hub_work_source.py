@@ -6,14 +6,15 @@ here is fetched from a forge.
 
 from __future__ import annotations
 
-from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
+from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import HubWorkItem, IReadWorkItemRepository, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
+from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEditService
+from blizzard.hub.domain.work_items.model import WorkItemEdit, is_readable
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
@@ -49,7 +50,7 @@ class HubWorkSource:
         """Read the table fresh — no cache to invalidate, so an edit to an open item is
         visible on the next call. An unknown or withdrawn ref is unresolvable."""
         item = self._items.get(pointer.source, pointer.ref)
-        if item is None or item.closure is WorkItemClosure.WITHDRAWN:
+        if item is None or not is_readable(item):
             raise WorkSourceError(f"no open {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
         return WorkItem(
             body=item.body,
@@ -78,11 +79,10 @@ class HubWorkSource:
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
-        """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
-        raises is :class:`WorkItemGoneError`, for a ref with no item row. Then resolves
-        whichever garden-proposal findings `pointer` answers, if any, safe to repeat:
-        :meth:`GardenProposalDeliveryResolution.resolve_for_item`
-        gates on its own durable marker, not the item write's idempotency."""
+        """Mark the item ``delivered`` via ``edits.deliver`` — a no-op on an item already closed,
+        withdrawn included; raises only :class:`WorkItemGoneError`, for a ref with no item row. Then
+        resolves whichever garden-proposal findings `pointer` answers, safe to repeat:
+        :meth:`GardenProposalDeliveryResolution.resolve_for_item` gates on its own durable marker."""
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
             raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")

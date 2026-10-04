@@ -22,6 +22,9 @@ from blizzard.hub.domain.observability.transcripts import (
     SegmentSummary,
     TranscriptIngestResult,
     TranscriptSlice,
+    records_final,
+    records_truncated,
+    stored_turns,
 )
 from blizzard.wire.transcript_segment import (
     LeaseTranscriptView,
@@ -72,6 +75,7 @@ def to_ack(runner_id: str, result: TranscriptIngestResult) -> TranscriptSegmentA
         applied=result.applied,
         already_applied=result.already_applied,
         capped=result.capped,
+        refused=result.refused,
     )
 
 
@@ -97,15 +101,10 @@ def _rendered_turns(records: list[SegmentRecordContent]) -> tuple[list[TurnSegme
     """Turns concatenated across stored records, in record order, plus the fold both
     :func:`_content_view` and :func:`lease_content_view` share: ``final`` true iff any
     record closed its segment out, ``truncated`` true iff any record lost turns."""
-    turns: list[TurnSegmentView] = []
-    for record in records:
-        if record.rejected:
-            continue
-        turns.extend(TurnSegmentView.model_validate(turn) for turn in json.loads(record.turns_json))
-    # A cap rejection (this hub's own) OR a runner-declared `record_truncated` — an
-    # accepted record the runner itself had to ship turns-empty.
-    truncated = any(record.rejected or record.record_truncated for record in records)
-    return turns, any(record.final for record in records), truncated
+    turns = [
+        TurnSegmentView.model_validate(turn) for turns_json in stored_turns(records) for turn in json.loads(turns_json)
+    ]
+    return turns, records_final(records), records_truncated(records)
 
 
 def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:

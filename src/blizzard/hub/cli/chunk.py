@@ -233,9 +233,12 @@ def chunk_promote(cli: CliContext, chunk_id: str) -> None:
     """Promote a not-ready CHUNK to ready so a runner may claim it.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
-    an already-ready chunk is a harmless no-op; 404 only when the chunk is unknown."""
+    an already-promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a
+    never-promoted chunk is already done or stopped."""
     resp = cli.post(
-        f"/api/chunks/{chunk_id}/promote", "POST /chunks/{id}/promote", on_status={404: f"no such chunk {chunk_id}"}
+        f"/api/chunks/{chunk_id}/promote",
+        "POST /chunks/{id}/promote",
+        on_status={409: "chunk is not promotable", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"promoted {chunk_id} — now ready for a runner to claim")
 
@@ -284,13 +287,13 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     """Forcibly release CHUNK from its runner.
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
-    ready and is re-claimable at its current node; the holding runner releases it on its
-    next tick. 409 when the chunk has no live route to release."""
+    A pure client of ``POST /api/chunks/{id}/detach``. The chunk re-derives ready at its current node; the
+    holding runner releases it on its next tick. 409 when no live route holds a claim — a stopped or done
+    chunk's leftover route holds none."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",
-        on_status={409: "chunk has no live route", 404: f"no such chunk {chunk_id}"},
+        on_status={409: "chunk has no live route holding a claim", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 

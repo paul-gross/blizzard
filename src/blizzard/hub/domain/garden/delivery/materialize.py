@@ -149,10 +149,125 @@ class IWriteGardenDeliveryRepository(Protocol):
         ...
 
 
+def build_delivery_plan(
+    validated: ValidatedDelivery,
+    *,
+    chunk: Chunk,
+    node: Node,
+    epoch: int,
+    delta_artifact_ids: Sequence[str],
+    proposal_artifact_ids: Sequence[str] = (),
+    at: datetime,
+) -> DeliveryPlan:
+    """The rows a passing delivery mints, every id minted at `at`: one finding set per delta, one finding
+    and `add` fact per `add` op, an `observed` fact per `observed` op; a run's `gone` settles an already
+    `delivered` finding to `resolved`, else records `gone`. A non-`fin_` proposal citation resolves against
+    the id its `add` op minted. The artifact-id lists parallel `validated.deltas`/`validated.proposals`."""
+    chunk_id = chunk.chunk_id
+    node_id = node.node_id
+    node_name = node.name
+    deltas: list[DeltaMaterialization] = []
+    # Each `add` op's `ref` -> the `fin_` id minted for it, across every delta at
+    # once: a proposal's citation names no delta of its own.
+    finding_id_by_ref: dict[str, str] = {}
+
+    for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
+        # Minted before the facts loop below: every fact this delta produces
+        # attributes to the set that carried it.
+        finding_set_id = Id.mint_at(FINDING_SET_PREFIX, at).value
+        new_findings: list[NewFinding] = []
+        facts: list[NewFindingFact] = []
+        single_repo = single_repo_of(delta)
+        for op in delta.findings:
+            if isinstance(op, AddFindingOp):
+                finding_id = Id.mint_at(FINDING_PREFIX, at).value
+                if op.ref is not None:
+                    finding_id_by_ref[op.ref] = finding_id
+                introduced_at = (
+                    validated.introduced_at.get((single_repo, op.introduced))
+                    if op.introduced is not None and single_repo is not None
+                    else None
+                )
+                new_findings.append(
+                    NewFinding(
+                        finding_id=finding_id,
+                        routine_name=validated.run.routine_name,
+                        scope_slug=delta.scope,
+                        class_=op.class_,
+                        locus=op.locus,
+                        summary=op.summary,
+                        introduced=op.introduced,
+                        introduced_at=introduced_at,
+                    )
+                )
+                facts.append(
+                    NewFindingFact(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
+                )
+            elif isinstance(op, ObservedFindingOp):
+                facts.append(
+                    NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
+                )
+            else:
+                assert isinstance(op, GoneFindingOp)
+                # A delivered finding's gone completes its exit rather than flagging it.
+                kind, actor = validated.gone_settlements.get(op.id, ("gone", None))
+                facts.append(
+                    NewFindingFact(
+                        finding_id=op.id, kind=kind, finding_set_id=finding_set_id, note=op.note, actor=actor
+                    )
+                )
+        # One finding_set per delta, even an empty one (delta.findings == []).
+        finding_set = NewFindingSet(
+            finding_set_id=finding_set_id,
+            artifact_id=artifact_id,
+            scope_slug=delta.scope,
+            revisions=dict(delta.revisions),
+            measurement=delta.measurement,
+        )
+        deltas.append(DeltaMaterialization(finding_set=finding_set, new_findings=new_findings, facts=facts))
+
+    proposals = [
+        NewProposal(
+            proposal_id=Id.mint_at(GARDEN_PROPOSAL_PREFIX, at).value,
+            routine_name=validated.run.routine_name,
+            class_=candidate.class_,
+            title=candidate.title,
+            body=candidate.body,
+            source_artifact_id=artifact_id,
+            ref=candidate.ref,
+            # A `fin_`-shaped entry is already an id; anything else is a ref, resolved
+            # against the id its own `add` op minted above.
+            finding_ids=[
+                entry if is_finding_id_shaped(entry) else finding_id_by_ref[entry] for entry in candidate.findings
+            ],
+        )
+        for candidate, artifact_id in zip(validated.proposals, proposal_artifact_ids, strict=True)
+    ]
+
+    return DeliveryPlan(
+        chunk_id=chunk_id,
+        node_id=node_id,
+        node_name=node_name,
+        epoch=epoch,
+        at=at,
+        run=validated.run,
+        deltas=deltas,
+        proposals=proposals,
+    )
+
+
+def delivery_replay_outcome(*, recorded: bool) -> DeliveryOutcome | None:
+    """The garden delivery verb by its node-step's marker state, keyed
+    `(chunk, node, epoch)`. Once recorded, a replay is ``ALREADY_RECORDED``, minting nothing
+    and never re-validated against state that may have drifted since. Not yet recorded,
+    `None`: validate and write, which records it or is ``FENCED``."""
+    return DeliveryOutcome.ALREADY_RECORDED if recorded else None
+
+
 class GardenDelivery:
-    """Turns a Phase-2 :class:`ValidatedDelivery` into a :class:`DeliveryPlan` and hands
-    it to the store, one call — minting every id here (`bzh:domain-takes-objects`, the
-    pattern ``GardenProposalAuthoring.create_operator`` already sets) rather than in the store."""
+    """Turns a Phase-2 :class:`ValidatedDelivery` into a :class:`DeliveryPlan`
+    (:func:`build_delivery_plan`, at the clock's instant) and hands it to the store, one
+    call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
     def __init__(self, *, delivery: IWriteGardenDeliveryRepository, clock: IClock) -> None:
         self._delivery = delivery
@@ -176,104 +291,13 @@ class GardenDelivery:
         parallel — neither carries its own artifact id.
         `chunk`/`node`/`epoch` identify the delivering node-step, the idempotence
         marker's own key."""
-        chunk_id = chunk.chunk_id
-        node_id = node.node_id
-        node_name = node.name
-        at = self._clock.now()
-        deltas: list[DeltaMaterialization] = []
-        # Each `add` op's `ref` -> the `fin_` id minted for it, across every delta at
-        # once: a proposal's citation names no delta of its own.
-        finding_id_by_ref: dict[str, str] = {}
-
-        for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
-            # Minted before the facts loop below: every fact this delta produces
-            # attributes to the set that carried it.
-            finding_set_id = Id.mint(FINDING_SET_PREFIX, self._clock).value
-            new_findings: list[NewFinding] = []
-            facts: list[NewFindingFact] = []
-            single_repo = single_repo_of(delta)
-            for op in delta.findings:
-                if isinstance(op, AddFindingOp):
-                    finding_id = Id.mint(FINDING_PREFIX, self._clock).value
-                    if op.ref is not None:
-                        finding_id_by_ref[op.ref] = finding_id
-                    introduced_at = (
-                        validated.introduced_at.get((single_repo, op.introduced))
-                        if op.introduced is not None and single_repo is not None
-                        else None
-                    )
-                    new_findings.append(
-                        NewFinding(
-                            finding_id=finding_id,
-                            routine_name=validated.run.routine_name,
-                            scope_slug=delta.scope,
-                            class_=op.class_,
-                            locus=op.locus,
-                            summary=op.summary,
-                            introduced=op.introduced,
-                            introduced_at=introduced_at,
-                        )
-                    )
-                    facts.append(
-                        NewFindingFact(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
-                    )
-                elif isinstance(op, ObservedFindingOp):
-                    facts.append(
-                        NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
-                    )
-                else:
-                    assert isinstance(op, GoneFindingOp)
-                    if op.id in validated.delivered_findings:
-                        # Already delivered — this completes the exit rather than flagging it.
-                        facts.append(
-                            NewFindingFact(
-                                finding_id=op.id,
-                                kind="resolved",
-                                finding_set_id=finding_set_id,
-                                note=op.note,
-                                actor=validated.delivered_findings[op.id],
-                            )
-                        )
-                    else:
-                        facts.append(
-                            NewFindingFact(finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note)
-                        )
-            # One finding_set per delta, even an empty one (delta.findings == []).
-            finding_set = NewFindingSet(
-                finding_set_id=finding_set_id,
-                artifact_id=artifact_id,
-                scope_slug=delta.scope,
-                revisions=dict(delta.revisions),
-                measurement=delta.measurement,
-            )
-            deltas.append(DeltaMaterialization(finding_set=finding_set, new_findings=new_findings, facts=facts))
-
-        proposals = [
-            NewProposal(
-                proposal_id=Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
-                routine_name=validated.run.routine_name,
-                class_=candidate.class_,
-                title=candidate.title,
-                body=candidate.body,
-                source_artifact_id=artifact_id,
-                ref=candidate.ref,
-                # A `fin_`-shaped entry is already an id; anything else is a ref, resolved
-                # against the id its own `add` op minted above.
-                finding_ids=[
-                    entry if is_finding_id_shaped(entry) else finding_id_by_ref[entry] for entry in candidate.findings
-                ],
-            )
-            for candidate, artifact_id in zip(validated.proposals, proposal_artifact_ids, strict=True)
-        ]
-
-        plan = DeliveryPlan(
-            chunk_id=chunk_id,
-            node_id=node_id,
-            node_name=node_name,
+        plan = build_delivery_plan(
+            validated,
+            chunk=chunk,
+            node=node,
             epoch=epoch,
-            at=at,
-            run=validated.run,
-            deltas=deltas,
-            proposals=proposals,
+            delta_artifact_ids=delta_artifact_ids,
+            proposal_artifact_ids=proposal_artifact_ids,
+            at=self._clock.now(),
         )
         return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)

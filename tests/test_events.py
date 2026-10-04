@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import EventBroker
-from tests.support import HubHarness, build_hub, chunk_stores, drain_stream, emitted_events, pointer_token
+from tests.support import HubHarness, build_hub, chunk_stores, drain_stream, emitted_events, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -121,6 +121,7 @@ def test_broker_live_fanout_delivers_to_a_subscriber() -> None:
 async def test_lifecycle_publishes_events_and_the_stream_replays_them(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -139,6 +140,7 @@ async def test_lifecycle_publishes_events_and_the_stream_replays_them(tmp_path: 
 async def test_stream_resumes_from_last_event_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     # After ingest the latest id is known; a reconnect past it replays only newer events.
     resume_from = hub.events.latest_id()
     hub.client.post(
@@ -154,6 +156,7 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
     """The mutating routes publish typed events — asserted on the broker's replay tail."""
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

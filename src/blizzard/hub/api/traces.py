@@ -56,8 +56,8 @@ def trace_replay(
     request: TraceReplayRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> TraceReplayResponse | JSONResponse:
     """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
-    A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
-    refuses is 502 with the counts it accepted before."""
+    A bad window — inverted, too wide, or reaching past now — is 422, a replay that must export while tracing
+    is off is 409, and an exporter that refuses is 502 with the counts it accepted before."""
     try:
         result = services.trace_replay.replay(as_utc(request.since), as_utc(request.until), dry_run=request.dry_run)
     except ReplayWindowRefused as exc:

@@ -21,6 +21,18 @@ class ReviewFindingsRejected(Exception):
     pydantic error."""
 
 
+#: The `review` node's own fixed `produces:` asset name.
+REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
+
+
+def require_review_delta[A](artifact: A | None, *, chunk_id: str) -> A:
+    """`artifact`, the chunk's newest review-finding delta; refuses a delivery whose
+    chunk carries none."""
+    if artifact is None:
+        raise ReviewFindingsRejected(f"no {REVIEW_FINDING_DELTA_ARTIFACT!r} artifact found for chunk {chunk_id}")
+    return artifact
+
+
 @dto
 @dataclass(frozen=True)
 class ValidatedReviewFindings:

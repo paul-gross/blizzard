@@ -7,17 +7,19 @@ and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 from blizzard.hub.domain.garden.scopes import Scope, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
-from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 
 
 class RunMode(StrEnum):
@@ -62,6 +64,47 @@ class RoutineDefaultScopeUnlinkError(ValueError):
         self.scope_slug = scope_slug
 
 
+class RoutineVerb(StrEnum):
+    """Every act addressed at a routine by name or id."""
+
+    CREATE = "create"
+    EDIT = "edit"
+    RETIRE = "retire"
+    ENABLE = "enable"
+    LINK_SCOPE = "link_scope"
+    UNLINK_SCOPE = "unlink_scope"
+    RUN = "run"
+    READ = "read"
+
+
+@domain_model
+@dataclass(frozen=True)
+class RoutineEdit:
+    """The field set one routine edit writes — everything but ``name`` and
+    ``routine_id``."""
+
+    routine_id: str
+    graph_name: str
+    default_scope_slug: str
+    default_model: list[str]
+    default_effort: str | None
+    default_harnesses: list[str]
+
+
+def require_name_free(holder: Routine | None, name: str) -> None:
+    """A name already held — by an enabled or a retired routine, which keeps its name as
+    lineage — refuses a create, never merged."""
+    if holder is not None:
+        raise RoutineNameTakenError(name)
+
+
+def require_graph_resolves(graph: Graph | None, graph_name: str) -> Graph:
+    """``graph`` is the enabled mint ``graph_name`` resolves to, if any; none refuses."""
+    if graph is None:
+        raise RoutineGraphUnresolvedError(graph_name)
+    return graph
+
+
 @domain_model
 @dataclass(frozen=True)
 class Routine:
@@ -74,6 +117,82 @@ class Routine:
     default_effort: str | None = None
     # The routine's default harness preference, `default_model`'s shape: empty is no preference.
     default_harnesses: list[str] = field(default_factory=list)
+
+    #: Which verbs are legal from which brake state; a retired routine refuses only a run.
+    LEGAL_FROM: ClassVar[Mapping[RoutineVerb, frozenset[BrakeState]]] = {
+        RoutineVerb.CREATE: frozenset(),
+        RoutineVerb.EDIT: ANY_STATE,
+        RoutineVerb.RETIRE: ANY_STATE,
+        RoutineVerb.ENABLE: ANY_STATE,
+        RoutineVerb.LINK_SCOPE: ANY_STATE,
+        RoutineVerb.UNLINK_SCOPE: ANY_STATE,
+        RoutineVerb.RUN: ENABLED_ONLY,
+        RoutineVerb.READ: ANY_STATE,
+    }
+
+    @staticmethod
+    def allows(verb: RoutineVerb, *, retired: bool) -> bool:
+        """Whether ``verb`` is legal on a routine whose newest lifecycle fact reads
+        ``retired``."""
+        return BrakeState.of(retired=retired) in Routine.LEGAL_FROM[verb]
+
+    @classmethod
+    def mint(
+        cls,
+        *,
+        routine_id: str,
+        name: str,
+        graph_name: str,
+        default_scope: Scope,
+        at: datetime,
+        default_model: Sequence[str],
+        default_effort: str | None,
+        default_harnesses: Sequence[str],
+    ) -> Routine:
+        """A new routine pointing at ``default_scope``, created at ``at``."""
+        return cls(
+            routine_id=routine_id,
+            name=name,
+            graph_name=graph_name,
+            default_scope_slug=default_scope.slug,
+            created_at=at,
+            default_model=list(default_model),
+            default_effort=default_effort,
+            default_harnesses=list(default_harnesses),
+        )
+
+    def edited(
+        self,
+        *,
+        name: str,
+        graph_name: str,
+        default_scope_slug: ScopeSlug,
+        default_model: Sequence[str],
+        default_effort: str | None,
+        default_harnesses: Sequence[str],
+    ) -> RoutineEdit:
+        """The edit to write; a name other than the current one refuses — a routine's
+        name is its lineage."""
+        if name != self.name:
+            raise RoutineNameImmutableError(self.name)
+        return RoutineEdit(
+            routine_id=self.routine_id,
+            graph_name=graph_name,
+            default_scope_slug=default_scope_slug.value,
+            default_model=list(default_model),
+            default_effort=default_effort,
+            default_harnesses=list(default_harnesses),
+        )
+
+    def require_unlinkable(self, scope: Scope) -> None:
+        """The routine's own default scope never leaves its set."""
+        if scope.slug == self.default_scope_slug:
+            raise RoutineDefaultScopeUnlinkError(self.routine_id, scope.slug)
+
+    def effective_scope_slug(self, override: ScopeSlug | None) -> ScopeSlug:
+        """The scope a run acts on: the override when one is named, else the
+        routine's own default."""
+        return override if override is not None else ScopeSlug.parse(self.default_scope_slug)
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -106,7 +225,8 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
     """Read-write routine access. Only the domain layer depends on this variant."""
 
     def create(self, routine: Routine) -> None:
-        """Insert a routine row; ``uq_routines_name`` backstops a duplicate ``name``."""
+        """Insert a routine row. A ``name`` another routine already holds — a create
+        that lost the race to it — raises :class:`RoutineNameTakenError`."""
         ...
 
     def edit(
@@ -190,20 +310,21 @@ class RoutineAuthoring:
         default_harnesses: list[str] | None = None,
     ) -> Routine:
         harnesses = validated_harnesses(default_harnesses or [])
-        if self._routines.get_by_name(name) is not None:
-            raise RoutineNameTakenError(name)
-        self._ensure_graph_resolves(graph_name)
+        require_name_free(self._routines.get_by_name(name), name)
+        require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
         scope = self._scope_registry.ensure(default_scope_slug)
-        routine = Routine(
+        routine = Routine.mint(
             routine_id=Id.mint(ROUTINE_PREFIX, self._clock).value,
             name=name,
             graph_name=graph_name,
-            default_scope_slug=scope.slug,
-            created_at=self._clock.now(),
-            default_model=list(default_model or []),
+            default_scope=scope,
+            at=self._clock.now(),
+            default_model=default_model or [],
             default_effort=default_effort,
             default_harnesses=harnesses,
         )
+        # A concurrent create that took the name first surfaces from the port as
+        # RoutineNameTakenError, the same refusal the pre-check above raises.
         self._routines.create(routine)
         self._routine_scopes.link(routine.routine_id, scope.slug)
         return routine
@@ -220,26 +341,28 @@ class RoutineAuthoring:
         default_harnesses: list[str] | None = None,
     ) -> Routine:
         harnesses = validated_harnesses(default_harnesses or [])
-        if name != routine.name:
-            raise RoutineNameImmutableError(routine.name)
-        self._ensure_graph_resolves(graph_name)
-        scope = self._scope_registry.ensure(default_scope_slug)
-        edited = self._routines.edit(
-            routine.routine_id,
+        edit = routine.edited(
+            name=name,
             graph_name=graph_name,
-            default_scope_slug=scope.slug,
-            default_model=list(default_model or []),
+            default_scope_slug=default_scope_slug,
+            default_model=default_model or [],
             default_effort=default_effort,
             default_harnesses=harnesses,
         )
+        require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
+        scope = self._scope_registry.ensure(default_scope_slug)
+        edited = self._routines.edit(
+            edit.routine_id,
+            graph_name=edit.graph_name,
+            default_scope_slug=edit.default_scope_slug,
+            default_model=edit.default_model,
+            default_effort=edit.default_effort,
+            default_harnesses=edit.default_harnesses,
+        )
         # The new default is linked; a previous default is deliberately left linked —
         # the routine still sweeps it, and a set larger than its default is legal.
-        self._routine_scopes.link(routine.routine_id, scope.slug)
+        self._routine_scopes.link(edit.routine_id, scope.slug)
         return edited
-
-    def _ensure_graph_resolves(self, graph_name: str) -> None:
-        if self._graphs.get_enabled_by_name(graph_name) is None:
-            raise RoutineGraphUnresolvedError(graph_name)
 
 
 class RoutineScopeMembership:
@@ -258,8 +381,7 @@ class RoutineScopeMembership:
         """Idempotent: a no-op if `scope` is not linked to `routine`. Refused when
         `scope` is `routine`'s own default: a routine's default scope is always a
         member of its own set."""
-        if scope.slug == routine.default_scope_slug:
-            raise RoutineDefaultScopeUnlinkError(routine.routine_id, scope.slug)
+        routine.require_unlinkable(scope)
         self._routine_scopes.unlink(routine.routine_id, scope.slug)
 
 
@@ -275,8 +397,11 @@ class RoutineLifecycle:
         """Append ``routine.retired``. Idempotent: retiring an already-retired routine
         just appends another ``retired=True`` fact, a harmless no-op via
         newest-fact-wins."""
-        self._routines.record_lifecycle(routine.routine_id, retired=True, at=self._clock.now(), by=by)
+        self._record(routine, BrakeVerb.RETIRE, by=by)
 
     def enable(self, routine: Routine, *, by: str) -> None:
         """Append ``routine.enabled``. Idempotent on an already-enabled routine."""
-        self._routines.record_lifecycle(routine.routine_id, retired=False, at=self._clock.now(), by=by)
+        self._record(routine, BrakeVerb.ENABLE, by=by)
+
+    def _record(self, routine: Routine, verb: BrakeVerb, *, by: str) -> None:
+        self._routines.record_lifecycle(routine.routine_id, retired=verb.records_retired, at=self._clock.now(), by=by)

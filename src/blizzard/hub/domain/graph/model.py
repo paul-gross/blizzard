@@ -7,10 +7,11 @@ compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 from blizzard import __version__ as HUB_VERSION
@@ -21,6 +22,14 @@ from blizzard.foundation.roles import domain_model, dto
 
 class GraphParseError(ValueError):
     """A graph definition is structurally malformed (before validation)."""
+
+
+class TargetGraphRetired(Exception):
+    """A graph named explicitly as a new target has since been retired."""
+
+    def __init__(self, graph_id: str) -> None:
+        super().__init__(f"graph {graph_id} is retired and cannot receive new work")
+        self.graph_id = graph_id
 
 
 # The reserved terminal a choice may point at instead of a node name.
@@ -495,6 +504,11 @@ class GraphDoc:
             artifacts[str(name)] = content
         return artifacts
 
+    def differs_from(self, minted: GraphDoc | None) -> bool:
+        """Whether this definition is a new graph against ``minted``, the newest of its name —
+        compared parsed, so a reorder or a comment alone is no change; nothing minted yet is one."""
+        return minted is None or minted != self
+
     def node(self, name: str) -> NodeDoc | None:
         return next((n for n in self.nodes if n.name == name), None)
 
@@ -625,6 +639,125 @@ class Graph:
         }
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
 
+    def cross_graph_targets(self) -> list[str]:
+        """Every distinct ``graph:<name>`` target this graph's edges name, in edge order."""
+        return list(dict.fromkeys(e.target_graph for e in self.edges if e.target_graph is not None))
+
+    def cross_graph_target_name(self, from_node_id: str, choice_name: str) -> str | None:
+        """The graph name a choice submitted from ``from_node_id`` migrates to — ``None`` when the
+        node is unknown, the choice keys no edge, or its edge is not cross-graph."""
+        if self.node_by_id(from_node_id) is None:
+            return None
+        edge = self.edge_for_choice(from_node_id, choice_name)
+        return None if edge is None else edge.target_graph
+
+    def lifecycle_fact(self, *, retired: bool, at: datetime, by: str) -> GraphLifecycleFact:
+        """The fact a retire (``retired=True``) or enable appends — legal from either state, so a
+        repeat appends a duplicate the newest-fact-wins read absorbs (:data:`GRAPH_TRANSITIONS`)."""
+        return GraphLifecycleFact(graph_id=self.graph_id, retired=retired, at=at, by=by)
+
+    def policy_fact(self, *, follow_latest: bool | None, at: datetime, by: str) -> GraphPolicyFact:
+        """The fact setting this mint's follow-latest tri-state appends — ``None`` reverts to the
+        hub default; legal from either state, and a repeat appends (:data:`GRAPH_TRANSITIONS`)."""
+        return GraphPolicyFact(graph_id=self.graph_id, follow_latest=follow_latest, at=at, by=by)
+
+
+@dto
+@dataclass(frozen=True)
+class GraphLifecycleFact:
+    """One appended retire or enable fact over a graph id."""
+
+    graph_id: str
+    retired: bool
+    at: datetime
+    by: str
+
+
+@dto
+@dataclass(frozen=True)
+class GraphPolicyFact:
+    """One appended follow-latest policy fact over a graph id."""
+
+    graph_id: str
+    follow_latest: bool | None
+    at: datetime
+    by: str
+
+
+# --- Graph lifecycle (which verbs are legal from which state) ---------------
+
+
+class GraphState(StrEnum):
+    """A graph's lifecycle state: the newest retire/enable fact wins, and none reads enabled.
+    The follow-latest policy is orthogonal to it."""
+
+    ENABLED = "enabled"
+    RETIRED = "retired"
+
+    @classmethod
+    def of(cls, retired: bool) -> GraphState:
+        return cls.RETIRED if retired else cls.ENABLED
+
+
+class GraphVerb(StrEnum):
+    RETIRE = "retire"
+    ENABLE = "enable"
+    SET_FOLLOW_LATEST = "set_follow_latest"
+    #: Resolution by name — a ``graph:<name>`` edge, a routine, the default graph.
+    RESOLVE_BY_NAME = "resolve_by_name"
+    #: Naming the graph explicitly as a new target; a standing intent consulted at a transition is skipped.
+    TARGET = "target"
+    #: Running a chunk already pinned to the graph.
+    RUN_PINNED = "run_pinned"
+
+
+class GraphVerdict(StrEnum):
+    LEGAL = "legal"
+    REFUSED = "refused"
+
+
+#: Which verbs are legal from which graph state; a repeated verb appends a duplicate fact, never a no-op.
+GRAPH_TRANSITIONS: Mapping[GraphState, Mapping[GraphVerb, GraphVerdict]] = MappingProxyType(
+    {
+        GraphState.ENABLED: MappingProxyType(dict.fromkeys(GraphVerb, GraphVerdict.LEGAL)),
+        GraphState.RETIRED: MappingProxyType(
+            {
+                GraphVerb.RETIRE: GraphVerdict.LEGAL,
+                GraphVerb.ENABLE: GraphVerdict.LEGAL,
+                GraphVerb.SET_FOLLOW_LATEST: GraphVerdict.LEGAL,
+                GraphVerb.RESOLVE_BY_NAME: GraphVerdict.REFUSED,
+                GraphVerb.TARGET: GraphVerdict.REFUSED,
+                GraphVerb.RUN_PINNED: GraphVerdict.LEGAL,
+            }
+        ),
+    }
+)
+
+
+@domain_model
+@dataclass(frozen=True)
+class GraphStanding:
+    """A loaded graph with its lifecycle state — what a decision on the graph's state takes."""
+
+    graph: Graph
+    retired: bool
+
+    @property
+    def state(self) -> GraphState:
+        return GraphState.of(self.retired)
+
+    def verdict(self, verb: GraphVerb) -> GraphVerdict:
+        return GRAPH_TRANSITIONS[self.state][verb]
+
+    def targetable(self) -> bool:
+        """Whether the graph may be named as a new target — the skip test for a consulted intent."""
+        return self.verdict(GraphVerb.TARGET) is GraphVerdict.LEGAL
+
+    def require_targetable(self) -> None:
+        """Refuse naming a retired graph explicitly as a new target."""
+        if not self.targetable():
+            raise TargetGraphRetired(self.graph.graph_id)
+
 
 @dto
 @dataclass(frozen=True)
@@ -717,6 +850,13 @@ class FollowLatest:
     @classmethod
     def of(cls, graph_policy: bool | None, *, hub_default: bool) -> FollowLatest:
         return cls(hub_default if graph_policy is None else graph_policy)
+
+    def target(self, current: Graph, newest_enabled: Graph | None) -> Graph | None:
+        """The mint a chunk pinned to ``current`` drifts to: ``newest_enabled``, the newest enabled
+        mint of its name, only while the policy is on and it is **strictly** newer — never backwards."""
+        if not self.enabled or newest_enabled is None:
+            return None
+        return newest_enabled if Mint.of(newest_enabled).newer_than(Mint.of(current)) else None
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

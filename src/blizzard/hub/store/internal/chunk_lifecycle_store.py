@@ -42,6 +42,15 @@ class ChunkLifecycleStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
+    def record_pause_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+        """Append a ``chunk.paused`` fact on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``)."""
+        result = conn_of(handle).execute(
+            s.chunk_pause_facts.insert().values(chunk_id=chunk_id, paused=True, set_at=at, set_by=by)
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
+
     def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
         held fleet-wide hub-exec slot — all on ``handle``'s already-locked connection

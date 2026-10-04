@@ -713,9 +713,9 @@ class HubNodeExecutor:
         """The chunk's prose feature title (:data:`ENV_FEATURE_TITLE`) — the FIRST
         ``work_ref``'s work item title, best-effort. A read failure or a missing
         registry, pointer, or title degrades to ``None`` rather than breaking delivery."""
-        if not chunk.work_refs or self._work_sources is None:
+        pointer = chunk.originating_ref()
+        if pointer is None or self._work_sources is None:
             return None
-        pointer = chunk.work_refs[0]
         source = self._work_sources.get(pointer.source)
         if source is None:
             return None

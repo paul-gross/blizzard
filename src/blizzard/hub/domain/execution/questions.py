@@ -12,12 +12,23 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.chunk.model import AnswerOutcome
+from blizzard.hub.domain.chunk.model import AnswerOutcome, ChunkFacts, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.wire.question import QuestionAsked
 
 _log = get_logger("blizzard.hub.questions")
+
+
+def parse_instant(value: object, fallback: datetime) -> datetime:
+    """An ISO-8601 instant coerced to UTC (``bzh:utc-instants``), or ``fallback`` for a missing or
+    malformed stamp — a store-and-forward resend carries the naive stamp it buffered."""
+    if not isinstance(value, str):
+        return fallback
+    try:
+        return as_utc(datetime.fromisoformat(value))
+    except ValueError:
+        return fallback
 
 
 class QuestionService:
@@ -42,28 +53,21 @@ class QuestionService:
             claimant=Claimant(fact.runner_id, fact.lease_id),
             question=fact.question,
             options=fact.options,
-            asked_at=self._asked_at(fact.asked_at),
+            asked_at=parse_instant(fact.asked_at, self._clock.now()),
         )
         if refusal is None:
             _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
         return refusal
 
-    def _asked_at(self, value: str) -> datetime:
-        """Read an ISO-8601 instant, falling back to now on a malformed stamp.
-
-        Coerces a naive result to UTC (``bzh:utc-instants``); pinned by
-        ``tests/test_ask_answer.py``."""
-        try:
-            return as_utc(datetime.fromisoformat(value))
-        except ValueError:
-            return self._clock.now()
-
-    def answer(self, question_id: str, *, answer: str, answered_by: str) -> AnswerOutcome:
-        """Apply the answer first-write-wins; the CAS lives in the store."""
+    def answer(self, question: NodeQuestion, facts: ChunkFacts, *, answer: str, answered_by: str) -> AnswerOutcome:
+        """Apply the answer first-write-wins; the CAS lives in the store. Takes the loaded question
+        and its chunk's facts (``bzh:domain-takes-objects``): an ended chunk's question raises
+        :class:`~blizzard.hub.domain.chunk.model.QuestionClosed`."""
+        question.require_answerable(facts.status())
         outcome = self._questions.answer_question(
-            question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
+            question.question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
         )
-        _log.info("answer applied", question_id=question_id, won=outcome.won, answered_by=outcome.answered_by)
+        _log.info("answer applied", question_id=question.question_id, won=outcome.won, answered_by=outcome.answered_by)
         return outcome
 
     def record_delivered(self, *, question_id: str, chunk_id: str) -> None:

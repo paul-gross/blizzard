@@ -666,7 +666,7 @@
           "short_help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID."
         },
         "detach": {
-          "help": "Forcibly release CHUNK from its runner.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives\nready and is re-claimable at its current node; the holding runner releases it on its\nnext tick. 409 when the chunk has no live route to release.",
+          "help": "Forcibly release CHUNK from its runner.\n\nA pure client of ``POST /api/chunks/{id}/detach``. The chunk re-derives ready at its current node; the\nholding runner releases it on its next tick. 409 when no live route holds a claim \u2014 a stopped or done\nchunk's leftover route holds none.",
           "params": [
             {
               "hidden": false,
@@ -1062,7 +1062,7 @@
           "short_help": "Deprecated alias for ``blizzard hub chunk work-items``."
         },
         "promote": {
-          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\nan already-ready chunk is a harmless no-op; 404 only when the chunk is unknown.",
+          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\nan already-promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a\nnever-promoted chunk is already done or stopped.",
           "params": [
             {
               "hidden": false,
@@ -2487,7 +2487,7 @@
     "garden-proposal": {
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file, a body only a minted item\ncarries.",
           "params": [
             {
               "hidden": false,

@@ -30,6 +30,8 @@ from blizzard.hub.domain.config.secrets import (
     SecretReferenced,
     SecretRetired,
     SecretRevisionConflict,
+    SecretValueBlank,
+    listed,
 )
 from blizzard.wire.secret import RecordRefView, SecretCreateRequest, SecretReplaceRequest, SecretView
 
@@ -81,12 +83,15 @@ def create_secret(
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
-    """Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name."""
+    """Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name
+    or a blank value."""
     name = _parse_name(request.name)
     try:
         record = services.config_authoring.create_secret(
             name, request.value.get_secret_value(), change_context(identity, door)
         )
+    except SecretValueBlank as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except SecretAlreadyExists as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return secret_view(record, retired=False)
@@ -103,7 +108,7 @@ def replace_secret(
 ) -> SecretView:
     """Replace a secret's value, advancing its revision. 409 naming the current revision
     when `If-Match` is stale or a concurrent replace won, and when the secret is retired;
-    404 on an unknown name."""
+    422 on a blank value; 404 on an unknown name."""
     record = _existing(services, name)
     try:
         replaced = services.config_authoring.replace_secret(
@@ -113,6 +118,8 @@ def replace_secret(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SecretRetired as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc}; enable it first") from exc
+    except SecretValueBlank as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return secret_view(replaced, retired=False, references=services.secret_references.referrers_of([name])[name])
 
 
@@ -122,7 +129,7 @@ def list_secrets(
 ) -> list[SecretView]:
     """Every secret's metadata, retired ones hidden unless `include_retired`."""
     retired = services.secret_catalog.retired_names()
-    records = [r for r in services.secret_catalog.list_all() if include_retired or r.name not in retired]
+    records = listed(services.secret_catalog.list_all(), retired, include_retired=include_retired)
     references = services.secret_references.referrers_of([r.name for r in records])
     return [secret_view(r, retired=r.name in retired, references=references[r.name]) for r in records]
 

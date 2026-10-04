@@ -91,8 +91,9 @@ def egress_backfill(
     request: EgressBackfillRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> EgressBackfillResponse | JSONResponse:
     """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
-    or dataset is 422, a backfill while the export is off or rejected — even a dry run — is 409, and a writer that
-    refuses is 502 with the counts committed before."""
+    — inverted, too wide, or reaching past now — or dataset is 422, a wet backfill while the export is off or
+    rejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts
+    committed before."""
     try:
         result = services.egress_backfill.backfill(
             as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run

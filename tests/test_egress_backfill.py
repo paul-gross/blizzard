@@ -73,6 +73,7 @@ def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: 
     hub.clock.advance(timedelta(seconds=1))
     _sweep(hub, live).sweep()
     until = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
     assert len(_rows(live, "steps")) == 2
     assert len(_rows(live, "invocations")) == 3
 
@@ -91,6 +92,7 @@ def test_the_window_is_half_open(tmp_path: Path) -> None:
     since = hub.clock.now()
     _closed_step(hub, graph, 1)  # closes 5s in
     closed_at = hub.clock.now()
+    hub.clock.advance(timedelta(seconds=1))
     written = InMemoryEgressWriter()
     service = _service(hub, _SETTLED, written)
 
@@ -113,8 +115,10 @@ def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursor
     _closed_step(hub, graph, 2)
     cursors = _cursor_rows(hub)
     newest = _store(hub).newest_cursor("steps")
+    until = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
 
-    resp = _backfill(hub, since, hub.clock.now() + timedelta(seconds=1), dataset="steps")
+    resp = _backfill(hub, since, until, dataset="steps")
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"dry_run": False, "datasets": [{"dataset": "steps", "rows": 2, "files": 2}]}
@@ -139,6 +143,7 @@ def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Pat
     for ref in (1, 2, 3):
         _closed_step(hub, graph, ref, usage=1)
     until = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
     directory = tmp_path / "out"
 
     dry = _backfill(hub, since, until, dry_run=True)
@@ -156,7 +161,7 @@ def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Pat
 def test_a_bad_window_or_dataset_is_422_naming_its_bound(tmp_path: Path) -> None:
     config = _real(tmp_path, datasets=("steps",), backfill_max_window=3600)
     hub, _ = _hub(tmp_path, config)
-    now = hub.clock.now()
+    now = hub.clock.now() - timedelta(hours=2)
 
     inverted = _backfill(hub, now, now)
     assert inverted.status_code == 422
@@ -167,15 +172,20 @@ def test_a_bad_window_or_dataset_is_422_naming_its_bound(tmp_path: Path) -> None
     wrong = _backfill(hub, now, now + timedelta(seconds=1), dataset="invocations")
     assert wrong.status_code == 422
     assert "invocations" in wrong.json()["detail"]
+    future = _backfill(hub, hub.clock.now() - timedelta(seconds=1), hub.clock.now() + timedelta(seconds=1))
+    assert future.status_code == 422
+    assert "until must not be in the future" in future.json()["detail"]
 
 
-def test_the_export_off_is_409_even_for_a_dry_run(tmp_path: Path) -> None:
+def test_the_export_off_is_409_for_a_wet_run_and_a_dry_run_still_counts(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path)
     now = hub.clock.now()
-    for extra in ({}, {"dry_run": True}):
-        resp = _backfill(hub, now, now + timedelta(seconds=1), **extra)
-        assert resp.status_code == 409
-        assert "not configured" in resp.json()["detail"]
+    wet = _backfill(hub, now - timedelta(seconds=1), now)
+    assert wet.status_code == 409
+    assert "not configured" in wet.json()["detail"]
+    dry = _backfill(hub, now - timedelta(seconds=1), now, dry_run=True)
+    assert dry.status_code == 200, dry.text
+    assert dry.json()["dry_run"] is True
 
 
 def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_path: Path) -> None:
@@ -186,8 +196,10 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
     failing = InMemoryEgressWriter()
     failing.fail = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=1, required_bytes=2)
     object.__setattr__(hub.services, "egress_backfill", _service(hub, _SETTLED, failing))
+    until = hub.clock.now() + timedelta(seconds=1)
+    hub.clock.advance(timedelta(seconds=1))
 
-    resp = _backfill(hub, since, hub.clock.now() + timedelta(seconds=1))
+    resp = _backfill(hub, since, until)
 
     assert resp.status_code == 502
     body = resp.json()
@@ -271,6 +283,7 @@ def test_an_events_backfill_skips_a_step_that_started_outside_the_window_whateve
     world.derive("sg_old", 1)  # derived inside the window
     world.derive("sg_new", 1, chunk_id=inside)
     until = world.hub.clock.now() + timedelta(seconds=1)
+    world.hub.clock.advance(timedelta(seconds=1))
 
     _, written = _events_backfill(world, since, until)
 

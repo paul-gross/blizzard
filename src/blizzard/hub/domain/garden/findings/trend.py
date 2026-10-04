@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
 
 #: A finding's birth, every way it leaves the live set, and its own undo — `observed`/
@@ -69,6 +69,38 @@ class Trend:
     age: TrendAgeCut
 
 
+class InvalidTrendWindow(ValueError):
+    """A trend window that cannot be bucketed: a non-positive `period_days`, a non-positive
+    span, or more periods than :attr:`TrendWindow.MAX_PERIODS`."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class TrendWindow:
+    """One trend read's window — `[since, until)` cut into `period_days`-wide periods, and
+    the `introduced_boundary` the age cut splits on. Built only through :meth:`of`, which
+    refuses a window `compute_trend` could not bucket."""
+
+    since: datetime
+    until: datetime
+    introduced_boundary: datetime
+    period_days: int
+
+    #: The span/`period_days` bucket cap — a read bound, otherwise unbounded.
+    MAX_PERIODS = 366
+
+    @classmethod
+    def of(cls, *, since: datetime, until: datetime, introduced_boundary: datetime, period_days: int) -> TrendWindow:
+        if period_days < 1:
+            raise InvalidTrendWindow("period_days must be at least 1")
+        if until <= since:
+            raise InvalidTrendWindow("until must be after since")
+        span_days = (until - since).total_seconds() / 86400
+        if span_days / period_days > cls.MAX_PERIODS:
+            raise InvalidTrendWindow(f"since/until/period_days would bucket more than {cls.MAX_PERIODS} periods")
+        return cls(since=since, until=until, introduced_boundary=introduced_boundary, period_days=period_days)
+
+
 class IReadGardenTrendRepository(Protocol):
     def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
         """Every `add`/exit-kind fact for `routine_name` recorded in `[since, until)`,
@@ -98,7 +130,9 @@ def compute_trend(
 ) -> Trend:
     """Fold `facts` (already windowed at the store) into `period_days`-wide periods
     and the age cut over the window's own `add` facts — one pass over `facts`,
-    each bucketed by its own period index rather than rescanned per period per kind."""
+    each bucketed by its own period index rather than rescanned per period per kind.
+    Refuses a window :meth:`TrendWindow.of` refuses."""
+    TrendWindow.of(since=since, until=until, introduced_boundary=introduced_boundary, period_days=period_days)
     bounds = _periods(since, until, period_days)
     step = timedelta(days=period_days)
     created_counts = [0] * len(bounds)
@@ -146,21 +180,13 @@ class GardenTrendService:
     def __init__(self, *, repo: IReadGardenTrendRepository) -> None:
         self._repo = repo
 
-    def trend(
-        self,
-        routine_name: str,
-        *,
-        since: datetime,
-        until: datetime,
-        period_days: int,
-        introduced_boundary: datetime,
-    ) -> Trend:
-        facts = self._repo.facts_for_trend(routine_name, since=since, until=until)
+    def trend(self, routine_name: str, window: TrendWindow) -> Trend:
+        facts = self._repo.facts_for_trend(routine_name, since=window.since, until=window.until)
         return compute_trend(
             facts,
             routine_name=routine_name,
-            since=since,
-            until=until,
-            period_days=period_days,
-            introduced_boundary=introduced_boundary,
+            since=window.since,
+            until=window.until,
+            period_days=window.period_days,
+            introduced_boundary=window.introduced_boundary,
         )

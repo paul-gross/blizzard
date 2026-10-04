@@ -13,18 +13,20 @@ fabricated one."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.roles import dto
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden.delivery.validation import parse_delta
 from blizzard.hub.domain.garden.findings.model import Finding, IReadFindingRepository
+from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 
 
@@ -296,6 +298,60 @@ def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str,
     )
 
 
+@domain_model
+@dataclass(frozen=True)
+class RunWindow:
+    """The ``[since, until)`` a run list reads — either edge optional, defaulting to
+    the day ending now; inverted, empty, or wider than the span cap refuses."""
+
+    since: datetime
+    until: datetime
+
+    #: The default span when ``since`` is not named.
+    DEFAULT_SPAN = timedelta(hours=24)
+    #: The span cap — a run list is bounded by window, not paged.
+    MAX_SPAN_DAYS = 366
+
+    @classmethod
+    def of(cls, since: datetime | None, until: datetime | None, *, now: datetime) -> RunWindow:
+        resolved_until = until if until is not None else now
+        resolved_since = since if since is not None else resolved_until - cls.DEFAULT_SPAN
+        require_until_after_since(resolved_since, resolved_until)
+        if resolved_until - resolved_since > timedelta(days=cls.MAX_SPAN_DAYS):
+            raise InvalidWindowError(f"since/until would span more than {cls.MAX_SPAN_DAYS} days")
+        return cls(since=resolved_since, until=resolved_until)
+
+
+def run_rows(
+    records: Sequence[RunDeliveries],
+    chunks_by_id: Mapping[str, Chunk],
+    facts_by_id: Mapping[str, ChunkFacts],
+) -> list[RunSummary]:
+    """One row per run whose chunk still exists, its outcome derived from the chunk's
+    facts. An ephemeral (grouped-away/deleted) chunk's run is absent from every read;
+    a chunk with no facts yet reads as freshly minted."""
+    rows: list[RunSummary] = []
+    for record in records:
+        chunk = chunks_by_id.get(record.identity.chunk_id)
+        if chunk is None:
+            continue
+        facts = facts_by_id.get(record.identity.chunk_id) or ChunkFacts(minted=True)
+        outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
+        rows.append(
+            RunSummary(
+                chunk_id=record.identity.chunk_id,
+                routine_name=record.identity.routine_name,
+                scope_slug=record.identity.scope_slug,
+                mode=record.identity.mode,
+                minted_at=record.identity.minted_at,
+                outcome=outcome,
+                escalation=escalation,
+                delivered=record.delivered,
+            )
+        )
+    return rows
+
+
 class GardenRunService:
     """Reads a routine run's list and one run's own delta, deriving `outcome` from the
     chunk's own facts (`bzh:facts-not-status`) rather than any stored column."""
@@ -307,44 +363,27 @@ class GardenRunService:
         chunk_records: IReadChunkRecordRepository,
         chunk_facts: IReadChunkFactsRepository,
         findings: IReadFindingRepository,
+        clock: IClock,
     ) -> None:
         self._repo = repo
         self._chunk_records = chunk_records
         self._chunk_facts = chunk_facts
         self._findings = findings
+        self._clock = clock
 
-    def list_runs(self, *, since: datetime, until: datetime) -> list[RunSummary]:
-        """One bulk `get_many` and one bulk `load_facts_for` resolve every window run's
-        chunk and chunk facts (`bzh:bulk-reconstitution`) — `records` is already the
-        window's own bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost
-        tracks runs in the window."""
-        records = self._repo.runs_in_window(since=since, until=until)
+    def list_runs(self, *, since: datetime | None = None, until: datetime | None = None) -> list[RunSummary]:
+        """Every run in the window :meth:`RunWindow.of` settles against now. One bulk
+        `get_many` and one bulk `load_facts_for` resolve every window run's chunk and
+        chunk facts (`bzh:bulk-reconstitution`) — `records` is already the window's own
+        bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost tracks runs
+        in the window."""
+        window = RunWindow.of(since, until, now=self._clock.now())
+        records = self._repo.runs_in_window(since=window.since, until=window.until)
         chunk_ids = [record.identity.chunk_id for record in records]
-        chunks_by_id = self._chunk_records.get_many(chunk_ids)
-        facts_by_id = self._chunk_facts.load_facts_for(chunk_ids)
-        rows: list[RunSummary] = []
-        for record in records:
-            chunk = chunks_by_id.get(record.identity.chunk_id)
-            if chunk is None:
-                continue  # an ephemeral (grouped-away/deleted) chunk's run is absent from every read
-            facts = facts_by_id.get(record.identity.chunk_id) or ChunkFacts(minted=True)
-            outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
-            rows.append(
-                RunSummary(
-                    chunk_id=record.identity.chunk_id,
-                    routine_name=record.identity.routine_name,
-                    scope_slug=record.identity.scope_slug,
-                    mode=record.identity.mode,
-                    minted_at=record.identity.minted_at,
-                    outcome=outcome,
-                    escalation=escalation,
-                    delivered=record.delivered,
-                )
-            )
-        return rows
+        return run_rows(records, self._chunk_records.get_many(chunk_ids), self._chunk_facts.load_facts_for(chunk_ids))
 
     def run_delta(self, chunk: Chunk) -> RunDelta | None:
-        """`chunk` is already resolved (`bzz:domain-takes-objects`) — the caller 404s on
+        """`chunk` is already resolved (`bzh:domain-takes-objects`) — the caller 404s on
         an unknown chunk id before this is ever invoked; `None` here means only that
         `chunk` names no `work_item_runs`-backed run."""
         identity = self._repo.run_identity(chunk.chunk_id)

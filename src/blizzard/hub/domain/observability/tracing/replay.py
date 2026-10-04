@@ -9,12 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
+from blizzard.hub.domain.observability.operator_window import OperatorWindow, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.lifecycle import TraceVerb, trace_export_allows
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import assemble_window, read_window
 
@@ -22,11 +25,25 @@ _log = get_logger("blizzard.hub.trace_export")
 
 
 class ReplayWindowRefused(ValueError):
-    """The window is inverted, empty, or wider than ``replay_max_window``."""
+    """The window is inverted, empty, wider than ``replay_max_window``, or reaches past now."""
 
 
 class ReplayUnavailable(Exception):
     """A wet replay with no exporter wired — tracing is off."""
+
+
+def require_replayable(
+    since: datetime, until: datetime, *, max_window_seconds: int, now: datetime, dry_run: bool, exporter_wired: bool
+) -> None:
+    """Refuse a replay the window or the wiring cannot honour — the window first, then the
+    exporter. A dry run only counts, so it needs no exporter and runs with tracing off."""
+    fault = OperatorWindow(since, until).fault(max_window=timedelta(seconds=max_window_seconds), now=now)
+    if fault is not None:
+        raise ReplayWindowRefused(
+            fault_message(fault, max_window_name="replay_max_window", max_window_seconds=max_window_seconds)
+        )
+    if not trace_export_allows(TraceVerb.DRY_REPLAY if dry_run else TraceVerb.REPLAY, exporter_wired=exporter_wired):
+        raise ReplayUnavailable("fleet tracing is off; a replay without --dry-run has nowhere to send spans")
 
 
 @dto
@@ -44,20 +61,24 @@ class ReplayResult:
 
 
 class TraceReplay:
-    def __init__(self, *, steps: IReadTraceSteps, exporter: ITraceExporter | None, config: TracingConfig) -> None:
+    def __init__(
+        self, *, steps: IReadTraceSteps, exporter: ITraceExporter | None, clock: IClock, config: TracingConfig
+    ) -> None:
         self._steps = steps
         self._exporter = exporter
+        self._clock = clock
         self._batch_limit = config.batch_limit
-        self._max_window = timedelta(seconds=config.replay_max_window)
         self._max_window_seconds = config.replay_max_window
 
     def replay(self, since: datetime, until: datetime, *, dry_run: bool) -> ReplayResult:
-        if until <= since:
-            raise ReplayWindowRefused("until must be after since")
-        if until - since > self._max_window:
-            raise ReplayWindowRefused(f"window is wider than replay_max_window ({self._max_window_seconds} seconds)")
-        if not dry_run and self._exporter is None:
-            raise ReplayUnavailable("fleet tracing is off; a replay without --dry-run has nowhere to send spans")
+        require_replayable(
+            since,
+            until,
+            max_window_seconds=self._max_window_seconds,
+            now=self._clock.now(),
+            dry_run=dry_run,
+            exporter_wired=self._exporter is not None,
+        )
         steps = chunks = spans = batches = 0
         position = CursorKey.opening(since)
         while True:

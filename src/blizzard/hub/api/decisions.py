@@ -20,7 +20,13 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunk.model import DocketEntry, GateDecision
+from blizzard.hub.domain.chunk.model import (
+    DecisionClosed,
+    DocketEntry,
+    GateDecision,
+    NotADecisionChoice,
+    NotAPendingProposal,
+)
 from blizzard.wire.completion import CreateWorkItemProposal, UpdateWorkItemProposal
 from blizzard.wire.decision import (
     DecisionChoiceModel,
@@ -108,8 +114,10 @@ def resolve_decision(
         result = services.decisions.resolve(
             pre_decision, choice=request.choice, resolved_by=identity.username, struck=request.struck
         )
-    except ValueError as exc:
+    except (NotADecisionChoice, NotAPendingProposal) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except DecisionClosed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
         conflict = DecisionResolutionConflict(

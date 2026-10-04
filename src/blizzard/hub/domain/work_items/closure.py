@@ -6,16 +6,20 @@ complete, directly-callable step (``bzh:steppable-loop``); ground is
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.lane_retry import backoff_delay
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome
+from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -54,6 +58,55 @@ def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attemp
         timedelta(seconds=CLOSE_DRAIN_BACKOFF_CAP_SECONDS),
     )
     return now - last_attempt_at >= threshold
+
+
+class CloseIntentState(StrEnum):
+    """A close intent's lifecycle. Enqueued ``pending``; a skipped attempt (no closer bound
+    for the source) or a ``failed`` one leaves it ``backing-off``, re-attempted once due; a
+    terminal outcome ``retired`` it, never re-attempted and never re-enqueued for that ref."""
+
+    PENDING = "pending"
+    BACKING_OFF = "backing-off"
+    RETIRED = "retired"
+
+    @classmethod
+    def after(cls, outcome: WorkItemCloseOutcome) -> CloseIntentState:
+        """The state one attempt's ``outcome`` leaves its intent in."""
+        return _STATE_AFTER[outcome]
+
+
+_STATE_AFTER: Mapping[WorkItemCloseOutcome, CloseIntentState] = {
+    WorkItemCloseOutcome.CLOSED: CloseIntentState.RETIRED,
+    WorkItemCloseOutcome.GONE: CloseIntentState.RETIRED,
+    WorkItemCloseOutcome.FAILED: CloseIntentState.BACKING_OFF,
+}
+
+#: The outcomes that retire an intent, filtered on by the store's retire and re-enqueue guards.
+TERMINAL_CLOSE_OUTCOMES: frozenset[WorkItemCloseOutcome] = frozenset(
+    outcome for outcome in WorkItemCloseOutcome if CloseIntentState.after(outcome) is CloseIntentState.RETIRED
+)
+
+
+@domain_model
+@dataclass(frozen=True)
+class CloseEvent:
+    """The event-log entry one recorded close outcome announces."""
+
+    kind: EventLogKind
+    message: str
+    detail: dict[str, str | None] | None
+
+
+def close_event(ref: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None) -> CloseEvent:
+    """A closed ref announces ``work-item-closed``; a gone or failed one announces
+    ``work-item-close-failed`` with its outcome and reason."""
+    if outcome is WorkItemCloseOutcome.CLOSED:
+        return CloseEvent(kind=_EVENT_CLOSED, message=f"closed {ref.source}#{ref.ref}", detail=None)
+    return CloseEvent(
+        kind=_EVENT_CLOSE_FAILED,
+        message=f"failed to close {ref.source}#{ref.ref}: {reason}",
+        detail={"outcome": outcome.value, "reason": reason},
+    )
 
 
 class CloseIntentDrainer:
@@ -131,26 +184,15 @@ class CloseIntentDrainer:
             )  # retires the intent too, in the same transaction, when the outcome is terminal
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
-            if outcome is WorkItemCloseOutcome.CLOSED:
-                self._events.record(
-                    kind=_EVENT_CLOSED,
-                    runner_id=None,
-                    chunk_id=intent.chunk_id,
-                    lease_id=None,
-                    node_name=None,
-                    message=f"closed {intent.ref.source}#{intent.ref.ref}",
-                    detail=None,
-                    at=at,
-                )
-            else:
-                self._events.record(
-                    kind=_EVENT_CLOSE_FAILED,
-                    runner_id=None,
-                    chunk_id=intent.chunk_id,
-                    lease_id=None,
-                    node_name=None,
-                    message=f"failed to close {intent.ref.source}#{intent.ref.ref}: {reason}",
-                    detail={"outcome": outcome.value, "reason": reason},
-                    at=at,
-                )
+            event = close_event(intent.ref, outcome, reason)
+            self._events.record(
+                kind=event.kind,
+                runner_id=None,
+                chunk_id=intent.chunk_id,
+                lease_id=None,
+                node_name=None,
+                message=event.message,
+                detail=event.detail,
+                at=at,
+            )
         _log.info("close intent drain sweep completed", closed=closed, gone=gone, failed=failed, skipped=skipped)

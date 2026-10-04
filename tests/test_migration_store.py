@@ -33,7 +33,7 @@ from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, chunk_stores, pointer_token, report_lease
+from tests.support import build_hub, chunk_stores, make_ready, pointer_token, report_lease
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -202,6 +202,7 @@ def _claimed(hub) -> tuple[str, str, str]:  # type: ignore[no-untyped-def]
         json={"definition_yaml": _SRC_YAML.replace("name: default-delivery", "name: triage")},
     ).json()
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -302,6 +303,8 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
     assert landed["executor"] == "hub"
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    hub.promote(chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -349,6 +352,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
 def test_set_intended_migration_sets_overwrites_and_clears(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
 
     record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     pre = hub.services.chunks.record.get(chunk_id)
@@ -472,6 +476,7 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     assert landed["executor"] == "hub"
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

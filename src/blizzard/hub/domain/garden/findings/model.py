@@ -7,7 +7,7 @@ reversible); `class_`/`locus` are opaque to the hub, same doc."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -61,6 +61,84 @@ class FindingNoteRequiredError(ValueError):
         super().__init__(f"{kind!r} requires a non-empty note")
 
 
+class FindingSupersedesItself(ValueError):
+    """A `superseded` fact named its own finding as the absorber — the absorber is never
+    the finding being exited (blizzard-context:/domain/findings-and-proposals.md
+    §Liveness is derived, and reversible)."""
+
+    def __init__(self, finding_id: str) -> None:
+        self.finding_id = finding_id
+        super().__init__(f"finding {finding_id!r} cannot supersede itself")
+
+
+class AbsorberNotLive(ValueError):
+    """A `superseded` fact named an absorber that is not itself live — same doc, same
+    section."""
+
+    def __init__(self, finding_id: str) -> None:
+        self.finding_id = finding_id
+        super().__init__(f"finding {finding_id!r} is not live and cannot absorb another finding")
+
+
+class DuplicateFindingError(ValueError):
+    """One person's bulk verb named the same finding twice — refused rather than written
+    as two identical facts the trend would count twice."""
+
+    def __init__(self, finding_id: str) -> None:
+        self.finding_id = finding_id
+        super().__init__(f"finding {finding_id!r} is named more than once")
+
+
+class FindingTransitionRefused(ValueError):
+    """A verb applied to a finding whose state does not allow it, per
+    :data:`FINDING_TRANSITIONS` — the base every state refusal shares."""
+
+    def __init__(self, finding_id: str, kind: str, state: str, message: str) -> None:
+        self.finding_id = finding_id
+        self.kind = kind
+        self.state = state
+        super().__init__(message)
+
+
+class FindingAlreadyExited(FindingTransitionRefused):
+    """An exit verb on a finding already exited — a person reopens it first, so the
+    re-classification leaves its own trail instead of silently rewriting the exit."""
+
+    def __init__(self, finding_id: str, kind: str, state: str) -> None:
+        super().__init__(
+            finding_id, kind, state, f"finding {finding_id!r} is already {state!r}; reopen it before {kind!r}"
+        )
+
+
+class FindingNotReopenable(FindingTransitionRefused):
+    """`reopened` on a live finding — there is no exit, `gone`, or delivery to undo."""
+
+    def __init__(self, finding_id: str, kind: str, state: str) -> None:
+        super().__init__(finding_id, kind, state, f"finding {finding_id!r} is already live; nothing to reopen")
+
+
+def require_note(kind: str, note: str | None) -> str:
+    """`note` stripped — every human-driven verb, and `delivered`, wants a non-blank one."""
+    stripped = (note or "").strip()
+    if not stripped:
+        raise FindingNoteRequiredError(kind)
+    return stripped
+
+
+#: The unexited states (`derive_liveness`): live, a run's provisional `gone`, a delivery's provisional `delivered`.
+UNEXITED_STATES = frozenset({"live", "gone", "delivered"})
+FINDING_STATES = UNEXITED_STATES | EXIT_KINDS
+
+#: Which fact kind (the verb that writes it) is legal from which state; `add` mints and has no prior state.
+FINDING_TRANSITIONS: Mapping[str, frozenset[str]] = {
+    "observed": UNEXITED_STATES,
+    "gone": UNEXITED_STATES,
+    "delivered": frozenset({"live"}),
+    **dict.fromkeys(sorted(EXIT_KINDS), UNEXITED_STATES),
+    "reopened": FINDING_STATES - {"live"},
+}
+
+
 @domain_model
 @dataclass(frozen=True)
 class Finding:
@@ -92,6 +170,86 @@ class Finding:
     raised_by_chunk_id: str | None = None
     #: The newest fact's own actor — a `delivered` finding's own closer.
     actor: str | None = None
+
+    @property
+    def exited(self) -> bool:
+        """Left the live set for good, until a person reopens it."""
+        return self._in_exit_state()
+
+    @property
+    def delivered(self) -> bool:
+        """Closed by a delivery, provisionally, until its routine's next run settles it."""
+        return self._in_delivered_state()
+
+    def _in_exit_state(self) -> bool:
+        return self.state in EXIT_KINDS
+
+    def _in_delivered_state(self) -> bool:
+        return self.state == "delivered"
+
+    def allows(self, kind: str) -> bool:
+        """Whether a `kind` fact is legal from this finding's state, per :data:`FINDING_TRANSITIONS`."""
+        return self.state in FINDING_TRANSITIONS.get(kind, frozenset())
+
+    def exit_fact(self, kind: str, *, note: str, actor: str, at: datetime, proposal_id: str | None = None) -> FactEntry:
+        """A person's exit (any of `EXIT_KINDS` but `superseded`) or `reopened` fact — refused
+        from a state :data:`FINDING_TRANSITIONS` disallows, then for a blank note."""
+        if kind not in EXIT_KINDS - {"superseded"} and kind != "reopened":
+            raise UnknownFactKindError(kind)
+        self.check(kind)
+        return FactEntry(
+            finding_id=self.finding_id,
+            kind=kind,
+            at=at,
+            note=require_note(kind, note),
+            actor=actor,
+            proposal_id=proposal_id,
+        )
+
+    def supersede_into(self, absorber: Finding, *, note: str, actor: str, at: datetime) -> FactEntry:
+        """This finding's `superseded` fact, folded into `absorber` — which is never this
+        finding and must itself be live."""
+        if absorber.finding_id == self.finding_id:
+            raise FindingSupersedesItself(self.finding_id)
+        if not absorber.live:
+            raise AbsorberNotLive(absorber.finding_id)
+        self.check("superseded")
+        return FactEntry(
+            finding_id=self.finding_id,
+            kind="superseded",
+            at=at,
+            note=require_note("superseded", note),
+            actor=actor,
+            superseded_by=absorber.finding_id,
+        )
+
+    def deliver_fact(self, *, note: str, actor: str, at: datetime, proposal_id: str | None = None) -> FactEntry | None:
+        """The `delivered` fact a landed proposal closes this finding with, or `None` when
+        it is no longer live — a finding a run has since reported gone, or a person has
+        already exited, is left exactly as it stands
+        (blizzard-context:/domain/findings-and-proposals.md §Closing a proposal)."""
+        note = require_note("delivered", note)
+        if not self.allows("delivered"):
+            return None
+        return FactEntry(
+            finding_id=self.finding_id, kind="delivered", at=at, note=note, actor=actor, proposal_id=proposal_id
+        )
+
+    def run_gone(self) -> tuple[str, str | None]:
+        """The fact kind and actor a run's `gone` op lands as: a `delivered` finding settles
+        to `resolved`, carrying its closer as the actor; any other is flagged `gone`."""
+        if self.delivered:
+            return "resolved", self.actor
+        return "gone", None
+
+    def check(self, kind: str) -> None:
+        """Refuse a `kind` fact this finding's state disallows — `reopened` on a live finding,
+        any other verb on an exited one."""
+        if self.allows(kind):
+            return
+        if kind == "reopened":
+            raise FindingNotReopenable(self.finding_id, kind, self.state)
+        raise FindingAlreadyExited(self.finding_id, kind, self.state)
 
 
 @domain_model
@@ -306,68 +464,98 @@ class IFindingExitResolver(Protocol):
     ) -> None: ...
 
 
+def refuse_duplicates(findings: Sequence[Finding]) -> None:
+    """Refuse a person's bulk verb naming one finding twice."""
+    seen: set[str] = set()
+    for finding in findings:
+        if finding.finding_id in seen:
+            raise DuplicateFindingError(finding.finding_id)
+        seen.add(finding.finding_id)
+
+
+def exit_facts(
+    findings: Sequence[Finding], kind: str, *, note: str, actor: str, at: datetime, proposal_id: str | None = None
+) -> list[FactEntry]:
+    """One person's bulk exit or `reopened` — every finding's fact, or the batch's refusal:
+    a duplicate id, then any finding's state, then a blank note. Nothing is written for a
+    refused batch."""
+    refuse_duplicates(findings)
+    for finding in findings:
+        finding.check(kind)
+    note = require_note(kind, note)
+    return [f.exit_fact(kind, note=note, actor=actor, at=at, proposal_id=proposal_id) for f in findings]
+
+
+def supersede_facts(
+    findings: Sequence[Finding], absorber: Finding, *, note: str, actor: str, at: datetime
+) -> list[FactEntry]:
+    """One person's bulk `superseded` into `absorber` — `exit_facts`' shape, refusing a
+    self-naming or non-live absorber before any finding's state."""
+    refuse_duplicates(findings)
+    for finding in findings:
+        if absorber.finding_id == finding.finding_id:
+            raise FindingSupersedesItself(finding.finding_id)
+    if not absorber.live:
+        raise AbsorberNotLive(absorber.finding_id)
+    for finding in findings:
+        finding.check("superseded")
+    note = require_note("superseded", note)
+    return [f.supersede_into(absorber, note=note, actor=actor, at=at) for f in findings]
+
+
+def deliver_facts(
+    findings: Sequence[Finding], *, note: str, actor: str, at: datetime, proposal_id: str | None = None
+) -> list[FactEntry]:
+    """A landed proposal's `delivered` facts — its still-live findings only, every other
+    left as it stands (:meth:`Finding.deliver_fact`)."""
+    note = require_note("delivered", note)
+    facts = (f.deliver_fact(note=note, actor=actor, at=at, proposal_id=proposal_id) for f in findings)
+    return [fact for fact in facts if fact is not None]
+
+
 class FindingExitService:
     """The human-driven exit verbs, `reopen`, and `deliver`
     — delivery-triggered and provisional, not an exit, until the owning routine's next
     run settles it. Every method takes already-loaded :class:`Finding` objects
-    (`bzh:domain-takes-objects`) and refuses a blank or missing note before writing."""
+    (`bzh:domain-takes-objects`), asks the model for the batch's facts at the clock's
+    instant, and writes them in one all-or-nothing `record_facts`."""
 
     def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:
         self._repo = repo
         self._clock = clock
 
     def resolve(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
-        self._apply(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
+        self._exit(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
 
     def deliver(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
         """Delivery-triggered closure — `resolved`'s provisional sibling:
         the owning routine's next run re-checks a `delivered` finding, settling it to
         `resolved` if it still holds or reviving it to `live` if it does not, rather than
         a delivery alone declaring the ground changed."""
-        self._apply(findings, kind="delivered", note=note, actor=actor, proposal_id=proposal_id)
+        at = self._clock.now()
+        self._repo.record_facts(deliver_facts(findings, note=note, actor=actor, at=at, proposal_id=proposal_id))
 
     def confirm_gone(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
-        self._apply(findings, kind="gone-confirmed", note=note, actor=actor)
+        self._exit(findings, kind="gone-confirmed", note=note, actor=actor)
 
     def wont_fix(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
-        self._apply(findings, kind="wont-fix", note=note, actor=actor)
+        self._exit(findings, kind="wont-fix", note=note, actor=actor)
 
     def not_a_finding(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
-        self._apply(findings, kind="not-a-finding", note=note, actor=actor)
+        self._exit(findings, kind="not-a-finding", note=note, actor=actor)
 
-    def supersede(self, findings: Sequence[Finding], *, note: str, actor: str, superseded_by: str) -> None:
-        self._apply(findings, kind="superseded", note=note, actor=actor, superseded_by=superseded_by)
+    def supersede(self, findings: Sequence[Finding], absorber: Finding, *, note: str, actor: str) -> None:
+        at = self._clock.now()
+        self._repo.record_facts(supersede_facts(findings, absorber, note=note, actor=actor, at=at))
 
     def reopen(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
-        self._apply(findings, kind="reopened", note=note, actor=actor)
+        self._exit(findings, kind="reopened", note=note, actor=actor)
 
-    def _apply(
-        self,
-        findings: Sequence[Finding],
-        *,
-        kind: str,
-        note: str,
-        actor: str,
-        proposal_id: str | None = None,
-        superseded_by: str | None = None,
+    def _exit(
+        self, findings: Sequence[Finding], *, kind: str, note: str, actor: str, proposal_id: str | None = None
     ) -> None:
-        note = note.strip()
-        if not note:
-            raise FindingNoteRequiredError(kind)
         at = self._clock.now()
-        entries = [
-            FactEntry(
-                finding_id=finding.finding_id,
-                kind=kind,
-                at=at,
-                note=note,
-                actor=actor,
-                proposal_id=proposal_id,
-                superseded_by=superseded_by,
-            )
-            for finding in findings
-        ]
-        self._repo.record_facts(entries)
+        self._repo.record_facts(exit_facts(findings, kind, note=note, actor=actor, at=at, proposal_id=proposal_id))
 
 
 @domain_model

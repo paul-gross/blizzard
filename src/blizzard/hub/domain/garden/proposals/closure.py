@@ -6,7 +6,7 @@ linked hub work item by default). Closure is terminal, mirroring
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -15,9 +15,16 @@ from typing import NoReturn, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.roles import domain_model, dto
-from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
 from blizzard.hub.domain.garden.findings.model import Finding
-from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed
+from blizzard.hub.domain.garden.proposals.model import (
+    GardenProposal,
+    GardenProposalAlreadyClosed,
+    GardenProposalState,
+    GardenProposalVerb,
+    garden_proposal_state,
+    verb_legal_from,
+)
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
@@ -66,6 +73,128 @@ class GardenProposalClosure:
     source: str | None
     ref: str | None
 
+    @property
+    def state(self) -> GardenProposalState:
+        """The state this closure puts its proposal in."""
+        return garden_proposal_state(self.closure, self.item_outcome)
+
+    @property
+    def mints_delivery(self) -> bool:
+        """Whether delivering the item this closure names reaches its proposal — true only
+        for an accept that minted that item."""
+        return verb_legal_from(self.state, GardenProposalVerb.DELIVER)
+
+    @classmethod
+    def passing(
+        cls,
+        proposal: GardenProposal,
+        existing: GardenProposalClosure | None,
+        *,
+        reason: str,
+        by: str,
+        at: datetime,
+    ) -> GardenProposalClosure:
+        """The passed closure for `proposal`, its reason stored stripped. Refuses a closed
+        proposal first (:class:`GardenProposalAlreadyClosed`), as every verb on a closed
+        proposal does, then a blank reason (:class:`GardenProposalPassReasonRequired`)."""
+        proposal.require_legal(GardenProposalVerb.PASS, existing)
+        text = reason.strip()
+        if not text:
+            raise GardenProposalPassReasonRequired()
+        return cls(
+            proposal_id=proposal.proposal_id,
+            closure=GardenProposalClosureKind.PASSED,
+            reason=text,
+            closed_by=by,
+            closed_at=at,
+            item_outcome=None,
+            source=None,
+            ref=None,
+        )
+
+    @classmethod
+    def accepted_declining(
+        cls,
+        proposal: GardenProposal,
+        existing: GardenProposalClosure | None,
+        *,
+        reason: str | None,
+        body: str | None,
+        by: str,
+        at: datetime,
+    ) -> GardenProposalClosure:
+        """The closure of an accept that mints no item. Refuses a closed proposal first,
+        then a `body` override (:class:`GardenProposalBodyWithoutMint`) — an override
+        only a minted item could carry. The reason is optional: stored stripped, a blank
+        one as none."""
+        proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
+        if body is not None:
+            raise GardenProposalBodyWithoutMint(proposal.proposal_id)
+        return cls(
+            proposal_id=proposal.proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=accept_reason(reason),
+            closed_by=by,
+            closed_at=at,
+            item_outcome=GardenProposalItemOutcome.DECLINED,
+            source=None,
+            ref=None,
+        )
+
+    @classmethod
+    def accepted_minting(cls, accept: MintingAccept, item: HubWorkItem, *, by: str) -> GardenProposalClosure:
+        """The closure of an accept that minted `item`, stamped at the item's own
+        creation."""
+        return cls(
+            proposal_id=accept.proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=accept.reason,
+            closed_by=by,
+            closed_at=item.created_at,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            source=item.source,
+            ref=item.ref,
+        )
+
+
+@dto
+@dataclass(frozen=True)
+class MintingAccept:
+    """What an accept that mints an item writes: the item's title and composed body, and
+    the closure's normalized reason."""
+
+    proposal_id: str
+    title: str
+    body: str
+    reason: str | None
+
+    @classmethod
+    def of(
+        cls,
+        proposal: GardenProposal,
+        existing: GardenProposalClosure | None,
+        *,
+        reason: str | None,
+        body: str | None,
+        findings: Sequence[Finding],
+    ) -> MintingAccept:
+        """Refuses a closed proposal; otherwise the item takes `body` when given, else the
+        proposal's own, wrapped with `findings` (:func:`_compose_minted_body`)."""
+        proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
+        return cls(
+            proposal_id=proposal.proposal_id,
+            title=proposal.title,
+            body=_compose_minted_body(body if body is not None else proposal.body, findings),
+            reason=accept_reason(reason),
+        )
+
+
+def accept_reason(reason: str | None) -> str | None:
+    """An accept's optional reason, stripped; a blank one reads as no reason."""
+    if reason is None:
+        return None
+    return reason.strip() or None
+
 
 @dto
 @dataclass(frozen=True)
@@ -75,6 +204,15 @@ class AcceptedGardenProposal:
 
     closure: GardenProposalClosure
     chunk_id: str | None
+
+
+class GardenProposalBodyWithoutMint(ValueError):
+    """An accept declining to mint named a `body` override — the override is the minted
+    item's body, so an accept minting nothing can never carry it."""
+
+    def __init__(self, proposal_id: str) -> None:
+        super().__init__(f"accepting garden proposal {proposal_id} without minting takes no body")
+        self.proposal_id = proposal_id
 
 
 class GardenProposalPassReasonRequired(ValueError):
@@ -140,40 +278,35 @@ def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
 
 
 class GardenProposalClosureService:
-    """Close a garden proposal — pass or accept. Holds the closure write seam and
-    :class:`~blizzard.hub.domain.work_items.editing.WorkItemEditService`, the mint-with-link
-    path an accept that mints rides."""
+    """Close a garden proposal — pass or accept — over the closure write seam,
+    :class:`~blizzard.hub.domain.work_items.editing.WorkItemEditService` (an accept's mint-with-link path),
+    and `default_graph`. Every refusal is :class:`GardenProposalClosure`'s own; this service loads, reads the
+    clock, writes, and turns a lost write race into :class:`GardenProposalAlreadyClosed`."""
 
     def __init__(
-        self, *, closures: IWriteGardenProposalClosureRepository, items: WorkItemEditService, clock: IClock
+        self,
+        *,
+        closures: IWriteGardenProposalClosureRepository,
+        items: WorkItemEditService,
+        default_graph: Callable[[], Graph],
+        clock: IClock,
     ) -> None:
         self._closures = closures
         self._items = items
+        self._default_graph = default_graph
         self._clock = clock
 
     def pass_(self, proposal: GardenProposal, *, reason: str, by: str) -> GardenProposalClosure:
-        """Pass ``proposal`` with ``reason``, refusing a blank one. Raises
-        :class:`GardenProposalAlreadyClosed` when it already carries a closure, checked
-        against ``self._closures.get`` here and re-checked by the store's own
-        idempotence guard against a race in between."""
-        reason = reason.strip()
-        if not reason:
-            raise GardenProposalPassReasonRequired()
-        self._refuse_if_closed(proposal.proposal_id)
-        at = self._clock.now()
-        written = self._closures.record_pass(proposal.proposal_id, reason=reason, closed_by=by, at=at)
-        if not written:
-            self._raise_already_closed(proposal.proposal_id)
-        return GardenProposalClosure(
-            proposal_id=proposal.proposal_id,
-            closure=GardenProposalClosureKind.PASSED,
-            reason=reason,
-            closed_by=by,
-            closed_at=at,
-            item_outcome=None,
-            source=None,
-            ref=None,
+        """Pass ``proposal`` (:meth:`GardenProposalClosure.passing`)."""
+        closure = GardenProposalClosure.passing(
+            proposal, self._closures.get(proposal.proposal_id), reason=reason, by=by, at=self._clock.now()
         )
+        assert closure.reason is not None
+        if not self._closures.record_pass(
+            proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at
+        ):
+            self._raise_already_closed(proposal.proposal_id)
+        return closure
 
     def accept(
         self,
@@ -183,63 +316,38 @@ class GardenProposalClosureService:
         by: str,
         body: str | None,
         mint: bool,
-        graph: Graph | None,
         findings: Sequence[Finding],
     ) -> AcceptedGardenProposal:
-        """Accept ``proposal`` — see ``blizzard-context:/domain/findings-and-proposals.md``
-        §Closing a proposal: pass or accept. ``mint=True`` requires ``graph`` and composes
-        the item body (``_compose_minted_body``) from ``findings``, already-loaded objects
-        the caller resolves (``bzh:domain-takes-objects``). Raises :class:`GardenProposalAlreadyClosed` when
-        already closed, and :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
-        self._refuse_if_closed(proposal.proposal_id)
+        """Accept ``proposal`` — ``blizzard-context:/domain/findings-and-proposals.md`` §Closing a proposal.
+        ``mint=True`` resolves the default graph only once the proposal is known open and composes the item
+        body from the already-loaded ``findings``. Raises :class:`GardenProposalAlreadyClosed`,
+        :class:`GardenProposalBodyWithoutMint` for a body on a non-minting accept, and
+        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
+        existing = self._closures.get(proposal.proposal_id)
         if not mint:
-            at = self._clock.now()
-            written = self._closures.record_accept_decline(proposal.proposal_id, reason=reason, closed_by=by, at=at)
-            if not written:
-                self._raise_already_closed(proposal.proposal_id)
-            return AcceptedGardenProposal(
-                closure=GardenProposalClosure(
-                    proposal_id=proposal.proposal_id,
-                    closure=GardenProposalClosureKind.ACCEPTED,
-                    reason=reason,
-                    closed_by=by,
-                    closed_at=at,
-                    item_outcome=GardenProposalItemOutcome.DECLINED,
-                    source=None,
-                    ref=None,
-                ),
-                chunk_id=None,
+            closure = GardenProposalClosure.accepted_declining(
+                proposal, existing, reason=reason, body=body, by=by, at=self._clock.now()
             )
-        assert graph is not None
+            if not self._closures.record_accept_decline(
+                proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at
+            ):
+                self._raise_already_closed(proposal.proposal_id)
+            return AcceptedGardenProposal(closure=closure, chunk_id=None)
+        accept = MintingAccept.of(proposal, existing, reason=reason, body=body, findings=findings)
         minted = self._items.accept_create(
             proposal.proposal_id,
-            title=proposal.title,
-            body=_compose_minted_body(body if body is not None else proposal.body, findings),
+            title=accept.title,
+            body=accept.body,
             author=WorkItemAuthor.user(by),
-            graph=graph,
-            reason=reason,
+            graph=self._default_graph(),
+            reason=accept.reason,
             closed_by=by,
         )
         if minted is None:
             self._raise_already_closed(proposal.proposal_id)
         return AcceptedGardenProposal(
-            closure=GardenProposalClosure(
-                proposal_id=proposal.proposal_id,
-                closure=GardenProposalClosureKind.ACCEPTED,
-                reason=reason,
-                closed_by=by,
-                closed_at=minted.item.created_at,
-                item_outcome=GardenProposalItemOutcome.MINTED,
-                source=minted.item.source,
-                ref=minted.item.ref,
-            ),
-            chunk_id=minted.chunk_id,
+            closure=GardenProposalClosure.accepted_minting(accept, minted.item, by=by), chunk_id=minted.chunk_id
         )
-
-    def _refuse_if_closed(self, proposal_id: str) -> None:
-        closure = self._closures.get(proposal_id)
-        if closure is not None:
-            raise GardenProposalAlreadyClosed(proposal_id, closure)
 
     def _raise_already_closed(self, proposal_id: str) -> NoReturn:
         closure = self._closures.get(proposal_id)

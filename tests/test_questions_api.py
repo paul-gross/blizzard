@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token
+from tests.support import build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -54,6 +54,7 @@ def _asked(hub, *, question_id: str = "qn_1") -> str:  # type: ignore[no-untyped
     """Mint the graph, claim a chunk, and land an open question; return the chunk id."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -109,6 +110,7 @@ def test_question_harness_owner_reaches_the_runner_answer_read(tmp_path: Path) -
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     assert (
         hub.client.post(
             "/api/fleet/routes",
@@ -151,6 +153,7 @@ def test_equal_raw_session_ids_are_isolated_across_harnesses(tmp_path: Path) -> 
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "434b"})]}
     ).json()["chunk_id"]
     for chunk_id in (chunk_a, chunk_b):
+        make_ready(hub, chunk_id)
         assert (
             hub.client.post(
                 "/api/fleet/routes",

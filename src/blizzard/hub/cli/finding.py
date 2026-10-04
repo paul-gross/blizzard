@@ -106,6 +106,7 @@ def _post_exit(
         json_body={"finding_ids": list(finding_ids), "note": note, **extra},
         on_status={
             404: f"unknown finding among {', '.join(finding_ids)}",
+            409: f"{verb!r} is not legal from the state of a finding among {', '.join(finding_ids)}",
             422: _blank_note_fallback(verb),
         },
     ).json()

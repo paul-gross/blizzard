@@ -28,7 +28,7 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
     on the same row lock; once released, the claim lands against the now-restarted
     epoch, never a torn read of the two."""
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
 
     entered_write = threading.Event()
     release_write = threading.Event()

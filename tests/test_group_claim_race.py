@@ -27,8 +27,8 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
     """Pause the fold mid-write and prove a concurrent claim on the survivor blocks on
     the same row lock; once released, the claim lands against the now-folded survivor."""
     hub = build_hub(tmp_path)
-    survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}], promote=False)
-    target_id = ingest(hub, [{"source": "default", "ref": "target"}], promote=False)
+    survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}])
+    target_id = ingest(hub, [{"source": "default", "ref": "target"}])
 
     entered_write = threading.Event()
     release_write = threading.Event()

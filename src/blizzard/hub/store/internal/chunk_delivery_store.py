@@ -23,6 +23,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -216,7 +217,7 @@ class ChunkDeliveryStore:
                         recorded_at=at,
                     )
                 )
-            if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE):
+            if outcome in TERMINAL_CLOSE_OUTCOMES:
                 conn.execute(
                     update(s.close_intents)
                     .where(

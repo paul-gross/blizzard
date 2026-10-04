@@ -8,6 +8,7 @@ a warning, not an error: cycles are intentional and retries escape to escalation
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -18,6 +19,7 @@ from blizzard.hub.domain.graph.model import (
     RESERVED_TERMINAL,
     SESSION_LEGAL_FORMS,
     ChoiceTarget,
+    Graph,
     GraphDoc,
     NodeDoc,
     RetriesExhausted,
@@ -38,6 +40,14 @@ def _is_uninlined_file_reference(content: str) -> bool:
     if content.split() != [content] or "://" in content:
         return False
     return "/" in content or bool(_FILE_EXTENSION.search(content))
+
+
+class GraphValidationError(Exception):
+    """A graph definition failed mint-time validation — the 422 carrier."""
+
+    def __init__(self, result: ValidationResult) -> None:
+        super().__init__("; ".join(result.errors) or "graph validation failed")
+        self.result = result
 
 
 @dto
@@ -76,6 +86,14 @@ class Validator:
     @property
     def result(self) -> ValidationResult:
         return ValidationResult(errors=self.errors, warnings=self.warnings)
+
+    def require_valid(self) -> ValidationResult:
+        """The result of a definition that may mint — :class:`GraphValidationError` when any
+        error rejects it; its warnings still ride along."""
+        result = self.result
+        if not result.ok:
+            raise GraphValidationError(result)
+        return result
 
     def _check(self) -> None:
         self._check_entry()
@@ -376,3 +394,15 @@ class Reachability:
                     continue
                 stack.append(target)
         return seen
+
+
+def cross_graph_warnings(graph: Graph, *, enabled_names: Collection[str]) -> list[str]:
+    """A warning per distinct ``graph:<name>`` target naming no enabled graph — never an error:
+    the target resolves by name at apply time, so one not minted yet is legal. ``enabled_names``
+    holds whichever of :meth:`Graph.cross_graph_targets` resolve to an enabled graph."""
+    return [
+        f"cross-graph target `{target}` names no enabled graph yet — it will resolve "
+        f"when a graph named `{target}` is minted"
+        for target in graph.cross_graph_targets()
+        if target not in enabled_names
+    ]

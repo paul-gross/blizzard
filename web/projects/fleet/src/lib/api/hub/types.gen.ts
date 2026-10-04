@@ -2746,7 +2746,8 @@ export type GardenDeliveryResponse = {
  * defaults to `True`: minting a linked hub work item is the default, and declining it
  * is the deliberate act. `body` replaces the proposal's own body as the minted item's
  * body, wrapped in the "Related findings" template when the proposal cites findings and
- * minted bare otherwise; ignored when `mint_work_item` is `False`.
+ * minted bare otherwise; refused (422) when `mint_work_item` is `False`. A blank
+ * `reason` is stored as none.
  */
 export type GardenProposalAcceptRequest = {
     /**
@@ -5860,8 +5861,8 @@ export type TraceStatusResponse = {
  *
  * The hub's per-batch acknowledgement against the transcript lane's high-water mark.
  *
- * ``capped`` is the cap-rejection class — acknowledged, content-dropped, and the
- * high-water advances past it, a durable decision that must not re-adjudicate on replay.
+ * ``capped`` records are acknowledged and content-dropped, a durable decision never re-adjudicated on
+ * replay; ``refused`` records, whose lease epoch another holder owns, are acknowledged and never stored.
  */
 export type TranscriptSegmentAck = {
     /**
@@ -5880,6 +5881,10 @@ export type TranscriptSegmentAck = {
      * High Water
      */
     high_water: number;
+    /**
+     * Refused
+     */
+    refused?: Array<number>;
     /**
      * Runner Id
      */

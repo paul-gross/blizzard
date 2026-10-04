@@ -94,24 +94,18 @@ def list_events(
 ) -> EventsResponse:
     """The ``event_log`` unified with open escalations, newest first, bounded.
 
-    The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
-    the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
-    projection's aware ``recorded_at`` comparison below never raises against it."""
+    The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to both halves, the event
+    log and the open escalations alike. A tz-naive
+    ``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it."""
     since_utc = as_utc(since) if since is not None else None
     events = services.chunks.events.list_events(
         severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc, limit=limit
     )
-    # The same predicates over the escalation projection: it is always `critical` and names no runner,
-    # so a `severity`/`runner_id` filter excludes it wholesale; `chunk_id`/`since` narrow per row.
-    escalations = services.chunks.escalations.list_open_escalations()
-    if severity is not None and severity != "critical":
-        escalations = []
-    if runner_id is not None:
-        escalations = []
-    if chunk_id is not None:
-        escalations = [e for e in escalations if e.chunk_id == chunk_id]
-    if since_utc is not None:
-        escalations = [e for e in escalations if e.recorded_at >= since_utc]
+    escalations = [
+        e
+        for e in services.chunks.escalations.list_open_escalations()
+        if e.matches(severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc)
+    ]
     return Events(EventFeed.of(events, escalations).rows[:limit]).response()
 
 

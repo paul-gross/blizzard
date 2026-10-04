@@ -8,21 +8,30 @@ The load-facts → check-live-route → record-route sequence is an atomic CAS."
 from __future__ import annotations
 
 import secrets
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.chunk.model import Chunk, WorkRefLabel, holds_claim
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DependencyEdge,
+    WorkRefLabel,
+    holds_claim,
+    verb_legal_from,
+)
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
-from blizzard.hub.domain.execution.envelope import Arrival, Envelope
-from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.execution.envelope import Envelope
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard, RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -52,6 +61,16 @@ class ClaimDeniedPaused(Exception):
 
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is paused at the hub")
+        self.runner_id = runner_id
+
+
+class ClaimDeniedUnregistered(Exception):
+    """The claiming runner holds no registration at the hub — refused before any race, in the
+    runner-refusal shape of :class:`ClaimDeniedPaused`. Neither runner brake nor its capabilities
+    can be judged without a registration, and a live runner re-registers every tick."""
+
+    def __init__(self, *, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} is not registered at the hub")
         self.runner_id = runner_id
 
 
@@ -87,6 +106,99 @@ class ClaimDeniedIncompatible(Exception):
         super().__init__(f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}")
         self.chunk_id = chunk_id
         self.runner_id = runner_id
+
+
+class ClaimDeniedNotReady(Exception):
+    """The chunk is not ``ready`` — never promoted, paused while unclaimed, or parked on a human
+    with no live route — so the hub grants it to no runner. Distinct from
+    :class:`ClaimDeniedPaused`, which refuses the *runner*, and from :class:`ClaimConflict`,
+    which a held route answers first."""
+
+    def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
+        super().__init__(f"chunk {chunk_id} is {status.value}, not ready to claim")
+        self.chunk_id = chunk_id
+        self.status = status
+
+
+class RekeyDeniedTerminal(Exception):
+    """The live route sits on an ended chunk, where it confers no tenure — no token is minted."""
+
+    def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
+        super().__init__(f"chunk {chunk_id} is {status.value}, its route confers no tenure")
+        self.chunk_id = chunk_id
+        self.status = status
+
+
+def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
+    """Refuse a claim from a runner unregistered, retired, or paused at the hub registry, ahead of
+    any race; the registration the claim stands on otherwise."""
+    if registration is None:
+        raise ClaimDeniedUnregistered(runner_id=runner_id)
+    registration.refuse_if_retired(action="claim")
+    if registration.hub_paused:
+        raise ClaimDeniedPaused(runner_id=runner_id)
+    return registration
+
+
+def first_unmet_prerequisite(
+    chunk_id: str, edges: Sequence[DependencyEdge], prerequisite_facts: Mapping[str, ChunkFacts]
+) -> str | None:
+    """The earliest-declared standing edge naming ``chunk_id`` as dependent whose prerequisite does
+    not meet it (:meth:`DependencyEdge.met_by`) — ``None`` when every such edge is met. No
+    dependent-status filter: claim judges its own chunk whatever it derives."""
+    for edge in edges:
+        if edge.dependent_chunk_id != chunk_id:
+            continue
+        facts = prerequisite_facts.get(edge.prerequisite_chunk_id)
+        if not edge.met_by(facts.status() if facts is not None else None):
+            return edge.prerequisite_chunk_id
+    return None
+
+
+@domain_model
+@dataclass(frozen=True)
+class ClaimAdmission:
+    """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
+    each its own error: ended, held route, not ``ready``, unmet prerequisite, unregistered, retired, then
+    incapable runner (a registration reporting no capabilities is not checked). The runner-paused brake is
+    judged before the lock (:func:`refuse_paused_runner`)."""
+
+    chunk: Chunk
+    graph: Graph
+    facts: ChunkFacts | None
+
+    def node(
+        self,
+        *,
+        runner_id: str,
+        existing_route: Route | None,
+        unmet_prerequisite: str | None,
+        registration: RunnerRegistration | None,
+    ) -> Node:
+        """The node the claim lands the chunk at, or the refusal. Its envelope is built from it."""
+        chunk_id = self.chunk.chunk_id
+        facts = ChunkFacts.or_default(self.facts)
+        status = facts.status() if self.facts is not None else ChunkStatus.NOT_READY
+        if not holds_claim(status):
+            raise ClaimDeniedTerminal(chunk_id=chunk_id, status=status)
+        if existing_route is not None:
+            raise ClaimConflict(held_by_runner_id=existing_route.runner_id)
+        if not verb_legal_from(ChunkVerb.CLAIM, status):
+            raise ClaimDeniedNotReady(chunk_id=chunk_id, status=status)
+        if unmet_prerequisite is not None:
+            raise ClaimDeniedDependency(chunk_id=chunk_id, prerequisite_chunk_id=unmet_prerequisite)
+        node = facts.current_node(self.graph)
+        if node is None:  # pragma: no cover - a pinned graph always resolves its own node
+            raise ClaimConflict(held_by_runner_id=runner_id)
+        if registration is None:
+            raise ClaimDeniedUnregistered(runner_id=runner_id)
+        registration.refuse_if_retired(action="claim")
+        if (
+            registration.capabilities
+            and not EligibilityCheck(self.chunk, self.graph, node, registration.capabilities).eligible
+        ):
+            raise ClaimDeniedIncompatible(chunk_id=chunk_id, runner_id=runner_id)
+        return node
 
 
 @dto
@@ -146,11 +258,7 @@ class ClaimService:
     ) -> ClaimResult:
         # Checked before the lock: a paused runner is refused regardless of whether it
         # would have won the race, so there is nothing here for the CAS to serialize.
-        registration = self._registry.get_runner(runner_id)
-        if registration is not None:
-            registration.refuse_if_retired(action="claim")
-        if registration is not None and registration.hub_paused:
-            raise ClaimDeniedPaused(runner_id=runner_id)
+        refuse_paused_runner(self._registry.get_runner(runner_id), runner_id=runner_id)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             return self._claim_locked(
                 handle, chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
@@ -179,41 +287,16 @@ class ClaimService:
         chunk = current
 
         facts = handle.facts(chunk.chunk_id)
-        # Re-derived under the lock (a stop can land after the peek), and before the
-        # route: a route left on a terminal chunk confers no tenure.
-        status = facts.status() if facts is not None else ChunkStatus.NOT_READY
-        if not holds_claim(status):
-            raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
-
-        existing = handle.route_of(chunk.chunk_id)
-        if existing is not None:
-            raise ClaimConflict(held_by_runner_id=existing.runner_id)
-
-        # Re-derived under the same lock: an edge or completion can land after the peek.
-        unmet = self._unmet_prerequisite(handle, chunk.chunk_id)
-        if unmet is not None:
-            raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
-
-        # Hoisted ahead of the mint (below) so the same resolved node serves both the
-        # incompatibility check and the envelope, rather than resolving it twice.
-        node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
-        node = graph.node_by_id(node_id)
-        if node is None:  # pragma: no cover - a pinned graph always resolves its own node
-            raise ClaimConflict(held_by_runner_id=runner_id)
-
-        # Re-fetched fresh under the lock, never the pre-lock read the
-        # paused guard used: a capability change landing after this runner's peek must not race the claim.
-        registration = handle.runner_registration(runner_id)
-        if registration is not None:
-            registration.refuse_if_retired(action="claim")
-        if registration is not None and registration.capabilities:
-            eligible = EligibilityCheck(chunk, graph, node, registration.capabilities).eligible
-            if not eligible:
-                raise ClaimDeniedIncompatible(chunk_id=chunk.chunk_id, runner_id=runner_id)
-
-        # The claim carries the current epoch (0 before the first lease report) and mints
-        # no lease of its own.
-        epoch = facts.latest_epoch() or 0 if facts is not None else 0
+        # Every guard input is re-read under the lock — a stop, an edge, a completion, or a
+        # capability change can land after the pre-lock peek.
+        edges = handle.standing_edges()
+        prerequisites = [e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk.chunk_id]
+        ClaimAdmission(chunk, graph, facts).node(
+            runner_id=runner_id,
+            existing_route=handle.route_of(chunk.chunk_id),
+            unmet_prerequisite=first_unmet_prerequisite(chunk.chunk_id, edges, handle.facts_for(prerequisites)),
+            registration=handle.runner_registration(runner_id),
+        )
         now = self._clock.now()
 
         route = Route(
@@ -231,40 +314,27 @@ class ClaimService:
 
         # Envelope assembly stays outside the locked transaction's read set — the
         # artifact load is no part of the exactly-one-wins decision itself.
-        envelope = Envelope(
-            chunk=chunk,
-            graph=graph,
-            node=node,
-            artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
-            epoch=epoch,
-            arrival_addendum=Arrival.of_facts(graph, facts).addendum,
-            entered_by_restart=facts is not None and facts.entered_by_restart(),
+        envelope = Envelope.current(
+            chunk,
+            graph,
+            ChunkFacts.or_default(facts),
+            self._artifacts.load_artifacts(chunk.chunk_id),
             label=self._label,
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
-    def _unmet_prerequisite(self, handle: ILockedChunkRead, chunk_id: str) -> str | None:
-        """The earliest-declared standing edge naming ``chunk_id`` as dependent whose
-        prerequisite has not reached ``done`` — ``None`` when every standing edge is met
-        or the chunk carries none. Filters the full standing set rather than a targeted
-        read, mirroring ``DependencyService``'s own cycle check, resolving every
-        prerequisite's facts with one bulk ``facts_for`` call rather than one per edge."""
-        edges = [e for e in handle.standing_edges() if e.dependent_chunk_id == chunk_id]
-        facts_by_id = handle.facts_for([edge.prerequisite_chunk_id for edge in edges])
-        for edge in edges:
-            prerequisite_facts = facts_by_id.get(edge.prerequisite_chunk_id)
-            status = prerequisite_facts.status() if prerequisite_facts is not None else ChunkStatus.NOT_READY
-            if status != ChunkStatus.DONE:
-                return edge.prerequisite_chunk_id
-        return None
-
-    def rekey(self, route: Route) -> str:
+    def rekey(self, route: Route, facts: ChunkFacts) -> str:
         """Rotate a live route's capability token — the lost-plaintext
         recovery: a claim whose route-token response was never read back has no other
         way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
-        token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
+        token, re-run idempotent. Takes the already-resolved route and the chunk's facts
+        (``bzh:domain-takes-objects``); a route left on an ended chunk raises
+        :class:`RekeyDeniedTerminal`."""
         self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
+        status = facts.status()
+        if not verb_legal_from(ChunkVerb.REKEY_ROUTE_TOKEN, status):
+            raise RekeyDeniedTerminal(chunk_id=route.chunk_id, status=status)
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

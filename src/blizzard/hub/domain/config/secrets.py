@@ -9,6 +9,7 @@ a scope's shape (``bzh:facts-not-status``)."""
 from __future__ import annotations
 
 import re
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -72,6 +73,13 @@ class SecretUnreadable(Exception):
         self.key_id = key_id
 
 
+class SecretValueBlank(ValueError):
+    """A written secret value is empty or only whitespace — never a usable credential."""
+
+    def __init__(self) -> None:
+        super().__init__("a secret value must not be blank")
+
+
 class SecretRotationConflict(Exception):
     """A row changed between a rotation's read and its commit — nothing was re-sealed."""
 
@@ -103,6 +111,14 @@ class SecretValue:
     def __init__(self, value: str) -> None:
         self._value = value
 
+    @classmethod
+    def entered(cls, raw: str) -> SecretValue:
+        """A value entering through a create or replace — :class:`SecretValueBlank` when blank.
+        A stored value opens through the constructor, so one sealed before the rule still reveals."""
+        if not raw.strip():
+            raise SecretValueBlank()
+        return cls(raw)
+
     def expose(self) -> str:
         return self._value
 
@@ -122,6 +138,35 @@ class SecretMetadata:
     replaced_at: datetime
     replaced_by: str
     created_at: datetime
+
+
+def require_revealable(name: str, *, retired: bool) -> None:
+    """A retired secret is never revealed — enable it first."""
+    if retired:
+        raise SecretRetired(name)
+
+
+def require_unreferenced(name: str, referrers: list[RecordRef]) -> None:
+    """A secret an active configured record still names cannot be retired."""
+    if referrers:
+        raise SecretReferenced(name, referrers)
+
+
+def listed(
+    records: Iterable[SecretMetadata], retired_names: Collection[str], *, include_retired: bool
+) -> list[SecretMetadata]:
+    """The secrets a listing shows — retired ones only when asked for."""
+    return [record for record in records if include_retired or record.name not in retired_names]
+
+
+def uncovered_key_ids(in_use: Collection[str], available: Collection[str]) -> frozenset[str]:
+    """Every key generation a stored row is sealed under that no available generation answers."""
+    return frozenset(in_use) - frozenset(available)
+
+
+def stale_seals(rows: Sequence[SealedSecret], target_key_id: str) -> list[SealedSecret]:
+    """The rows a rotation into ``target_key_id`` re-seals: every row sealed under another generation."""
+    return [row for row in rows if row.sealed.key_id != target_key_id]
 
 
 @domain_model

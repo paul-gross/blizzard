@@ -10,11 +10,9 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
-
-_REFUSED = frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
 
 class ChunkNotStoppable(Exception):
@@ -24,6 +22,12 @@ class ChunkNotStoppable(Exception):
         super().__init__(f"chunk {chunk_id} is {status.value}, not stoppable")
         self.chunk_id = chunk_id
         self.status = status
+
+
+def require_stoppable(chunk_id: str, facts: ChunkFacts) -> None:
+    """Refuse a stop outside :attr:`ChunkVerb.STOP`'s window with :class:`ChunkNotStoppable`."""
+    if not facts.admits(ChunkVerb.STOP):
+        raise ChunkNotStoppable(chunk_id, facts.status())
 
 
 class StopService:
@@ -51,10 +55,5 @@ class StopService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            self._require_stoppable(chunk.chunk_id, facts)
+            require_stoppable(chunk.chunk_id, facts)
             return self._lifecycle.record_stop_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
-
-    def _require_stoppable(self, chunk_id: str, facts: ChunkFacts) -> None:
-        status = facts.status()
-        if status in _REFUSED:
-            raise ChunkNotStoppable(chunk_id, status)

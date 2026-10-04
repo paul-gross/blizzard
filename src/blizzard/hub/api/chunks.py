@@ -8,7 +8,7 @@ stored column. The work-item read is a pass-through whose contents are never sto
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -34,20 +34,17 @@ from blizzard.hub.domain.chunk.dependencies import (
     derive_chunk_neighborhood,
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.chunk.ingest import EmptyIngest, IngestConflict, ingest_work_refs
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import resolve_live_holders
 from blizzard.hub.domain.execution.decisions import NotEscalated
 from blizzard.hub.domain.execution.detach import NotRouted
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
-from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected, validate_delivery
+from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
-from blizzard.hub.domain.garden.review.validation import (
-    ReviewFindingsRejected,
-    parse_review_finding_delta,
-    validate_review_findings,
-)
+from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.graph.model import TargetGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable
 from blizzard.hub.domain.operations.edit import (
@@ -55,9 +52,9 @@ from blizzard.hub.domain.operations.edit import (
     ChunkNotEditable,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
-    TargetGraphRetired,
 )
 from blizzard.hub.domain.operations.pause import ChunkNotPausable
+from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.domain.operations.restart import (
     ChunkNotRestartable,
     RestartCurrentNodeUnknown,
@@ -115,7 +112,7 @@ class OpenDecision:
     def publish(self) -> None:
         """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
         decision = self.services.chunks.decisions.decision_for_chunk(self.chunk_id)
-        if decision is not None and not decision.resolved and not decision.transitioned:
+        if decision is not None and decision.is_open:
             self.services.events.publish_decision_opened(
                 self.chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}"
             )
@@ -132,8 +129,6 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
     packaged default has been retired (the operator's brake, not a code
     bug: re-enable one or mint a new one)."""
-    if not request.tokens:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
     pointers: list[WorkRef] = []
@@ -146,6 +141,11 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
                 detail=(f"token {token!r} is not claimed by any configured work source (configured: {configured})"),
             )
         pointers.append(pointer)
+    try:
+        # The batch is refused before the default graph resolves, which may mint one.
+        pointers = ingest_work_refs(pointers)
+    except EmptyIngest as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
@@ -191,7 +191,9 @@ def list_chunks(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it.
-        page_chunks = [c for c in page.chunks if not _done_before(facts.get(c.chunk_id), done_since)]
+        page_chunks = [
+            c for c in page.chunks if not ChunkFacts.or_default(facts.get(c.chunk_id)).finished_before(done_since)
+        ]
     else:
         page_chunks = page.chunks
     # Live-holder resolution needs every chunk's pointers, not just this page's —
@@ -226,13 +228,6 @@ def list_chunks(
         ],
         next_cursor=page.next_cursor,
     )
-
-
-def _done_before(facts: ChunkFacts | None, instant: datetime) -> bool:
-    if facts is None or facts.status() is not ChunkStatus.DONE:
-        return False
-    completed_at = facts.completed_at()
-    return completed_at is not None and completed_at < instant
 
 
 @router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(FLEET_VIEW))])
@@ -390,67 +385,22 @@ def record_garden_delivery(
     if run is None:
         return GardenDeliveryResponse(outcome="invalid", detail=f"no run context for chunk {chunk_id}")
 
-    delta_artifacts: dict[str, str] = {}
-    delta_artifact_id_by_name: dict[str, str] = {}
-    missing_delta: list[str] = []
-    delta_rows = services.chunks.artifacts.latest_artifacts(chunk_id, request_body.delta)
-    for name in request_body.delta:
-        artifact = delta_rows.get(name)
-        if artifact is None:
-            missing_delta.append(name)
-            continue
-        delta_artifacts[name] = artifact.data
-        delta_artifact_id_by_name[name] = artifact.artifact_id
-    if not delta_artifacts:
-        return GardenDeliveryResponse(
-            outcome="invalid", detail=f"no delta artifact resolved — missing: {', '.join(missing_delta) or '<none>'}"
-        )
-    delta_artifact_ids = [delta_artifact_id_by_name[name] for name in delta_artifacts]
-
-    proposal_artifacts: dict[str, str] = {}
-    proposal_artifact_id_by_name: dict[str, str] = {}
-    proposal_rows = services.chunks.artifacts.latest_artifacts(chunk_id, request_body.proposals)
-    for name in request_body.proposals:
-        artifact = proposal_rows.get(name)
-        if artifact is not None:
-            proposal_artifacts[name] = artifact.data
-            proposal_artifact_id_by_name[name] = artifact.artifact_id
-
-    # Checked before validation: a replay must stay a no-op even if a finding this delivery
-    # named was since exited by a person — never re-validated against live state.
-    if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
-        return GardenDeliveryResponse(outcome="recorded", detail="")
-
     try:
-        validated = validate_delivery(
+        outcome = services.garden_delivery.record(
+            chunk=chunk,
+            node=node,
+            epoch=epoch,
             run=run,
-            delta_artifacts=delta_artifacts,
-            proposal_artifacts=proposal_artifacts,
-            bucket=services.finding_bucket.for_run(run),
-            resolve_commit=services.commit_resolver,
+            delta_names=request_body.delta,
+            proposal_names=request_body.proposals,
         )
     except GardenDeliveryRejected as exc:
         return GardenDeliveryResponse(outcome="invalid", detail=str(exc))
-
-    proposal_artifact_ids = [proposal_artifact_id_by_name[name] for name in validated.proposal_sources]
-
-    # Both `DeliveryOutcome` members mean "durably recorded" to this route's caller
-    # (see `DeliveryOutcome`'s own docstring) — a replay minting nothing is not itself news.
-    outcome = services.garden_delivery.deliver(
-        validated,
-        chunk=chunk,
-        node=node,
-        epoch=epoch,
-        delta_artifact_ids=delta_artifact_ids,
-        proposal_artifact_ids=proposal_artifact_ids,
-    )
+    # Both recorded `DeliveryOutcome` members mean "durably recorded" to this route's
+    # caller — a replay minting nothing is not itself news.
     if outcome is DeliveryOutcome.FENCED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
     return GardenDeliveryResponse(outcome="recorded", detail="")
-
-
-#: The `review` node's own fixed `produces:` asset name.
-_REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
 
 
 @router.post(
@@ -479,24 +429,11 @@ def record_review_findings_delivery(
             outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}"
         )
 
-    # Checked before validation: a replay must stay a no-op.
-    if services.review_findings.already_delivered(chunk_id=chunk_id):
-        return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
-
-    artifact = services.chunks.artifacts.latest_artifact(chunk_id, _REVIEW_FINDING_DELTA_ARTIFACT)
-    if artifact is None:
-        return ReviewFindingsDeliveryResponse(
-            outcome="invalid",
-            detail=f"no {_REVIEW_FINDING_DELTA_ARTIFACT!r} artifact found for chunk {chunk_id}",
-        )
-
     try:
-        delta = parse_review_finding_delta(_REVIEW_FINDING_DELTA_ARTIFACT, artifact.data)
-        validated = validate_review_findings(delta)
+        outcome = services.review_findings.record(chunk=chunk, node=node, epoch=epoch)
     except ReviewFindingsRejected as exc:
         return ReviewFindingsDeliveryResponse(outcome="invalid", detail=str(exc))
-
-    if services.review_findings.deliver(validated, chunk=chunk, node=node, epoch=epoch) is ReviewFindingsOutcome.FENCED:
+    if outcome is ReviewFindingsOutcome.FENCED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
     return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
 
@@ -601,7 +538,9 @@ def pause_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        pause_fact_id = services.pause.pause(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
+        pause_fact_id = services.pause.pause(chunk, by=request.by)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotPausable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
@@ -695,14 +634,17 @@ def complete_chunk(
 def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
-    Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
-    404 only when the chunk is unknown."""
+    Idempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk
+    is unknown; 409 when a never-promoted chunk is already ``done`` or ``stopped``."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     statuses = services.chunks.facts.load_live_statuses()
-    promoted_id = services.promote.promote(chunk, facts=ChunkFacts.or_default(change.facts), statuses=statuses)
+    try:
+        promoted_id = services.promote.promote(chunk, facts=ChunkFacts.or_default(change.facts), statuses=statuses)
+    except ChunkNotPromotable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue

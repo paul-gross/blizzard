@@ -5,14 +5,25 @@ The rows are inert: nothing reads them for delivery yet."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Protocol
+from typing import ClassVar, Protocol
 from urllib.parse import urlparse
 
-from blizzard.foundation.roles import dto
-from blizzard.hub.domain.config.changes import ConfigChange, FieldChange
-from blizzard.hub.domain.config.work_sources import ConfigFieldError
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.hub.domain.config.changes import (
+    FIELDED_RECORD_TRANSITIONS,
+    RETIRED_FIELD,
+    ChangeContext,
+    ChangeOp,
+    ConfigChange,
+    FieldChange,
+    RecordKind,
+    RecordState,
+    Verdict,
+)
+from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 #: The mutable fields, in the order a diff lists them.
@@ -52,10 +63,15 @@ class RepositoryFields:
     secret_name: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ConfiguredRepository:
-    """A stored repository. ``retired`` derives from the newest lifecycle fact."""
+    """A stored repository. ``retired`` derives from the newest lifecycle fact.
+
+    Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
+    or ``None`` when the verb changes nothing and so writes nothing."""
+
+    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
 
     name: str
     fields: RepositoryFields
@@ -63,6 +79,48 @@ class ConfiguredRepository:
     created_at: datetime
     created_by: str
     retired: bool = False
+
+    @classmethod
+    def new(
+        cls, name: str, fields: RepositoryFields, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[ConfiguredRepository, ConfigChange]:
+        validate_name(name)
+        validate_fields(fields)
+        record = cls(name=name, fields=fields, revision=1, created_at=at, created_by=ctx.actor)
+        return record, ConfigChange.of(ctx, RecordKind.REPOSITORY, name, 1, ChangeOp.CREATE, diff(None, fields), at)
+
+    def require_revision(self, if_match: int | None) -> None:
+        """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
+        if if_match is not None and if_match != self.revision:
+            raise ConfigRevisionConflict("repository", self.name, current=self.revision)
+
+    def edit(
+        self, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[ConfiguredRepository, ConfigChange] | None:
+        """Apply a sparse edit, legal from either state. The revision check comes first, even
+        for an edit that changes nothing; an empty diff never re-validates the stored fields."""
+        self.require_revision(if_match)
+        merged = merge(self.fields, edit)
+        changes = diff(self.fields, merged)
+        if not changes:
+            return None
+        validate_fields(merged)
+        edited = replace(self, fields=merged, revision=self.revision + 1)
+        return edited, ConfigChange.of(
+            ctx, RecordKind.REPOSITORY, self.name, edited.revision, ChangeOp.EDIT, changes, at
+        )
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[ConfiguredRepository, ConfigChange] | None:
+        """Retire or enable; ``None`` when the record already stands there (a redundant verb writes nothing)."""
+        self.require_revision(if_match)
+        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
+        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+            return None
+        moved = replace(self, revision=self.revision + 1, retired=retired)
+        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        return moved, ConfigChange.of(ctx, RecordKind.REPOSITORY, self.name, moved.revision, op, flip, at)
 
 
 @dto

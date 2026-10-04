@@ -1,4 +1,4 @@
-"""Graph retire / re-enable — an operator's reversible brake over a ``graph_id`` (#101).
+"""Graph retire / re-enable — an operator's reversible brake over a ``graph_id``.
 
 Retiring appends a ``graph.retired`` fact and re-enabling a ``graph.enabled`` one;
 newest-fact-wins, so either direction needs no extra bookkeeping. The ``graphs`` row and
@@ -8,7 +8,7 @@ its ``definition_yaml`` are never touched — this is append-only, not a mutatio
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.graph.model import Graph, IWriteGraphRepository
+from blizzard.hub.domain.graph.model import Graph, GraphLifecycleFact, IWriteGraphRepository
 
 
 class GraphLifecycleService:
@@ -24,7 +24,7 @@ class GraphLifecycleService:
         Idempotent: retiring an already-retired graph just appends another
         ``retired=True`` fact, a harmless no-op via newest-fact-wins.
         """
-        self._graphs.record_lifecycle(graph.graph_id, retired=True, at=self._clock.now(), by=by)
+        self._record(graph.lifecycle_fact(retired=True, at=self._clock.now(), by=by))
 
     def enable(self, graph: Graph, *, by: str) -> None:
         """Append ``graph.enabled`` — restores normal newest-per-name derivation.
@@ -32,7 +32,7 @@ class GraphLifecycleService:
         Idempotent: enabling an already-enabled graph (or one with no lifecycle fact at
         all) just appends another ``retired=False`` fact, a harmless no-op.
         """
-        self._graphs.record_lifecycle(graph.graph_id, retired=False, at=self._clock.now(), by=by)
+        self._record(graph.lifecycle_fact(retired=False, at=self._clock.now(), by=by))
 
     def set_follow_latest(self, graph: Graph, *, follow_latest: bool | None, by: str) -> None:
         """Append this graph's follow-latest policy — the tri-state.
@@ -40,4 +40,8 @@ class GraphLifecycleService:
         ``None`` reverts to inheriting the configured default; clearing an override is an
         appended fact like any other (pinned by tests/test_follow_latest_policy.py).
         """
-        self._graphs.record_policy(graph.graph_id, follow_latest=follow_latest, at=self._clock.now(), by=by)
+        fact = graph.policy_fact(follow_latest=follow_latest, at=self._clock.now(), by=by)
+        self._graphs.record_policy(fact.graph_id, follow_latest=fact.follow_latest, at=fact.at, by=fact.by)
+
+    def _record(self, fact: GraphLifecycleFact) -> None:
+        self._graphs.record_lifecycle(fact.graph_id, retired=fact.retired, at=fact.at, by=fact.by)

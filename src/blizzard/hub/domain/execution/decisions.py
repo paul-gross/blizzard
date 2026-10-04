@@ -10,27 +10,34 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.foundation.roles import dto
-from blizzard.hub.config import ROUTE_TOKEN_WARN
+from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, GateDecision
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
+from blizzard.hub.domain.execution.auth.produces import Produces
 from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.completion import (
+    CompletionRefused,
+    decision_choices,
+    gate_refusal,
+    refuse_incoherent_attempt,
+    stamped_proposals,
+    stored_artifacts,
+)
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
+from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
@@ -62,7 +69,8 @@ class ResolutionResult:
 
 
 class NotEscalated(Exception):
-    """A requeue targeted a chunk that is not ``needs_human`` — nothing to supersede."""
+    """A requeue targeted a chunk that is not ``needs_human`` — nothing to supersede
+    (:attr:`ChunkVerb.REQUEUE`)."""
 
 
 class DecisionService:
@@ -84,16 +92,24 @@ class DecisionService:
         self._clock = clock
 
     def submit(
-        self, chunk: Chunk, graph: Graph, submission: DecisionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        submission: DecisionSubmission,
+        *,
+        route_token_mode: str = ROUTE_TOKEN_WARN,
+        produces_mode: str = PRODUCES_WARN,
     ) -> DecisionSubmitResult:
         """Runner-config gate: park the chunk on a decision instead of transitioning. A retired
-        submitting runner is refused with :class:`RunnerRetired` before anything lands."""
+        submitting runner is refused with :class:`RunnerRetired` before anything lands.
+
+        Order is behavior: retired → node → facts → route token → replay → attempt coherence →
+        proposals → commit pointer → produces → record."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
-        node = graph.node_by_id(submission.from_node_id)
-        if node is None:
-            return DecisionSubmitResult.failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
-        if not node.choices:
-            return DecisionSubmitResult.failure(f"node {node.name} has no choices to gate")
+        try:
+            node = gate_refusal(graph, submission.from_node_id)
+        except CompletionRefused as refused:
+            return DecisionSubmitResult.failure(refused.detail)
 
         facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
@@ -118,19 +134,23 @@ class DecisionService:
                 response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
             )
 
-        # Proposed-work-item policy refusal — the same unconditional check
-        # ``ApplyService.apply`` runs, since a runner-config gate is the fourth dispatch fork.
-        policy_rejection = ProposalPolicy(node, submission.proposals).rejection()
-        if policy_rejection is not None:
-            return DecisionSubmitResult.failure(policy_rejection)
-
-        # Commit-pointer refusal — unconditional and at the same point, so no dispatch fork
-        # records a `git_commit` that does not name a repo, a branch, and a full hash.
-        pointer_rejection = CommitPointerPolicy(submission.artifacts).rejection()
-        if pointer_rejection is not None:
-            return DecisionSubmitResult.failure(pointer_rejection)
+        try:
+            refuse_incoherent_attempt(facts, graph, from_node=node, epoch=submission.epoch)
+            # The same unconditional policies `ApplyService.apply` runs — a runner-config gate is a
+            # dispatch fork too, and the step's artifacts land here, so the produces backstop runs.
+            for rejection in (
+                ProposalPolicy(node, submission.proposals).rejection(),
+                CommitPointerPolicy(submission.artifacts).rejection(),
+                Produces(node, submission.artifacts).rejection(mode=produces_mode),
+            ):
+                if rejection is not None:
+                    raise CompletionRefused(rejection)
+        except CompletionRefused as refused:
+            return DecisionSubmitResult.failure(refused.detail)
 
         decision_id = Id.mint(DECISION_PREFIX, self._clock).value
+        artifact_ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in submission.artifacts]
+        proposal_ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in submission.proposals]
         refusal = self._decisions.record_decision(
             decision_id=decision_id,
             chunk_id=chunk.chunk_id,
@@ -139,11 +159,16 @@ class DecisionService:
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
             claimant=Claimant(submission.runner_id, submission.lease_id),
-            choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
+            choices=decision_choices(node),
             at=self._clock.now(),
-            artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],
-            proposals=self._proposal_rows(
-                chunk, node, submission.epoch, submission.proposals, runner_id=submission.runner_id
+            artifacts=self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids),
+            proposals=stamped_proposals(
+                chunk.chunk_id,
+                node,
+                submission.epoch,
+                submission.proposals,
+                proposal_ids=proposal_ids,
+                runner_id=submission.runner_id,
             ),
             imposed_by_runner_id=submission.runner_id,
         )
@@ -154,58 +179,21 @@ class DecisionService:
             decision_id=decision_id,
         )
 
-    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> StoredArtifact:
-        """Twin of :meth:`~blizzard.hub.domain.execution.apply.ApplyService._row`; the shared owner would be
-        :class:`StoredArtifact`, which cannot import the wire type without a cycle."""
-        is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
-        data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
-        return StoredArtifact(
-            kind=artifact.kind,
-            name=artifact.name,
-            data=data,
-            repo=artifact.repo if is_commit else None,
-            forge=artifact.forge if is_commit else None,
-            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
-            chunk_id=chunk.chunk_id,
-            node_id=from_node.node_id,
-            node_name=from_node.name,
-            epoch=epoch,
-        )
-
-    def _proposal_rows(
-        self, chunk: Chunk, node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
-    ) -> list[StampedWorkItemProposal]:
-        """Twin of :meth:`~blizzard.hub.domain.execution.apply.ApplyService._proposal_rows`."""
-        return [
-            StampedWorkItemProposal.of(
-                p,
-                proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
-                chunk_id=chunk.chunk_id,
-                node_id=node.node_id,
-                node_name=node.name,
-                epoch=epoch,
-                ordinal=ordinal,
-                runner_id=runner_id,
-            )
-            for ordinal, p in enumerate(proposals)
-        ]
+    @staticmethod
+    def _artifact_rows(
+        chunk: Chunk, node: Node, epoch: int, artifacts: Sequence[SubmittedArtifact], ids: Sequence[str]
+    ) -> list[StoredArtifact]:
+        return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
     def resolve(
         self, decision: GateDecision, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
     ) -> ResolutionResult:
         """Record a choice, first-write-wins, striking ``struck``'s proposal ids in the same
         write. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare
-        ``decision_id``. A struck id outside the chunk's pending, unstruck proposals raises,
-        same as an invalid ``choice`` — except once already resolved, when a retry falls
-        straight through to the CAS instead."""
-        if choice not in {c.name for c in decision.choices}:
-            valid = ", ".join(c.name for c in decision.choices)
-            raise ValueError(f"`{choice}` is not a choice of this decision (one of: {valid})")
-        if decision.resolved_choice is None:
-            strikeable = {e.proposal.proposal_id for e in decision.docket if not e.struck}
-            unknown = set(struck) - strikeable
-            if unknown:
-                raise ValueError(f"not a pending proposal of chunk {decision.chunk_id}: {', '.join(sorted(unknown))}")
+        ``decision_id``. :meth:`GateDecision.require_resolvable` decides the refusals; the
+        chunk's derived status is read here for it."""
+        facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
+        decision.require_resolvable(choice=choice, struck=struck, chunk_status=facts.status())
         won = self._decisions.record_decision_resolution(
             decision.decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
         )
@@ -249,9 +237,11 @@ class RequeueService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            if facts.open_escalation() is None:
+            if not facts.admits(ChunkVerb.REQUEUE):
                 raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
             now = self._clock.now()
             requeue_id = self._movement.record_requeue_locked(handle, chunk.chunk_id, at=now)  # supersedes escalation
-            self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable
+            # A detached chunk holds no route: there is nothing to release.
+            if handle.route_of(chunk.chunk_id) is not None:
+                self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable
             return requeue_id

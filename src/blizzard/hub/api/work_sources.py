@@ -29,6 +29,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.config.work_sources import (
+    BuiltInWorkSource,
     ConfigFieldError,
     ConfigRevisionConflict,
     ConfiguredWorkSource,
@@ -36,15 +37,13 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     WorkSourceLocatorTaken,
     WorkSourceNameTaken,
+    is_built_in,
+    require_configurable,
 )
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.work_items.editing import (
-    WorkItemEdit,
-    WorkItemHeldByDependents,
-    WorkItemHeldByLiveChunk,
-    WorkItemNotEditable,
-)
+from blizzard.hub.domain.work_items.editing import WorkItemHeldByDependents, WorkItemHeldByLiveChunk
+from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
 from blizzard.wire.chunk import ChunkIngestConflict
@@ -79,11 +78,8 @@ def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IW
     return source_obj, editor
 
 
-def _stripped(value: str, field_name: str) -> str:
-    text = value.strip()
-    if not text:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must not be blank")
-    return text
+def _blank(exc: WorkItemFieldBlank) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 def _view(item: HubWorkItem, source_obj: IWorkSource, author: AuthorView, *, live_holder: str | None) -> WorkItemView:
@@ -151,10 +147,10 @@ def _conflict(exc: Exception) -> HTTPException:
 
 def _writable(source: str, services: HubServices) -> ConfiguredWorkSource:
     """The stored record for a write: 409 for the built-in ``hub``, 404 for an unknown name."""
-    if source == RESERVED_HUB_SOURCE_NAME:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f"work source {source} is built in and cannot be changed"
-        )
+    try:
+        require_configurable(source)
+    except BuiltInWorkSource as exc:
+        raise _conflict(exc) from exc
     record = services.work_source_records.get(source)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
@@ -202,7 +198,7 @@ def create_work_source(
 @router.get("/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(FLEET_VIEW))])
 def get_work_source(source: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkSourceSummary:
     """One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name."""
-    if source == RESERVED_HUB_SOURCE_NAME:
+    if is_built_in(source):
         return _built_in_summary(services)
     record = services.work_source_records.get(source)
     if record is None:
@@ -329,8 +325,10 @@ def create_work_item(
     source_obj, editor = _require_editor(source, services)
     # Validated before graph resolution, so a blank title/body rejects the whole request
     # without the store consulted — the ordering POST /chunks holds for its own guard too.
-    title = _stripped(request.title, "title")
-    body = _stripped(request.body, "body")
+    try:
+        text = WorkItemText.of(title=request.title, body=request.body)
+    except WorkItemFieldBlank as exc:
+        raise _blank(exc) from exc
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
@@ -339,8 +337,8 @@ def create_work_item(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
         created = editor.create(
-            title=title,
-            body=body,
+            title=text.title,
+            body=text.body,
             author=WorkItemAuthor.user(identity.user_id),
             stated_priority=request.stated_priority,
             graph=graph,
@@ -407,11 +405,14 @@ def patch_work_item(
     pointer = WorkRef(source=source, ref=ref)
     # Sentinel-tagged rather than merged here: filling an omitted field at the edge needs a
     # second, unguarded read of the pointer, which races a concurrent withdrawal.
-    edit = WorkItemEdit(
-        title=_stripped(request.title, "title") if request.title is not None else UNSET,
-        body=_stripped(request.body, "body") if request.body is not None else UNSET,
-        stated_priority=request.stated_priority if "stated_priority" in request.model_fields_set else UNSET,
-    )
+    try:
+        edit = WorkItemEdit(
+            title=request.title if request.title is not None else UNSET,
+            body=request.body if request.body is not None else UNSET,
+            stated_priority=request.stated_priority if "stated_priority" in request.model_fields_set else UNSET,
+        )
+    except WorkItemFieldBlank as exc:
+        raise _blank(exc) from exc
     try:
         updated = editor.edit(pointer, edit)
     except WorkItemRefUnknownError as exc:

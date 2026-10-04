@@ -8,12 +8,15 @@ append-only, newest-fact-wins brake, exactly like a graph's (``bzh:facts-not-sta
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from enum import StrEnum
+from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
 
@@ -36,12 +39,45 @@ class ScopeSlug:
         return cls(raw)
 
 
+class ScopeVerb(StrEnum):
+    """Every act that names an existing scope."""
+
+    CREATE = "create"
+    NAME_AS_DEFAULT = "name_as_default"
+    EDIT_DESCRIPTION = "edit_description"
+    RETIRE = "retire"
+    ENABLE = "enable"
+    LINK = "link"
+    UNLINK = "unlink"
+    RUN_AGAINST = "run_against"
+    READ = "read"
+
+
 @domain_model
 @dataclass(frozen=True)
 class Scope:
     slug: str
     description: str
     created_at: datetime
+
+    #: Which verbs are legal from which brake state; retiring withdraws a scope from selection only.
+    LEGAL_FROM: ClassVar[Mapping[ScopeVerb, frozenset[BrakeState]]] = {
+        ScopeVerb.CREATE: ANY_STATE,
+        ScopeVerb.NAME_AS_DEFAULT: ANY_STATE,
+        ScopeVerb.EDIT_DESCRIPTION: ANY_STATE,
+        ScopeVerb.RETIRE: ANY_STATE,
+        ScopeVerb.ENABLE: ANY_STATE,
+        ScopeVerb.LINK: ANY_STATE,
+        ScopeVerb.UNLINK: ANY_STATE,
+        ScopeVerb.RUN_AGAINST: ENABLED_ONLY,
+        ScopeVerb.READ: ANY_STATE,
+    }
+
+    @staticmethod
+    def allows(verb: ScopeVerb, *, retired: bool) -> bool:
+        """Whether ``verb`` is legal on a scope whose newest lifecycle fact reads
+        ``retired``."""
+        return BrakeState.of(retired=retired) in Scope.LEGAL_FROM[verb]
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -115,8 +151,11 @@ class ScopeLifecycle:
     def retire(self, scope: Scope, *, by: str) -> None:
         """Append ``scope.retired``. Idempotent: retiring an already-retired scope just
         appends another ``retired=True`` fact, a harmless no-op via newest-fact-wins."""
-        self._scopes.record_lifecycle(scope.slug, retired=True, at=self._clock.now(), by=by)
+        self._record(scope, BrakeVerb.RETIRE, by=by)
 
     def enable(self, scope: Scope, *, by: str) -> None:
         """Append ``scope.enabled``. Idempotent on an already-enabled scope."""
-        self._scopes.record_lifecycle(scope.slug, retired=False, at=self._clock.now(), by=by)
+        self._record(scope, BrakeVerb.ENABLE, by=by)
+
+    def _record(self, scope: Scope, verb: BrakeVerb, *, by: str) -> None:
+        self._scopes.record_lifecycle(scope.slug, retired=verb.records_retired, at=self._clock.now(), by=by)

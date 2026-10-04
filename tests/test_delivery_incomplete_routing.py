@@ -14,7 +14,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -35,6 +35,7 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     ).json()["chunk_id"]
     repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": graph_id})
     assert repin.status_code == 202, repin.text
+    make_ready(hub, chunk_id)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},

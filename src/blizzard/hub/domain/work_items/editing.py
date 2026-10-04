@@ -1,13 +1,13 @@
-"""Hub-owned work item editing plus delivery closure —
-create, in-place edit, withdraw, deliver.
+"""Hub-owned work item editing plus delivery closure — create, in-place edit, withdraw, deliver.
 
-Holds the *write* work-item repository (``bzh:controller-read-only``), reached only through a
-work-source binding's ``IWorkEditor``/``IWorkCloser``. ``WorkItemClosure`` has exactly
-two members, so every closing write — withdraw or deliver — shares one guard."""
+Holds the *write* work-item repository, reached only through a work-source binding's
+``IWorkEditor``/``IWorkCloser``. Orchestration only: legality, the text invariant, and an edit's
+resolution are :mod:`blizzard.hub.domain.work_items.model`'s; this service reads the clock, asks the
+model, writes, and turns a lost write race into the model's refusal."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
@@ -29,8 +29,17 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.work_items.model import (
+    Transition,
+    WorkItemEdit,
+    WorkItemNotEditable,
+    WorkItemState,
+    WorkItemText,
+    WorkItemVerb,
+    require_open_for,
+    require_withdrawn,
+)
 
 
 def prepare_mint(
@@ -60,28 +69,6 @@ def prepare_mint(
         default_harnesses=default_harnesses,
     )
     return pointer, chunk, at
-
-
-class WorkItemNotEditable(Exception):
-    """An edit or withdrawal targeted a work item that already carries a closure —
-    closure is terminal, so neither verb is retroactive."""
-
-    def __init__(self, work_item_id: str, closure: WorkItemClosure) -> None:
-        super().__init__(f"work item {work_item_id} is {closure.value}, not editable")
-        self.work_item_id = work_item_id
-        self.closure = closure
-
-
-@dto
-@dataclass(frozen=True)
-class WorkItemEdit:
-    """The fields a single all-or-nothing item edit request supplies,
-    the same sentinel shape :class:`~blizzard.hub.domain.operations.edit.ChunkEdit` carries: a
-    field absent from ``edit`` is left unchanged, distinct from an explicit clear."""
-
-    title: str | UnsetType = field(default=UNSET)
-    body: str | UnsetType = field(default=UNSET)
-    stated_priority: WorkItemPriority | None | UnsetType = field(default=UNSET)
 
 
 @dto
@@ -166,16 +153,16 @@ class WorkItemEditService:
         stated_priority: WorkItemPriority | None,
         graph: Graph,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk in one transaction,
-        pinned to ``graph``, holding the pointer this call itself allocates. Checks the
-        allocated pointer for a live holder before minting: an out-of-band ingest of the
-        same ref can pre-empt it, raising :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict`
-        and burning the ref."""
+        """File the item and mint its resting chunk in one transaction, pinned to ``graph``, holding the
+        pointer this call allocates. An out-of-band ingest of the same ref can pre-empt it, raising
+        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the ref. A blank title or
+        body raises :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` before allocating."""
+        text = WorkItemText.of(title=title, body=body)
         pointer, chunk, at = prepare_mint(self._items, self._work_refs, self._clock, source, graph=graph)
         item = self._items.create_with_chunk(
             pointer=pointer,
-            title=title,
-            body=body,
+            title=text.title,
+            body=text.body,
             author=author,
             stated_priority=stated_priority.value if stated_priority is not None else None,
             at=at,
@@ -198,15 +185,17 @@ class WorkItemEditService:
         :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.materialize_create` so
         the mint and the outcome fact are one transaction. Raises
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` exactly as :meth:`create`
-        does; returns ``False`` when ``proposal_id`` was already judged."""
+        does, and :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` for a blank
+        title or body; returns ``False`` when ``proposal_id`` was already judged."""
+        text = WorkItemText.of(title=title, body=body)
         pointer, chunk, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
         )
         return self._items.materialize_create(
             proposal_id=proposal_id,
             pointer=pointer,
-            title=title,
-            body=body,
+            title=text.title,
+            body=text.body,
             author=author,
             stated_priority=stated_priority,
             at=at,
@@ -224,19 +213,18 @@ class WorkItemEditService:
         reason: str | None,
         closed_by: str,
     ) -> CreatedWorkItem | None:
-        """A garden-proposal acceptance's mint path: :meth:`create`'s
-        guard sequence into the reserved hub source, writing the item, its chunk, and
-        the closure row on one connection. Raises
-        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` as :meth:`create` does;
-        returns ``None`` when already closed."""
+        """A garden-proposal acceptance's mint path: :meth:`create`'s guard sequence into the reserved hub
+        source, writing the item, its chunk, and the closure row on one connection. Raises as
+        :meth:`create` does; returns ``None`` when already closed."""
+        text = WorkItemText.of(title=title, body=body)
         pointer, chunk, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
         )
         item = self._items.accept_create(
             proposal_id=proposal_id,
             pointer=pointer,
-            title=title,
-            body=body,
+            title=text.title,
+            body=text.body,
             author=author,
             at=at,
             chunk=chunk,
@@ -248,19 +236,19 @@ class WorkItemEditService:
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
     def edit(self, item: HubWorkItem, edit: WorkItemEdit) -> HubWorkItem:
-        """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this
-        call itself guards — and replace them in place; raises :class:`WorkItemNotEditable`
-        when ``item`` already carries a closure, checked here and re-checked by the store's
-        own ``closed_at IS NULL`` guard against a closure racing in between."""
-        self._require_open(item)
-        title = item.title if edit.title is UNSET else edit.title
-        body = item.body if edit.body is UNSET else edit.body
-        if edit.stated_priority is UNSET:
-            stated_priority = item.stated_priority
-        else:
-            stated_priority = edit.stated_priority.value if edit.stated_priority is not None else None
+        """Write ``edit``'s revision of ``item`` — the record this call itself guards — in
+        place; raises :class:`~blizzard.hub.domain.work_items.model.WorkItemNotEditable` when
+        ``item`` already carries a closure, checked here and re-checked by the store's own
+        ``closed_at IS NULL`` guard against a closure racing in between."""
+        require_open_for(item, WorkItemVerb.EDIT)
+        revision = edit.resolve_against(item)
         updated = self._items.edit(
-            item.source, item.ref, title=title, body=body, stated_priority=stated_priority, at=self._clock.now()
+            item.source,
+            item.ref,
+            title=revision.title,
+            body=revision.body,
+            stated_priority=revision.stated_priority,
+            at=self._clock.now(),
         )
         if updated is None:
             current = self._items.get(item.source, item.ref)
@@ -274,16 +262,17 @@ class WorkItemEditService:
         :class:`~blizzard.hub.domain.operations.delete.DeleteService` instead of refusing;
         :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
         one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
-        self._require_open(item)
+        require_open_for(item, WorkItemVerb.WITHDRAW)
         holder = self._work_refs.find_live_holder(item.pointer)
         if holder is None:
             closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+            require_withdrawn(closed)
             return WithdrawnWorkItem(item=closed)
         chunk = self._record.get(holder)
         if chunk is None:
             raise ChunkNotFound(holder)
         facts = self._facts.load_facts(holder)
-        prev_status = (facts if facts is not None else ChunkFacts(minted=True)).status().value
+        prev_status = ChunkFacts.or_default(facts).status().value
         try:
             deleted_id = self._delete.delete(chunk, by=by)
         except ChunkNotDeletable as exc:
@@ -297,12 +286,10 @@ class WorkItemEditService:
         )
 
     def deliver(self, item: HubWorkItem) -> HubWorkItem:
-        """Close ``item`` as delivered — the close-intent drainer's own
-        write path. No business rule beyond the store's own idempotency
-        guard: a live chunk holding the pointer is the expected caller, not a conflict
-        to block."""
+        """Close ``item`` as delivered — the close-intent drainer's own write path. A
+        live chunk holding the pointer is the expected caller, not a conflict to block.
+        An item already closed — delivered by an earlier attempt, or withdrawn after its
+        holder landed — is a no-op that writes nothing and keeps its closure."""
+        if WorkItemState.of(item).on(WorkItemVerb.DELIVER) is Transition.NOOP:
+            return item
         return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())
-
-    def _require_open(self, item: HubWorkItem) -> None:
-        if item.closure is not None:
-            raise WorkItemNotEditable(item.work_item_id, item.closure)

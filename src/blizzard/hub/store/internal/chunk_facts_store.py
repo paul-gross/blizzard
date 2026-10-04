@@ -313,7 +313,12 @@ class ChunkFactsStore:
             answered = {a.question_id for a in conn.execute(answered_stmt).all()}
             for q in _rows(conn, s.questions, batch):
                 questions[q.chunk_id].append(
-                    QuestionFact(question_id=q.question_id, asked_at=q.asked_at, answered=q.question_id in answered)
+                    QuestionFact(
+                        question_id=q.question_id,
+                        asked_at=q.asked_at,
+                        answered=q.question_id in answered,
+                        epoch=q.epoch,
+                    )
                 )
 
         decisions: dict[str, list[DecisionFact]] = defaultdict(list)

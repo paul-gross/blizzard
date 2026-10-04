@@ -68,6 +68,7 @@ from blizzard.hub.domain.execution.facts import FactIngestService, RunnerFactsSe
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
+from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import CommitResolver
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
@@ -87,6 +88,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden.review.materialize import ReviewFindingsMaterialize
+from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
@@ -353,10 +355,10 @@ class HubServices:
     answered_findings: AnsweredFindingsReader
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
-    #: Materialize a validated delivery in one transaction.
-    garden_delivery: GardenDelivery
-    #: Materialize a delivery lane's deferred review findings, one per chunk.
-    review_findings: ReviewFindingsMaterialize
+    #: Records a delivering node-step's garden delivery: validate, then materialize in one transaction.
+    garden_delivery: GardenDeliveryRecorder
+    #: Record a delivery lane's deferred review findings, once per chunk.
+    review_findings: ReviewFindingsRecorder
     #: Resolves a cited commit against the configured forge.
     commit_resolver: CommitResolver
     #: A routine's finding inflow-against-outflow over a window.
@@ -585,7 +587,7 @@ def build_services(
         if trace_exporter is not None
         else None
     )
-    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, config=trace_config)
+    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config)
     trace_status = TraceStatusReader(
         settings=tracing_settings or TracingSettings("disabled"),
         status=trace_store,
@@ -731,6 +733,7 @@ def build_services(
     garden_trend_store = GardenTrendStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_run_store = GardenRunStore(store_connections)
+    finding_bucket = FindingBucketReader(finding_store)
     # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
@@ -791,7 +794,7 @@ def build_services(
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
         detach=detach,
-        pause=PauseService(lifecycle=chunk_lifecycle, clock=clock),
+        pause=PauseService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         complete=CompleteService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
@@ -927,7 +930,12 @@ def build_services(
         ),
         garden_proposal_closures=garden_proposal_closure_store,
         garden_proposal_closure=GardenProposalClosureService(
-            closures=garden_proposal_closure_store, items=materialization_edits, clock=clock
+            closures=garden_proposal_closure_store,
+            items=materialization_edits,
+            default_graph=lambda: graph_mint.ensure_default(
+                PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
+            ),
+            clock=clock,
         ),
         routine_garden_proposals=RoutineGardenProposalReader(
             proposals=garden_proposal_store, closures=garden_proposal_closure_store
@@ -936,16 +944,28 @@ def build_services(
         answered_findings=AnsweredFindingsReader(
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
-        finding_bucket=FindingBucketReader(finding_store),
-        garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
-        review_findings=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
+        finding_bucket=finding_bucket,
+        garden_delivery=GardenDeliveryRecorder(
+            artifacts=chunk_artifacts,
+            buckets=finding_bucket,
+            materialize=GardenDelivery(delivery=garden_delivery_store, clock=clock),
+            resolve_commit=commit_resolver,
+        ),
+        review_findings=ReviewFindingsRecorder(
+            artifacts=chunk_artifacts,
+            materialize=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
+        ),
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
             repo=garden_sweeps_store, scopes=scope_store, routine_scopes=routine_scope_store
         ),
         garden_run=GardenRunService(
-            repo=garden_run_store, chunk_records=chunk_record, chunk_facts=chunk_facts, findings=finding_store
+            repo=garden_run_store,
+            chunk_records=chunk_record,
+            chunk_facts=chunk_facts,
+            findings=finding_store,
+            clock=clock,
         ),
         annotation=(
             AnnotationReconciler(work_refs=chunk_work_refs, work_sources=work_sources)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -86,13 +86,15 @@ def test_work_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path:
 
 def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     """A chunk with no pointers is the board's empty state — an empty list, 200, not a 404."""
-    # Ingest guards against empty pointers at the front door (422), so mint the degenerate
-    # empty-pointer chunk through the ingest service directly to prove the route still answers.
+    # Every ingest refuses an empty batch, so write the degenerate empty-pointer chunk straight
+    # to the record store to prove the route still answers one.
     hub = build_hub(tmp_path)
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    chunk_id = hub.services.ingest.ingest([], graph=graph)
+    chunk = Chunk(chunk_id="ch_empty", graph_id=graph.graph_id, work_refs=[], minted_at=hub.clock.now())
+    chunk_stores(hub.engine, hub.clock).record.mint(chunk)
+    chunk_id = chunk.chunk_id
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
     assert resp.status_code == 200

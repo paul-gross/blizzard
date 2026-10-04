@@ -1,9 +1,8 @@
 """SQLAlchemy adapter for the routine repository seam (package-private).
 
-All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness
-is enforced by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring` before ``create``
-runs; ``uq_routines_name`` is a backstop only — a raised ``IntegrityError`` here propagates
-rather than being swallowed as an idempotent CAS, unlike other stores' patterns."""
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness is enforced
+by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_name`` backstops a
+concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed."""
 
 from __future__ import annotations
 
@@ -12,9 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import insert, select, update
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import entity
-from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine
+from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import routine_lifecycle_facts, routines
 
@@ -45,19 +45,26 @@ class RoutineStore:
         self._store = store
 
     def create(self, routine: Routine) -> None:
-        with self._store.write("create") as conn:
-            conn.execute(
-                insert(routines).values(
-                    routine_id=routine.routine_id,
-                    name=routine.name,
-                    graph_name=routine.graph_name,
-                    default_scope_slug=routine.default_scope_slug,
-                    default_model=MODEL.encode(routine.default_model),
-                    default_effort=routine.default_effort,
-                    default_harnesses=HARNESSES.encode(routine.default_harnesses),
-                    created_at=routine.created_at,
+        try:
+            with self._store.write("create", expect=(IntegrityError,)) as conn:
+                conn.execute(
+                    insert(routines).values(
+                        routine_id=routine.routine_id,
+                        name=routine.name,
+                        graph_name=routine.graph_name,
+                        default_scope_slug=routine.default_scope_slug,
+                        default_model=MODEL.encode(routine.default_model),
+                        default_effort=routine.default_effort,
+                        default_harnesses=HARNESSES.encode(routine.default_harnesses),
+                        created_at=routine.created_at,
+                    )
                 )
-            )
+        except IntegrityError as exc:
+            # The post-write re-check: a concurrent create that took the name first
+            # loses here, and reads as the same refusal the domain's pre-check raises.
+            if self.get_by_name(routine.name) is not None:
+                raise RoutineNameTakenError(routine.name) from exc
+            raise
 
     def edit(
         self,

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token
+from tests.support import build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -99,6 +99,7 @@ def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyp
     node_ids = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -189,6 +190,7 @@ def test_reclaim_at_a_node_entered_by_an_addended_edge_carries_the_addendum(tmp_
     chunk_id, _ = _fail_review_into_build(hub)
     assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
 
+    make_ready(hub, chunk_id)
     reclaim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -276,7 +278,7 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
     _report_lease(hub, chunk_id, epoch=3)
     hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
-        json=_completion(nodes["build"], epoch=3, choice="pass", artifacts=[_git_artifact("c2")]),
+        json=_completion(nodes["build"], epoch=3, choice="pass", artifacts=[_git_artifact("d" * 40)]),
     )
     _report_lease(hub, chunk_id, epoch=4)
     delivered = hub.client.post(

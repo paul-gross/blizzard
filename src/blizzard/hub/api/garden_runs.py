@@ -4,14 +4,12 @@ a new run rather than reading an existing one."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import FLEET_VIEW
-from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -25,6 +23,7 @@ from blizzard.hub.domain.garden.runs.history import (
     RunEscalation,
     RunSummary,
 )
+from blizzard.hub.domain.garden.runs.window import InvalidWindowError
 from blizzard.wire.garden_run import (
     AddedFindingView,
     DeliveredSetDeltaView,
@@ -37,34 +36,6 @@ from blizzard.wire.garden_run import (
 )
 
 router = APIRouter(prefix="/api", tags=["garden-runs"], dependencies=[Depends(reject_runner_principal)])
-
-
-@dto
-@dataclass(frozen=True)
-class _RunWindow:
-    """One `GET /runs` request's parsed window — both edges optional, defaulting to the
-    last 24 hours ending now (the `GET /activity` shape); a malformed edge, an inverted
-    span, or one past the day cap is the 422 it names."""
-
-    since: datetime
-    until: datetime
-
-    #: The span cap (`GET /routines/trend`'s own `_MAX_PERIODS` shape) — a run list is
-    #: bounded by window, not paged, but the window still needs a floor.
-    _MAX_SPAN_DAYS = 366
-
-    @classmethod
-    def of(cls, *, since: str | None, until: str | None, now: datetime) -> _RunWindow:
-        parsed_until = _parse_instant(until, field="until") if until is not None else now
-        parsed_since = _parse_instant(since, field="since") if since is not None else parsed_until - timedelta(hours=24)
-        if parsed_until <= parsed_since:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
-        if (parsed_until - parsed_since) > timedelta(days=cls._MAX_SPAN_DAYS):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"since/until would span more than {cls._MAX_SPAN_DAYS} days",
-            )
-        return cls(since=parsed_since, until=parsed_until)
 
 
 def _parse_instant(value: str, *, field: str) -> datetime:
@@ -163,8 +134,12 @@ def list_runs(
     default to the last 24 hours ending now. Each row carries its routine, scope, mode,
     its derived outcome, and, where it delivered, every finding-set row it published.
     422 on a malformed instant or an inverted span."""
-    window = _RunWindow.of(since=since, until=until, now=services.clock.now())
-    rows = services.garden_run.list_runs(since=window.since, until=window.until)
+    parsed_until = _parse_instant(until, field="until") if until is not None else None
+    parsed_since = _parse_instant(since, field="since") if since is not None else None
+    try:
+        rows = services.garden_run.list_runs(since=parsed_since, until=parsed_until)
+    except InvalidWindowError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     names = GraphNames(services.graphs)
     names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
     return [_run_row_view(row, names) for row in rows]

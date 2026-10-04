@@ -25,6 +25,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerRegistration,
     SubscriptionUsageMiss,
     SubscriptionUsageSample,
+    TokenRotation,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -353,16 +354,33 @@ class RunnerRegistryStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        # `at` is not persisted: no rotation-audit column exists yet — accepted only for
-        # signature symmetry with this seam's other writes.
-        del at
-        with self._store.write("set_token_hash") as conn:
+    def rotate_token(self, rotation: TokenRotation) -> int | None:
+        # The replaced hash's revocation and the new hash land in one transaction, so the old
+        # token reads as revoked from the instant the new one resolves.
+        with self._store.write("rotate_token") as conn:
+            replaced = conn.execute(
+                select(s.runner_registrations.c.token_hash).where(
+                    s.runner_registrations.c.runner_id == rotation.runner_id
+                )
+            ).scalar_one_or_none()
+            revocation_id: int | None = None
+            if replaced is not None:
+                result = conn.execute(
+                    insert(s.runner_token_revocations).values(
+                        runner_id=rotation.runner_id,
+                        token_hash=replaced,
+                        revoked_at=rotation.at,
+                        revoked_by=rotation.by,
+                    )
+                )
+                key = result.inserted_primary_key
+                revocation_id = int(key[0]) if key is not None else 0
             conn.execute(
                 s.runner_registrations.update()
-                .where(s.runner_registrations.c.runner_id == runner_id)
-                .values(token_hash=token_hash)
+                .where(s.runner_registrations.c.runner_id == rotation.runner_id)
+                .values(token_hash=rotation.token_hash)
             )
+            return revocation_id
 
     # --- helpers ------------------------------------------------------------
 

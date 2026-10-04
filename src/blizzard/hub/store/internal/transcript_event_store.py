@@ -27,6 +27,8 @@ from blizzard.hub.domain.observability.analytics.events import (
     SegmentDerivationInput,
     SegmentProvenance,
     TranscriptEvent,
+    is_candidate,
+    segment_complete,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -324,7 +326,7 @@ class TranscriptEventStore:
         for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
             visible_segment_ids.add(segment_id)
             fingerprint = _fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
-            if markers.get(segment_id) != fingerprint:
+            if is_candidate(markers.get(segment_id), fingerprint):
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
 
@@ -352,7 +354,7 @@ class TranscriptEventStore:
             spawn_generation=first.spawn_generation,
             normalizer_version=first.normalizer_version,
             turns=_decode_turns(rows),
-            complete=not any(row.rejected for row in rows),
+            complete=segment_complete(row.rejected for row in rows),
             content_fingerprint=content_fingerprint(rows),
             provenance=_provenance(rows),
         )

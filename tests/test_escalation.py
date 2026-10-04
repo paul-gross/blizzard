@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token
+from tests.support import build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -64,6 +64,7 @@ nodes:
 def _claim(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

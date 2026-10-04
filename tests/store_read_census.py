@@ -1246,7 +1246,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert proposal_2 is not None
     resolved_findings = resolve_proposal_findings(hub.services.findings, proposal_2.findings)
     accepted = hub.services.garden_proposal_closure.accept(
-        proposal_2, reason=None, by="operator", body=None, mint=True, graph=default_graph, findings=resolved_findings
+        proposal_2, reason=None, by="operator", body=None, mint=True, findings=resolved_findings
     )
     assert accepted.closure.source is not None
     assert accepted.closure.ref is not None

@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -25,6 +25,7 @@ _POINTER_B = {"source": "default", "ref": "8"}
 
 def _claim(hub, pointer: dict) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
