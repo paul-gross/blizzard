@@ -18,7 +18,6 @@ is why the round failed, not something this delta records. Each entry carries `r
 `fixed`, or `refuted`). A `deferred` entry additionally carries `severity`, `scope` — run `blizzard runner scope list`
 first and reuse a listed slug where one already fits, rather than inventing one — `class`, `locus`, and `summary`;
 `fixed`/`refuted` carry no more than `ref` and `disposition`. A `deferred` entry can never carry `severity: blocking` —
-that cannot coexist with `pass`. Read the full shape live with
-`blizzard runner artifact
-get --scope system review/finding-format --content` and follow it exactly; on failure or an
-empty read, use the restatement above.
+that cannot coexist with `pass`. Read the full shape live and follow it exactly:
+`blizzard runner artifact get --scope system review/finding-format --content`; on failure or an empty read, use the
+restatement above.
