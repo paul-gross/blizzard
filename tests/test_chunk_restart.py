@@ -305,6 +305,8 @@ def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignor
         at=hub.clock.now(),
         wrapped_takeover_command="",
         admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
     assert _detail(hub, chunk_id)["status"] == "needs_human"
 

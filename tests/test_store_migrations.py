@@ -271,6 +271,45 @@ def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Pat
     assert _shape() == (True, True)
 
 
+def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """A pre-cause escalation row reads back with no cause or detail: no backfill."""
+    config = hub_runtime.init_environment(tmp_path)
+    runner = hub_runtime.migration_runner(config)
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("escalations")} & {"cause", "detail"}
+        finally:
+            engine.dispose()
+
+    assert _columns() == {"cause", "detail"}
+
+    runner.downgrade("20261003_1300_hub_transcript_segment_spawn_cwd")
+    assert _columns() == set()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO escalations (chunk_id, epoch, takeover_command, recorded_at) "
+                    "VALUES ('ch_old', 1, '', '2026-10-01T00:00:00+00:00')"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+    assert _columns() == {"cause", "detail"}
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(sa.text("SELECT cause, detail FROM escalations WHERE chunk_id = 'ch_old'")).one()
+    finally:
+        engine.dispose()
+    assert tuple(row) == (None, None)
+
+
 def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_items`` + ``work_item_sequence`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from
@@ -1213,6 +1252,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260914_1000_hub_harness_provenance", "routines", ("default_harnesses",)),
     ("hub", "20260916_1000_hub_authored_harnesses", "runner_registrations", ("capabilities",)),
     ("hub", "20260930_1000_artifact_seq", "lease_facts", ("lease_id",)),
+    ("hub", "20261003_1300_hub_transcript_segment_spawn_cwd", "escalations", ("cause", "detail")),
     # runner tree — instance 6
     (
         "runner",

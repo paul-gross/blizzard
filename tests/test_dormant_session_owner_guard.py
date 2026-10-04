@@ -72,6 +72,9 @@ def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  # ty
     assert payload["chunk_id"] == chunk_id
     assert payload["takeover_command"] == ""
     assert payload["wrapped_takeover_command"] == ""
+    assert payload["cause"] == "owner-unresolvable"
+    assert payload["detail"].startswith("recorded harness owner ")
+    assert " is unknown " in payload["detail"] or " is unavailable " in payload["detail"]
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])

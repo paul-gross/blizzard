@@ -64,8 +64,8 @@ when the rolling window later drops the spend back under it: clearing the brake 
 line, so it reads differently from a manual pause.
 
 `chunk_cap_usd` is checked between attempts, never by killing a live worker: when a chunk's total cost reaches it, the
-runner parks the chunk `needs_human` at the next step boundary with an escalation naming the cap, the spend, and the
-usual takeover command. A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap,
+runner parks the chunk `needs_human` at the next step boundary with an escalation whose cause is `spend-cap`, whose
+detail names the cap, the spend, and whether that spend figure is partial, and which carries the usual takeover command. A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap,
 then requeue.
 
 ## Usage-limit pause

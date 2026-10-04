@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.asks import AskRecord
@@ -49,14 +50,25 @@ class OutboundFacts:
         }
         self._enqueue(LEASE_MINTED, chunk_id, lease_id, payload, at)
 
-    def escalation(self, lease: LeaseRecord, *, takeover: str, wrapped_takeover: str, at: datetime) -> None:
-        """Carries both takeover strings — the wrapped entry point and the raw pasteable fallback."""
+    def escalation(
+        self,
+        lease: LeaseRecord,
+        *,
+        takeover: str,
+        wrapped_takeover: str,
+        cause: EscalationCause,
+        detail: str,
+        at: datetime,
+    ) -> None:
+        """Carries both takeover strings and why the escalation was raised."""
         payload = {
             "chunk_id": lease.chunk_id,
             "epoch": lease.epoch,
             "lease_id": lease.lease_id,
             "takeover_command": takeover,
             "wrapped_takeover_command": wrapped_takeover,
+            "cause": str(cause),
+            "detail": detail,
             "route_token": self.ctx.stores.tokens.route_token(lease.chunk_id),
         }
         self._enqueue(ESCALATION_RECORDED, lease.chunk_id, lease.lease_id, payload, at)

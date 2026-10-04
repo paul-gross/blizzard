@@ -161,6 +161,8 @@ class RunnerFactsService:
         epoch: int,
         takeover_command: str,
         wrapped_takeover_command: str = "",
+        cause: str | None = None,
+        detail: str | None = None,
     ) -> int | FenceRefusal:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``. A retired
         runner is refused with :class:`RunnerRetired` before anything lands; a write the fence
@@ -173,6 +175,8 @@ class RunnerFactsService:
             admission=EpochAdmission.AT_OR_ABOVE,
             takeover_command=takeover_command,
             wrapped_takeover_command=wrapped_takeover_command,
+            cause=cause,
+            detail=detail,
             at=self._clock.now(),
         )
 
@@ -297,6 +301,8 @@ class FactIngestService:
                 claimant=Claimant(runner_id, fact.text("lease_id")),
                 takeover_command=fact.string("takeover_command"),
                 wrapped_takeover_command=fact.string("wrapped_takeover_command"),
+                cause=fact.text("cause"),
+                detail=fact.text("detail"),
                 at=now,
             )
             if isinstance(escalation_id, FenceRefusal):

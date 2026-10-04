@@ -22,6 +22,7 @@ from sqlalchemy import Engine, select
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
@@ -812,6 +813,13 @@ def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escala
             {"harness_id": "untiered", "reason": "no-authored-tier"},
         ],
     }
+    recorded = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED and b.chunk_id == "ch_1"]
+    assert len(recorded) == 1
+    escalation = json.loads(recorded[0].payload)
+    assert escalation["cause"] == "no-acceptable-harness"
+    assert escalation["detail"] == (
+        "attempted missing, untiered — missing: unknown, untiered: no-authored-tier (via test)"
+    )
 
     # A second pass over the same chunk stacks no second escalation.
     Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test")
@@ -3024,6 +3032,8 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     # the flusher reports it up to POST /events, where the fleet derives needs_human.
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
+    assert payload["cause"] == "retries-exhausted"
+    assert payload["detail"].startswith("retries 2 of 2 used; last failure: ")
     # It resumes from the session's own spawn cwd, where a directory-scoped harness finds it.
     takeover_command = payload["takeover_command"]
     assert takeover_command.startswith(f"cd {expected_cwd} &&") and "--resume" in takeover_command
@@ -3070,7 +3080,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
         config=config,
     )
 
-    Attempt(ctx, lease).escalate()
+    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3119,7 +3129,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
         config=config,
     )
 
-    Attempt(ctx, lease).escalate()
+    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3173,7 +3183,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
     from structlog.testing import capture_logs
 
     with capture_logs() as logs:
-        Attempt(ctx, lease).escalate()
+        Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3228,6 +3238,8 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
+    assert payload["cause"] == "spend-cap"
+    assert payload["detail"] == "spend cap $5.00 reached (spend $7.00)"
     # The takeover resumes the just-finished attempt's own session — a human's entry point
     # back into the chunk, the same shape a retries-exhausted escalation carries.
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
@@ -3417,7 +3429,9 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     assert "PARTIAL" in park_events[0]["event"]
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
-    assert "PARTIAL" in escalate_events[0]["reason"] and "spend cap" in escalate_events[0]["reason"]
+    assert "PARTIAL" in escalate_events[0]["detail"] and "spend cap" in escalate_events[0]["detail"]
+    payload = json.loads(escalations[0].payload)
+    assert payload["cause"] == "spend-cap" and "PARTIAL" in payload["detail"]
 
 
 @pytest.mark.unit
@@ -3451,9 +3465,9 @@ def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_pat
     assert store.active_lease_for_chunk("ch_1") is None
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
-    assert "PARTIAL" in escalate_events[0]["reason"]
+    assert "PARTIAL" in escalate_events[0]["detail"]
     # The billed figure alone trips and names the cap — the estimate never enters it.
-    assert "$5.00" in escalate_events[0]["reason"]
+    assert "$5.00" in escalate_events[0]["detail"]
 
 
 @pytest.mark.unit

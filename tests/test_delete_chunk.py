@@ -175,7 +175,13 @@ def _make_paused(chunks: ChunkStores, chunk_id: str) -> None:
 
 def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
     chunks.escalations.record_escalation(
-        chunk_id, epoch=1, takeover_command="cd x && resume", at=_T0, admission=EpochAdmission.AT_OR_ABOVE
+        chunk_id,
+        epoch=1,
+        takeover_command="cd x && resume",
+        at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
     )
 
 

@@ -279,6 +279,8 @@ class ChunkFactsStore:
                         recorded_at=e.recorded_at,
                         takeover_command=e.takeover_command or "",
                         wrapped_takeover_command=e.wrapped_takeover_command or "",
+                        cause=e.cause,
+                        detail=e.detail,
                     )
                 )
 

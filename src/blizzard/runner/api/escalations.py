@@ -39,6 +39,7 @@ def _escalation_list(service: RunnerStatusService) -> EscalationListResponse:
                 harness_id=e.harness_id,
                 harness_version=e.harness_version,
                 wrapped_takeover_command=e.wrapped_takeover_command,
+                cause=e.cause,
             )
             for e in service.escalations()
         ]

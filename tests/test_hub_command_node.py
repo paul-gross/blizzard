@@ -1520,6 +1520,8 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     # A hub-authored escalation composes no wrapped command — the hub has no runner
     # runtime dir to draw one from (`blizzard-context:/domain/humans/escalation.md` §What each origin carries).
     assert detail2["escalation"]["wrapped_takeover_command"] == ""
+    assert detail2["escalation"]["cause"] == "bounce-cap"
+    assert detail2["escalation"]["detail"] == "bounce cap (1) crossed after 2 bounces"
 
 
 def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:

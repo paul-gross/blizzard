@@ -110,6 +110,7 @@ class EscalationView(BaseModel):
     #: The ``blizzard runner takeover`` invocation — the primary command; ``resume_command`` stays the
     #: raw fallback. ``None`` when the runner cannot compose it. Holds only the chunk id and runner dir.
     wrapped_takeover_command: str | None = None
+    cause: str | None = None
 
 
 class EscalationListResponse(BaseModel):

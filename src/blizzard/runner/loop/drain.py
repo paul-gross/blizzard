@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.domain.leases import LeaseRecord
@@ -185,7 +186,8 @@ class OutboundDrain:
             cost_partial=cost.billed_partial,
         )
         Attempt(self.ctx, lease).escalate(
-            reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})"
+            cause=EscalationCause.SPEND_CAP,
+            detail=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})",
         )
         return True
 

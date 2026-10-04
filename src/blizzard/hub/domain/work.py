@@ -298,6 +298,8 @@ class EscalationFact:
     recorded_at: datetime
     takeover_command: str = ""
     wrapped_takeover_command: str = ""
+    cause: str | None = None
+    detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -505,6 +507,8 @@ class EscalationOpen:
     chunk_id: str
     recorded_at: datetime
     takeover_command: str
+    cause: str | None = None
+    detail: str | None = None
 
 
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
@@ -547,7 +551,7 @@ class EventFeed:
                 if esc.takeover_command
                 else f"chunk {esc.chunk_id} needs a human"
             ),
-            detail=None,
+            detail={"cause": esc.cause, "detail": esc.detail} if esc.cause or esc.detail else None,
         )
 
 

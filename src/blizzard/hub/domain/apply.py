@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.ids import (
     ARTIFACT_PREFIX,
     DECISION_PREFIX,
@@ -444,6 +445,8 @@ class ApplyService:
                     ),
                     at=self._clock.now(),
                     decision_id=submission.decision_id,
+                    cause=EscalationCause.MIGRATION_TARGET_UNRESOLVABLE,
+                    detail=f"cross-graph target graph `{edge.target_graph}` names no enabled graph",
                 )
                 if isinstance(escalated, FenceRefusal):
                     return ApplyResult.failure(escalated.detail)

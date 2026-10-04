@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
@@ -150,7 +151,10 @@ class Attempt:
             now,
             self._event(_WORKER_LOST, f"worker lost — retries exhausted ({reason}, via {via})", reason, via, tail),
         )
-        self.escalate()
+        self.escalate(
+            cause=EscalationCause.RETRIES_EXHAUSTED,
+            detail=f"retries {retried} of {lease.retries_max} used; last failure: {reason} (via {via})",
+        )
 
     def requeue(self) -> None:
         """Re-attempt the node in the same environments — new session, new lease, fresh epoch.
@@ -196,8 +200,8 @@ class Attempt:
             harness_id=lease.harness_id,
         )
 
-    def escalate(self, *, reason: str = "retries exhausted") -> None:
-        """Park the chunk needs-human at the hub, envs held for takeover.
+    def escalate(self, *, cause: EscalationCause, detail: str) -> None:
+        """Park the chunk needs-human at the hub, envs held for takeover, recording why.
 
         Reached only after the closure is already durable (:meth:`fail` closes first), so an
         unresolvable owner cannot un-escalate it — it only costs the takeover command, which
@@ -231,9 +235,16 @@ class Attempt:
                 bound_envs=len(bindings),
                 harness_unresolved=session is not None and harness is None,
             )
-        OutboundFacts(self.ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped, at=self.ctx.clock.now())
+        OutboundFacts(self.ctx).escalation(
+            lease, takeover=takeover, wrapped_takeover=wrapped, cause=cause, detail=detail, at=self.ctx.clock.now()
+        )
         _log.info(
-            "escalated to needs-human", reason=reason, chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped
+            "escalated to needs-human",
+            cause=str(cause),
+            detail=detail,
+            chunk_id=lease.chunk_id,
+            takeover=takeover,
+            wrapped=wrapped,
         )
 
     def escalate_owner_unresolvable(
@@ -299,7 +310,10 @@ class Attempt:
         # Resolved inline, same as `abandon`/`park_paused`/`preempt` — escalated is a third
         # resolution `record_resume_clear` closes here, not a fourth pending state.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-        self.escalate(reason=f"owner {status}: {session.harness_id}")
+        self.escalate(
+            cause=EscalationCause.OWNER_UNRESOLVABLE,
+            detail=f"recorded harness owner {session.harness_id!r} is {status} (via {via})",
+        )
 
     def escalate_no_acceptable_harness(
         self, *, attempted: Sequence[str], skipped: Sequence[SkippedHarness], via: str
@@ -326,7 +340,11 @@ class Attempt:
         self.close(ESCALATED, now, event, closure_reason=NO_ACCEPTABLE_HARNESS_MINT)
         # Same resolve-inline shape as `_escalate_owner_unresolvable`.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-        self.escalate(reason="no acceptable harness")
+        tried = ", ".join(f"{s.harness_id}: {s.reason}" for s in skipped) or "none skipped"
+        self.escalate(
+            cause=EscalationCause.NO_ACCEPTABLE_HARNESS,
+            detail=f"attempted {', '.join(attempted) or 'none'} — {tried} (via {via})",
+        )
 
     def abandon(self, *, killed: bool = False, via: str) -> None:
         """Release a chunk the hub reassigned, detached, or no longer knows about —

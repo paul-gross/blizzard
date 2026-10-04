@@ -1649,6 +1649,28 @@
       "ChunkEscalationView": {
         "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"
@@ -3486,6 +3508,28 @@
       "EscalationReport": {
         "description": "A runner's ``escalation.recorded`` \u2014 the runner ran out of moves on this node.\n``takeover_command`` may carry operator prose instead of a literal command, or be empty;\n``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``.",
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"

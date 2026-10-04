@@ -550,6 +550,14 @@ export type ChunkDetail = {
  */
 export type ChunkEscalationView = {
     /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -1006,6 +1014,10 @@ export type EscalationListResponse = {
  * One parked escalation, carrying its literal takeover command — ``GET /api/escalations``.
  */
 export type EscalationView = {
+    /**
+     * Cause
+     */
+    cause?: string | null;
     /**
      * Chunk Id
      */

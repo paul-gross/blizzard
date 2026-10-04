@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import click
 
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMissReason
@@ -89,6 +90,12 @@ def status(directory: str, runner_url: str | None) -> None:
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
         subscriptions_resp = daemon.get("/api/subscriptions")
+        escalations = escalations_resp.json().get("items", [])
+        harness_health = (
+            daemon.get("/api/harness-health").json().get("items", [])
+            if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations)
+            else []
+        )
 
     click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
     pause = view["pause"]
@@ -123,7 +130,6 @@ def status(directory: str, runner_url: str | None) -> None:
         opts = f"  [{'|'.join(ask.get('options') or [])}]" if ask.get("options") else ""
         click.echo(f"  {ask['question_id']}  (chunk {ask['chunk_id']}): {ask['question']}{opts}")
 
-    escalations = escalations_resp.json().get("items", [])
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:
         click.echo(
@@ -132,6 +138,12 @@ def status(directory: str, runner_url: str | None) -> None:
         if esc.get("wrapped_takeover_command"):
             click.echo(f"    takeover: {esc['wrapped_takeover_command']}")
         click.echo(f"    resume: {esc['resume_command']}")
+        if esc.get("cause"):
+            click.echo(f"    cause: {esc['cause']}")
+        if esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS:
+            for health in harness_health:
+                availability = "available" if health["available"] else "unavailable"
+                click.echo(f"    harness {health['harness_id']}: {availability}, cause={health['cause'] or 'none'}")
 
     takeovers = takeovers_resp.json().get("items", [])
     click.echo(f"\nopen takeovers ({len(takeovers)}):")

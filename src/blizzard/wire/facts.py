@@ -71,6 +71,8 @@ class EscalationReport(BaseModel):
     lease_id: str | None = None
     takeover_command: str = ""
     wrapped_takeover_command: str = ""
+    cause: str | None = None
+    detail: str | None = None
 
 
 class RunnerFact(BaseModel):

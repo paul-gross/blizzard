@@ -802,6 +802,8 @@ def report_escalation(
         runner_id=report.runner_id,
         takeover_command=report.takeover_command,
         wrapped_takeover_command=report.wrapped_takeover_command,
+        cause=report.cause,
+        detail=report.detail,
     )
     if isinstance(escalation_id, FenceRefusal):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=escalation_id.detail)

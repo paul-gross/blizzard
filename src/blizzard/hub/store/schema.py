@@ -797,6 +797,8 @@ escalations = Table(
     # Set only when a gate's resolved choice migrated to an unresolvable target, so the
     # gate's decision derives closed here too. Null otherwise.
     Column("decision_id", String, nullable=True),
+    Column("cause", Text, nullable=True),
+    Column("detail", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_escalations_chunk_id", escalations.c.chunk_id)

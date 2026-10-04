@@ -154,6 +154,61 @@ def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) ->
     assert detail["escalation"] is not None
     assert detail["escalation"]["takeover_command"] == _TAKEOVER
     assert detail["escalation"]["wrapped_takeover_command"] == ""
+    assert detail["escalation"]["cause"] is None
+    assert detail["escalation"]["detail"] is None
+
+
+def test_escalation_cause_and_detail_round_trip(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/escalations",
+        json={
+            "epoch": 1,
+            "runner_id": "r1",
+            "takeover_command": _TAKEOVER,
+            "cause": "retries-exhausted",
+            "detail": "retries 2 of 2 used; last failure: exited",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+
+    escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
+    assert escalation["cause"] == "retries-exhausted"
+    assert escalation["detail"] == "retries 2 of 2 used; last failure: exited"
+
+
+def test_escalation_fact_carries_cause_and_detail_and_keeps_an_unknown_cause_verbatim(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "escalation.recorded",
+                    "payload": {
+                        "chunk_id": chunk_id,
+                        "epoch": 1,
+                        "takeover_command": _TAKEOVER,
+                        "cause": "a-future-cause",
+                        "detail": "something new",
+                    },
+                }
+            ],
+        },
+    )
+    assert resp.json()["applied"] == [1], resp.text
+
+    escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
+    assert escalation["cause"] == "a-future-cause"
+    assert escalation["detail"] == "something new"
 
 
 def test_escalation_on_unknown_chunk_is_404(tmp_path: Path) -> None:
