@@ -17,10 +17,10 @@ from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness import bundle as bundle_module
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
-from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, plugin_identity
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
+from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.wiring import publish_harness_bundle
 from tests.harness_sections import sections
 
 pytestmark = pytest.mark.component

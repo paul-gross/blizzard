@@ -30,8 +30,8 @@ from blizzard.runner.config import (
     WorkspaceRepo,
 )
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.workspace_prompts import PACKAGED
 from tests.harness_sections import claude_code, opencode, sections, with_claude_code, with_opencode
 from tests.runner_config_legacy_emitted import LEGACY_EMITTED

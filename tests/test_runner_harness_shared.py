@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from packaging.specifiers import SpecifierSet
 
-from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version, version_admitted
+from blizzard.runner.harness.harness_shared import normalize_opencode_version, version_admitted
 
 pytestmark = pytest.mark.unit
 

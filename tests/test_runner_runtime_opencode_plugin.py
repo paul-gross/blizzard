@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.internal.opencode_plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
-from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
+from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
+from blizzard.runner.harness.opencode.shapes import parse_worker_config
 from blizzard.runner.runtime import Runtime, init_environment
 from tests.harness_sections import opencode, with_opencode
 

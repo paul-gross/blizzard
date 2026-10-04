@@ -10,8 +10,8 @@ from typing import cast
 
 import pytest
 
-from blizzard.runner.harness.internal.opencode_worker_config import render_worker_config
-from blizzard.runner.harness.worker_settings import WorkerSettings
+from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
+from blizzard.runner.harness.opencode.worker_config import render_worker_config
 
 pytestmark = pytest.mark.unit
 

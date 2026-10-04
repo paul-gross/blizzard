@@ -13,8 +13,8 @@ from typing import Any, Protocol
 
 from blizzard.foundation.roles import dto
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.harness.internal.claude_code_section import CLAUDE_CODE_SECTION
-from blizzard.runner.harness.internal.opencode_section import OPENCODE_SECTION
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
+from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 
 
 class IHarnessSection(Protocol):

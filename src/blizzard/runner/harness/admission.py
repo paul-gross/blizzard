@@ -7,8 +7,8 @@ from pathlib import Path
 
 from packaging.specifiers import SpecifierSet
 
+from blizzard.runner.harness import harness_shared, offline_compatibility
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.internal import harness_shared, offline_compatibility
 
 
 def version_admitted(version: str, admitted_range: SpecifierSet) -> bool:

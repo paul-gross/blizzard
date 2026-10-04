@@ -1,4 +1,4 @@
-"""``harness/internal/opencode_paths.py`` — the one OpenCode auth-path resolver (unit)."""
+"""``harness/opencode/paths.py`` — the one OpenCode auth-path resolver (unit)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.harness.internal.opencode_paths import resolve_opencode_auth_path
+from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
 
 pytestmark = pytest.mark.unit
 

@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config

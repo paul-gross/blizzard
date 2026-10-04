@@ -20,8 +20,8 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
-from blizzard.runner.harness.internal.offline_compatibility import (
+from blizzard.runner.harness.harness_shared import normalize_opencode_version
+from blizzard.runner.harness.offline_compatibility import (
     DEFAULT_CORPUS_ROOT,
     CorpusConfigurationError,
     admitted_corpus_versions,
@@ -29,7 +29,7 @@ from blizzard.runner.harness.internal.offline_compatibility import (
     classify_offline,
     reference_corpus_version,
 )
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -165,7 +165,7 @@ def test_assert_admitted_range_has_corpus_raises_naming_the_range(tmp_path: Path
 
 def test_a_semver_prerelease_named_corpus_directory_is_never_admitted(tmp_path: Path) -> None:
     """A directory named ``1.19.0-1`` reads as a semver pre-release — the
-    same guard :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`
+    same guard :func:`~blizzard.runner.harness.harness_shared.version_admitted`
     applies to an observed version, now shared by corpus admission too."""
     for version in ("1.19.0-1", "1.19.0"):
         manifest_dir = tmp_path / "widget" / version

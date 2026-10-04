@@ -37,7 +37,7 @@ compatibility proof's `root_hook` and `child_sessions` probes both report absent
 never something a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the
 full probe table and its classification policy). This is a fact of the committed corpora inside the admitted range, not
 a blanket guarantee — the binding's declared degradations (`OpenCodeHealthProbe.declared_degradations`,
-`src/blizzard/runner/harness/internal/opencode_health.py`) are the union across every in-range corpus manifest, so a
+`src/blizzard/runner/harness/opencode/health.py`) are the union across every in-range corpus manifest, so a
 future corpus can change them; how an observed version resolves to its reference corpus is owned by
 [opencode-compatibility.md § Admitting a candidate version](./opencode-compatibility.md#admitting-a-candidate-version).
 Nothing about a turn's completion or a lease's correctness rests on it — process liveness is the sole signal for both

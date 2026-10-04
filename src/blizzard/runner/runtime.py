@@ -13,7 +13,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
-from blizzard.runner.harness.catalog import declared
+from blizzard.runner.harness.wiring import declared
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard runner migrate"

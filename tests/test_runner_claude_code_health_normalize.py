@@ -1,4 +1,4 @@
-"""``claude_code_health.normalize_claude_code_version`` — the version
+"""``claude_code.health.normalize_claude_code_version`` — the version
 normalizer Claude Code's own ``IHarnessHealthProbe.normalize_version`` routes a membership
 check through, cased the same way as ``harness_shared.normalize_opencode_version``'s own
 tests, beside which this lives. Also ``version_admitted`` against Claude Code's admitted
@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.harness.internal.claude_code_health import (
+from blizzard.runner.harness.claude_code.health import (
     ADMITTED_CLAUDE_CODE_RANGE,
     normalize_claude_code_version,
 )
-from blizzard.runner.harness.internal.harness_shared import version_admitted
+from blizzard.runner.harness.harness_shared import version_admitted
 
 pytestmark = pytest.mark.unit
 

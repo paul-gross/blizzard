@@ -14,21 +14,21 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.internal.harness_registry import (
-    build_production_harness_health_probes,
-    build_production_harness_registry,
-)
-from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog
-from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
+from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
+from blizzard.runner.harness.opencode.usage.price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.registry import (
     HarnessBinding,
     HarnessRegistry,
     UnavailableHarnessError,
     UnknownHarnessError,
 )
+from blizzard.runner.harness.wiring import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
 from blizzard.runner.loop.capability_snapshot import capability_snapshot, default_harness_id
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 

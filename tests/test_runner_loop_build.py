@@ -35,13 +35,13 @@ from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceP
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler

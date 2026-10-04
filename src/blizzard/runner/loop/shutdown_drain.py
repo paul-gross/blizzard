@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.owned_process import IOwnedProcessControl, interrupt_owned_process
+from blizzard.runner.process.owned_process import IOwnedProcessControl, interrupt_owned_process
 
 _log = get_logger("blizzard.runner.loop")
 

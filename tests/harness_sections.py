@@ -6,8 +6,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.sections import HarnessSections, IHarnessSection, section_of, with_section
 
 

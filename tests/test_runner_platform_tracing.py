@@ -68,8 +68,8 @@ from blizzard.runner.domain.tracing.receiver_limits import (
 )
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.harness_telemetry import plan_harness_telemetry
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance

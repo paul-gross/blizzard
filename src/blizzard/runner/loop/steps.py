@@ -42,8 +42,8 @@ from blizzard.runner.loop.overload import (
     record_worker_overload,
     reset_if_streak_open,
 )
-from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
+from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss

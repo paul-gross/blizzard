@@ -1,4 +1,4 @@
-"""``harness/internal/opencode_transcript_source.py`` — unit tier, hermetic: a scripted
+"""``harness/opencode/transcript/transcript_source.py`` — unit tier, hermetic: a scripted
 :class:`IOpenCodeExporter`, never a real ``opencode`` binary. Covers cold/forward identity
 reads, the malformed-cursor/export-failure ``unreadable`` paths, child-session sidechain
 linking, and ``read_raw_lines``'s round trip through ``OpenCodeAdapter.sum_transcript_usage``."""
@@ -14,13 +14,13 @@ import structlog
 from structlog.testing import capture_logs
 
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_export import IOpenCodeExporter, OpenCodeExportError
-from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERSION, build_turns
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
-from blizzard.runner.harness.internal.opencode_shapes import parse_session_export
-from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
+from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.opencode.shapes import parse_session_export
+from blizzard.runner.harness.opencode.transcript.export import IOpenCodeExporter, OpenCodeExportError
+from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION, build_turns
+from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from tests.repo_files import repo_root

@@ -71,7 +71,7 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file
   states none of that prose, only what the rule mechanically checks:
   - Scoped to `src/blizzard/**`, excluding the selection points (`runner/environments/factory.py`,
-    `runner/harness/catalog.py`), the bindings' own modules (`runner/harness/internal/**`, `runner/harness/identity.py`,
+    `runner/harness/wiring.py`), the bindings' own modules (`runner/harness/claude_code/**`, `runner/harness/opencode/**`, `runner/harness/identity.py`,
     `runner/environments/internal/**`) and every `migrations/` tree.
   - Matches a comparison (`==`, `!=`, `in`, `not in`, …) with a `workspace_provider` name or attribute as an operand, or
     with a harness-id string literal (`"claude_code"`, `"opencode"`) as an operand, directly or inside a literal set,

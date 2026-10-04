@@ -6,17 +6,17 @@ import json
 
 import pytest
 
-from blizzard.runner.harness.internal.opencode_permission_compose import (
+from blizzard.runner.harness.opencode.permissions.permission_compose import (
     _deny_in,
     _holds_ask,
     compose_ask_denials,
     merge_overrides,
     residual_asks,
 )
-from blizzard.runner.harness.internal.opencode_shapes import (
+from blizzard.runner.harness.opencode.shapes import (
     OpenCodePermissionRule as Rule,
 )
-from blizzard.runner.harness.internal.opencode_shapes import (
+from blizzard.runner.harness.opencode.shapes import (
     OpenCodeShapeError,
     parse_agent_rulesets,
     parse_resolved_config,

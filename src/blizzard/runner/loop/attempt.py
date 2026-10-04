@@ -21,7 +21,6 @@ from blizzard.runner.domain.leases.closure import (
     PREEMPTED,
     RELEASED,
 )
-from blizzard.runner.domain.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
@@ -32,6 +31,7 @@ from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import SkippedHarness
 from blizzard.runner.loop.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
+from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.wire.facts import EVENT_RECORDED
 from blizzard.wire.sse_runner import LeaseChangeCause
 

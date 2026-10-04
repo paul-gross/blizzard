@@ -51,11 +51,11 @@ from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
 from blizzard.runner.loop.transcript_pump import TranscriptPumpConfig, TranscriptPumpContext, TranscriptPumpStores
 from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.process.probe import IProcessProbe
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")

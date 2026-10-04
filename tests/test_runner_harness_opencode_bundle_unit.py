@@ -15,10 +15,8 @@ from blizzard.runner.cli.runtime import _publish_harness_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition, published_snapshot
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
-from blizzard.runner.harness.catalog import shared_inputs
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_bundle import (
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.bundle import (
     _compose,
     _directory_plugins,
     _merge_plugins,
@@ -27,10 +25,11 @@ from blizzard.runner.harness.internal.opencode_bundle import (
     content_with_snapshot_references,
     plugin_identity,
 )
-from blizzard.runner.harness.internal.opencode_declaration import OPENCODE_DECLARATION
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.sections import HarnessSections, section_of
+from blizzard.runner.harness.wiring import publish_harness_bundle, shared_inputs
 from blizzard.runner.runtime import init_environment
 from tests.harness_sections import opencode, sections, with_claude_code
 from tests.runner_fakes import FakeProbe

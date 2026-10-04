@@ -17,7 +17,6 @@ from blizzard.runner.domain.elicitation import PendingElicitation
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.overload import OverloadExit
-from blizzard.runner.domain.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.domain.pause import PausePark
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
@@ -33,6 +32,7 @@ from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.spawn import SpawnConfig, Spawner
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.usage_limit import UsageLimitContext, UsageLimitStores
+from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 
 _log = get_logger("blizzard.runner.loop")
 

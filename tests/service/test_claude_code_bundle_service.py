@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import _free_port, _runner_config
 from tests.service.support import (

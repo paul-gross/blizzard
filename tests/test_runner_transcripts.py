@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 import structlog
 
-from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.claude_code import normalizer as normalizer_module
+from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptErrorFactory
 from blizzard.runner.transcripts.internal import projected_transcript_repository as projection_module
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
@@ -288,7 +288,7 @@ def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_pat
 def _tool_use_line(tool_input: object) -> str:
     """A ``tool_use`` record whose ``input`` is not a dict — ``fx.assistant_tool_use``
     only types a dict, so a non-object shape (``ToolInput.of``,
-    ``claude_code_normalizer.py``) is built inline here."""
+    ``claude_code/normalizer.py``) is built inline here."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": tool_input}]
     return json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
 

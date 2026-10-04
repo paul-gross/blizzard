@@ -1,4 +1,4 @@
-"""``harness/internal/claude_code_transcript.py`` — the transcript filesystem adapter.
+"""``harness/claude_code/transcript.py`` — the transcript filesystem adapter.
 Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
 
 Covers forward incremental reads from a minted position, the shared batch-budget cap,
@@ -16,9 +16,9 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
-from blizzard.runner.harness.internal import claude_code_transcript as source_module
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.claude_code import transcript as source_module
+from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION
+from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from tests import transcript_fixtures as fx
 

@@ -8,19 +8,19 @@ from pathlib import Path
 import click
 
 from blizzard.runner.harness.compatibility import CompatibilityContractError
-from blizzard.runner.harness.internal.opencode_attach import LoopbackAttachProxyFactory
-from blizzard.runner.harness.internal.opencode_compaction import SubprocessOpenCodeCompactor
-from blizzard.runner.harness.internal.opencode_diagnostic import run_opencode_compatibility
-from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence, OpenCodeEvidenceError
-from blizzard.runner.harness.internal.opencode_loopback import UrllibLoopbackTransport
-from blizzard.runner.harness.internal.opencode_paths import resolve_opencode_auth_path
-from blizzard.runner.harness.internal.opencode_probe import (
+from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
+from blizzard.runner.harness.opencode.compatibility.compaction import SubprocessOpenCodeCompactor
+from blizzard.runner.harness.opencode.compatibility.diagnostic import run_opencode_compatibility
+from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence, OpenCodeEvidenceError
+from blizzard.runner.harness.opencode.compatibility.loopback import UrllibLoopbackTransport
+from blizzard.runner.harness.opencode.compatibility.probe import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     OpenCodeCompatibilityProbe,
     OpenCodeProbeError,
 )
-from blizzard.runner.harness.internal.opencode_process import SubprocessOpenCodeProcess, stop_started_process
-from blizzard.runner.harness.internal.opencode_scratch_git import SubprocessOpenCodeScratchGit
+from blizzard.runner.harness.opencode.compatibility.process import SubprocessOpenCodeProcess, stop_started_process
+from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
+from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
 
 
 @click.group("opencode")

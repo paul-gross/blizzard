@@ -1,6 +1,6 @@
 """The construction half of a harness declaration — what a binding builds or reports from its
 parsed section (:mod:`.sections`) plus the runner-wide inputs every binding shares. A consumer
-iterates :data:`~blizzard.runner.harness.catalog.HARNESS_CATALOG` and never names a binding;
+iterates :data:`~blizzard.runner.harness.wiring.HARNESS_CATALOG` and never names a binding;
 adding a harness is one declaration and one section kind under ``harness/internal/``."""
 
 from __future__ import annotations
@@ -13,12 +13,12 @@ from blizzard.foundation.roles import dto
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
+from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.harness.sections import IHarnessSection
-from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.process.probe import IProcessProbe
 
 SectionT_contra = TypeVar("SectionT_contra", bound=IHarnessSection, contravariant=True)
 

@@ -12,9 +12,10 @@ files:
 ignores:
   # The selection points.
   - src/blizzard/runner/environments/factory.py
-  - src/blizzard/runner/harness/catalog.py
+  - src/blizzard/runner/harness/wiring.py
   # The bindings' own modules.
-  - src/blizzard/runner/harness/internal/**
+  - src/blizzard/runner/harness/claude_code/**
+  - src/blizzard/runner/harness/opencode/**
   - src/blizzard/runner/harness/identity.py
   - src/blizzard/runner/environments/internal/**
   # Migrations record historical data shapes.

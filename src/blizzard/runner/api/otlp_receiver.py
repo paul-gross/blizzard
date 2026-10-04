@@ -40,7 +40,7 @@ from blizzard.runner.domain.tracing.receiver import (
     admit_log_records,
 )
 from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds
-from blizzard.runner.harness.harness_telemetry import (
+from blizzard.runner.harness.claude_code.telemetry_plan import (
     CLAUDE_CODE_LOGS_SCOPE,
     CLAUDE_CODE_METRICS_SCOPE,
     CLAUDE_CODE_SCOPES,

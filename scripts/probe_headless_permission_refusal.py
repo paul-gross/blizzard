@@ -25,12 +25,12 @@ from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_permission_resolver import SubprocessOpenCodePermissionResolver
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.process.probe import LinuxProcessProbe
 from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.graph import SessionMode
 
