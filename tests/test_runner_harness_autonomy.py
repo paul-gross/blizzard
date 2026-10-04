@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
 
@@ -20,6 +21,7 @@ from blizzard.runner.config import (
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
@@ -90,12 +92,14 @@ class _FakeResolver:
 
     def __init__(self, *, ask: bool = True, stuck: bool = False, error: Exception | None = None) -> None:
         self.calls: list[dict[str, str]] = []
+        self.cwds: list[str] = []
         self._ask = ask
         self._stuck = stuck
         self._error = error
 
     def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
         self.calls.append(dict(env))
+        self.cwds.append(cwd)
         if self._error is not None:
             raise self._error
         composed = '"bash": "deny"' in env.get("OPENCODE_CONFIG_CONTENT", "")
@@ -205,6 +209,44 @@ def test_opencode_normal_composes_ask_denials_into_every_unattended_kind(tmp_pat
     for env in launcher.envs:
         assert _content(env)["permission"] == {"bash": "deny"}
     assert len(resolver.calls) == 2 * len(kinds)
+
+
+def test_opencode_normal_resolves_in_the_launch_cwd_of_every_unattended_kind(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=resolver)
+
+    kinds = _unattended(adapter, tmp_path, launcher)
+
+    assert resolver.cwds == [str(tmp_path)] * (2 * len(kinds))
+
+
+def _unresolvable_spawn(adapter: OpenCodeAdapter, tmp_path: Path) -> object:
+    preamble = replace(_preamble(tmp_path), environments=[AcquiredEnvironment(environment_id="e1", workdir="")])
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    return adapter.spawn(envelope, preamble, session_hint="sess-1")
+
+
+def test_opencode_normal_fails_closed_when_the_spawn_cwd_cannot_be_resolved(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=resolver)
+
+    with pytest.raises(HarnessSpawnError, match="no launch cwd can be resolved"):
+        _unresolvable_spawn(adapter, tmp_path)
+
+    assert launcher.argvs == []
+    assert resolver.calls == []
+
+
+@pytest.mark.parametrize("autonomy", [Autonomy.Auto, Autonomy.Dangerous])
+def test_opencode_unresolvable_spawn_cwd_still_launches_outside_normal(tmp_path: Path, autonomy: Autonomy) -> None:
+    launcher = _RecordingLauncher()
+    adapter = _opencode(launcher, autonomy=autonomy)
+
+    _unresolvable_spawn(adapter, tmp_path)
+
+    assert len(launcher.argvs) == 1
 
 
 def test_opencode_normal_keeps_the_published_document_and_adds_only_the_overrides(tmp_path: Path) -> None:
@@ -455,3 +497,56 @@ def test_argv_and_env_ignore_the_bundle_key(tmp_path: Path, make: Callable[..., 
 
     assert launches[0] == launches[1]
     assert len(launches[0][0]) == 4 == len(launches[0][1])
+
+
+def _published_config(tmp_path: Path, plugin: str) -> tuple[Path, Path]:
+    effective = tmp_path / "effective"
+    effective.mkdir()
+    (effective / "opencode.json").write_text(json.dumps({"permission": {}, "plugin": [plugin]}))
+    worker = tmp_path / "worker.json"
+    worker.write_text(json.dumps({"permission": {}, "plugin": []}))
+    return effective, worker
+
+
+def test_opencode_checks_ambient_plugins_on_every_unattended_kind(tmp_path: Path) -> None:
+    effective, worker = _published_config(tmp_path, "clash@1")
+    home = tmp_path / "home"
+    (home / ".config" / "opencode").mkdir(parents=True)
+    (home / ".config" / "opencode" / "opencode.json").write_text(json.dumps({"plugin": ["clash@2"]}))
+    launcher = _RecordingLauncher()
+    adapter = OpenCodeAdapter(
+        "opencode",
+        worker_env=AllowlistedEnv.of(("HOME",)),
+        process=FakeProbe(),
+        launcher=launcher,
+        effective_config_dir=str(effective),
+        worker_config_path=str(worker),
+    )
+    preamble = _preamble(tmp_path)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    runs: list[Callable[[], object]] = [
+        lambda: adapter.spawn(envelope, preamble, session_hint=None),
+        lambda: adapter.resume_with_message(str(tmp_path), "s", "go", preamble=preamble),
+        lambda: adapter.judge(str(tmp_path), "s", "judge", str(tmp_path / "j.out"), preamble=preamble),
+    ]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("HOME", str(home))
+        patch.delenv("XDG_CONFIG_HOME", raising=False)
+        for run in runs:
+            with pytest.raises(HarnessBundleError, match="duplicate plugin 'clash'"):
+                run()
+    assert launcher.argvs == []
+
+
+def test_opencode_without_a_preamble_launches_with_the_bare_config_env(tmp_path: Path) -> None:
+    worker = tmp_path / "worker.json"
+    worker.write_text(json.dumps({"permission": {}, "plugin": []}))
+    launcher = _RecordingLauncher()
+    adapter = _opencode(launcher, worker_config_path=str(worker))
+
+    adapter.resume_with_message(str(tmp_path), "s", "go")
+    adapter.judge(str(tmp_path), "s", "judge", str(tmp_path / "j.out"))
+
+    for env in launcher.envs:
+        assert env["OPENCODE_CONFIG"] == str(worker)
+        assert "BLIZZARD_ENV_IDS" not in env

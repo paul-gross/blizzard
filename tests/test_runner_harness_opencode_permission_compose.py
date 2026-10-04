@@ -7,6 +7,8 @@ import json
 import pytest
 
 from blizzard.runner.harness.internal.opencode_permission_compose import (
+    _deny_in,
+    _holds_ask,
     compose_ask_denials,
     merge_overrides,
     residual_asks,
@@ -112,3 +114,84 @@ def test_a_malformed_agent_list_raises_a_shape_error(text: str) -> None:
 def test_a_malformed_resolved_config_raises_a_shape_error(text: str) -> None:
     with pytest.raises(OpenCodeShapeError):
         parse_resolved_config(text)
+
+
+def test_a_deny_promotes_an_existing_scalar_to_a_wildcard_map() -> None:
+    target: dict[str, object] = {"read": "allow"}
+
+    _deny_in(target, "read", "*.env", as_map=False)
+
+    assert target == {"read": {"*": "allow", "*.env": "deny"}}
+
+
+@pytest.mark.parametrize(
+    ("target", "pattern", "as_map", "expected"),
+    [
+        ({}, "*", False, {"bash": "deny"}),
+        ({}, "*", True, {"bash": {"*": "deny"}}),
+        ({}, "ls", False, {"bash": {"ls": "deny"}}),
+        ({"bash": {"*": "allow"}}, "*", False, {"bash": {"*": "deny"}}),
+        ({"bash": "allow"}, "*", False, {"bash": "deny"}),
+    ],
+)
+def test_a_deny_is_written_in_the_shape_the_ask_was(
+    target: dict[str, object], pattern: str, as_map: bool, expected: dict[str, object]
+) -> None:
+    _deny_in(target, "bash", pattern, as_map=as_map)
+
+    assert target == expected
+
+
+@pytest.mark.parametrize(
+    ("node", "permission", "pattern", "held"),
+    [
+        ({"bash": "ask"}, "bash", "*", True),
+        ({"bash": "ask"}, "bash", "ls", False),
+        ({"bash": "allow"}, "bash", "*", False),
+        ({"bash": {"ls": "ask"}}, "bash", "ls", True),
+        ({"bash": {"ls": "allow"}}, "bash", "ls", False),
+        ({"bash": {"ls": "ask"}}, "bash", "*", False),
+        ({"bash": 3}, "bash", "*", False),
+        ({}, "bash", "*", False),
+        (None, "bash", "*", False),
+    ],
+)
+def test_holds_ask_is_true_only_for_the_exact_ask(node: object, permission: str, pattern: str, held: bool) -> None:
+    assert _holds_ask(node, permission, pattern) is held
+
+
+def test_an_agent_level_scalar_ask_is_denied_as_a_scalar_and_a_map_ask_as_a_map() -> None:
+    config = {
+        "agent": {
+            "build": {"permission": {"edit": "ask"}},
+            "plan": {"permission": {"bash": {"*": "allow", "rm": "ask"}}},
+        }
+    }
+    rules = {
+        "build": (Rule("edit", "*", "ask"),),
+        "plan": (Rule("bash", "*", "allow"), Rule("bash", "rm", "ask")),
+    }
+
+    assert compose_ask_denials(config, rules) == {
+        "agent": {"build": {"permission": {"edit": "deny"}}, "plan": {"permission": {"bash": {"rm": "deny"}}}}
+    }
+
+
+def test_an_agent_layer_ask_wins_over_the_same_ask_at_the_top_level() -> None:
+    config = {"permission": {"edit": "ask"}, "agent": {"build": {"permission": {"edit": "ask"}}}}
+
+    assert compose_ask_denials(config, {"build": (Rule("edit", "*", "ask"),)}) == {
+        "agent": {"build": {"permission": {"edit": "deny"}}}
+    }
+
+
+def test_an_ask_written_by_neither_layer_is_denied_in_the_agent_layer_even_with_a_top_level_scalar() -> None:
+    config = {"permission": {"read": "allow"}, "agent": {"build": {"permission": "bad"}, "plan": "bad"}}
+    rules = {"build": (Rule("read", "*.env", "ask"),), "plan": (Rule("read", "*.env", "ask"),)}
+
+    assert compose_ask_denials(config, rules) == {
+        "agent": {
+            "build": {"permission": {"read": {"*.env": "deny"}}},
+            "plan": {"permission": {"read": {"*.env": "deny"}}},
+        }
+    }
