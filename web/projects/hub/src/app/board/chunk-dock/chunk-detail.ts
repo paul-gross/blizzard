@@ -7,10 +7,12 @@ import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
+  type AnswerFailure,
   type AnswerVars,
   injectAnswerQuestionMutation,
   injectResolveDecisionMutation,
   readAnswerFailure,
+  readDecisionFailure,
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
 import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../../mutation-keys';
@@ -50,9 +52,9 @@ const PAUSE_OVERRIDE_TOTAL: Record<ChunkStatus, boolean> = {
  * shared `actionError` for the panel to show — the "report, don't swallow"
  * requirement, which pause/resume, graph/model edits, and complete all follow rather
  * than reinvent — and clears on the next attempt or the
- * moment a different chunk opens. Answering has a **second** channel alongside it,
+ * moment a different chunk opens. Answering and resolving have a **second** channel alongside it,
  * `actionOutcome`: a lost first-write-wins race is not a failure to retry
- * but news — someone else's answer landed — so it reads as an outcome naming the winner.
+ * but news — someone else's answer or choice landed — so it reads as an outcome naming the winner.
  * Both clear together in `beginAction`.
  *
  * **Delete** breaks that shape: it makes the chunk cease to exist, so
@@ -246,7 +248,11 @@ export class ChunkDetail {
   /** Route an answer failure to the outcome or error channel — the fold is
    * `readAnswerFailure`'s, shared with the mobile board so both read the same. */
   private reportAnswerFailure(error: unknown): void {
-    const failure = readAnswerFailure(error);
+    this.reportFailure(readAnswerFailure(error));
+  }
+
+  /** Route a folded failure to the outcome or error channel. */
+  private reportFailure(failure: AnswerFailure): void {
     if (failure.kind === 'outcome') this.actionOutcome.set(failure.message);
     else this.actionError.set(failure.message);
   }
@@ -260,7 +266,7 @@ export class ChunkDetail {
         chunkId: event.chunkId,
         struck: event.struck,
       },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Resolve failed.')) },
+      { onError: (error) => this.reportFailure(readDecisionFailure(error)) },
     );
   }
 

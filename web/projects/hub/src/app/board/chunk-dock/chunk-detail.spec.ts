@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel, hubClient } from 'fleet';
+import { type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
 import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
@@ -279,7 +279,7 @@ describe('ChunkDetail container', () => {
   });
 
   it('surfaces a resolve-decision failure rather than swallowing it', async () => {
-    resolveResponse = stubError(409, { detail: 'decision de_42 already resolved' });
+    resolveResponse = stubError(400, { detail: "choice 'maybe' is not one of approve, reject" });
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);
@@ -289,7 +289,29 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/decisions/de_42/resolutions', 'POST')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already resolved');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('is not one of');
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+  });
+
+  it('renders a lost resolve race as the winning choice, who, and when — an outcome, not "Resolve failed."', async () => {
+    resolveResponse = stubError(409, {
+      decision_id: 'de_42',
+      already_resolved_by: 'alice',
+      resolved_choice: 'reject',
+      resolved_at: '2026-07-13T00:01:00Z',
+      detail: 'decision already resolved',
+    });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(fixture);
+
+    const outcome = el.querySelector('[data-testid="action-outcome"]')?.textContent ?? '';
+    expect(outcome).toContain(`reject by alice, ${formatWhen('2026-07-13T00:01:00Z')}`);
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
   });
 
   it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {

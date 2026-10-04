@@ -97,7 +97,7 @@ export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
 export type { HubEventPayload } from './lib/sse/fleet-live';
-export { formatClockTime, formatRefreshedAgo } from './lib/when';
+export { formatClockTime, formatRefreshedAgo, formatWhen } from './lib/when';
 export { completeCopy, deleteCopy, detachCopy } from './lib/chunk-detail/chunk-action-copy';
 export { ChunkDelivery } from './lib/chunk-detail/chunk-delivery';
 export type { ActivityView, AnswerResult, BacklogPeekEntry, BacklogPeekResponse, ChunkCountsView, ChunkStatus, ChunkSummary, DecisionResolutionResponse, DecisionView, EventView, ExternalSubscriptionUsageWindowView, FindingDetailView, FindingFactView, FindingView, FleetSpendView, GardenProposalAcceptResponse, GardenProposalClosureView, GardenProposalCountsView, GardenProposalView, GardenSweepsView, GraphChoiceView, GraphNodeView, GraphSessionView, GraphSummaryView, GraphView, LandedRepoView, MeResponse, PauseView, PrView, ProviderSummary, QuestionView, QueuePeekEntry, QueuePeekResponse, RouteView, RoutineBaselineView, RoutineRunResponse, RoutineView, RunDeltaView, RunRowView, RunnerCapability, RunnerView, ScopeView, TrendView, UserView, WorkItemView, WorkRefView } from './lib/api/hub';

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, hubClient, ViewportService } from 'fleet';
+import { ChunkPage, formatWhen, hubClient, ViewportService } from 'fleet';
 import { stubError, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
@@ -599,6 +599,51 @@ describe('Mobile chunk drill-down', () => {
 
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown question');
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
+  });
+
+  const OPEN_DECISION = {
+    decision_id: 'dc_77',
+    chunk_id: CHUNK_ID,
+    node_id: 'nd_gate',
+    node_name: 'approve-gate',
+    epoch: 1,
+    submitted_at: '2026-07-16T11:20:00.000Z',
+    choices: [{ name: 'approve', description: '' }, { name: 'reject', description: '' }],
+  };
+
+  /** Open the chunk page parked on `OPEN_DECISION`, its resolve POST answering `resolveResponse`, and click a choice. */
+  async function resolveOnMobile(resolveResponse: unknown): Promise<HTMLElement> {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'POST' && path === '/api/decisions/dc_77/resolutions') return resolveResponse;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, status: 'waiting_on_human', decision: OPEN_DECISION };
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(harness.fixture);
+    return el;
+  }
+
+  it('renders a lost resolve race as the winning choice, who, and when, not "Resolve failed."', async () => {
+    const el = await resolveOnMobile(
+      stubError(409, {
+        decision_id: 'dc_77',
+        already_resolved_by: 'alice',
+        resolved_choice: 'reject',
+        resolved_at: '2026-07-16T11:21:00.000Z',
+        detail: 'decision already resolved',
+      }),
+    );
+
+    const outcome = el.querySelector('[data-testid="mobile-chunk-action-outcome"]');
+    expect(outcome?.textContent).toContain(`reject by alice, ${formatWhen('2026-07-16T11:21:00.000Z')}`);
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
   });
 
   it('shows an answered question’s delivery trail on the phone too', async () => {

@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkDetail, QuestionView } from '../api/hub';
+import { formatWhen } from '../when';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
@@ -216,6 +217,39 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="question-text"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="answer-input"]')).toBeNull();
     expect(el.querySelector('[data-testid="question-option"]')).toBeNull();
+  });
+
+  it('renders a resolved-but-untransitioned gate as "<choice> by <who>, <when>" in place of its choices', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_DECISION_DETAIL,
+      decision: {
+        ...WAITING_DECISION_DETAIL.decision!,
+        resolved_choice: 'approve',
+        resolved_by: 'alice',
+        resolved_at: '2026-07-13T00:02:00Z',
+      },
+    });
+    fixture.componentRef.setInput('canResolve', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const line = el.querySelector('[data-testid="decision-resolved-line"]')?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(line).toBe(`approve by alice, ${formatWhen('2026-07-13T00:02:00Z')}`);
+    expect(el.querySelector('[data-testid="decision-node"]')?.textContent).toContain('approve-gate');
+    expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
+    expect(el.querySelector('[data-testid="open-decision"]')).toBeNull();
+  });
+
+  it('renders an open gate’s choices and no resolved line', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="decision-choice"]')).toHaveLength(2);
+    expect(el.querySelector('[data-testid="decision-resolved-line"]')).toBeNull();
   });
 
   it('withholds the gate choice chips without gate:resolve', async () => {

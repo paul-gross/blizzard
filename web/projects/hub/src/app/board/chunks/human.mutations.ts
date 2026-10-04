@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type AnswerResult, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, hubChunkKey, hubChunksKey } from 'fleet';
+import { type AnswerResult, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
 import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../mutation-keys';
 
 /** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
@@ -82,6 +82,42 @@ export function injectAnswerQuestionMutation() {
   }));
 }
 
+/** A losing resolve's 409 body — the winner's choice, who, and when. */
+interface DecisionConflict {
+  readonly already_resolved_by: string;
+  readonly resolved_choice: string;
+  readonly resolved_at: string;
+}
+
+/**
+ * Read a losing resolve's 409 body, or `null` for any other failure — narrowed by shape,
+ * the same way {@link readAnswerConflict} narrows the answer race.
+ */
+function readDecisionConflict(error: unknown): DecisionConflict | null {
+  if (!error || typeof error !== 'object') return null;
+  const body = error as Partial<DecisionConflict>;
+  return typeof body.already_resolved_by === 'string' &&
+    typeof body.resolved_choice === 'string' &&
+    body.resolved_choice !== '' &&
+    typeof body.resolved_at === 'string'
+    ? (body as DecisionConflict)
+    : null;
+}
+
+/**
+ * Fold a resolve mutation's `onError` into the channel it belongs on, for both surfaces
+ * that resolve a gate: a lost first-write-wins race reads as the winning outcome,
+ * "<choice> by <who>, <when>" — the same line the gate panel renders once the refreshed
+ * detail lands — and anything else as "Resolve failed.". Pinned per surface by
+ * `chunk-detail.spec.ts` and `chunk-page.spec.ts`'s lost-resolve-race cases.
+ */
+export function readDecisionFailure(error: unknown): AnswerFailure {
+  const winner = readDecisionConflict(error);
+  if (!winner) return { kind: 'error', message: errorMessage(error, 'Resolve failed.') };
+  const when = winner.resolved_at ? `, ${formatWhen(winner.resolved_at)}` : '';
+  return { kind: 'outcome', message: `${winner.resolved_choice} by ${winner.already_resolved_by}${when}` };
+}
+
 /** Resolve a chunk's open gate decision — the board's choice buttons. */
 export interface ResolveVars {
   readonly decisionId: string;
@@ -97,7 +133,9 @@ export interface ResolveVars {
  * CAS, through the generated client (bzh:generated-client); `POST
  * /api/decisions/{id}/resolution` is now a deprecated alias this board no longer
  * calls. The holding runner records the resolving transition over its pull; here we
- * re-read the chunk and the list.
+ * re-read the chunk, the list, and the fleet-wide open gates — on `onSettled`, so a lost
+ * race re-reads too, and the mutation settles only once the refreshed detail carries the
+ * resolution the gate panel renders.
  */
 export function injectResolveDecisionMutation() {
   const queryClient = inject(QueryClient);
@@ -116,6 +154,7 @@ export function injectResolveDecisionMutation() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
         queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubDecisionsKey }),
       ]),
   }));
 }
