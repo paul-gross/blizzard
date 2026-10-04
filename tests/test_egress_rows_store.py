@@ -9,11 +9,12 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, invocation_row, step_row
+from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, step_row
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.trace_store import TraceStore
+from tests import trace_fixtures as fx
 from tests.support import HubHarness, hub_store_connections, ingest
 from tests.trace_hub import claim, label, pass_build, trace_hub
 
@@ -138,7 +139,7 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
     closed = [st for st in steps if st.close is not None]
     assert {st.kind for st in closed} == {StepKind.RUNNER, StepKind.GATE}
     rows: list[StepRow | InvocationRow] = [step_row(summarize_step(facts, st, steps), hub.clock.now()) for st in closed]
-    rows += [invocation_row(facts, UsageRow(1, chunk_id, "r1", u), hub.clock.now()) for u in facts.usage]
+    rows += [fx.invocation_of(facts, UsageRow(1, chunk_id, "r1", u), hub.clock.now()) for u in facts.usage]
 
     assert len(facts.usage) == 1
     assert any(isinstance(r, StepRow) and r.asks == 1 for r in rows)

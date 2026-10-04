@@ -93,7 +93,7 @@ def _done(**extra: Any) -> StepFacts:
 def _all_spans(facts: StepFacts) -> list[SpanRecord]:
     steps = [s for s in identify_steps(facts) if s.close is not None]
     return (
-        [span for step in steps for span in assemble_step(facts, step)]
+        [span for step in steps for span in assemble_step(facts, step, identify_steps(facts))]
         + list(assemble_work(facts))
         + list(assemble_lifetime(facts))
     )
@@ -105,7 +105,7 @@ def _named(spans: tuple[SpanRecord, ...], name: str) -> SpanRecord:
 
 def test_a_bounced_chunk_is_a_work_trace_under_one_work_root() -> None:
     facts = _done()
-    steps = [s for step in identify_steps(facts) for s in assemble_step(facts, step)]
+    steps = [s for step in identify_steps(facts) for s in assemble_step(facts, step, identify_steps(facts))]
     (work,) = assemble_work(facts)
 
     assert {s.context.trace_id for s in [*steps, work]} == {chunk_trace_id("ch_1")}
@@ -119,7 +119,7 @@ def test_a_bounced_chunk_is_a_work_trace_under_one_work_root() -> None:
 def test_the_work_root_starts_at_the_first_step_and_ends_at_the_finish_with_totals_but_no_waits() -> None:
     facts = _done()
     (work,) = assemble_work(facts)
-    first = assemble_step(facts, identify_steps(facts)[0])[0]
+    first = assemble_step(facts, identify_steps(facts)[0], identify_steps(facts))[0]
 
     assert (work.start, work.end) == (first.start, fx.at(100))
     assert work.start > fx.at(0)
@@ -156,7 +156,7 @@ def test_the_lifetime_trace_has_a_span_per_step_named_for_its_node_and_linking_t
     steps = identify_steps(facts)
     spans = assemble_lifetime(facts)
     told = [s for s in spans if attr.STEP_KIND in s.attributes]
-    roots = [assemble_step(facts, step)[0] for step in steps]
+    roots = [assemble_step(facts, step, identify_steps(facts))[0] for step in steps]
 
     assert [s.name for s in told] == ["build", "review", "build", "review"]
     assert [(s.start, s.end) for s in told] == [
@@ -230,7 +230,7 @@ def test_an_escalation_a_restart_releases_is_a_wait_and_the_next_step_queues_fro
     spans = assemble_lifetime(facts)
     wait = _named(spans, "escalation wait")
     lifetime_steps = sorted((s for s in spans if s.attributes.get(attr.STEP_KIND) == "step"), key=lambda s: s.start)
-    second = assemble_step(facts, identify_steps(facts)[1])
+    second = assemble_step(facts, identify_steps(facts)[1], identify_steps(facts))
 
     assert (wait.start, wait.end) == (fx.at(40), fx.at(250))
     assert lifetime_steps[1].start == fx.at(250)
@@ -271,7 +271,7 @@ def test_a_gate_is_a_lifetime_span_of_kind_gate() -> None:
 def test_step_roots_keep_their_links_and_reasons() -> None:
     facts = _done()
     steps = identify_steps(facts)
-    roots = [assemble_step(facts, s)[0] for s in steps]
+    roots = [assemble_step(facts, s, identify_steps(facts))[0] for s in steps]
 
     assert [r.links[0].attributes[attr.LINK_REASON] for r in roots[1:]] == ["next", "bounce", "next"]
     assert [r.links[0].context for r in roots[1:]] == [step_root(s.key) for s in steps[:-1]]
@@ -356,7 +356,7 @@ def test_an_escalation_wait_covers_the_gap_to_the_requeue() -> None:
 
     spans = assemble_lifetime(facts)
     wait = _named(spans, "escalation wait")
-    second = assemble_step(facts, identify_steps(facts)[1])
+    second = assemble_step(facts, identify_steps(facts)[1], identify_steps(facts))
 
     assert (wait.start, wait.end) == (fx.at(40), fx.at(300))
     assert wait.parent_span_id == spans[0].context.span_id
@@ -407,7 +407,9 @@ def test_a_pause_a_restart_closes_the_step_under_is_a_wait_from_the_close_to_the
     )
 
     waits = [s for s in assemble_lifetime(facts) if s.name == "pause wait"]
-    pause_child = [s for s in assemble_step(facts, identify_steps(facts)[0]) if s.name == "pause"]
+    pause_child = [
+        s for s in assemble_step(facts, identify_steps(facts)[0], identify_steps(facts)) if s.name == "pause"
+    ]
 
     assert [(w.start, w.end) for w in waits] == [(fx.at(30), fx.at(50))]
     assert waits[0].context == lifetime_context("ch_1", ChunkRole.PAUSE, instant_text(fx.at(30)))
@@ -483,7 +485,7 @@ def test_instants_in_span_ids_are_utc_microseconds() -> None:
 
 
 def _window(facts: StepFacts, since: CursorKey, limit: int = 100) -> Any:
-    return select_window([facts], since, fx.at(10_000), None, limit)
+    return select_window([facts], since, fx.at(10_000), None, limit, None)
 
 
 def test_a_sweep_tells_each_chunk_span_exactly_once() -> None:

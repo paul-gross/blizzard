@@ -71,7 +71,7 @@ def test_billed_and_estimated_cost_are_each_null_when_absent(
 def test_the_folded_cost_equals_the_span_roots(name: str, index: int) -> None:
     facts = fx.scenarios()[name]
     step = identify_steps(facts)[index]
-    root = assemble_step(facts, step)[0]
+    root = assemble_step(facts, step, identify_steps(facts))[0]
     summary = summarize_step(facts, step)
     assert summary.folded_cost_usd() == pytest.approx(root.attributes[attr.STEP_COST_USD])  # type: ignore[arg-type]
 
@@ -80,7 +80,7 @@ def test_the_folded_cost_equals_the_span_roots(name: str, index: int) -> None:
 def test_each_wait_equals_the_sum_of_the_matching_children(name: str, index: int) -> None:
     facts = fx.scenarios()[name]
     step = identify_steps(facts)[index]
-    root, *children = assemble_step(facts, step)
+    root, *children = assemble_step(facts, step, identify_steps(facts))
     summary = summarize_step(facts, step)
     for span_name, key in _WAIT_ATTRS.items():
         summed = sum(round((c.end - c.start).total_seconds() * 1000) for c in children if c.name == span_name)

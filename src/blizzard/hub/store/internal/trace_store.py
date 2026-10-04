@@ -89,13 +89,16 @@ class TraceStore:
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         chunk_ids: dict[str, None] = {}
         frontiers: list[datetime] = []
+        newest: list[datetime] = []
         with self._store.read("closing_candidates") as conn:
             for table, at, row_id in _CLOSING_TABLES:
                 rows, saturated = self._closing_rows(conn, table, at, row_id, since, until, limit)
                 chunk_ids.update((r.chunk_id, None) for r in rows)
+                if rows:
+                    newest.append(rows[-1].at)
                 if saturated:
                     frontiers.append(rows[-1].at)
-        return ClosingCandidates(tuple(chunk_ids), min(frontiers, default=None))
+        return ClosingCandidates(tuple(chunk_ids), min(frontiers, default=None), max(newest, default=None))
 
     @staticmethod
     def _closing_rows(  # type: ignore[no-untyped-def]

@@ -21,6 +21,7 @@ from blizzard.hub.domain.egress.repository import IReadEgress, UsagePosition
 from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
+from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.tracing.window import read_window
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -136,7 +137,7 @@ class EgressBackfill:
             window = read_window(self._steps, position, run.until - _ONE_MICROSECOND, self._batch_limit)
             batch: dict[str, tuple[CursorKey, EgressRow]] = {}
             for closed in window.closed_steps():
-                add_step(batch, closed.facts, closed.step, closed.key, run.now)
+                add_step(batch, closed.facts, closed.steps, closed.step, closed.key, run.now)
             rows = [(step_partition(row), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
             if rows and (failure := self._place(run, STEPS_SCHEMA, rows)) is not None:
                 return failure
@@ -154,10 +155,11 @@ class EgressBackfill:
             if not usage:
                 return None
             facts = self._steps.step_facts_for(sorted({row.chunk_id for row in usage}))
+            steps = {chunk_id: identify_steps(held) for chunk_id, held in facts.items()}
             rows: _Rows = []
             for row in usage:
                 chunk = facts.get(row.chunk_id)
-                entry = invocation_entry(chunk, row, run.now) if chunk is not None else None
+                entry = invocation_entry(chunk, steps[row.chunk_id], row, run.now) if chunk is not None else None
                 if entry is not None:
                     rows.append(entry)
             if rows and (failure := self._place(run, INVOCATIONS_SCHEMA, rows)) is not None:

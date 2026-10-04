@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.hub.domain.tracing.steps import NodeStep
 
 _CHUNK_EPOCH = -1
 _COMPLETED = "completed"
+_ONE_MICROSECOND = timedelta(microseconds=1)
 
 
 @dataclass(frozen=True, order=True)
 class CursorKey:
     """A position in the total order of closed steps and finished chunks: time, chunk, epoch, decision.
 
-    ``decision_id`` is empty for runner and hub steps. A chunk's own items sit at epoch ``-1``, ahead of the
-    instant's steps. :meth:`opening` is the position just before every item at an instant."""
+    ``decision_id`` is empty for runner and hub steps; a chunk's own items sit at epoch ``-1``, ahead of the
+    instant's steps. :meth:`opening` and :meth:`past` bound every item at an instant."""
 
     at: datetime
     chunk_id: str = ""
@@ -40,3 +41,7 @@ class CursorKey:
     @classmethod
     def opening(cls, at: datetime) -> CursorKey:
         return cls(at)
+
+    @classmethod
+    def past(cls, at: datetime) -> CursorKey:
+        return cls(at + _ONE_MICROSECOND)

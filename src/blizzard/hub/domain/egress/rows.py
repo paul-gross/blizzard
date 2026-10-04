@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.domain.tracing.facts import StepFacts
-from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
+from blizzard.hub.domain.tracing.steps import NodeStep, StepKind
 from blizzard.hub.domain.tracing.summary import StepSummary
 from blizzard.hub.domain.work import UsageFact
 
@@ -163,16 +163,12 @@ def step_row(summary: StepSummary, exported_at: datetime) -> StepRow:
     )
 
 
-def invocation_row(facts: StepFacts, usage: UsageRow, exported_at: datetime) -> InvocationRow:
-    """The ``invocations`` row of one usage row, positioned by the runner step holding its epoch — open or closed.
-
-    Raises :class:`LookupError` when the facts hold no runner step at that epoch."""
+def invocation_row(facts: StepFacts, step: NodeStep, usage: UsageRow, exported_at: datetime) -> InvocationRow:
+    """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
+    open or closed."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact
-    step = next((s for s in identify_steps(facts) if s.kind is StepKind.RUNNER and s.epoch == fact.epoch), None)
-    if step is None:
-        raise LookupError(f"usage {usage.usage_id} has no runner step at epoch {fact.epoch} of {facts.chunk_id}")
     return InvocationRow(
         usage_id=usage.usage_id,
         step_key=step.key.text(),

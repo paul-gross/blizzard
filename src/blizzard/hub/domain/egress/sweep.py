@@ -29,6 +29,7 @@ from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
+from blizzard.hub.domain.tracing.steps import NodeStep, identify_steps
 from blizzard.hub.domain.tracing.window import read_window
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -147,19 +148,24 @@ class EgressSweep:
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
         now = egress_pass.started_at
         facts: dict[str, StepFacts] = {closed.step.key.chunk_id: closed.facts for closed in window.closed_steps()}
+        steps: dict[str, tuple[NodeStep, ...]] = {
+            closed.step.key.chunk_id: closed.steps for closed in window.closed_steps()
+        }
         batch: dict[str, tuple[CursorKey, EgressRow]] = {}
         for closed in window.closed_steps():
-            add_step(batch, facts[closed.step.key.chunk_id], closed.step, closed.key, now)
+            add_step(batch, closed.facts, closed.steps, closed.step, closed.key, now)
         late = [row for row in usage if row.chunk_id not in facts]
-        facts.update(self._steps.step_facts_for(sorted({row.chunk_id for row in late})))
+        for chunk_id, held in self._steps.step_facts_for(sorted({row.chunk_id for row in late})).items():
+            facts[chunk_id] = held
+            steps[chunk_id] = identify_steps(held)
         for row in usage:
             chunk = facts.get(row.chunk_id)
-            step = runner_step(chunk, row.fact.epoch) if chunk is not None else None
+            step = runner_step(steps[row.chunk_id], row.fact.epoch) if chunk is not None else None
             if chunk is None or step is None or step.close is None:
                 continue
             key = CursorKey.of(step)
             if key <= window.position:
-                add_step(batch, chunk, step, key, now)
+                add_step(batch, chunk, steps[row.chunk_id], step, key, now)
         position = usage[-1] if usage else None
         advanced = EgressCursorRecord(
             STEPS_SCHEMA.name,
@@ -185,10 +191,13 @@ class EgressSweep:
         if not usage:
             return False
         facts = self._steps.step_facts_for(sorted({row.chunk_id for row in usage}))
+        steps = {chunk_id: identify_steps(held) for chunk_id, held in facts.items()}
         rows: _Rows = []
         for row in usage:
             chunk = facts.get(row.chunk_id)
-            entry = invocation_entry(chunk, row, egress_pass.started_at) if chunk is not None else None
+            entry = (
+                invocation_entry(chunk, steps[row.chunk_id], row, egress_pass.started_at) if chunk is not None else None
+            )
             if entry is None:
                 _log.warning("usage has no runner step; not exported", usage_id=row.usage_id, chunk_id=row.chunk_id)
                 continue

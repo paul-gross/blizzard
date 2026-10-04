@@ -20,7 +20,7 @@ import duckdb
 import pyarrow.parquet as pq
 import pytest
 
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, invocation_row, step_row
+from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, step_row
 from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA, invocation_egress_row, step_egress_row
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
@@ -111,7 +111,9 @@ def _scenario_rows() -> tuple[list[tuple[StepRow, CursorKey]], list[InvocationRo
         for fact in facts.usage:
             usage_id += 1
             try:
-                invocations.append(invocation_row(facts, UsageRow(usage_id, facts.chunk_id, "r-1", fact), _FIRST_PASS))
+                invocations.append(
+                    fx.invocation_of(facts, UsageRow(usage_id, facts.chunk_id, "r-1", fact), _FIRST_PASS)
+                )
             except LookupError:
                 continue
     return steps, invocations

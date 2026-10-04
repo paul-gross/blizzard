@@ -307,7 +307,7 @@ def _span(span: SpanRecord) -> dict[str, object]:
 
 def _serialize(facts: StepFacts) -> str:
     steps = [s for s in identify_steps(facts) if s.close is not None]
-    spans = [_span(span) for step in steps for span in assemble_step(facts, step)]
+    spans = [_span(span) for step in steps for span in assemble_step(facts, step, identify_steps(facts))]
     if chunk_end(facts) is not None:
         spans += [_span(span) for span in (*assemble_work(facts), *assemble_lifetime(facts))]
     if completion_instant(facts) is not None:

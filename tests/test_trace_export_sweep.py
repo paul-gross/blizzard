@@ -3,6 +3,7 @@ told to the in-memory exporter one ``sweep()`` at a time against a fixed clock."
 
 from __future__ import annotations
 
+import itertools
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -28,8 +29,15 @@ from blizzard.hub.domain.tracing.repository import TraceCursorRecord
 from blizzard.hub.domain.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, InMemoryTraceExporter, hub_store_connections
-from tests.trace_hub import label, trace_hub, transitioned_and_stopped
+from tests.support import (
+    HubHarness,
+    InMemoryTraceExporter,
+    count_queries,
+    count_rows_read,
+    hub_store_connections,
+    ingest,
+)
+from tests.trace_hub import claim, label, pass_build, trace_hub, transitioned_and_stopped
 
 pytestmark = pytest.mark.component
 
@@ -149,7 +157,7 @@ def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_accepta
     assert len(_chunk_spans(exporter, "chunk")) == len(_chunk_spans(exporter, "chunk work")) == 1
     newest = _store(hub).newest_cursor()
     assert newest is not None
-    assert newest.position == keys[-1]
+    assert newest.position == CursorKey.past(tie)
     assert newest.span_count == len(exporter.batches[2])
 
 
@@ -410,3 +418,51 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
 
     assert len(built) == 1
     assert app.state.services.trace_export is not None
+
+
+def _open_steps(hub: HubHarness, count: int, seqs: itertools.count) -> None:  # type: ignore[type-arg]
+    """``count`` chunks claimed and left running — each an open step with nothing closing."""
+    for _ in range(count):
+        chunk_id = ingest(hub, [{"source": "default", "ref": str(next(seqs))}])
+        claim(hub, chunk_id, seq=next(seqs))
+
+
+def test_an_idle_pass_reads_no_closing_candidates_however_many_steps_are_open(tmp_path: Path) -> None:
+    hub, exporter = _hub(tmp_path)
+    sweep = _sweep(hub)
+    sweep.sweep()
+    _closed_pair(hub)
+    seqs = itertools.count(100)
+    measured: list[tuple[int, int]] = []
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()  # reads the new rows once and moves past them
+        rows_before = _row_count(hub)
+        measured.append((count_queries(hub.engine, sweep.sweep), count_rows_read(hub.engine, sweep.sweep)))
+        assert _row_count(hub) == rows_before
+        _open_steps(hub, 3, seqs)
+
+    assert len(set(measured)) == 1
+    assert len(_roots(exporter)) == 2
+
+
+def test_an_open_step_that_closes_later_is_told_once_after_the_cursor_passed_its_opening(tmp_path: Path) -> None:
+    hub, exporter = _hub(tmp_path)
+    sweep = _sweep(hub)
+    sweep.sweep()
+    graph = hub.services.graphs.get_enabled_by_name("default-delivery")
+    assert graph is not None
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
+    claim(hub, chunk_id, seq=1)
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()
+    assert _roots(exporter) == []
+
+    hub.clock.advance(timedelta(seconds=1))
+    pass_build(hub, chunk_id, graph)
+    for _ in range(3):
+        sweep.sweep()
+        hub.clock.advance(timedelta(seconds=1))
+
+    assert _roots(exporter) == [_root(chunk_id)]
