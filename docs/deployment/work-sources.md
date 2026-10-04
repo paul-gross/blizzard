@@ -33,6 +33,41 @@ fill it in to configure a source; the scaffold is the field-by-field reference.
   (`/etc/blizzard/hub.env` under the systemd layout in [install.md](./install.md)), and an unset `token_env` fails at
   boot naming the missing variable rather than silently ingesting unauthenticated.
 
+## Work source records
+
+A hub also holds work sources as stored records, managed with `blizzard hub source`. A record carries the same fields a
+`[[work_source]]` block declares, with `secret` naming a stored secret in place of a token variable:
+
+```bash
+printf '%s' "$TOKEN" | blizzard hub secret set gh-token
+blizzard hub source create blizzard --provider github --locator paul-gross/blizzard --secret gh-token --annotate
+blizzard hub source list
+blizzard hub source show blizzard
+```
+
+`create` stores the source at revision 1. Every later change moves the revision by one:
+
+- `edit <name>` changes only the flags given: `--provider`, `--locator`, `--secret`, `--api-base`, `--web-base`, and
+  `--annotate` or `--no-annotate`. `--clear api-base`, `--clear web-base`, or `--clear secret` unsets a field, and
+  `--clear secret` is refused for a provider that needs a credential, which includes `github`. An edit that leaves every
+  field as it is writes nothing and keeps the revision. The name never changes.
+- `retire <name>` hides the source from `list` unless `--include-retired` is given. A retired source keeps its provider
+  and locator, so `create` for another name on the same locator is refused with a message naming the holder; `enable`
+  the holder instead.
+- `enable <name>` lifts the retirement, and is refused while the source's secret is retired.
+
+`edit`, `retire`, and `enable` take `--if-match <revision>` and are refused, naming the current revision, when the
+source has moved on. A name may not contain `:` and may not be `hub`, which is the built-in source: `list` shows it as
+built-in, and every attempt to change it is refused. Every write is recorded in the [change log](./config-changes.md).
+
+Writes need the `config:edit` permission and reads need `fleet:view`. The record fields are also served over
+`GET /api/work-sources` and `GET /api/work-sources/{name}`, and the document schema at
+`GET /api/config/schema/work-sources`.
+
+A stored record does not yet change what the hub ingests: ingest, the forge-status sweep, and delivery closure still
+read the `[[work_source]]` blocks below, and a source declared only as a record is neither ingested from nor annotated.
+`list` shows records only, so a source declared in `blizzard-hub.toml` is not listed there.
+
 ## Ingesting work items
 
 `blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk; each token is `<source>:<ref>`,
