@@ -1,5 +1,3 @@
-"""The lane retry helper (unit tier) — the backoff formula and the outage latch, pure, no store."""
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta

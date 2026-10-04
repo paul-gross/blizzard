@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -753,3 +754,18 @@ def test_sweep_attempts_at_most_the_pass_limit_and_the_rest_drain_on_later_passe
     chunks._candidates = [i for i in chunks._candidates if (i.chunk_id, i.ref) not in chunks.retired]
     drainer.sweep()
     assert closer.closed == refs  # the head moved, so nothing starves
+
+
+def test_sweep_logs_one_summary_counting_each_outcome() -> None:
+    refs = {name: WorkRef(source="default", ref=name) for name in ("ok", "gone", "bad")}
+    chunks = _FakeCloseChunks(
+        [PendingCloseIntent(chunk_id=f"ch_{name}", ref=ref) for name, ref in refs.items()]
+        + [PendingCloseIntent(chunk_id="ch_skip", ref=WorkRef(source="unopted", ref="1"), intent_id=9)]
+    )
+    closer = FakeCloser(gone_refs={"gone"}, fail_refs={"bad"})
+
+    with capture_logs() as logs:
+        _drainer(chunks, {"default": closer}).sweep()
+
+    [summary] = [entry for entry in logs if entry["event"] == "close intent drain sweep completed"]
+    assert (summary["closed"], summary["gone"], summary["failed"], summary["skipped"]) == (1, 1, 1, 1)
