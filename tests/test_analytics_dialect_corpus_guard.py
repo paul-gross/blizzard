@@ -76,10 +76,9 @@ def test_every_corpus_backed_dialect_is_registered() -> None:
 
 @pytest.mark.parametrize("normalizer_version", declared_normalizer_versions())
 def test_every_runner_normalizer_version_is_registered(normalizer_version: str) -> None:
-    """The hub's `DIALECTS` keys are string literals, deliberately not imported from
-    `blizzard.runner` — this test is the one place that ties them to every normalizer
-    stamp the runner's harness catalog declares, so a newly declared harness with no
-    dialect entry fails here rather than drifting silently."""
+    """The hub's `DIALECTS` keys are literals, deliberately not imported from `blizzard.runner`;
+    this test ties them to every normalizer stamp the harness catalog declares, so a newly
+    declared harness with no dialect entry fails here."""
     assert normalizer_version in DIALECTS, (
         f"the harness catalog declares normalizer version {normalizer_version!r}, which has no DIALECTS entry"
     )
