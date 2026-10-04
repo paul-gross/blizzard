@@ -9,8 +9,8 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.cli.daemon import uds_client
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.transcript_backfill import TranscriptReshipError
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import ensure_current_revision
 
 

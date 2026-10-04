@@ -18,7 +18,7 @@ import httpx
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton, unix_ns
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,

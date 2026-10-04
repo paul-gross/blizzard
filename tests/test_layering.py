@@ -166,7 +166,7 @@ def test_kernel_loads_no_non_kernel_blizzard_module_transitively() -> None:
 def test_neither_daemon_root_loads_the_other_daemon() -> None:
     """B and C, transitively: no composition root drags in the other daemon through the kernel."""
     hub_roots = ["blizzard.hub.app", "blizzard.hub.composition"]
-    runner_roots = ["blizzard.runner.app", "blizzard.runner.composition", "blizzard.runner.loop.build"]
+    runner_roots = ["blizzard.runner.app", "blizzard.runner.composition", "blizzard.runner.loop_wiring"]
     leaks = [
         f"{root} loads {m}"
         for root in hub_roots
@@ -449,7 +449,7 @@ _COMPOSITION_ROOTS = frozenset(
         _HUB_DIR / "composition.py",
         _HUB_DIR / "cli" / "__init__.py",
         _RUNNER_DIR / "app.py",
-        _RUNNER_DIR / "loop" / "build.py",
+        _RUNNER_DIR / "loop_wiring.py",
         _RUNNER_DIR / "cli" / "runtime.py",
         _RUNNER_DIR / "cli" / "external_usage.py",
         _RUNNER_COMPOSITION_FILE,
@@ -461,20 +461,32 @@ _COMPOSITION_ROOTS = frozenset(
 _RUNNER_COMPOSITION_MODULE = "blizzard.runner.composition"
 
 
-def _runner_composition_imports(root: Path, *, exempt: frozenset[Path]) -> list[str]:
+def _resolved_imports(path: Path, tree: ast.Module, src_root: Path) -> list[tuple[int, str]]:
+    package = list(path.relative_to(src_root.parent).with_suffix("").parts)[:-1]
+    targets: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets += [(node.lineno, alias.name) for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = package[: len(package) - (node.level - 1)] if node.level else []
+            module = ".".join([*base, *(node.module.split(".") if node.module else [])])
+            targets += [(node.lineno, module), *((node.lineno, f"{module}.{alias.name}") for alias in node.names)]
+    return targets
+
+
+def _runner_composition_imports(root: Path, *, exempt: frozenset[Path], src_root: Path = _SRC_DIR) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):
         if path in exempt:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == _RUNNER_COMPOSITION_MODULE:
-                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports from {node.module}")
-            elif isinstance(node, ast.ImportFrom) and node.module == "blizzard.runner":
-                if any(alias.name == "composition" for alias in node.names):
-                    violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports composition")
-            elif isinstance(node, ast.Import) and any(alias.name == _RUNNER_COMPOSITION_MODULE for alias in node.names):
-                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports {_RUNNER_COMPOSITION_MODULE}")
+        lines = {
+            lineno
+            for lineno, module in _resolved_imports(path, tree, src_root)
+            if module == _RUNNER_COMPOSITION_MODULE or module.startswith(f"{_RUNNER_COMPOSITION_MODULE}.")
+        }
+        shown = path.relative_to(src_root.parent.parent)
+        violations += [f"{shown}:{lineno} imports {_RUNNER_COMPOSITION_MODULE}" for lineno in sorted(lines)]
     return violations
 
 
@@ -668,6 +680,243 @@ def test_internal_check_catches_every_import_form(tmp_path: Path, importer: str,
 )
 def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, importer: str, statement: str) -> None:
     assert _plant(tmp_path, importer, statement) == []
+
+
+_LOOP_DIR = _RUNNER_DIR / "loop"
+_LOOP_DRIVER = frozenset({_LOOP_DIR / "context.py", _LOOP_DIR / "tick.py", _LOOP_DIR / "steps.py"})
+_RUNNER_EDGES = (_RUNNER_DIR / "api", _RUNNER_DIR / "cli")
+_STORE_BUNDLES = frozenset({"RunnerStores", "RunnerReadStores", "IReadRunnerStore", "IWriteRunnerStore"})
+_LOOP_CONTEXT = frozenset({"LoopContext"})
+
+
+def _scanned(root: Path, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...]) -> list[tuple[Path, ast.Module]]:
+    return [
+        (path, ast.parse(path.read_text(), filename=str(path)))
+        for path in sorted(root.rglob("*.py"))
+        if path not in exempt and not any(path.is_relative_to(d) for d in exempt_dirs)
+    ]
+
+
+def _naming_sites(
+    root: Path,
+    names: frozenset[str],
+    *,
+    exempt: frozenset[Path],
+    exempt_dirs: tuple[Path, ...] = (),
+    src_root: Path = _SRC_DIR,
+) -> list[str]:
+    sites: set[tuple[str, int, str]] = set()
+    for path, tree in _scanned(root, exempt, exempt_dirs):
+        shown = str(path.relative_to(src_root.parent.parent))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in names:
+                sites.add((shown, node.lineno, node.id))
+            elif isinstance(node, ast.Attribute) and node.attr in names:
+                sites.add((shown, node.lineno, node.attr))
+            elif isinstance(node, ast.ImportFrom):
+                sites |= {(shown, node.lineno, alias.name) for alias in node.names if alias.name in names}
+    return [f"{shown}:{lineno} names {name}" for shown, lineno, name in sorted(sites)]
+
+
+def test_only_the_loop_driver_and_composition_roots_name_loop_context() -> None:
+    violations = _naming_sites(_SRC_DIR, _LOOP_CONTEXT, exempt=_LOOP_DRIVER | _COMPOSITION_ROOTS)
+    assert not violations, f"bzh:narrow-seams — a step types its ctx by its own Protocol, not LoopContext: {violations}"
+
+
+def test_only_the_roots_driver_and_edges_name_a_runner_store_bundle() -> None:
+    exempt = _LOOP_DRIVER | _COMPOSITION_ROOTS | {_RUNNER_DIR / "stores.py"}
+    violations = _naming_sites(_RUNNER_DIR, _STORE_BUNDLES, exempt=exempt, exempt_dirs=_RUNNER_EDGES)
+    assert not violations, f"bzh:narrow-seams — a runner core module takes individual store seams: {violations}"
+
+
+def test_no_runner_loop_module_is_a_composition_root_or_imports_composition() -> None:
+    violations = [str(root) for root in _COMPOSITION_ROOTS if root.is_relative_to(_LOOP_DIR)]
+    violations += _runner_composition_imports(_LOOP_DIR, exempt=frozenset())
+    assert not violations, f"bzh:narrow-seams — the loop is wired from outside, never wires itself: {violations}"
+
+
+def _declares_protocol(node: ast.ClassDef) -> bool:
+    return any(
+        (isinstance(base, ast.Name) and base.id == "Protocol")
+        or (isinstance(base, ast.Attribute) and base.attr == "Protocol")
+        for base in node.bases
+    )
+
+
+def _ctx_annotations(tree: ast.Module) -> list[tuple[int, ast.expr | None]]:
+    found: list[tuple[int, ast.expr | None]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            args = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            found += [(arg.lineno, arg.annotation) for arg in args if arg.arg == "ctx"]
+        elif isinstance(node, ast.ClassDef):
+            found += [
+                (stmt.lineno, stmt.annotation)
+                for stmt in node.body
+                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.target.id == "ctx"
+            ]
+    return found
+
+
+def _step_contexts(
+    root: Path, *, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...], src_root: Path = _SRC_DIR
+) -> tuple[list[str], set[str]]:
+    violations: list[str] = []
+    contexts: set[str] = set()
+    for path, tree in _scanned(root, exempt, exempt_dirs):
+        local = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and _declares_protocol(node)}
+        for lineno, annotation in _ctx_annotations(tree):
+            if isinstance(annotation, ast.Name) and annotation.id in local:
+                contexts.add(annotation.id)
+            else:
+                shown = ast.unparse(annotation) if annotation else "nothing"
+                violations.append(f"{path.relative_to(src_root.parent.parent)}:{lineno} types ctx by {shown}")
+    return violations, contexts
+
+
+def _conformance_sentinels(context_file: Path) -> set[str]:
+    tree = ast.parse(context_file.read_text(), filename=str(context_file))
+    return {
+        node.returns.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name.startswith("_conforms_")
+        and isinstance(node.returns, ast.Name)
+        and len(node.args.args) == 1
+        and isinstance(node.args.args[0].annotation, ast.Name)
+        and node.args.args[0].annotation.id == "LoopContext"
+    }
+
+
+def test_every_loop_step_types_its_context_by_a_protocol_it_declares() -> None:
+    exempt = _LOOP_DRIVER | _COMPOSITION_ROOTS
+    violations, _ = _step_contexts(_RUNNER_DIR, exempt=exempt, exempt_dirs=_RUNNER_EDGES)
+    assert not violations, f"bzh:narrow-seams — each step's ctx is a Protocol its module declares: {violations}"
+
+
+def test_loop_context_has_a_conformance_sentinel_for_every_step_context() -> None:
+    _, contexts = _step_contexts(_RUNNER_DIR, exempt=_LOOP_DRIVER | _COMPOSITION_ROOTS, exempt_dirs=_RUNNER_EDGES)
+    missing = sorted(contexts - _conformance_sentinels(_LOOP_DIR / "context.py"))
+    assert not missing, f"bzh:narrow-seams — loop/context.py proves LoopContext satisfies each step context: {missing}"
+
+
+def _plant_tree(tmp_path: Path, files: dict[str, str]) -> Path:
+    src = tmp_path / "src" / "blizzard"
+    for rel, text in files.items():
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text(text)
+    return src
+
+
+_TYPE_CHECKING_IMPORT = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    {}\n"
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "from blizzard.runner.loop.context import LoopContext",
+        "from .context import LoopContext",
+        "from blizzard.runner.loop import context\nx: context.LoopContext",
+        "import blizzard.runner.loop.context as c\nx: c.LoopContext",
+        _TYPE_CHECKING_IMPORT.format("from blizzard.runner.loop.context import LoopContext"),
+    ],
+)
+def test_loop_context_check_catches_every_naming_form(tmp_path: Path, statement: str) -> None:
+    src = _plant_tree(tmp_path, {"runner/loop/step.py": statement})
+    violations = _naming_sites(src, _LOOP_CONTEXT, exempt=frozenset(), src_root=src)
+    assert len(violations) == 1
+    assert violations[0].startswith("src/blizzard/runner/loop/step.py:")
+
+
+def test_loop_context_check_admits_the_driver_and_other_context_names(tmp_path: Path) -> None:
+    src = _plant_tree(
+        tmp_path,
+        {
+            "runner/loop/tick.py": "from blizzard.runner.loop.context import LoopContext",
+            "runner/loop/step.py": "from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription",
+        },
+    )
+    exempt = frozenset({src / "runner/loop/tick.py"})
+    assert _naming_sites(src, _LOOP_CONTEXT, exempt=exempt, src_root=src) == []
+
+
+_BUNDLE_FORMS = (
+    "from blizzard.runner.stores import {}",
+    _TYPE_CHECKING_IMPORT.format("from blizzard.runner.stores import {}"),
+    "def build(stores: {}) -> None: ...",
+)
+
+
+@pytest.mark.parametrize("name", sorted(_STORE_BUNDLES))
+@pytest.mark.parametrize("form", _BUNDLE_FORMS)
+def test_store_bundle_check_catches_a_bundle_outside_the_edges(tmp_path: Path, name: str, form: str) -> None:
+    src = _plant_tree(tmp_path, {"runner/domain/service.py": form.format(name)})
+    violations = _naming_sites(src / "runner", _STORE_BUNDLES, exempt=frozenset(), src_root=src)
+    assert violations == [f"src/blizzard/runner/domain/service.py:{len(form.splitlines())} names {name}"]
+
+
+def test_store_bundle_check_admits_the_edges_and_driver(tmp_path: Path) -> None:
+    statement = "from blizzard.runner.stores import RunnerStores, RunnerReadStores"
+    src = _plant_tree(
+        tmp_path,
+        dict.fromkeys(("runner/api/route.py", "runner/cli/verb.py", "runner/loop/steps.py"), statement),
+    )
+    edges = (src / "runner/api", src / "runner/cli")
+    exempt = frozenset({src / "runner/loop/steps.py"})
+    assert _naming_sites(src / "runner", _STORE_BUNDLES, exempt=exempt, exempt_dirs=edges, src_root=src) == []
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "import blizzard.runner.composition",
+        "from blizzard.runner.composition import RunnerProcess",
+        "from blizzard.runner import composition",
+        "from .. import composition",
+    ],
+)
+def test_loop_composition_check_catches_every_import_form(tmp_path: Path, statement: str) -> None:
+    src = _plant_tree(tmp_path, {"runner/loop/step.py": statement})
+    violations = _runner_composition_imports(src / "runner/loop", exempt=frozenset(), src_root=src)
+    assert violations == [f"src/blizzard/runner/loop/step.py:1 imports {_RUNNER_COMPOSITION_MODULE}"]
+
+
+_STEP_PROTOCOL = "from typing import Protocol\nclass StepContext(Protocol): ...\n"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "def step(ctx: LoopContext) -> None: ...",
+        "from blizzard.runner.loop.spawn import SpawnContext\ndef step(ctx: SpawnContext) -> None: ...",
+        "@dataclass\nclass Step:\n    ctx: LoopContext",
+    ],
+)
+def test_step_context_check_catches_a_foreign_or_bundle_context(tmp_path: Path, body: str) -> None:
+    src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body})
+    violations, _ = _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src)
+    assert len(violations) == 1
+    assert violations[0].startswith("src/blizzard/runner/loop/step.py:")
+
+
+def test_step_context_check_admits_a_local_protocol(tmp_path: Path) -> None:
+    body = "def step(ctx: StepContext) -> None: ...\n@dataclass\nclass Step:\n    ctx: StepContext\n"
+    src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body})
+    assert _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src) == ([], {"StepContext"})
+
+
+def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: Path) -> None:
+    sentinel = "def _conforms_to_{}(ctx: LoopContext) -> {}:\n        return ctx\n"
+    context = _TYPE_CHECKING_IMPORT.format(sentinel.format("other", "OtherContext"))
+    src = _plant_tree(
+        tmp_path,
+        {"runner/loop/step.py": _STEP_PROTOCOL + "def step(ctx: StepContext) -> None: ...\n"},
+    )
+    _, contexts = _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src)
+    (src / "runner/loop/context.py").write_text(context)
+    assert contexts - _conformance_sentinels(src / "runner/loop/context.py") == {"StepContext"}
+    (src / "runner/loop/context.py").write_text(context + "    " + sentinel.format("step", "StepContext"))
+    assert contexts - _conformance_sentinels(src / "runner/loop/context.py") == set()
 
 
 _DOMAIN_CORE_FORBIDDEN = ("fastapi", "starlette", "sqlalchemy", "click", "httpx")
@@ -1399,12 +1648,35 @@ class _RoleScan:
 
     def is_collaborator(self, name: str, path: Path) -> bool:
         """Whether ``name``, spelled in ``path``, is a port (an ``I[A-Z]…`` name a Protocol under
-        the root declares), a clock (a name ending in ``Clock``), or a class that infers
-        orchestration everywhere it can mean."""
+        the root declares), a clock (a name ending in ``Clock``), a class that infers
+        orchestration everywhere it can mean, or a Protocol that exposes a collaborator."""
+        return self._is_collaborator(name, path, frozenset())
+
+    def _is_collaborator(self, name: str, path: Path, seen: frozenset[int]) -> bool:
         if name in self.ports or name.endswith("Clock"):
             return True
         declared = self.declared(name, path)
-        return bool(declared) and all(id(site.node) in self.orchestration for site in declared)
+        if bool(declared) and all(id(site.node) in self.orchestration for site in declared):
+            return True
+        protocols = bool(declared) and all("Protocol" in site.bases for site in declared)
+        return protocols and all(self._exposes_collaborator(site, seen) for site in declared)
+
+    def _exposes_collaborator(self, site: _ClassSite, seen: frozenset[int]) -> bool:
+        """Whether a Protocol, through an attribute or property of its own or of a Protocol base,
+        hands out a collaborator — a narrowed view of a context that holds collaborators."""
+        if id(site.node) in seen:
+            return False
+        seen = seen | {id(site.node)}
+        for item in site.node.body:
+            if isinstance(item, ast.AnnAssign):
+                annotation = item.annotation
+            elif isinstance(item, ast.FunctionDef) and any(_terminal(d) == "property" for d in item.decorator_list):
+                annotation = item.returns
+            else:
+                continue
+            if any(self._is_collaborator(name, site.path, seen) for name in _direct_types(annotation)):
+                return True
+        return any(base != "Protocol" and self._is_collaborator(base, site.path, seen) for base in site.bases)
 
     def params(self, site: _ClassSite, seen: frozenset[int] = frozenset()) -> list[_Param]:
         """A data class's fields, inherited ones first; any other class's ``__init__`` parameters,
@@ -1656,6 +1928,7 @@ def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
         "@dataclass\nclass Disguised:\n    x: int\n    thing: IThing | None = None\n",
         "@dataclass\nclass Netted:\n    net: IPv4Network\n",
         "@dataclass\nclass Holder:\n    x: int\n    things: tuple[IThing, ...]\n",
+        "class Named(Protocol):\n    @property\n    def slug(self) -> str: ...\n\n@dataclass\nclass Holder:\n    x: int\n    named: Named\n",
         "@dto\n@dataclass\nclass Base:\n    x: int\n\n@dataclass\nclass Child(Base):\n    y: int\n",
         "@dto\n@dataclass\nclass ParseError:\n    x: int\n\n@dataclass\nclass Sub(ParseError):\n    y: int\n",
     ],
@@ -1682,6 +1955,10 @@ def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, sour
         "@dataclass\nclass Ctx:\n    thing: IThing\n\n@dataclass\nclass Step:\n    n: int\n    ctx: Ctx\n",
         "@dataclass\nclass Starts:\n    x: int\n    clock: InitVar[IClock]\n",
         "@dataclass\nclass Ctx:\n    thing: IThing\n\n@dataclass\nclass Narrower(Ctx):\n    n: int = 0\n",
+        "class StepContext(Protocol):\n    @property\n    def thing(self) -> IThing: ...\n\n"
+        "@dataclass\nclass Step:\n    n: int\n    ctx: StepContext\n",
+        "class Stores(Protocol):\n    thing: IThing\n\nclass BaseContext(Protocol):\n    stores: Stores\n\n"
+        "class StepContext(BaseContext, Protocol): ...\n\n@dataclass\nclass Step:\n    n: int\n    ctx: StepContext\n",
     ],
 )
 def test_role_marker_check_admits_a_declared_or_inferred_role(tmp_path: Path, source: str) -> None:

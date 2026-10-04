@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-import blizzard.runner.loop.build as loop_build
+import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.trace_driver import TraceSweepDriver
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.wire.facts import EVENT_RECORDED
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
@@ -113,7 +113,7 @@ def test_runner_tick_never_drives_the_sweep(tmp_path: Path, monkeypatch: pytest.
         built.append(graph)
         return graph
 
-    monkeypatch.setattr(loop_build, "build_runner_process", traced)
+    monkeypatch.setattr(loop_wiring, "build_runner_process", traced)
     LoopWiring.of(config).tick_once()
 
     assert built and built[0].trace_sweep is not None

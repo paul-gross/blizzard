@@ -8,15 +8,21 @@ its end**, so a session this run could not finish stays open for the next one to
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
+from blizzard.runner.domain.leases import IReadLeaseRecordRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.transcript_drain import HUB_CAPPED, TranscriptDrain
-from blizzard.runner.loop.transcript_pump import BACKFILL_INCOMPLETE, MAX_BUFFERED_BYTES, TranscriptPump
+from blizzard.runner.loop.transcript_drain import HUB_CAPPED, TranscriptDrain, TranscriptDrainContext
+from blizzard.runner.loop.transcript_pump import (
+    BACKFILL_INCOMPLETE,
+    MAX_BUFFERED_BYTES,
+    TranscriptPump,
+    TranscriptPumpStores,
+)
 from blizzard.runner.transcripts.ledger import (
     TranscriptBackfillLease,
     TranscriptSegmentState,
@@ -69,11 +75,21 @@ class TranscriptReshipReport:
     shipping_stopped_reason: str | None
 
 
+class TranscriptBackfillStores(TranscriptPumpStores, Protocol):
+    @property
+    def lease_record(self) -> IReadLeaseRecordRepository: ...
+
+
+class TranscriptBackfillContext(TranscriptDrainContext, Protocol):
+    @property
+    def stores(self) -> TranscriptBackfillStores: ...
+
+
 @dataclass(frozen=True)
 class TranscriptBackfill:
     """The ``blizzard runner transcript backfill`` verb's domain half."""
 
-    ctx: LoopContext
+    ctx: TranscriptBackfillContext
 
     def run(self, *, dry_run: bool = False, limit: int | None = None) -> TranscriptBackfillReport:
         """Import every session-bearing lease's transcript still on disk and not already

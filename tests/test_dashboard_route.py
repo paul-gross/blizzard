@@ -25,7 +25,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from tests.runner_fakes import FakeHarness, FakeHarnessHealth, make_read_stores, make_store, make_stores, no_retry_clock
+from tests.runner_fakes import FakeHarness, FakeHarnessHealth, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -41,8 +41,14 @@ def _app_with_status(
         handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1), verdict=None
     )
     service = RunnerStatusService(
-        make_read_stores(store),
         FixedClock(_NOW),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,

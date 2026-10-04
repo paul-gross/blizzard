@@ -20,9 +20,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.observability.analytics.extraction import extract_events
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Fill, Pull
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, transcript_segments, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config

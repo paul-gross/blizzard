@@ -24,7 +24,7 @@ from blizzard.runner.harness.preamble import (
     RESUME_STANDING_UNCHANGED,
     RESUME_UPDATED_NOTICE,
 )
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,

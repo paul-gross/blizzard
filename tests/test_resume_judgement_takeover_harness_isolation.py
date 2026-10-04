@@ -306,11 +306,15 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 # TAKEOVER (takeover.py:370 `_resolved_harness`).
 
 
-def _takeover_service(stores, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:  # type: ignore[no-untyped-def]
+def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:  # type: ignore[no-untyped-def]
     return TakeoverService(
-        stores,
         FixedClock(_NOW),
         FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspace_root="",
         harnesses=_two_harness_registry(harness_a, harness_b),
@@ -343,7 +347,7 @@ def test_takeover_opens_each_parked_chunk_through_its_own_harness(tmp_path) -> N
     handle_b = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=200, process_start_time="start-200", pgid=200)
     harness_a = FakeHarness(handle=handle_a, verdict=None)
     harness_b = FakeHarness(handle=handle_b, verdict=None)
-    service = _takeover_service(make_stores(store), harness_a=harness_a, harness_b=harness_b)
+    service = _takeover_service(store, harness_a=harness_a, harness_b=harness_b)
 
     opened_a = service.open(_open_scope(store, "ch_a"), force=False)
     opened_b = service.open(_open_scope(store, "ch_b"), force=False)
@@ -373,9 +377,13 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     handle_a = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     harness_a = FakeHarness(handle=handle_a, verdict=None)
     service = TakeoverService(
-        make_stores(store),
         FixedClock(_NOW),
         FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspace_root="",
         # Only `claude_code` is bound — `ch_b`'s own `unbound-harness` id resolves nowhere.

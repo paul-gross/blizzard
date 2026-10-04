@@ -28,7 +28,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import metadata
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_read_stores, make_stores, runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, runner_store_errors
 
 pytestmark = pytest.mark.component
 
@@ -96,8 +96,14 @@ def _build_app(
     )
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     runner_status = RunnerStatusService(
-        stores=make_read_stores(store),
         clock=SystemClock(),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
         runner_id=_RUNNER_ID,
         workspace_id="workspace-1",
         max_agents=1,

@@ -8,7 +8,7 @@ that parameter object, plus the loop's static config.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -156,7 +156,7 @@ class _NoUsageHttpClient:
 
 @dataclass(frozen=True)
 class LoopContext:
-    """Everything a step function reads — passed in, never module-global."""
+    """The loop driver's bundle — every step's narrow context is satisfied by it, never module-global."""
 
     stores: RunnerStores
     clock: IClock
@@ -238,3 +238,62 @@ class LoopContext:
         if position is None:
             return None, True
         return position.token, False
+
+
+if TYPE_CHECKING:
+    from blizzard.runner.loop.attempt import AttemptContext
+    from blizzard.runner.loop.claim import ClaimContext
+    from blizzard.runner.loop.dormant import DormantContext
+    from blizzard.runner.loop.drain import DrainContext
+    from blizzard.runner.loop.git_commits import GitCommitsContext
+    from blizzard.runner.loop.held_chunk import HeldChunkContext
+    from blizzard.runner.loop.judgement import JudgementContext
+    from blizzard.runner.loop.outbound import OutboundContext
+    from blizzard.runner.loop.overload import OverloadContext
+    from blizzard.runner.loop.spawn import SpawnContext
+    from blizzard.runner.loop.transcript_backfill import TranscriptBackfillContext
+    from blizzard.runner.loop.transcript_drain import TranscriptDrainContext
+    from blizzard.runner.loop.transcript_pump import TranscriptPumpContext
+    from blizzard.runner.loop.usage_limit import UsageLimitContext
+
+    def _conforms_to_outbound(ctx: LoopContext) -> OutboundContext:
+        return ctx
+
+    def _conforms_to_transcript_pump(ctx: LoopContext) -> TranscriptPumpContext:
+        return ctx
+
+    def _conforms_to_transcript_drain(ctx: LoopContext) -> TranscriptDrainContext:
+        return ctx
+
+    def _conforms_to_transcript_backfill(ctx: LoopContext) -> TranscriptBackfillContext:
+        return ctx
+
+    def _conforms_to_git_commits(ctx: LoopContext) -> GitCommitsContext:
+        return ctx
+
+    def _conforms_to_overload(ctx: LoopContext) -> OverloadContext:
+        return ctx
+
+    def _conforms_to_spawn(ctx: LoopContext) -> SpawnContext:
+        return ctx
+
+    def _conforms_to_attempt(ctx: LoopContext) -> AttemptContext:
+        return ctx
+
+    def _conforms_to_held_chunk(ctx: LoopContext) -> HeldChunkContext:
+        return ctx
+
+    def _conforms_to_drain(ctx: LoopContext) -> DrainContext:
+        return ctx
+
+    def _conforms_to_claim(ctx: LoopContext) -> ClaimContext:
+        return ctx
+
+    def _conforms_to_usage_limit(ctx: LoopContext) -> UsageLimitContext:
+        return ctx
+
+    def _conforms_to_dormant(ctx: LoopContext) -> DormantContext:
+        return ctx
+
+    def _conforms_to_judgement(ctx: LoopContext) -> JudgementContext:
+        return ctx

@@ -24,7 +24,7 @@ import uvicorn
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,

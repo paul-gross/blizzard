@@ -50,7 +50,6 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
-    make_stores,
 )
 
 pytestmark = pytest.mark.component
@@ -65,9 +64,13 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):  # type: ignore[no-untyped-def]
     return TakeoverService(
-        make_stores(store),
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspace_root=workspace_root,
         harnesses=HarnessRegistry(
@@ -242,9 +245,13 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         }
     )
     service = TakeoverService(
-        make_stores(store),
         FixedClock(_NOW),
         FakeProbe(),
+        takeover=store,
+        asks=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         harnesses=resolved,
         workspace_root="",

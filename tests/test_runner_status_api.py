@@ -25,7 +25,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from tests.runner_fakes import FakeHarness, FakeProbe, make_read_stores, make_store, make_stores
+from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -48,8 +48,14 @@ def _app_with_status(
         verdict=None,
     )
     service = RunnerStatusService(
-        make_read_stores(store),
         clock or FixedClock(_NOW),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
@@ -593,8 +599,14 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     probe = FakeProbe()
     service = RunnerStatusService(
-        make_read_stores(store),
         FixedClock(_NOW),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
         runner_id="runner-local",
         workspace_id="workspace-local",
         max_agents=2,
