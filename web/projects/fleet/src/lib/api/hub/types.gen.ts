@@ -4337,7 +4337,7 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  */
-export type RecordKind = 'work_source' | 'secret';
+export type RecordKind = 'work_source' | 'secret' | 'repository';
 
 /**
  * RecordRefView
@@ -4353,6 +4353,128 @@ export type RecordRefView = {
      * Kind
      */
     kind: string;
+};
+
+/**
+ * RepositoriesListView
+ *
+ * Every stored repository — ``GET /api/repositories``.
+ */
+export type RepositoriesListView = {
+    /**
+     * Repositories
+     */
+    repositories?: Array<RepositorySummary>;
+};
+
+/**
+ * RepositoryDocument
+ *
+ * A repository as a document — the create body, and the model whose JSON Schema
+ * ``GET /api/config/schema/repositories`` serves. ``secret_name`` names a stored secret.
+ */
+export type RepositoryDocument = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Forge Api Url
+     */
+    forge_api_url: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+};
+
+/**
+ * RepositoryPatchRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
+ * ``null`` is refused on every field. ``name`` is immutable, so a body carrying it is refused.
+ */
+export type RepositoryPatchRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch?: string | null;
+    /**
+     * Forge Api Url
+     */
+    forge_api_url?: string | null;
+    /**
+     * Owner
+     */
+    owner?: string | null;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+    /**
+     * Secret Name
+     */
+    secret_name?: string | null;
+};
+
+/**
+ * RepositorySummary
+ *
+ * One repository — the ``GET /api/repositories`` listing row and every record verb's view.
+ */
+export type RepositorySummary = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Forge Api Url
+     */
+    forge_api_url: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
 };
 
 /**
@@ -10860,6 +10982,217 @@ export type ReadyApiReadyGetResponses = {
 };
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
+
+export type ListRepositoriesApiRepositoriesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/repositories';
+};
+
+export type ListRepositoriesApiRepositoriesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRepositoriesApiRepositoriesGetError = ListRepositoriesApiRepositoriesGetErrors[keyof ListRepositoriesApiRepositoriesGetErrors];
+
+export type ListRepositoriesApiRepositoriesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoriesListView;
+};
+
+export type ListRepositoriesApiRepositoriesGetResponse = ListRepositoriesApiRepositoriesGetResponses[keyof ListRepositoriesApiRepositoriesGetResponses];
+
+export type CreateRepositoryApiRepositoriesPostData = {
+    body: RepositoryDocument;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/repositories';
+};
+
+export type CreateRepositoryApiRepositoriesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRepositoryApiRepositoriesPostError = CreateRepositoryApiRepositoriesPostErrors[keyof CreateRepositoryApiRepositoriesPostErrors];
+
+export type CreateRepositoryApiRepositoriesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RepositorySummary;
+};
+
+export type CreateRepositoryApiRepositoriesPostResponse = CreateRepositoryApiRepositoriesPostResponses[keyof CreateRepositoryApiRepositoriesPostResponses];
+
+export type GetRepositoryApiRepositoriesNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/repositories/{name}';
+};
+
+export type GetRepositoryApiRepositoriesNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRepositoryApiRepositoriesNameGetError = GetRepositoryApiRepositoriesNameGetErrors[keyof GetRepositoryApiRepositoriesNameGetErrors];
+
+export type GetRepositoryApiRepositoriesNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositorySummary;
+};
+
+export type GetRepositoryApiRepositoriesNameGetResponse = GetRepositoryApiRepositoriesNameGetResponses[keyof GetRepositoryApiRepositoriesNameGetResponses];
+
+export type PatchRepositoryApiRepositoriesNamePatchData = {
+    body: RepositoryPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/repositories/{name}';
+};
+
+export type PatchRepositoryApiRepositoriesNamePatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchRepositoryApiRepositoriesNamePatchError = PatchRepositoryApiRepositoriesNamePatchErrors[keyof PatchRepositoryApiRepositoriesNamePatchErrors];
+
+export type PatchRepositoryApiRepositoriesNamePatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositorySummary;
+};
+
+export type PatchRepositoryApiRepositoriesNamePatchResponse = PatchRepositoryApiRepositoriesNamePatchResponses[keyof PatchRepositoryApiRepositoriesNamePatchResponses];
+
+export type EnableRepositoryApiRepositoriesNameEnablePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/repositories/{name}/enable';
+};
+
+export type EnableRepositoryApiRepositoriesNameEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableRepositoryApiRepositoriesNameEnablePostError = EnableRepositoryApiRepositoriesNameEnablePostErrors[keyof EnableRepositoryApiRepositoriesNameEnablePostErrors];
+
+export type EnableRepositoryApiRepositoriesNameEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositorySummary;
+};
+
+export type EnableRepositoryApiRepositoriesNameEnablePostResponse = EnableRepositoryApiRepositoriesNameEnablePostResponses[keyof EnableRepositoryApiRepositoriesNameEnablePostResponses];
+
+export type RetireRepositoryApiRepositoriesNameRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/repositories/{name}/retire';
+};
+
+export type RetireRepositoryApiRepositoriesNameRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireRepositoryApiRepositoriesNameRetirePostError = RetireRepositoryApiRepositoriesNameRetirePostErrors[keyof RetireRepositoryApiRepositoriesNameRetirePostErrors];
+
+export type RetireRepositoryApiRepositoriesNameRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositorySummary;
+};
+
+export type RetireRepositoryApiRepositoriesNameRetirePostResponse = RetireRepositoryApiRepositoriesNameRetirePostResponses[keyof RetireRepositoryApiRepositoriesNameRetirePostResponses];
 
 export type ListRoutinesApiRoutinesGetData = {
     body?: never;

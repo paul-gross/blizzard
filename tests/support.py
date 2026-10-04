@@ -92,6 +92,7 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -120,7 +121,11 @@ def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) ->
     """The one configured-record writer over ``engine``, sealing under ``keys``."""
     store = hub_store_connections(engine)
     return ConfigAuthoring(
-        work_sources=WorkSourceRecordStore(store), secrets=SecretStore(store), cipher=secret_cipher(keys), clock=clock
+        work_sources=WorkSourceRecordStore(store),
+        repositories=RepositoryRecordStore(store),
+        secrets=SecretStore(store),
+        cipher=secret_cipher(keys),
+        clock=clock,
     )
 
 

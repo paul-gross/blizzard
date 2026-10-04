@@ -10,7 +10,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 
-_KINDS = click.Choice(["work_source", "secret"])
+_KINDS = click.Choice(["work_source", "repository", "secret"])
 
 
 class ChangeListing(Listing):

@@ -11,6 +11,7 @@ import base64
 from datetime import datetime
 
 from sqlalchemy import insert, select, update
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.config.changes import ConfigChange
@@ -29,7 +30,7 @@ from blizzard.hub.domain.secrets import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.work_source_record_store import active_referrers
+from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 
 _METADATA = (
@@ -39,6 +40,20 @@ _METADATA = (
     secrets.c.replaced_by,
     secrets.c.created_at,
 )
+
+
+def secret_unavailable(conn: Connection, name: str) -> bool | None:
+    """Why a configured record may not reference ``name``: ``False`` when no such secret
+    exists, ``True`` when it is retired, ``None`` when it is usable."""
+    if conn.execute(select(secrets.c.name).where(secrets.c.name == name)).first() is None:
+        return False
+    newest = conn.execute(
+        select(secret_lifecycle_facts.c.retired)
+        .where(secret_lifecycle_facts.c.name == name)
+        .order_by(secret_lifecycle_facts.c.id.desc())
+        .limit(1)
+    ).first()
+    return True if newest is not None and newest.retired else None
 
 
 class SecretStore:

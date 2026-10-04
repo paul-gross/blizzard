@@ -3998,6 +3998,423 @@
       "path": "hub record-marker",
       "short_help": "A hub command node's ``run:`` script: record a marker artifact mid-run (#65)."
     },
+    "repo": {
+      "commands": {
+        "create": {
+          "help": "Add repository NAME at revision 1.\n\nRefused when the name or the forge, owner and repo are already taken \u2014 a retired repository keeps its\nclaim \u2014 or when the secret is missing or retired. A stored repository does not yet change where the hub\ndelivers.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge's API origin, an http(s) URL.",
+              "hidden": false,
+              "kind": "option",
+              "name": "forge_api_url",
+              "opts": [
+                "--forge-api-url"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The repository's owner on the forge.",
+              "hidden": false,
+              "kind": "option",
+              "name": "owner",
+              "opts": [
+                "--owner"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The repository's name on the forge.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repo",
+              "opts": [
+                "--repo"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The branch work lands on.",
+              "hidden": false,
+              "kind": "option",
+              "name": "base_branch",
+              "opts": [
+                "--base-branch"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The stored secret holding the forge token.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo create",
+          "short_help": "Add repository NAME at revision 1."
+        },
+        "edit": {
+          "help": "Change only the fields given on NAME; every other field keeps its value.\n\nA change that leaves every field as it is writes nothing and keeps the revision. Refused when\n--if-match names a stale revision.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new forge API origin.",
+              "hidden": false,
+              "kind": "option",
+              "name": "forge_api_url",
+              "opts": [
+                "--forge-api-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new owner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "owner",
+              "opts": [
+                "--owner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new repository name on the forge.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repo",
+              "opts": [
+                "--repo"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new base branch.",
+              "hidden": false,
+              "kind": "option",
+              "name": "base_branch",
+              "opts": [
+                "--base-branch"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new forge-token secret.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the repository is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo edit",
+          "short_help": "Change only the fields given on NAME; every other field keeps its value."
+        },
+        "enable": {
+          "help": "Re-enable a retired NAME. Refused while its secret is retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the repository is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo enable",
+          "short_help": "Re-enable a retired NAME."
+        },
+        "list": {
+          "help": "List every repository \u2014 name, revision, state, owner/repo, base branch.",
+          "params": [
+            {
+              "help": "Also list retired repositories.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo list",
+          "short_help": "List every repository \u2014 name, revision, state, owner/repo, base branch."
+        },
+        "retire": {
+          "help": "Retire NAME: it leaves the default list and keeps its coordinate, so no other repository takes it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the repository is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo retire",
+          "short_help": "Retire NAME: it leaves the default list and keeps its coordinate, so no other repository takes it."
+        },
+        "show": {
+          "help": "Show NAME's fields, revision, and who created it and when.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo show",
+          "short_help": "Show NAME's fields, revision, and who created it and when."
+        }
+      },
+      "help": "Operator verbs over repository records: create, list, show, edit, retire, enable.",
+      "params": [],
+      "path": "hub repo",
+      "short_help": "Operator verbs over repository records: create, list, show, edit, retire, enable."
+    },
     "rotate-signing-key": {
       "help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``).",
       "params": [

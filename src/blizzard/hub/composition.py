@@ -59,6 +59,7 @@ from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.delete import DeleteService
@@ -144,12 +145,14 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
@@ -288,10 +291,12 @@ class HubServices:
     secret_catalog: ISecretCatalog
     #: The active configured records naming each secret.
     secret_references: ISecretReferences
-    #: The one writer of configured records — work sources and secrets, each write with its change row.
+    #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
     config_authoring: ConfigAuthoring
     #: Stored work-source records (the read half; ``work_sources`` is the boot-built registry).
     work_source_records: IReadWorkSourceRepository
+    #: Stored repository records (the read half).
+    repository_records: IReadRepositoryRecordRepository
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: The routine read Protocol — the same store instance as
@@ -377,6 +382,10 @@ class HubCore:
     secrets: SecretStore
     #: Work-source records — composition-only write half; ``HubServices`` carries the read half.
     work_source_records: WorkSourceRecordStore
+    #: Repository records — composition-only write half; ``HubServices`` carries the read half.
+    repository_records: RepositoryRecordStore
+    #: Which active configured records name each secret, across every referring kind.
+    secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
     clock: IClock
 
@@ -422,6 +431,8 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         garden_proposal_closure_store=garden_proposal_closure_store,
         secrets=SecretStore(store_connections),
         work_source_records=WorkSourceRecordStore(store_connections),
+        repository_records=RepositoryRecordStore(store_connections),
+        secret_referrers=SecretReferrersStore(store_connections),
         config_changes=ConfigChangeStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
@@ -837,14 +848,16 @@ def build_services(
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=core.secrets,
-        secret_references=core.work_source_records,
+        secret_references=core.secret_referrers,
         config_authoring=ConfigAuthoring(
             work_sources=core.work_source_records,
+            repositories=core.repository_records,
             secrets=core.secrets,
             cipher=secret_cipher(secret_keys),
             clock=clock,
         ),
         work_source_records=core.work_source_records,
+        repository_records=core.repository_records,
         config_changes=core.config_changes,
         routines=routine_store,
         routine_scopes=routine_scope_store,

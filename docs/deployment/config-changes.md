@@ -1,6 +1,6 @@
 # Configuration changes
 
-Every committed write to a stored work source or secret appends one row to the hub's change log, in the same transaction
+Every committed write to a stored work source, repository, or secret appends one row to the hub's change log, in the same transaction
 as the write. A write that changes nothing appends nothing.
 
 ## Reading the log
@@ -12,7 +12,7 @@ blizzard hub config changes --kind work_source --key blizzard --all
 
 Rows come newest first. Each carries the acting user, the door, the kind and key of the record, the record's revision
 after the change, the operation, and the fields that changed. Without `--all` the verb prints the newest page; `--kind`
-is `work_source` or `secret`, and `--key` narrows to one record. `--json` prints the raw rows.
+is `work_source`, `repository`, or `secret`, and `--key` narrows to one record. `--json` prints the raw rows.
 
 Over HTTP the same log is `GET /api/config/changes?record_kind=&record_key=&before=&limit=`, newest first, at most 200
 rows a page. Pass the response's `next_before` as `before` to read the next page; it is `null` on the last. Reading

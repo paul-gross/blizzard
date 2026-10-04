@@ -17,6 +17,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.wire.config import ConfigChangesPage, ConfigChangeView, FieldChangeView
+from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.work_source import WorkSourceDocument
 
 router = APIRouter(
@@ -28,7 +29,7 @@ router = APIRouter(
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
 
-_SCHEMAS = {"work-sources": WorkSourceDocument}
+_SCHEMAS = {"work-sources": WorkSourceDocument, "repositories": RepositoryDocument}
 
 
 def _view(change: ConfigChange) -> ConfigChangeView:
