@@ -25,7 +25,8 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
-from blizzard.hub.domain.runners.activity import ActivityEntry
+from blizzard.hub.domain.runners.registration import RecordedPause
+from blizzard.wire.sse import ActivityChunkChangeCause
 
 if TYPE_CHECKING:
     # Deferred: ``ports.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
@@ -613,13 +614,41 @@ class EventFeed:
         )
 
 
+@dto
+@dataclass(frozen=True)
+class ActivityEntry:
+    """One row of the activity feed — a historical fact reshaped into the
+    same vocabulary a live SSE frame carries. ``type`` mirrors a frame-type constant as a
+    plain string (``bzh:domain-core``); ``key`` is a table-qualified natural key used only
+    as the sort tiebreak; ``at`` is the fact's own recorded instant."""
+
+    type: str
+    key: str
+    at: datetime
+    # chunk-changed
+    chunk_id: str | None = None
+    status: str | None = None
+    prev_status: str | None = None
+    node: str | None = None
+    prev_node: str | None = None
+    runner_id: str | None = None
+    cause: ActivityChunkChangeCause | None = None
+    graph_id: str | None = None
+    # event-logged
+    severity: EventLogSeverity | None = None
+    kind: str | None = None
+    # runner-changed
+    by: str | None = None
+    reason: str | None = None
+
+
 @domain_model
 @dataclass(frozen=True)
 class ActivityFeed:
     """The activity feed's three already-bounded per-source reads, merged.
 
-    Merge only: sorts by ``(at desc, key desc)`` — ``key`` breaking an exact-instant tie
-    — and caps to ``limit``."""
+    Reshapes the event and runner pause-fact reads into the common row, sorts by
+    ``(at desc, key desc)`` — ``key`` breaking an exact-instant tie — and caps to ``limit``."""
 
     rows: list[ActivityEntry]
 
@@ -628,11 +657,15 @@ class ActivityFeed:
         cls,
         chunk_changed: Sequence[ActivityEntry],
         events: Sequence[OperationalEvent],
-        runner_changed: Sequence[ActivityEntry],
+        runner_changed: Sequence[RecordedPause],
         *,
         limit: int,
     ) -> ActivityFeed:
-        merged = [*chunk_changed, *(cls._of_event(e) for e in events), *runner_changed]
+        merged = [
+            *chunk_changed,
+            *(cls._of_event(e) for e in events),
+            *(cls._of_pause(p) for p in runner_changed),
+        ]
         merged.sort(key=lambda row: (row.at, row.key), reverse=True)
         return cls(merged[:limit])
 
@@ -648,6 +681,20 @@ class ActivityFeed:
             runner_id=row.runner_id,
             severity=row.severity,
             kind=row.kind,
+        )
+
+    @staticmethod
+    def _of_pause(fact: RecordedPause) -> ActivityEntry:
+        """One runner pause-family fact reshaped into the feed's ``runner-changed`` row: its
+        ``kind`` is ``paused``/``resumed``, prefixed ``locally-`` for the runner's own brake."""
+        return ActivityEntry(
+            type="runner-changed",
+            key=fact.key,
+            at=fact.at,
+            runner_id=fact.runner_id,
+            kind=f"{'locally-' if fact.local else ''}{'paused' if fact.paused else 'resumed'}",
+            by=fact.by,
+            reason=fact.reason,
         )
 
 

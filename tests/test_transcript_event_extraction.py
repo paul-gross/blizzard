@@ -5,12 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.observability.analytics.extraction import (
-    KIND_AGENT_SPAWN,
-    KIND_FILE_READ,
-    KIND_SKILL_INVOCATION,
-    extract_events,
-)
+from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
+from blizzard.hub.domain.observability.analytics.extraction import extract_events
 from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
 
 pytestmark = pytest.mark.unit

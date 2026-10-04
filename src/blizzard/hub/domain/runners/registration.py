@@ -15,7 +15,6 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.domain.runners.route import Route
 
 #: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
@@ -80,6 +79,22 @@ class LifecycleFact:
     retired: bool
     at: datetime
     by: str
+
+
+@dto
+@dataclass(frozen=True)
+class RecordedPause:
+    """One pause-family fact as recorded: the fleet brake (``local=False``) or the runner's own
+    local brake (``local=True``), engaged (``paused=True``) or released. ``key`` is a natural key
+    unique across both brakes' facts; ``reason`` is carried by a local brake alone."""
+
+    key: str
+    at: datetime
+    runner_id: str
+    local: bool
+    paused: bool
+    by: str | None
+    reason: str | None = None
 
 
 @dto
@@ -447,9 +462,9 @@ class IReadRunnerRegistry(Protocol):
         uniformly readable off a request, so a principal resolves from the token alone."""
         ...
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
-        """Every ``runner-changed`` activity row off the fleet's two pause-family fact tables, at or
-        after ``since``; ``registered``/``heartbeat`` carry no fact table. On this seam,
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
+        """Every fact off the fleet's two pause-family fact tables at or after ``since``;
+        ``registered``/``heartbeat`` carry no fact table. On this seam,
         not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
         read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
         returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""

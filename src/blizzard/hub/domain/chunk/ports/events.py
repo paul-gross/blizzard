@@ -7,8 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, OperationalEvent
-from blizzard.hub.domain.runners.activity import ActivityEntry
+from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
 
 
 class IReadChunkEventsRepository(Protocol):

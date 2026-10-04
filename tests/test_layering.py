@@ -1178,6 +1178,132 @@ def test_a_domain_init_that_imports_a_name_is_flagged(tmp_path: Path) -> None:
     assert _domain_init_reexports(tmp_path) == ["garden/__init__.py"]
 
 
+def _module_bindings(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """The names a module binds at its top level — including inside a top-level ``if``, ``try``, or
+    ``with`` — split into the ones it defines and the ones it only imports."""
+    defined: set[str] = set()
+    imported: set[str] = set()
+
+    def walk(body: list[ast.stmt]) -> None:
+        for node in body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                defined.add(node.name)
+            elif isinstance(node, ast.Assign):
+                defined.update(n.id for target in node.targets for n in ast.walk(target) if isinstance(n, ast.Name))
+            elif isinstance(node, ast.AnnAssign | ast.AugAssign) and isinstance(node.target, ast.Name):
+                defined.add(node.target.id)
+            elif isinstance(node, ast.TypeAlias):
+                defined.add(node.name.id)
+            elif isinstance(node, ast.Import):
+                imported.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.update(alias.asname or alias.name for alias in node.names)
+            elif isinstance(node, ast.If | ast.Try | ast.With):
+                walk(node.body)
+                walk(getattr(node, "orelse", []))
+                walk(getattr(node, "finalbody", []))
+                for handler in getattr(node, "handlers", []):
+                    walk(handler.body)
+
+    walk(tree.body)
+    return defined, imported - defined
+
+
+def _domain_second_spellings(src_root: Path, domain_dir: Path, importer_roots: Iterable[Path]) -> list[str]:
+    """Every ``from <module> import <name>`` under ``importer_roots`` whose ``<module>`` sits under
+    ``domain_dir`` and only imports ``<name>`` rather than defining it — a second import path for a
+    name defined elsewhere. Relative imports resolve against the importer's package when it sits
+    under ``src_root``."""
+    umbrella = list(domain_dir.relative_to(src_root).parts)
+    bindings: dict[tuple[str, ...], set[str] | None] = {}
+
+    def only_imported(module: tuple[str, ...]) -> set[str] | None:
+        if module not in bindings:
+            base = src_root.joinpath(*module)
+            path = base.with_suffix(".py") if base.with_suffix(".py").is_file() else base / "__init__.py"
+            bindings[module] = _module_bindings(ast.parse(path.read_text()))[1] if path.is_file() else None
+        return bindings[module]
+
+    violations: list[str] = []
+    for root in importer_roots:
+        for path in sorted(root.rglob("*.py")):
+            package = (
+                list(path.relative_to(src_root).with_suffix("").parts)[:-1] if path.is_relative_to(src_root) else None
+            )
+            for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.level:
+                    if package is None:
+                        continue
+                    module = [*package[: len(package) - (node.level - 1)], *(node.module or "").split(".")]
+                else:
+                    module = (node.module or "").split(".")
+                module = [part for part in module if part]
+                if module[: len(umbrella)] != umbrella:
+                    continue
+                reexported = only_imported(tuple(module)) or set()
+                violations.extend(
+                    f"{path.relative_to(root.parent)}:{node.lineno} imports {alias.name} from {'.'.join(module)}"
+                    for alias in node.names
+                    if alias.name in reexported
+                )
+    return violations
+
+
+def test_each_hub_domain_name_has_one_import_path() -> None:
+    violations = _domain_second_spellings(_SRC_DIR.parent, _HUB_DOMAIN_DIR, (_SRC_DIR, _TESTS_DIR))
+    assert not violations, f"import a hub domain name from the module that defines it: {violations}"
+
+
+def _plant_second_spelling(tmp_path: Path, rel: str, text: str) -> list[str]:
+    """A two-package hub domain — ``operations/queue.py`` imports ``ChunkNotFound`` from
+    ``chunk/errors.py``, which defines it — with ``text`` written at ``rel`` under ``tmp_path``."""
+    src = tmp_path / "src"
+    domain = src / "blizzard" / "hub" / "domain"
+    for path, body in {
+        domain / "__init__.py": "",
+        domain / "chunk" / "__init__.py": "",
+        domain / "chunk" / "errors.py": "class ChunkNotFound(Exception):\n    pass\n",
+        domain / "operations" / "__init__.py": "",
+        domain / "operations" / "queue.py": (
+            "from typing import TYPE_CHECKING\n"
+            "from blizzard.hub.domain.chunk.errors import ChunkNotFound\n"
+            "from blizzard.hub.domain.chunk import errors as chunk_errors\n"
+            "if TYPE_CHECKING:\n    from blizzard.hub.domain.chunk.errors import ChunkNotFound as Missing\n"
+            "from blizzard.foundation.ids import Id\nId = Id\n"
+            "class GroupService:\n    pass\n"
+        ),
+        tmp_path / rel: text,
+    }.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+    return _domain_second_spellings(src, domain, (src / "blizzard", tmp_path / "tests"))
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "caught"),
+    [
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import ChunkNotFound\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import chunk_errors\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import Missing\n", True),
+        ("tests/test_queue.py", "def f():\n    from blizzard.hub.domain.operations.queue import ChunkNotFound\n", True),
+        ("src/blizzard/hub/domain/operations/run.py", "from .queue import ChunkNotFound\n", True),
+        ("src/blizzard/hub/api/chunks.py", "from ..domain.operations.queue import ChunkNotFound\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.chunk.errors import ChunkNotFound\n", False),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import GroupService, Id\n", False),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations import queue\n", False),
+        ("src/blizzard/hub/domain/operations/run.py", "from ..chunk.errors import ChunkNotFound\n", False),
+        ("tests/test_queue.py", "from blizzard.foundation.ids import Id\n", False),
+    ],
+)
+def test_domain_second_spelling_check_flags_an_import_through_an_importer(
+    tmp_path: Path, rel: str, text: str, caught: bool
+) -> None:
+    violations = _plant_second_spelling(tmp_path, rel, text)
+    assert len(violations) == (1 if caught else 0), violations
+
+
 def test_hub_domain_package_layers_are_acyclic() -> None:
     assert _layer_cycle(_DOMAIN_PACKAGE_LAYERS) == []
     assert all(dep in _DOMAIN_PACKAGE_LAYERS for deps in _DOMAIN_PACKAGE_LAYERS.values() for dep in deps)

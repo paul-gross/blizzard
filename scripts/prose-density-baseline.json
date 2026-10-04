@@ -1856,7 +1856,7 @@
    "comments": 1,
    "docstrings": 20,
    "over_cap": 0,
-   "total": 160
+   "total": 159
   },
   "blizzard/hub/api/findings.py": {
    "comments": 3,
@@ -2489,10 +2489,10 @@
    "total": 89
   },
   "blizzard/hub/domain/chunk/model.py": {
-   "comments": 82,
-   "docstrings": 430,
+   "comments": 85,
+   "docstrings": 436,
    "over_cap": 13,
-   "total": 1828
+   "total": 1875
   },
   "blizzard/hub/domain/chunk/ports/__init__.py": {
    "comments": 0,
@@ -2534,7 +2534,7 @@
    "comments": 0,
    "docstrings": 27,
    "over_cap": 1,
-   "total": 88
+   "total": 87
   },
   "blizzard/hub/domain/chunk/ports/exclusive.py": {
    "comments": 0,
@@ -3268,12 +3268,6 @@
    "over_cap": 0,
    "total": 0
   },
-  "blizzard/hub/domain/runners/activity.py": {
-   "comments": 3,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 38
-  },
   "blizzard/hub/domain/runners/enrollment.py": {
    "comments": 3,
    "docstrings": 12,
@@ -3282,9 +3276,9 @@
   },
   "blizzard/hub/domain/runners/registration.py": {
    "comments": 27,
-   "docstrings": 138,
+   "docstrings": 141,
    "over_cap": 5,
-   "total": 596
+   "total": 611
   },
   "blizzard/hub/domain/runners/route.py": {
    "comments": 0,
@@ -3566,7 +3560,7 @@
    "comments": 11,
    "docstrings": 25,
    "over_cap": 3,
-   "total": 664
+   "total": 663
   },
   "blizzard/hub/store/internal/chunk_exclusive_store.py": {
    "comments": 0,
@@ -7738,7 +7732,7 @@
    "comments": 1,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 99
+   "total": 131
   },
   "test_activity_feed_store.py": {
    "comments": 5,
@@ -9274,7 +9268,7 @@
    "comments": 3,
    "docstrings": 32,
    "over_cap": 0,
-   "total": 395
+   "total": 396
   },
   "test_harness_provenance_migration_replay.py": {
    "comments": 11,
@@ -9662,9 +9656,9 @@
   },
   "test_layering.py": {
    "comments": 22,
-   "docstrings": 160,
+   "docstrings": 168,
    "over_cap": 7,
-   "total": 2446
+   "total": 2572
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -11590,13 +11584,13 @@
    "comments": 28,
    "docstrings": 52,
    "over_cap": 1,
-   "total": 704
+   "total": 705
   },
   "test_transcript_event_extraction.py": {
    "comments": 4,
    "docstrings": 16,
    "over_cap": 0,
-   "total": 347
+   "total": 343
   },
   "test_transcript_event_store.py": {
    "comments": 10,

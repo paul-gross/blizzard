@@ -16,11 +16,11 @@ from sqlalchemy import Select, insert, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
+    RecordedPause,
     RunnerCapability,
     RunnerRegistration,
     SubscriptionUsageMiss,
@@ -33,7 +33,6 @@ from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 
-
 def locked_token_hash(runner_id: str) -> Select[tuple[str | None]]:
     """The runner's current token hash, read under its registration row's lock (``FOR UPDATE``
     where the backend has one; SQLite serializes writers instead)."""
@@ -42,6 +41,7 @@ def locked_token_hash(runner_id: str) -> Select[tuple[str | None]]:
         .where(s.runner_registrations.c.runner_id == runner_id)
         .with_for_update()
     )
+
 
 class RunnerRegistryStore:
     """Read-write fleet-registry adapter over the hub store engine."""
@@ -122,7 +122,7 @@ class RunnerRegistryStore:
                 self._lifecycle(conn, row.runner_id),
             )
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
         with self._store.read("list_pause_facts_since") as conn:
             fleet_rows = conn.execute(
                 select(s.runner_pause_facts)
@@ -137,25 +137,25 @@ class RunnerRegistryStore:
                 .limit(limit)
             ).all()
         fleet = [
-            ActivityEntry(
-                type="runner-changed",
+            RecordedPause(
                 key=f"runner_pause_facts:{r.id}",
                 at=r.set_at,
                 runner_id=r.runner_id,
-                kind="paused" if r.paused else "resumed",
+                local=False,
+                paused=r.paused,
                 by=r.set_by,
             )
             for r in fleet_rows
         ]
         local = [
-            ActivityEntry(
-                type="runner-changed",
+            RecordedPause(
                 key=f"runner_local_pause_facts:{r.id}",
                 # `set_at` is the runner-machine's own clock, so a skewed one can float a
                 # row out of this window — a known gap, not fixable without a schema change.
                 at=r.set_at,
                 runner_id=r.runner_id,
-                kind="locally-paused" if r.paused else "locally-resumed",
+                local=True,
+                paused=r.paused,
                 by=r.set_by,
                 reason=r.reason,
             )

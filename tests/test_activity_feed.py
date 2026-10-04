@@ -1,6 +1,6 @@
 """``ActivityFeed`` (unit tier) — the pure merge/sort/cap behind the board's
 Event log page-load backfill. Built from already-loaded
-:class:`ActivityEntry`/:class:`OperationalEvent` literals — no store; the per-source bounded reads
+:class:`ActivityEntry`/:class:`OperationalEvent`/:class:`RecordedPause` literals — no store; the per-source bounded reads
 are exercised at the component tier (``tests/test_activity_feed_store.py``).
 """
 
@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.chunk.model import ActivityFeed, OperationalEvent
-from blizzard.hub.domain.runners.activity import ActivityEntry
+from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
+from blizzard.hub.domain.runners.registration import RecordedPause
 from blizzard.wire.sse import ActivityChunkChangeCause
 
 pytestmark = pytest.mark.unit
@@ -44,8 +44,8 @@ def _event(id_: int, *, at: datetime) -> OperationalEvent:
     )
 
 
-def _runner_changed(key: str, *, at: datetime) -> ActivityEntry:
-    return ActivityEntry(type="runner-changed", key=key, at=at, runner_id="runner-a", kind="paused")
+def _runner_changed(key: str, *, at: datetime) -> RecordedPause:
+    return RecordedPause(key=key, at=at, runner_id="runner-a", local=False, paused=True, by="alice")
 
 
 def test_empty_source_set_returns_empty_list() -> None:
@@ -95,5 +95,37 @@ def test_event_row_reshapes_into_an_event_logged_activity_row() -> None:
             runner_id="runner-a",
             severity="info",
             kind="some.kind",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("local", "paused", "kind"),
+    [
+        (False, True, "paused"),
+        (False, False, "resumed"),
+        (True, True, "locally-paused"),
+        (True, False, "locally-resumed"),
+    ],
+)
+def test_pause_fact_reshapes_into_a_runner_changed_activity_row(local: bool, paused: bool, kind: str) -> None:
+    fact = RecordedPause(
+        key="runner_local_pause_facts:4",
+        at=_at(5),
+        runner_id="runner-a",
+        local=local,
+        paused=paused,
+        by="operator",
+        reason="spend cap hit",
+    )
+    assert ActivityFeed.of([], [], [fact], limit=200).rows == [
+        ActivityEntry(
+            type="runner-changed",
+            key="runner_local_pause_facts:4",
+            at=_at(5),
+            runner_id="runner-a",
+            kind=kind,
+            by="operator",
+            reason="spend cap hit",
         )
     ]
