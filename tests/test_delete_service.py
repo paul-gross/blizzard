@@ -18,6 +18,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -33,7 +34,6 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
-from blizzard.hub.domain.operations.queue import ChunkNotFound
 
 pytestmark = pytest.mark.unit
 

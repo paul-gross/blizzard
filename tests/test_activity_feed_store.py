@@ -17,11 +17,10 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunk.model import DecisionChoice
+from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.runtime import migration_runner
@@ -446,14 +445,15 @@ def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> No
 
     rows = store.list_pause_facts_since(_T0, limit=50)
 
-    fleet = [r for r in rows if r.kind == "paused"]
-    local = [r for r in rows if r.kind == "locally-paused"]
+    fleet = [r for r in rows if not r.local]
+    local = [r for r in rows if r.local]
     assert len(fleet) == 1
-    assert fleet[0].type == "runner-changed"
+    assert fleet[0].paused
     assert fleet[0].runner_id == "runner-a"
     assert fleet[0].by == "alice"
     assert fleet[0].key.startswith("runner_pause_facts:")
     assert len(local) == 1
+    assert local[0].paused
     assert local[0].runner_id == "runner-a"
     assert local[0].by == "operator"
     assert local[0].reason == "spend cap hit"

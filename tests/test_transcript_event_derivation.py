@@ -25,7 +25,8 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationService,
     GraphPins,
 )
-from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
+from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
