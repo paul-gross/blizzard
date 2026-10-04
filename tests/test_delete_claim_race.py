@@ -29,6 +29,8 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     refuses (409), never a route recorded against an ephemeral chunk."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])  # promote=True by default -> ready
+    # Registered up front, so the claim's only wait is the delete's lock, not a registration write.
+    hub.services.fleet.register("r1", "w1")
 
     entered_write = threading.Event()
     release_write = threading.Event()

@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _finding(finding_id: str) -> Finding:
+def _finding(finding_id: str, *, state: str = "live") -> Finding:
     return Finding(
         finding_id=finding_id,
         routine_name="nightly",
@@ -36,8 +36,8 @@ def _finding(finding_id: str) -> Finding:
         introduced=None,
         introduced_at=None,
         first_observed_at=_T0,
-        live=True,
-        state="live",
+        live=state == "live",
+        state=state,
         note=None,
         last_seen_at=_T0,
         observed_count=0,
@@ -160,7 +160,7 @@ def test_supersede_requires_the_absorbing_finding_id() -> None:
     repo = _FakeFindingRepo()
     service = _service(repo)
 
-    service.supersede([_finding("fin_1")], note="folded into fin_2", actor="u1", superseded_by="fin_2")
+    service.supersede([_finding("fin_1")], _finding("fin_2"), note="folded into fin_2", actor="u1")
 
     assert repo.batches[0] == [
         FactEntry(
@@ -173,7 +173,7 @@ def test_reopen_records_reopened() -> None:
     repo = _FakeFindingRepo()
     service = _service(repo)
 
-    service.reopen([_finding("fin_1")], note="regressed", actor="u1")
+    service.reopen([_finding("fin_1", state="wont-fix")], note="regressed", actor="u1")
 
     assert repo.batches[0] == [FactEntry(finding_id="fin_1", kind="reopened", at=_T0, note="regressed", actor="u1")]
 

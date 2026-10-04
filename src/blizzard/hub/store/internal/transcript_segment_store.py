@@ -14,15 +14,18 @@ from typing import Any
 
 from sqlalchemy import Insert, Select, Update, func, insert, select
 
+from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.observability.transcripts import (
     IWriteTranscriptSegments,
     NaturalKeyState,
     SegmentRecordContent,
     SegmentSummary,
     TranscriptSlice,
+    lost_turns,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal import chunk_rows
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -318,6 +321,10 @@ class TranscriptSegmentStore:
             return "absent"
         return "rejected" if row.rejected else "accepted"
 
+    def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
+        with self._store.read("epoch_owner") as conn:
+            return chunk_rows.epoch_owner(conn, chunk_id, epoch)
+
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         with self._store.read("chunk_stored_bytes") as conn:
             total = conn.execute(_chunk_stored_bytes_stmt(chunk_id)).scalar_one()
@@ -378,8 +385,7 @@ class TranscriptSegmentStore:
             turn_range_start=min(r.turn_range_start for r in rows),
             turn_range_end=max(r.turn_range_end for r in rows),
             final=any(r.final for r in rows),
-            # Cap-rejected (this hub) OR runner-declared `record_truncated`.
-            truncated=any(r.rejected or bool(r.record_truncated) for r in rows),
+            truncated=any(lost_turns(rejected=r.rejected, record_truncated=r.record_truncated) for r in rows),
             byte_count=sum(r.byte_count for r in rows),
             harness_id=rows[0].harness_id,
             normalizer_version=rows[0].normalizer_version,

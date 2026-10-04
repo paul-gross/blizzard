@@ -15,11 +15,9 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 
 DOOR_HEADER = "X-Blizzard-Door"
 
-_CLIENT_DOORS = {Door.CLI.value: Door.CLI, Door.BOARD.value: Door.BOARD}
-
 
 def request_door(raw: str | None) -> Door:
-    return _CLIENT_DOORS.get((raw or "").strip().lower(), Door.API)
+    return Door.claimed((raw or "").strip().lower())
 
 
 def request_door_of(x_blizzard_door: Annotated[str | None, Header()] = None) -> Door:

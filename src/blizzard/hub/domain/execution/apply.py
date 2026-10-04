@@ -9,11 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.ids import (
     ARTIFACT_PREFIX,
     DECISION_PREFIX,
@@ -22,19 +19,11 @@ from blizzard.foundation.ids import (
     WORK_ITEM_PROPOSAL_PREFIX,
     Id,
 )
-from blizzard.foundation.node_steps import Executor, JudgedBy
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import dto
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import (
-    Chunk,
-    ChunkFacts,
-    DecisionChoice,
-    MigrationFact,
-    MigrationSource,
-    WorkRefLabel,
-)
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -44,13 +33,28 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
-from blizzard.hub.domain.execution.auth.produces import Produces
 from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.completion import (
+    CompletionPlan,
+    CompletionRefused,
+    Landing,
+    MigrationTargets,
+    NextStep,
+    NextStepKind,
+    ReplayedMigration,
+    UnresolvableTarget,
+    decision_choices,
+    refuse_hub_executed,
+    refuse_incoherent_attempt,
+    replayed_migration,
+    stamped_proposals,
+    stored_artifacts,
+)
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node
+from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, WorkItemProposal
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (``bzh:crash-point-registry``): the whole
@@ -73,9 +77,26 @@ class ApplyResult:
     transition_id: str | None = None
     migration_id: str | None = None
 
+    @property
+    def fresh_migration(self) -> bool:
+        """Whether this call itself migrated the chunk — a replay carries no ``migration_id``."""
+        return self._migrated_freshly()
+
+    def _migrated_freshly(self) -> bool:
+        return self.response.outcome is ApplyOutcome.MIGRATED and self.migration_id is not None
+
     @classmethod
     def failure(cls, detail: str) -> ApplyResult:
         return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
+
+    @classmethod
+    def replayed(cls, replay: ReplayedMigration, *, epoch: int) -> ApplyResult:
+        """The answer to a completion whose migration already landed at its (node, epoch)."""
+        if replay is ReplayedMigration.SUPERSEDED_BY_RESTART:
+            return cls.failure(f"superseded by a restart at epoch {epoch}")
+        if replay is ReplayedMigration.HUB_NODE_TAKEN:
+            return cls.hub_node_taken_replay()
+        return cls.migrated_replay()
 
     @classmethod
     def done(cls, transition_id: str | None) -> ApplyResult:
@@ -157,24 +178,9 @@ class ApplyResult:
         )
 
 
-@domain_model
-@dataclass(frozen=True)
-class Destination:
-    """Where an edge routes inside its own graph: the reserved terminal, a node id, or ``None``
-    for a name no node there carries."""
-
-    node_id: str | None
-
-    @classmethod
-    def of(cls, graph: Graph, edge: Edge) -> Destination:
-        if edge.to_node_name == RESERVED_TERMINAL:
-            return cls(RESERVED_TERMINAL)
-        node = graph.node_by_name(edge.to_node_name)
-        return cls(node.node_id if node is not None else None)
-
-
 class ApplyService:
-    """Apply a node-step completion to a chunk, fenced and idempotent."""
+    """Apply a node-step completion to a chunk, fenced and idempotent. Orchestration only: it
+    reads, probes for replays, asks the completion rules what to do, and records it."""
 
     def __init__(
         self,
@@ -209,15 +215,14 @@ class ApplyService:
         *,
         route_token_mode: str = ROUTE_TOKEN_WARN,
         produces_mode: str = PRODUCES_WARN,
-        target_graph: Graph | None = None,
-        intended_target_graph: Graph | None = None,
-        follow_latest_graph: Graph | None = None,
+        targets: MigrationTargets | None = None,
     ) -> ApplyResult:
-        """Apply a completion.
+        """Apply a completion. ``targets`` arrive pre-resolved — each ``None`` meaning "names no
+        enabled graph" — so this holds no graph repo of its own (``bzh:domain-takes-objects``).
 
-        ``target_graph`` (#90), ``intended_target_graph`` (#124), and ``follow_latest_graph``
-        (#164) all arrive pre-resolved — ``None`` meaning "names no enabled graph" — so this
-        holds no graph repo of its own (``bzh:domain-takes-objects``)."""
+        Order is behavior: retired → facts → migration replay → route token → from node →
+        transition replay → attempt coherence → proposals → commit pointer → plan → record."""
+        targets = targets or MigrationTargets(cross_graph=None, intended=None, follow_latest=None)
         self._retired.refuse_if_retired(submission.runner_id, action="completion")
         facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
@@ -228,23 +233,8 @@ class ApplyService:
         if self._movement.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
-            # A **hub-landing** migration retained the route, so its replay must
-            # return ``HUB_NODE_TAKEN`` rather than ``MIGRATED``.
-            replayed = next(
-                (
-                    m
-                    for m in facts.migrations
-                    if m.from_node_id == submission.from_node_id and m.epoch == submission.epoch
-                ),
-                None,
-            )
-            # A restart's own re-pin (#371) retained the route, so a displaced attempt landing
-            # LEVEL on its key is fenced like any stale one — never `MIGRATED`, which releases.
-            if replayed is not None and replayed.source is MigrationSource.RESTART:
-                return ApplyResult.failure(f"superseded by a restart at epoch {submission.epoch}")
-            if replayed is not None and replayed.landed_node_executor is Executor.HUB:
-                return ApplyResult.hub_node_taken_replay()
-            return ApplyResult.migrated_replay()
+            replay = replayed_migration(facts, from_node_id=submission.from_node_id, epoch=submission.epoch)
+            return ApplyResult.replayed(replay, epoch=submission.epoch)
 
         # Route-token authorization — ordered ahead of the replay probe and the
         # epoch fence, so a post-release zombie's replay is rejected as a fresh one is.
@@ -264,76 +254,72 @@ class ApplyService:
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
-        # Proposed-work-item policy refusal — unconditional, ordered ahead of every
-        # dispatch fork below, so none of them carries a proposal past a node that never declared the policy.
-        policy_rejection = ProposalPolicy(from_node, submission.proposals).rejection()
-        if policy_rejection is not None:
-            return ApplyResult.failure(policy_rejection)
+        try:
+            refuse_hub_executed(from_node)
+            refuse_incoherent_attempt(facts, graph, from_node=from_node, epoch=submission.epoch)
+            # Unconditional and ahead of every dispatch fork, so none carries a proposal past a
+            # node that never declared the policy, nor a `git_commit` missing a repo, branch, or hash.
+            for policy_rejection in (
+                ProposalPolicy(from_node, submission.proposals).rejection(),
+                CommitPointerPolicy(submission.artifacts).rejection(),
+            ):
+                if policy_rejection is not None:
+                    raise CompletionRefused(policy_rejection)
+            if submission.decision_id is not None:
+                # A gate-resolving transition — a graph gate (human node) or a runner-config gate.
+                decision = self._decisions.get_decision(submission.decision_id)
+                plan = CompletionPlan.resolving(graph, from_node, submission, decision, chunk=chunk)
+            else:
+                open_gate = self._decisions.find_decision(
+                    chunk.chunk_id, node_id=from_node.node_id, epoch=submission.epoch
+                )
+                plan = CompletionPlan.plain(
+                    graph, from_node, submission, open_gate=open_gate, produces_mode=produces_mode
+                )
+        except CompletionRefused as refused:
+            return ApplyResult.failure(refused.detail)
 
-        # Commit-pointer refusal — unconditional and at the same point, so no dispatch fork
-        # records a `git_commit` that does not name a repo, a branch, and a full hash.
-        pointer_rejection = CommitPointerPolicy(submission.artifacts).rejection()
-        if pointer_rejection is not None:
-            return ApplyResult.failure(pointer_rejection)
+        # A gate's resolving transition carries no artifacts or proposals: they landed with
+        # the decision, and threading `decision_id` through keeps the gate from staying live.
+        resolving = submission.decision_id is not None
+        artifacts = [] if resolving else submission.artifacts
+        proposals = [] if resolving else submission.proposals
+        if plan.migrates:
+            return self._migrate_across(chunk, facts, from_node, submission, plan.edge, targets, artifacts, proposals)
+        assert plan.to_node_id is not None
+        # The transition-time consult — after every rejection and before `record_transition`,
+        # so a firing intent or follow-latest drift writes no transition row of its own.
+        landing = Landing.consult(chunk, plan.edge, targets)
+        if landing is not None:
+            return self._land_migration(chunk, from_node, submission, landing, submission.artifacts, proposals)
+        return self._transition(chunk, graph, from_node, submission, plan, artifacts, proposals)
 
-        # A completion carrying a decision id is a gate-resolving transition — a graph gate
-        # (human node) or a runner-config gate (worker node).
-        if submission.decision_id is not None:
-            return self._apply_gate_resolution(
-                chunk, graph, from_node, submission, target_graph, intended_target_graph, follow_latest_graph
-            )
-        # Only the resolving transition above may leave a gate node.
-        if from_node.judged_by is JudgedBy.HUMAN:
-            return ApplyResult.failure(
-                f"human signoff required: node `{from_node.name}` is a gate — resolve its decision"
-            )
-
-        edge = graph.edge_for_choice(from_node.node_id, submission.choice)
-        if edge is None:
-            return ApplyResult.failure(f"node {from_node.name} has no choice `{submission.choice}`")
-        # A cross-graph edge migrates the chunk rather than transitioning it.
-        if edge.target_graph is not None:
-            return self._apply_migration(chunk, from_node, submission, edge, target_graph)
-        to_node_id = Destination.of(graph, edge).node_id
-        if to_node_id is None:
-            return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
-
-        # Produces-artifact backstop — ordered after every other rejection, so
-        # it runs only on a submission genuinely about to be recorded.
-        produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
-        if produces_rejection is not None:
-            return ApplyResult.failure(produces_rejection)
-
-        # Checks gate backstop — the same shared predicate `ChecksGate.violated`
-        # both gates run, so the two cannot drift (`test_checks_gate_agreement.py`).
-        selected = next((c for c in from_node.choices if c.name == submission.choice), None)
-        if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
-            return ApplyResult.failure(f"choice `{submission.choice}` requires green checks but a check is red")
-
-        # The transition-time consult — ordered after every rejection above and
-        # before ``record_transition``, so a firing intent writes no transition row of its own.
-        migrated = self._consult_intended_migration(
-            chunk, from_node, submission, edge, intended_target_graph, follow_latest_graph
-        )
-        if migrated is not None:
-            return migrated
-
+    def _transition(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        from_node: Node,
+        submission: CompletionSubmission,
+        plan: CompletionPlan,
+        artifacts: list[SubmittedArtifact],
+        proposals: list[WorkItemProposal],
+    ) -> ApplyResult:
+        assert plan.to_node_id is not None
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
         refusal = self._movement.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
             from_node_id=from_node.node_id,
-            to_node_id=to_node_id,
+            to_node_id=plan.to_node_id,
             choice_name=submission.choice,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
             claimant=Claimant(submission.runner_id, submission.lease_id),
             runner_id=submission.runner_id,
             at=self._clock.now(),
-            artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
-            proposals=self._proposal_rows(
-                chunk, from_node, submission.epoch, submission.proposals, runner_id=submission.runner_id
-            ),
+            artifacts=self._artifact_rows(chunk, from_node, submission.epoch, artifacts),
+            proposals=self._proposal_rows(chunk, from_node, submission, proposals),
+            decision_id=submission.decision_id,
         )
         if refusal is not None:
             return ApplyResult.failure(refusal.detail)
@@ -342,278 +328,86 @@ class ApplyService:
             graph,
             from_node,
             submission,
-            to_node_id=to_node_id,
+            to_node_id=plan.to_node_id,
             is_fresh_apply=True,
-            edge=edge,
+            edge=plan.edge,
             transition_id=fresh_transition_id,
         )
 
-    def _apply_gate_resolution(
+    def _migrate_across(
         self,
         chunk: Chunk,
-        graph: Graph,
-        gate_node: Node,
+        facts: ChunkFacts,
+        from_node: Node,
         submission: CompletionSubmission,
-        target_graph: Graph | None = None,
-        intended_target_graph: Graph | None = None,
-        follow_latest_graph: Graph | None = None,
+        edge: Edge,
+        targets: MigrationTargets,
+        artifacts: list[SubmittedArtifact],
+        proposals: list[WorkItemProposal],
     ) -> ApplyResult:
-        """Advance a chunk past a resolved gate — the resolving transition. Its artifacts
-        and proposals already landed at submission time, so every dispatch fork
-        below — the authored cross-graph edge, the migration consult, and the plain
-        transition alike — carries none of either."""
-        assert submission.decision_id is not None  # the caller dispatches only when set
-        decision = self._decisions.get_decision(submission.decision_id)
-        if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
-            return ApplyResult.failure(f"decision {submission.decision_id} does not match node `{gate_node.name}`")
-        if decision.resolved_choice is None:
-            return ApplyResult.failure(f"decision {submission.decision_id} is not yet resolved")
-        if submission.choice != decision.resolved_choice:
-            return ApplyResult.failure(
-                f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`"
+        """Take a cross-graph edge — land on its resolved target, or escalate once per epoch. An
+        unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
+        if targets.cross_graph is not None:
+            landing = Landing.authored(edge, targets.cross_graph, from_node)
+            return self._land_migration(chunk, from_node, submission, landing, artifacts, proposals)
+        if not facts.escalated_at(submission.epoch):
+            draft = UnresolvableTarget.of(edge)
+            # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
+            escalated = self._escalations.record_escalation(
+                chunk.chunk_id,
+                epoch=submission.epoch,
+                admission=EpochAdmission.CURRENT,
+                claimant=Claimant(submission.runner_id, submission.lease_id),
+                takeover_command=draft.takeover_command,
+                at=self._clock.now(),
+                decision_id=submission.decision_id,
+                cause=draft.cause,
+                detail=draft.detail,
             )
-
-        edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
-        if edge is None:
-            return ApplyResult.failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
-        # A resolved choice may itself target another graph — threading
-        # ``decision_id`` through is what keeps the gate's decision from staying live.
-        if edge.target_graph is not None:
-            return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[], proposals=[])
-        to_node_id = Destination.of(graph, edge).node_id
-        if to_node_id is None:
-            return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
-
-        # The transition-time consult — see the sibling call in ``apply``; the
-        # override keeps the decision's already-landed proposals off the migration lane too.
-        migrated = self._consult_intended_migration(
-            chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph, proposals=[]
-        )
-        if migrated is not None:
-            return migrated
-
-        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        refusal = self._movement.record_transition(
-            transition_id=fresh_transition_id,
-            chunk_id=chunk.chunk_id,
-            from_node_id=gate_node.node_id,
-            to_node_id=to_node_id,
-            choice_name=submission.choice,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id, submission.lease_id),
-            runner_id=submission.runner_id,
-            at=self._clock.now(),
-            artifacts=[],  # the decision's artifacts already landed
-            proposals=[],  # ...and so, for the same reason, are its proposals
-            decision_id=submission.decision_id,
-        )
-        if refusal is not None:
-            return ApplyResult.failure(refusal.detail)
-        return self._respond(
-            chunk,
-            graph,
-            gate_node,
-            submission,
-            to_node_id=to_node_id,
-            is_fresh_apply=True,
-            edge=edge,
-            transition_id=fresh_transition_id,
-        )
-
-    def _apply_migration(
-        self,
-        chunk: Chunk,
-        from_node: Node,
-        submission: CompletionSubmission,
-        edge: Edge,
-        target_graph: Graph | None,
-        *,
-        artifacts: list[SubmittedArtifact] | None = None,
-        proposals: list[WorkItemProposal] | None = None,
-    ) -> ApplyResult:
-        """Take a cross-graph migration edge — re-pin + re-queue, or escalate.
-
-        With ``target_graph`` set it records the migration and lands via
-        :meth:`_land_migration`. Unresolved, it escalates to ``needs_human`` and answers
-        ``PARKED_AT_GATE`` — ``FAILURE`` would requeue and supersede it."""
-        if target_graph is None:
-            facts = self._facts.load_facts(chunk.chunk_id)
-            already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
-            if not already:
-                # Hub-authored escalation, no runner runtime dir to compose a wrapped
-                # takeover command from — leaves wrapped_takeover_command at its store default.
-                escalated = self._escalations.record_escalation(
-                    chunk.chunk_id,
-                    epoch=submission.epoch,
-                    admission=EpochAdmission.CURRENT,
-                    claimant=Claimant(submission.runner_id, submission.lease_id),
-                    takeover_command=(
-                        f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
-                        f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
-                    ),
-                    at=self._clock.now(),
-                    decision_id=submission.decision_id,
-                    cause=EscalationCause.MIGRATION_TARGET_UNRESOLVABLE,
-                    detail=f"cross-graph target graph `{edge.target_graph}` names no enabled graph",
-                )
-                if isinstance(escalated, FenceRefusal):
-                    return ApplyResult.failure(escalated.detail)
-            return ApplyResult.escalated(edge.target_graph)
-        submitted = submission.artifacts if artifacts is None else artifacts
-        submitted_proposals = submission.proposals if proposals is None else proposals
-        landed_node_id = MigrationFact.landing_node(target_graph, from_node.name)
-        return self._land_migration(
-            chunk,
-            from_node,
-            submission,
-            target_graph=target_graph,
-            landed_node_id=landed_node_id,
-            choice_name=submission.choice,
-            decision_id=submission.decision_id,
-            model=edge.model,
-            artifacts=submitted,
-            proposals=submitted_proposals,
-            clear_intent=False,
-            source=MigrationSource.AUTHORED_EDGE,
-        )
-
-    def _consult_intended_migration(
-        self,
-        chunk: Chunk,
-        from_node: Node,
-        submission: CompletionSubmission,
-        edge: Edge,
-        intended_target_graph: Graph | None,
-        follow_latest_graph: Graph | None,
-        *,
-        proposals: list[WorkItemProposal] | None = None,
-    ) -> ApplyResult | None:
-        """The transition-time consult — the shared helper both transition sites
-        call once their destination resolves, before their own ``record_transition``. ``forced``
-        fires unconditionally on the intent's own named node; ``auto`` fires only on a
-        destination-name match; anything else falls through. ``proposals`` defaults to the
-        submission's own list, overridden to ``[]`` by the gate-resolution caller."""
-        submitted_proposals = submission.proposals if proposals is None else proposals
-        intent = chunk.intended_migration
-        if intent is None:
-            return self._consult_follow_latest(
-                chunk, from_node, submission, edge, follow_latest_graph, proposals=submitted_proposals
-            )
-        if intended_target_graph is None:
-            return None
-        if intent.mode is MigrationMode.FORCED:
-            assert intent.node_name is not None  # request-time validation requires this for `forced`
-            landed_node_name = intent.node_name
-        elif intended_target_graph.node_by_name(edge.to_node_name) is not None:
-            landed_node_name = edge.to_node_name
-        else:
-            return None  # auto, no name match: unchanged transition, intent stays set
-        landed_node = intended_target_graph.node_by_name(landed_node_name)
-        assert landed_node is not None, (
-            f"consult resolved landed node `{landed_node_name}` on graph {intended_target_graph.graph_id}, "
-            "but it does not exist there"
-        )
-        return self._land_migration(
-            chunk,
-            from_node,
-            submission,
-            target_graph=intended_target_graph,
-            landed_node_id=landed_node.node_id,
-            choice_name=submission.choice,
-            decision_id=submission.decision_id,
-            model=None,
-            artifacts=submission.artifacts,
-            proposals=submitted_proposals,
-            clear_intent=True,
-            source=MigrationSource.INTENT,
-        )
-
-    def _consult_follow_latest(
-        self,
-        chunk: Chunk,
-        from_node: Node,
-        submission: CompletionSubmission,
-        edge: Edge,
-        follow_latest_graph: Graph | None,
-        *,
-        proposals: list[WorkItemProposal] | None = None,
-    ) -> ApplyResult | None:
-        """The standing follow-latest policy's own consult, reached only when
-        the chunk carries **no** explicit intent. A transition to the reserved terminal is
-        the load-bearing no-op: it names no node, so it would land on the target's
-        **entry** and restart the workflow (tests/test_follow_latest_policy.py). ``proposals``
-        defaults to the submission's own list, per :meth:`_consult_intended_migration`."""
-        if follow_latest_graph is None or edge.to_node_name == RESERVED_TERMINAL:
-            return None
-        return self._land_migration(
-            chunk,
-            from_node,
-            submission,
-            target_graph=follow_latest_graph,
-            landed_node_id=MigrationFact.landing_node(follow_latest_graph, edge.to_node_name),
-            choice_name=submission.choice,
-            decision_id=submission.decision_id,
-            model=None,
-            artifacts=submission.artifacts,
-            proposals=submission.proposals if proposals is None else proposals,
-            clear_intent=False,
-            source=MigrationSource.FOLLOW_LATEST,
-        )
+            if isinstance(escalated, FenceRefusal):
+                return ApplyResult.failure(escalated.detail)
+        return ApplyResult.escalated(edge.target_graph)
 
     def _land_migration(
         self,
         chunk: Chunk,
         from_node: Node,
         submission: CompletionSubmission,
-        *,
-        target_graph: Graph,
-        landed_node_id: str,
-        choice_name: str | None,
-        decision_id: str | None,
-        model: str | None,
+        landing: Landing,
         artifacts: list[SubmittedArtifact],
         proposals: list[WorkItemProposal],
-        clear_intent: bool,
-        source: MigrationSource,
     ) -> ApplyResult:
-        """The landing tail shared by every migration path. Records the migration atomically
-        (fact + re-pin + artifacts + proposals + route release/retain + intent clear), then
-        governs by the landed node's executor as a transition into it would.
-        ``migration_id`` is the fresh fact this call wrote."""
-        landed_node = target_graph.node_by_id(landed_node_id)
-        lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
+        """Record the migration atomically (fact + re-pin + artifacts + proposals + route
+        release/retain + intent clear), then govern by the landed node's executor."""
         recorded = self._movement.record_migration(
             chunk.chunk_id,
             from_node_id=from_node.node_id,
             from_graph_id=from_node.graph_id,
-            to_graph_id=target_graph.graph_id,
-            landed_node_id=landed_node_id,
-            choice_name=choice_name,
-            decision_id=decision_id,
-            model=model,
-            source=source,
+            to_graph_id=landing.graph.graph_id,
+            landed_node_id=landing.node_id,
+            choice_name=submission.choice,
+            decision_id=submission.decision_id,
+            model=landing.model,
+            source=landing.source,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
             claimant=Claimant(submission.runner_id, submission.lease_id),
             at=self._clock.now(),
-            artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
-            proposals=self._proposal_rows(
-                chunk, from_node, submission.epoch, proposals, runner_id=submission.runner_id
-            ),
-            release_route=not lands_on_hub,
-            clear_intent=clear_intent,
+            artifacts=self._artifact_rows(chunk, from_node, submission.epoch, artifacts),
+            proposals=self._proposal_rows(chunk, from_node, submission, proposals),
+            release_route=landing.releases_route,
+            clear_intent=landing.clear_intent,
             migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
         )
         if isinstance(recorded, FenceRefusal):
             return ApplyResult.failure(recorded.detail)
-        migration_id = recorded
         _CP_MIGRATE_AFTER_RECORD.reached()
-        if lands_on_hub:
+        landed_node = landing.node
+        if not landing.releases_route:
             assert landed_node is not None
-            self._hub_node_executor.run(chunk, target_graph, landed_node, epoch=submission.epoch)
-            return ApplyResult.landed_on_hub(landed_node, migration_id)
-        return ApplyResult.migrated(from_node, target_graph, migration_id)
+            self._hub_node_executor.run(chunk, landing.graph, landed_node, epoch=submission.epoch)
+            return ApplyResult.landed_on_hub(landed_node, recorded)
+        return ApplyResult.migrated(from_node, landing.graph, recorded)
 
     def _respond(
         self,
@@ -627,34 +421,33 @@ class ApplyService:
         edge: Edge | None = None,
         transition_id: str | None = None,
     ) -> ApplyResult:
-        """``transition_id`` is the caller's own freshly-recorded
-        ``transitions.transition_id`` on a fresh apply, or ``None`` on a replay
-        (``is_fresh_apply=False``); every branch below carries it straight through."""
-        if to_node_id == RESERVED_TERMINAL:
+        """Perform the next step's side effects. ``transition_id`` is the fresh row on a fresh
+        apply, ``None`` on a replay; every branch carries it through."""
+        step = NextStep.of(graph, to_node_id)
+        if step.kind is NextStepKind.DONE:
             return ApplyResult.done(transition_id)
-        to_node = graph.node_by_id(to_node_id)
-        if to_node is None:
+        if step.node is None:
             return ApplyResult.failure(f"transition target {to_node_id} is not a node")
-
-        if to_node.executor is Executor.HUB:
-            # Run on BOTH the fresh apply and the idempotent replay: the executor is itself
-            # idempotent and resumable, so a re-flush RESUMES an interrupted run (#67).
-            self._hub_node_executor.run(chunk, graph, to_node, epoch=submission.epoch)
-            return ApplyResult.taken_over(to_node, transition_id)
-        if to_node.judged_by is JudgedBy.HUMAN:
-            # A transition INTO a human-judged node opens a graph gate: park on a decision
-            # carrying the node's choice set. Only on the real apply, never a replay.
+        if step.kind is NextStepKind.HUB_TAKES:
+            # Run on BOTH the fresh apply and the replay: the executor is idempotent and
+            # resumable, so a re-flush resumes an interrupted run.
+            self._hub_node_executor.run(chunk, graph, step.node, epoch=submission.epoch)
+            return ApplyResult.taken_over(step.node, transition_id)
+        if step.kind is NextStepKind.GATE:
+            # Only the real apply opens the gate's decision, never a replay.
             if is_fresh_apply:
                 self._open_graph_gate_decision(
-                    chunk, to_node, epoch=submission.epoch, claimant=Claimant(submission.runner_id, submission.lease_id)
+                    chunk,
+                    step.node,
+                    epoch=submission.epoch,
+                    claimant=Claimant(submission.runner_id, submission.lease_id),
                 )
-            return ApplyResult.parked(to_node, transition_id)
-
+            return ApplyResult.parked(step.node, transition_id)
         arrival = Arrival(edge) if edge is not None else Arrival.of_choice(graph, from_node, submission.choice)
         envelope = Envelope(
             chunk=chunk,
             graph=graph,
-            node=to_node,
+            node=step.node,
             artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
             epoch=submission.epoch,
             arrival_addendum=arrival.addendum,
@@ -663,11 +456,8 @@ class ApplyService:
         return ApplyResult.advance(envelope.wire, transition_id)
 
     def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int, claimant: Claimant) -> None:
-        """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch).
-
-        The node's own choices become the decision's; no artifacts are attached (they
-        arrived with the transition into the gate). The natural-key probe guards a
-        double-open."""
+        """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch) by the
+        natural-key probe. No artifacts attach: they arrived with the transition into the gate."""
         if self._decisions.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return
         # A refusal — the chunk was stopped or restarted since the arrival was recorded —
@@ -680,7 +470,7 @@ class ApplyService:
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
             claimant=claimant,
-            choices=[DecisionChoice(name=c.name, description=c.description) for c in gate_node.choices],
+            choices=decision_choices(gate_node),
             at=self._clock.now(),
             artifacts=[],
             proposals=[],
@@ -699,35 +489,16 @@ class ApplyService:
         ).rejection(mode=route_token_mode)
         return ApplyResult.failure(detail) if detail is not None else None
 
-    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> StoredArtifact:
-        is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
-        data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
-        return StoredArtifact(
-            kind=artifact.kind,
-            name=artifact.name,
-            data=data,
-            repo=artifact.repo if is_commit else None,
-            forge=artifact.forge if is_commit else None,
-            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
-            chunk_id=chunk.chunk_id,
-            node_id=from_node.node_id,
-            node_name=from_node.name,
-            epoch=epoch,
-        )
+    def _artifact_rows(
+        self, chunk: Chunk, node: Node, epoch: int, artifacts: list[SubmittedArtifact]
+    ) -> list[StoredArtifact]:
+        ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in artifacts]
+        return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
     def _proposal_rows(
-        self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
+        self, chunk: Chunk, node: Node, submission: CompletionSubmission, proposals: list[WorkItemProposal]
     ) -> list[StampedWorkItemProposal]:
-        return [
-            StampedWorkItemProposal.of(
-                p,
-                proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
-                chunk_id=chunk.chunk_id,
-                node_id=from_node.node_id,
-                node_name=from_node.name,
-                epoch=epoch,
-                ordinal=ordinal,
-                runner_id=runner_id,
-            )
-            for ordinal, p in enumerate(proposals)
-        ]
+        ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in proposals]
+        return stamped_proposals(
+            chunk.chunk_id, node, submission.epoch, proposals, proposal_ids=ids, runner_id=submission.runner_id
+        )

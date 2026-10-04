@@ -7,9 +7,11 @@ saw, so the sweep can tell a segment's stored content changed since."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 from blizzard.foundation.roles import dto
@@ -83,6 +85,84 @@ class DropFact:
     epoch: int
     spawn_generation: int
     dropped_at: datetime
+
+
+class MarkerState(StrEnum):
+    """Where a segment's derivation marker stands against the content it stores today."""
+
+    NONE = "none"
+    CURRENT = "current"
+    STALE = "stale"
+    GONE = "gone"
+
+
+class DerivationVerb(StrEnum):
+    SWEEP = "sweep"
+    RE_DERIVE_SEGMENT = "re_derive_segment"
+    RE_DERIVE_SCOPE = "re_derive_scope"
+
+
+class DerivationAction(StrEnum):
+    DERIVE = "derive"
+    SKIP = "skip"
+    DROP = "drop"
+
+
+#: What each verb does to a segment from each marker state; only a segment re-derive ignores the marker.
+DERIVATION_TRANSITIONS: Mapping[MarkerState, Mapping[DerivationVerb, DerivationAction]] = MappingProxyType(
+    {
+        MarkerState.NONE: MappingProxyType(
+            {
+                DerivationVerb.SWEEP: DerivationAction.DERIVE,
+                DerivationVerb.RE_DERIVE_SEGMENT: DerivationAction.DERIVE,
+                DerivationVerb.RE_DERIVE_SCOPE: DerivationAction.DERIVE,
+            }
+        ),
+        MarkerState.CURRENT: MappingProxyType(
+            {
+                DerivationVerb.SWEEP: DerivationAction.SKIP,
+                DerivationVerb.RE_DERIVE_SEGMENT: DerivationAction.DERIVE,
+                DerivationVerb.RE_DERIVE_SCOPE: DerivationAction.SKIP,
+            }
+        ),
+        MarkerState.STALE: MappingProxyType(
+            {
+                DerivationVerb.SWEEP: DerivationAction.DERIVE,
+                DerivationVerb.RE_DERIVE_SEGMENT: DerivationAction.DERIVE,
+                DerivationVerb.RE_DERIVE_SCOPE: DerivationAction.DERIVE,
+            }
+        ),
+        MarkerState.GONE: MappingProxyType(
+            {
+                DerivationVerb.SWEEP: DerivationAction.DROP,
+                DerivationVerb.RE_DERIVE_SEGMENT: DerivationAction.SKIP,
+                DerivationVerb.RE_DERIVE_SCOPE: DerivationAction.SKIP,
+            }
+        ),
+    }
+)
+
+
+def marker_state(marker_fingerprint: str | None, current_fingerprint: str | None) -> MarkerState:
+    """A segment with no current content (``None``) is gone; one with no current-version marker
+    is underived; else its marker is current or stale by fingerprint."""
+    if current_fingerprint is None:
+        return MarkerState.GONE
+    if marker_fingerprint is None:
+        return MarkerState.NONE
+    return MarkerState.CURRENT if marker_fingerprint == current_fingerprint else MarkerState.STALE
+
+
+def is_candidate(marker_fingerprint: str | None, current_fingerprint: str) -> bool:
+    """A visible segment needs deriving when it carries no current-version marker, or its
+    marker's fingerprint disagrees with the content it stores today."""
+    state = marker_state(marker_fingerprint, current_fingerprint)
+    return DERIVATION_TRANSITIONS[state][DerivationVerb.SWEEP] is DerivationAction.DERIVE
+
+
+def segment_complete(rejected: Iterable[bool]) -> bool:
+    """A segment's turns are whole unless one of its records was rejected — a content hole."""
+    return not any(rejected)
 
 
 @dto

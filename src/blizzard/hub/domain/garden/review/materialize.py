@@ -103,10 +103,58 @@ class IWriteReviewFindingsRepository(Protocol):
         ...
 
 
+def review_scope_description(chunk: Chunk) -> str:
+    """The hub-written description of a scope a review delivery mints by naming it
+    (`blizzard-context:/domain/routines-and-scopes.md` §Mint-on-name): it names the chunk
+    whose review minted it."""
+    return f"Minted by review delivery on chunk {chunk.chunk_id}"
+
+
+def build_review_plan(
+    validated: ValidatedReviewFindings, *, chunk: Chunk, node: Node, epoch: int, at: datetime
+) -> ReviewFindingsPlan:
+    """The rows a passing review delivery mints, every id minted at `at`: one finding and
+    one `add` fact per `deferred` entry, in order, each finding raised by `chunk`."""
+    new_findings: list[NewReviewFinding] = []
+    facts: list[NewReviewFindingFact] = []
+    for entry in validated.deferred:
+        finding_id = Id.mint_at(FINDING_PREFIX, at).value
+        new_findings.append(
+            NewReviewFinding(
+                finding_id=finding_id,
+                scope_slug=entry.scope,
+                class_=entry.class_,
+                locus=entry.locus,
+                summary=entry.summary,
+                severity=entry.severity,
+                raised_by_chunk_id=chunk.chunk_id,
+            )
+        )
+        facts.append(NewReviewFindingFact(finding_id=finding_id, ref=entry.ref))
+    return ReviewFindingsPlan(
+        chunk_id=chunk.chunk_id,
+        node_id=node.node_id,
+        node_name=node.name,
+        epoch=epoch,
+        at=at,
+        new_scope_description=review_scope_description(chunk),
+        new_findings=new_findings,
+        facts=facts,
+    )
+
+
+def review_replay_outcome(*, recorded: bool) -> ReviewFindingsOutcome | None:
+    """The review delivery verb by its chunk's marker state: a review raises findings once per chunk
+    (`blizzard-context:/domain/findings-and-proposals.md`), so once recorded every later delivery is
+    ``ALREADY_RECORDED``, minting nothing and never re-validated. Not yet recorded, `None`: validate and
+    write, which records it or is ``FENCED``."""
+    return ReviewFindingsOutcome.ALREADY_RECORDED if recorded else None
+
+
 class ReviewFindingsMaterialize:
-    """Turns a :class:`ValidatedReviewFindings` into a :class:`ReviewFindingsPlan` and
-    hands it to the store, one call — minting every id here (`bzh:domain-takes-objects`)
-    rather than in the store."""
+    """Turns a :class:`ValidatedReviewFindings` into a :class:`ReviewFindingsPlan`
+    (:func:`build_review_plan`, at the clock's instant) and hands it to the store, one
+    call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
     def __init__(self, *, delivery: IWriteReviewFindingsRepository, clock: IClock) -> None:
         self._delivery = delivery
@@ -126,32 +174,5 @@ class ReviewFindingsMaterialize:
         """Materialize `validated`. `chunk`/`node`/`epoch` identify the delivering
         node-step, recorded on the marker row for legibility even though the
         idempotence key itself is `chunk_id` alone."""
-        at = self._clock.now()
-        new_findings: list[NewReviewFinding] = []
-        facts: list[NewReviewFindingFact] = []
-        for entry in validated.deferred:
-            finding_id = Id.mint(FINDING_PREFIX, self._clock).value
-            new_findings.append(
-                NewReviewFinding(
-                    finding_id=finding_id,
-                    scope_slug=entry.scope,
-                    class_=entry.class_,
-                    locus=entry.locus,
-                    summary=entry.summary,
-                    severity=entry.severity,
-                    raised_by_chunk_id=chunk.chunk_id,
-                )
-            )
-            facts.append(NewReviewFindingFact(finding_id=finding_id, ref=entry.ref))
-
-        plan = ReviewFindingsPlan(
-            chunk_id=chunk.chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            at=at,
-            new_scope_description=f"Minted by review delivery on chunk {chunk.chunk_id}",
-            new_findings=new_findings,
-            facts=facts,
-        )
+        plan = build_review_plan(validated, chunk=chunk, node=node, epoch=epoch, at=self._clock.now())
         return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)

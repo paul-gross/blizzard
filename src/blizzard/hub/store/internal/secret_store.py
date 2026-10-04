@@ -24,9 +24,9 @@ from blizzard.hub.domain.config.secrets import (
     SealedValue,
     SecretAlreadyExists,
     SecretMetadata,
-    SecretReferenced,
     SecretRevisionConflict,
     SecretRotationConflict,
+    require_unreferenced,
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
@@ -187,9 +187,7 @@ class SecretStore:
     def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
         with self._store.write("record_lifecycle") as conn:
             if retired:
-                referrers = active_referrers(conn, [name])[name]
-                if referrers:
-                    raise SecretReferenced(name, referrers)
+                require_unreferenced(name, active_referrers(conn, [name])[name])
             conn.execute(insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by))
             append_change(conn, change)
 

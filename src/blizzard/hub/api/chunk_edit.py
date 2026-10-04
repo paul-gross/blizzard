@@ -6,14 +6,13 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
-from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
-from blizzard.hub.domain.operations.edit import ChunkEdit
+from blizzard.hub.domain.operations.edit import BlankEditValue, ChunkEdit, filled, filled_entries
 from blizzard.wire.chunk import ChunkPatchRequest
 
 
@@ -21,23 +20,26 @@ from blizzard.wire.chunk import ChunkPatchRequest
 class ChunkPatchBody:
     """A ``PATCH /chunks/{id}`` body, read field by field and applied.
 
-    Refuses a blank value with 422 and an unresolvable graph with 404; every *semantic*
-    refusal stays ``EditService.edit``'s, so reading a body never decides whether the edit
-    it asks for is allowed."""
+    Maps a blank value (:class:`BlankEditValue`) to 422 and an unresolvable graph to 404;
+    every *semantic* refusal stays ``EditService.edit``'s, so reading a body never decides
+    whether the edit it asks for is allowed."""
 
     request: ChunkPatchRequest
     services: HubServices
 
     def apply(self, chunk: Chunk) -> None:
-        graph_target = self._graph_target()
-        migration_target, intended_migration = self._migration()
-        edit = ChunkEdit(
-            graph_id=graph_target.graph_id if graph_target is not None else UNSET,
-            default_model=self._default_model(),
-            default_effort=self._default_effort(),
-            default_harnesses=self._default_harnesses(),
-            intended_migration=intended_migration,
-        )
+        try:
+            graph_target = self._graph_target()
+            migration_target, intended_migration = self._migration()
+            edit = ChunkEdit(
+                graph_id=graph_target.graph_id if graph_target is not None else UNSET,
+                default_model=self._default_model(),
+                default_effort=self._default_effort(),
+                default_harnesses=self._default_harnesses(),
+                intended_migration=intended_migration,
+            )
+        except BlankEditValue as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
         try:
             self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
         except InvalidHarnesses as exc:
@@ -56,12 +58,7 @@ class ChunkPatchBody:
         entries = self.request.default_model
         if entries is None:
             return UNSET
-        stripped = [entry.strip() for entry in entries]
-        if any(not entry for entry in stripped):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_model entries must not be blank"
-            )
-        return stripped
+        return filled_entries(entries, "default_model")
 
     def _default_harnesses(self) -> list[str] | UnsetType:
         entries = self.request.default_harnesses
@@ -73,7 +70,7 @@ class ChunkPatchBody:
         if "default_effort" not in self.request.model_fields_set:
             return UNSET
         value = self.request.default_effort
-        return None if value is None else self._stripped(value, "default_effort")
+        return None if value is None else filled(value, "default_effort")
 
     def _migration(self) -> tuple[Graph | None, IntendedMigration | None | UnsetType]:
         if "intended_migration" not in self.request.model_fields_set:
@@ -81,15 +78,6 @@ class ChunkPatchBody:
         patch = self.request.intended_migration
         if patch is None:
             return (None, None)
-        target = graph_by_ref(self.services.graphs, self._stripped(patch.to_graph, "to_graph"))
-        node_name = self._stripped(patch.node, "node") if patch.node is not None else None
-        mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
-        return (target, IntendedMigration(mode=mode, graph_id=target.graph_id, node_name=node_name))
-
-    def _stripped(self, value: str, field_name: str) -> str:
-        text = value.strip()
-        if not text:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must not be blank"
-            )
-        return text
+        target = graph_by_ref(self.services.graphs, filled(patch.to_graph, "to_graph"))
+        node_name = filled(patch.node, "node") if patch.node is not None else None
+        return (target, IntendedMigration.toward(target.graph_id, node_name))

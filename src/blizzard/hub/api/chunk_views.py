@@ -16,6 +16,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
+from blizzard.hub.domain.chunk.dependencies import BlockedMarking
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.work_sources.source import IWorkSource
@@ -90,13 +91,11 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     """A derived marking's wire wrapping — the one home every caller of
     :func:`~blizzard.hub.domain.chunk.dependencies.derive_blocked_prerequisites` reaches through,
     listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
-    declared order: the marking names its first and counts them all. An absent or empty
-    set is no marking."""
-    if not unmet_prerequisite_chunk_ids:
+    declared order, and maps :meth:`BlockedMarking.of`'s marking onto the wire."""
+    marking = BlockedMarking.of(unmet_prerequisite_chunk_ids)
+    if marking is None:
         return None
-    return BlockedView(
-        prerequisite_chunk_id=unmet_prerequisite_chunk_ids[0], unmet_count=len(unmet_prerequisite_chunk_ids)
-    )
+    return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
 
 
 class DeliveryWireFields(TypedDict):
@@ -486,7 +485,7 @@ class ChunkHistoryView:
                 decision_id=r.decision_id,
                 recorded_at=iso_utc(r.recorded_at),
             )
-            for r in sorted(self.facts.restarts, key=lambda r: (r.recorded_at, r.epoch))
+            for r in self.facts.restart_history()
         ]
 
     def migrations(self) -> list[MigrationView]:

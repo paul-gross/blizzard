@@ -12,10 +12,10 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef, holds_work_refs
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
@@ -51,7 +51,7 @@ class ChunkWorkRefsStore:
             if row.chunk_id in ephemeral:
                 continue  # grouped away or deleted; the pointer moved on or is withdrawn
             status = statuses.get(row.chunk_id)
-            if status is None or status in TERMINAL_STATUSES:
+            if status is None or not holds_work_refs(status):
                 continue
             result[WorkRef(source=row.source, ref=row.ref)] = status
         return result

@@ -1,59 +1,36 @@
 """``ConfigAuthoring`` — the one writer of configured records.
 
 Every verb loads nothing: it takes the record the edge resolved (``bzh:domain-takes-objects``),
-decides the change, and hands the write repository the record write together with the
+asks the record's model for the change, and hands the write repository the record write together with the
 :class:`ConfigChange` it must commit in the same transaction (``bzh:configured-record``).
 A write that changes nothing writes nothing: no revision moves and no row is appended.
 
-Secrets route through here too. A secret's retire and enable append their change row at the
-secret's unchanged revision: its value is sealed against ``(name, revision)``, so moving the
-revision without resealing would leave the value undecryptable."""
+Secrets route through here too; :mod:`.secret_lifecycle` decides their change rows."""
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime
-
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.config.changes import (
-    ChangeContext,
-    ChangeOp,
-    ConfigChange,
-    FieldChange,
-    RecordKind,
-)
+from blizzard.hub.domain.config import secret_lifecycle
+from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
     RepositoryEdit,
     RepositoryFields,
 )
-from blizzard.hub.domain.config.repositories import diff as repository_diff
-from blizzard.hub.domain.config.repositories import merge as repository_merge
-from blizzard.hub.domain.config.repositories import validate_fields as validate_repository_fields
-from blizzard.hub.domain.config.repositories import validate_name as validate_repository_name
 from blizzard.hub.domain.config.secrets import (
     ISecretCipher,
     IWriteSecretRepository,
     SecretMetadata,
     SecretName,
-    SecretRetired,
-    SecretRevisionConflict,
     SecretValue,
 )
 from blizzard.hub.domain.config.work_sources import (
-    ConfigRevisionConflict,
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
     WorkSourceEdit,
     WorkSourceFields,
-    diff,
-    merge,
-    validate_fields,
-    validate_name,
 )
-
-_RETIRED = "retired"
 
 
 class ConfigAuthoring:
@@ -75,27 +52,16 @@ class ConfigAuthoring:
     # --- Work sources ------------------------------------------------------------
 
     def create_work_source(self, name: str, fields: WorkSourceFields, ctx: ChangeContext) -> ConfiguredWorkSource:
-        validate_name(name)
-        validate_fields(fields)
-        now = self._clock.now()
-        record = ConfiguredWorkSource(name=name, fields=fields, revision=1, created_at=now, created_by=ctx.actor)
-        change = self._change(ctx, RecordKind.WORK_SOURCE, name, 1, ChangeOp.CREATE, diff(None, fields), now)
+        record, change = ConfiguredWorkSource.new(name, fields, ctx, at=self._clock.now())
         return self._work_sources.create(record, change=change)
 
     def edit_work_source(
         self, record: ConfiguredWorkSource, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredWorkSource:
-        """Apply a sparse edit. A retired source is edited too — the revision moves, the
-        fact does not — but a retired secret is refused, as a write that enables would be."""
-        self._check_match(record, if_match)
-        merged = merge(record.fields, edit)
-        changes = diff(record.fields, merged)
-        if not changes:
+        decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
+        if decided is None:
             return record
-        validate_fields(merged)
-        now = self._clock.now()
-        edited = replace(record, fields=merged, revision=record.revision + 1)
-        change = self._change(ctx, RecordKind.WORK_SOURCE, record.name, edited.revision, ChangeOp.EDIT, changes, now)
+        edited, change = decided
         return self._work_sources.update(edited, from_revision=record.revision, change=change)
 
     def retire_work_source(
@@ -111,55 +77,28 @@ class ConfigAuthoring:
     def _set_work_source_retired(
         self, record: ConfiguredWorkSource, retired: bool, ctx: ChangeContext, if_match: int | None
     ) -> ConfiguredWorkSource:
-        self._check_match(record, if_match)
-        if record.retired == retired:
-            return record
         now = self._clock.now()
-        moved = replace(record, revision=record.revision + 1, retired=retired)
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        change = self._change(
-            ctx,
-            RecordKind.WORK_SOURCE,
-            record.name,
-            moved.revision,
-            op,
-            (FieldChange(_RETIRED, record.retired, retired),),
-            now,
-        )
+        decided = record.set_retired(retired, ctx, if_match=if_match, at=now)
+        if decided is None:
+            return record
+        moved, change = decided
         return self._work_sources.record_lifecycle(
             moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
         )
 
-    @staticmethod
-    def _check_match(record: ConfiguredWorkSource | ConfiguredRepository, if_match: int | None) -> None:
-        if if_match is not None and if_match != record.revision:
-            kind = "repository" if isinstance(record, ConfiguredRepository) else "work source"
-            raise ConfigRevisionConflict(kind, record.name, current=record.revision)
-
     # --- Repositories ------------------------------------------------------------
 
     def create_repository(self, name: str, fields: RepositoryFields, ctx: ChangeContext) -> ConfiguredRepository:
-        validate_repository_name(name)
-        validate_repository_fields(fields)
-        now = self._clock.now()
-        record = ConfiguredRepository(name=name, fields=fields, revision=1, created_at=now, created_by=ctx.actor)
-        change = self._change(ctx, RecordKind.REPOSITORY, name, 1, ChangeOp.CREATE, repository_diff(None, fields), now)
+        record, change = ConfiguredRepository.new(name, fields, ctx, at=self._clock.now())
         return self._repositories.create(record, change=change)
 
     def edit_repository(
         self, record: ConfiguredRepository, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredRepository:
-        """Apply a sparse edit. A retired repository is edited too — the revision moves, the
-        fact does not — but a retired secret is refused, as a write that enables would be."""
-        self._check_match(record, if_match)
-        merged = repository_merge(record.fields, edit)
-        changes = repository_diff(record.fields, merged)
-        if not changes:
+        decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
+        if decided is None:
             return record
-        validate_repository_fields(merged)
-        now = self._clock.now()
-        edited = replace(record, fields=merged, revision=record.revision + 1)
-        change = self._change(ctx, RecordKind.REPOSITORY, record.name, edited.revision, ChangeOp.EDIT, changes, now)
+        edited, change = decided
         return self._repositories.update(edited, from_revision=record.revision, change=change)
 
     def retire_repository(
@@ -175,21 +114,11 @@ class ConfigAuthoring:
     def _set_repository_retired(
         self, record: ConfiguredRepository, retired: bool, ctx: ChangeContext, if_match: int | None
     ) -> ConfiguredRepository:
-        self._check_match(record, if_match)
-        if record.retired == retired:
-            return record
         now = self._clock.now()
-        moved = replace(record, revision=record.revision + 1, retired=retired)
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        change = self._change(
-            ctx,
-            RecordKind.REPOSITORY,
-            record.name,
-            moved.revision,
-            op,
-            (FieldChange(_RETIRED, record.retired, retired),),
-            now,
-        )
+        decided = record.set_retired(retired, ctx, if_match=if_match, at=now)
+        if decided is None:
+            return record
+        moved, change = decided
         return self._repositories.record_lifecycle(
             moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
         )
@@ -197,23 +126,20 @@ class ConfigAuthoring:
     # --- Secrets -----------------------------------------------------------------
 
     def create_secret(self, name: SecretName, value: str, ctx: ChangeContext) -> SecretMetadata:
-        sealed = self._cipher.seal(SecretValue(value), name=name.value, revision=1)
+        sealed = self._cipher.seal(SecretValue.entered(value), name=name.value, revision=1)
         now = self._clock.now()
-        change = self._change(ctx, RecordKind.SECRET, name.value, 1, ChangeOp.CREATE, (), now)
+        change = secret_lifecycle.creation(name, ctx, at=now)
         return self._secrets.create(name.value, sealed=sealed, at=now, by=ctx.actor, change=change)
 
     def replace_secret(
         self, record: SecretMetadata, value: str, ctx: ChangeContext, *, if_match: int | None = None
     ) -> SecretMetadata:
-        """Seal under ``record.revision + 1`` and compare-and-set from ``record.revision``.
+        """Seal under the next revision and compare-and-set from ``record.revision``.
         ``if_match`` is the revision the caller last saw, checked before any write."""
-        if self._secrets.is_retired(record.name):
-            raise SecretRetired(record.name)
-        if if_match is not None and if_match != record.revision:
-            raise SecretRevisionConflict(record.name, current=record.revision)
-        sealed = self._cipher.seal(SecretValue(value), name=record.name, revision=record.revision + 1)
         now = self._clock.now()
-        change = self._change(ctx, RecordKind.SECRET, record.name, record.revision + 1, ChangeOp.REPLACE, (), now)
+        retired = self._secrets.is_retired(record.name)
+        change = secret_lifecycle.replacement(record, ctx, retired=retired, if_match=if_match, at=now)
+        sealed = self._cipher.seal(SecretValue.entered(value), name=record.name, revision=change.revision)
         return self._secrets.replace(
             record.name, from_revision=record.revision, sealed=sealed, at=now, by=ctx.actor, change=change
         )
@@ -228,39 +154,10 @@ class ConfigAuthoring:
         return self._set_secret_retired(record, False, ctx)
 
     def _set_secret_retired(self, record: SecretMetadata, retired: bool, ctx: ChangeContext) -> bool:
-        if self._secrets.is_retired(record.name) == retired:
-            return False
         now = self._clock.now()
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        change = self._change(
-            ctx,
-            RecordKind.SECRET,
-            record.name,
-            record.revision,
-            op,
-            (FieldChange(_RETIRED, not retired, retired),),
-            now,
-        )
+        retired_now = self._secrets.is_retired(record.name)
+        change = secret_lifecycle.lifecycle_change(record, ctx, retired_now=retired_now, retired=retired, at=now)
+        if change is None:
+            return False
         self._secrets.record_lifecycle(record.name, retired=retired, at=now, by=ctx.actor, change=change)
         return True
-
-    @staticmethod
-    def _change(
-        ctx: ChangeContext,
-        kind: RecordKind,
-        key: str,
-        revision: int,
-        op: ChangeOp,
-        changes: tuple[FieldChange, ...],
-        at: datetime,
-    ) -> ConfigChange:
-        return ConfigChange(
-            recorded_at=at,
-            actor=ctx.actor,
-            door=ctx.door,
-            record_kind=kind,
-            record_key=key,
-            revision=revision,
-            op=op,
-            diff=changes,
-        )

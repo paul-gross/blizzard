@@ -12,7 +12,8 @@ from typing import Protocol
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
+from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem
+from blizzard.hub.domain.work_items.model import WorkItemEdit
 
 
 class WorkItemRefUnknownError(Exception):

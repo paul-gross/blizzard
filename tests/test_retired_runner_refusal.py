@@ -11,7 +11,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
@@ -20,7 +20,7 @@ from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
-from tests.support import HubHarness, build_hub, report_lease
+from tests.support import HubHarness, build_hub, make_ready, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -82,6 +82,7 @@ def test_claim_refuses_a_retired_runner_and_leaves_the_chunk_unrouted(tmp_path: 
     hub = _retired_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    make_ready(hub, chunk_id)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
@@ -111,6 +112,7 @@ class _Routed:
         self.hub.services.fleet.register(_RUNNER, "ws-a")
         self.chunk_id = self.hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
         assert self.hub.client.post(f"/api/chunks/{self.chunk_id}/promote").status_code == 202
+        make_ready(self.hub, self.chunk_id)
         claim = self.hub.client.post(
             "/api/fleet/routes",
             json={"chunk_id": self.chunk_id, "runner_id": _RUNNER, "workspace_id": "ws-a", "environment_ids": ["e1"]},
@@ -169,9 +171,9 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
         )
     ),
     "transcript ingest": lambda r: r.hub.services.transcript_ingest.ingest(_RUNNER, [r.transcript_record()]),
-    "lease report": lambda r: r.hub.services.runner_facts.record_lease_minted(r.chunk_id, epoch=2, runner_id=_RUNNER),
+    "lease report": lambda r: r.hub.services.runner_facts.record_lease_minted(r.chunk, epoch=2, runner_id=_RUNNER),
     "escalation report": lambda r: r.hub.services.runner_facts.record_escalation(
-        r.chunk_id, runner_id=_RUNNER, epoch=1, takeover_command="claude --resume"
+        r.chunk, runner_id=_RUNNER, epoch=1, takeover_command="claude --resume"
     ),
     "completion": lambda r: r.hub.services.apply.apply(
         r.chunk,
@@ -181,7 +183,9 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
     "decision": lambda r: r.hub.services.decisions.submit(
         r.chunk, r.graph, DecisionSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
     ),
-    "route-token rekey": lambda r: r.hub.services.claim.rekey(r.route),
+    "route-token rekey": lambda r: r.hub.services.claim.rekey(
+        r.route, ChunkFacts.or_default(r.hub.services.chunks.facts.load_facts(r.chunk_id))
+    ),
     "runner read": lambda r: r.hub.services.fleet.own_liveness(_registration(r.hub)),
 }
 

@@ -29,12 +29,16 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``route_of`` is live — see module docstring."""
+    """Only ``route_of`` and ``facts`` are live — see module docstring. A chunk with no status
+    facts counts as held, so ``facts`` answers ``None``."""
 
     route: Route | None
 
     def route_of(self, chunk_id: str) -> Route | None:
         return self.route
+
+    def facts(self, chunk_id: str) -> None:
+        return None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DetachService should not touch handle.{name!r}")

@@ -11,7 +11,7 @@ as it stands. ``events`` selects by step start, not derivation time (``fact-egre
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -19,14 +19,20 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.observability.egress.assembly import add_step, guarded, invocation_entry, step_partition
+from blizzard.hub.domain.observability.egress.assembly import (
+    guarded,
+    invocation_rows,
+    sorted_step_rows,
+    window_step_rows,
+)
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy, missing_key_reason
 from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of
+from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.operator_window import OperatorWindow, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -43,11 +49,46 @@ _Rows = list[tuple[date, EgressValues]]
 
 
 class BackfillWindowRefused(ValueError):
-    """The window is inverted, empty, wider than ``backfill_max_window``, or names a dataset not configured."""
+    """The window is inverted, empty, wider than ``backfill_max_window``, reaches past now, or names a dataset
+    not configured."""
 
 
 class BackfillUnavailable(Exception):
-    """The export is off or rejected, so there is no writer to backfill through."""
+    """A wet backfill while the export is off or rejected: there is no writer to backfill through."""
+
+
+def require_backfillable(
+    since: datetime,
+    until: datetime,
+    dataset: str | None,
+    *,
+    datasets: Sequence[str],
+    max_window_seconds: int,
+    now: datetime,
+    dry_run: bool,
+    writers_wired: bool,
+    missing_path_key: str | None = None,
+) -> None:
+    """Refuse a backfill the wiring, window, or dataset cannot honour — a wet run with the export
+    off first, then the window, then the events dataset while its path hash key is missing, then a
+    dataset not configured. A dry run only counts the rows and files it would place, so it runs
+    with the export off."""
+    if not export_allows(ExportVerb.DRY_BACKFILL if dry_run else ExportVerb.BACKFILL, wired=writers_wired):
+        raise BackfillUnavailable("the egress export is not configured; there is nowhere to write a backfill")
+    fault = OperatorWindow(since, until).fault(max_window=timedelta(seconds=max_window_seconds), now=now)
+    if fault is not None:
+        raise BackfillWindowRefused(
+            fault_message(fault, max_window_name="backfill_max_window", max_window_seconds=max_window_seconds)
+        )
+    if dataset == EVENTS_SCHEMA.name and missing_path_key is not None:
+        raise BackfillWindowRefused(missing_key_reason(missing_path_key))
+    if dataset is not None and dataset not in datasets:
+        raise BackfillWindowRefused(f"dataset {dataset!r} is not configured; the export writes {', '.join(datasets)}")
+
+
+def files_needed(partition_rows: Sequence[int], max_rows_per_file: int) -> int:
+    """How many files a pass places: each partition's rows split into files of at most ``max_rows_per_file``."""
+    return sum(-(-rows // max_rows_per_file) for rows in partition_rows)
 
 
 @dto
@@ -117,27 +158,25 @@ class EgressBackfill:
         self._datasets = config.datasets
         self._batch_limit = config.batch_limit
         self._max_rows_per_file = config.max_rows_per_file
-        self._max_window = timedelta(seconds=config.backfill_max_window)
         self._max_window_seconds = config.backfill_max_window
         self._writers = writers
         self._missing_path_key = missing_path_key
 
     def backfill(self, since: datetime, until: datetime, *, dataset: str | None, dry_run: bool) -> BackfillResult:
-        if self._writers is None:
-            raise BackfillUnavailable("the egress export is not configured; there is nowhere to write a backfill")
-        if until <= since:
-            raise BackfillWindowRefused("until must be after since")
-        if until - since > self._max_window:
-            raise BackfillWindowRefused(
-                f"window is wider than backfill_max_window ({self._max_window_seconds} seconds)"
-            )
-        if dataset == EVENTS_SCHEMA.name and self._missing_path_key is not None:
-            raise BackfillWindowRefused(missing_key_reason(self._missing_path_key))
-        if dataset is not None and dataset not in self._datasets:
-            raise BackfillWindowRefused(
-                f"dataset {dataset!r} is not configured; the export writes {', '.join(self._datasets)}"
-            )
-        run = _Run(since, until, None if dry_run else self._writers(), self._clock.now())
+        now = self._clock.now()
+        require_backfillable(
+            since,
+            until,
+            dataset,
+            datasets=self._datasets,
+            max_window_seconds=self._max_window_seconds,
+            now=now,
+            dry_run=dry_run,
+            writers_wired=self._writers is not None,
+            missing_path_key=self._missing_path_key,
+        )
+        writers = self._writers
+        run = _Run(since, until, writers() if not dry_run and writers is not None else None, now)
         for name in self._datasets:
             if dataset is not None and name != dataset:
                 continue
@@ -163,10 +202,7 @@ class EgressBackfill:
         while True:
             # The window is half-open: read_window's own bound is inclusive.
             window = read_window(self._steps, position, run.until - _ONE_MICROSECOND, self._batch_limit)
-            batch: dict[str, tuple[CursorKey, EgressValues]] = {}
-            for closed in window.closed_steps():
-                add_step(batch, closed.facts, closed.steps, closed.step, closed.key, run.now)
-            rows = [(step_partition(row), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
+            rows = sorted_step_rows(window_step_rows(window, run.now))
             if rows and (failure := self._place(run, STEPS_SCHEMA, rows)) is not None:
                 return failure
             if window.position == position:
@@ -183,13 +219,7 @@ class EgressBackfill:
             if not usage:
                 return None
             facts = self._steps.step_facts_for(sorted({row.chunk_id for row in usage}))
-            steps = {chunk_id: identify_steps(held) for chunk_id, held in facts.items()}
-            rows: _Rows = []
-            for row in usage:
-                chunk = facts.get(row.chunk_id)
-                entry = invocation_entry(chunk, steps[row.chunk_id], row, run.now) if chunk is not None else None
-                if entry is not None:
-                    rows.append(entry)
+            rows = invocation_rows(usage, facts, run.now).rows
             if rows and (failure := self._place(run, INVOCATIONS_SCHEMA, rows)) is not None:
                 return failure
             position = UsagePosition(usage[-1].fact.recorded_at, usage[-1].usage_id)
@@ -234,7 +264,7 @@ class EgressBackfill:
         tally = run.tallies[schema.name]
         if run.writer is None:
             tally.rows += len(rows)
-            tally.files += sum(-(-len(part) // self._max_rows_per_file) for part in by_partition.values())
+            tally.files += files_needed([len(part) for part in by_partition.values()], self._max_rows_per_file)
             return None
         egress_pass = EgressPass(started_at=run.now, backfill=True, extractor_version=extractor_version)
         placed: list[PlacedFile] = []

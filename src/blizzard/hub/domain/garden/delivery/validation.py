@@ -11,12 +11,14 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Protocol
 
 from pydantic import TypeAdapter, ValidationError
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
 from blizzard.foundation.roles import dto
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
+from blizzard.hub.domain.garden.proposals.model import GardenProposalBlankFieldError, require_text
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp
 from blizzard.wire.garden_proposal import GardenProposalCandidate
@@ -67,8 +69,63 @@ class ValidatedDelivery:
     #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
     #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
-    #: Every currently-`delivered` finding, valued by its closer's actor, or `None`.
-    delivered_findings: dict[str, str | None] = field(default_factory=dict)
+    #: Every citable finding's :meth:`Finding.run_gone`: the fact kind and actor a run's `gone` lands as.
+    gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+
+    @property
+    def delivered_findings(self) -> dict[str, str | None]:
+        """Every currently-`delivered` finding — the ones a `gone` settles to `resolved` —
+        valued by its closer's actor, or `None`."""
+        return delivered_closers(self.gone_settlements)
+
+
+def delivered_closers(gone_settlements: Mapping[str, tuple[str, str | None]]) -> dict[str, str | None]:
+    """The findings whose `gone` settles to `resolved` — the delivered ones — by closer."""
+    return {fid: actor for fid, (kind, actor) in gone_settlements.items() if kind == "resolved"}
+
+
+@dto
+@dataclass(frozen=True)
+class SelectedArtifacts:
+    """The named artifacts a delivery reads: artifact name → raw content, and name →
+    artifact id, in the order the delivery named them."""
+
+    contents: dict[str, str]
+    artifact_ids: dict[str, str]
+
+
+class NamedArtifact(Protocol):
+    """What a delivery reads of one named artifact: its raw content and its id."""
+
+    @property
+    def data(self) -> str: ...
+
+    @property
+    def artifact_id(self) -> str: ...
+
+
+def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
+    """The delta artifacts `names` names, out of `latest` (each name's newest artifact).
+    Refuses a delivery naming no delta, or naming one with no artifact — a missing delta
+    would silently drop a scope's measurement."""
+    missing = [name for name in names if name not in latest]
+    if not names or missing:
+        raise GardenDeliveryRejected(f"delta artifact not found — missing: {', '.join(missing) or '<none named>'}")
+    return SelectedArtifacts(
+        contents={name: latest[name].data for name in names},
+        artifact_ids={name: latest[name].artifact_id for name in names},
+    )
+
+
+def select_proposal_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
+    """The proposals artifacts `names` names, out of `latest`; a named one with no artifact
+    is skipped — a garden graph reaches delivery without drafting proposals when its run
+    has none to make."""
+    present = [name for name in names if name in latest]
+    return SelectedArtifacts(
+        contents={name: latest[name].data for name in present},
+        artifact_ids={name: latest[name].artifact_id for name in present},
+    )
 
 
 def parse_delta(artifact_name: str, raw: str) -> FindingDelta:
@@ -188,11 +245,15 @@ def check_proposal(
     exited_ids: frozenset[str] = frozenset(),
     known_refs: frozenset[str] = frozenset(),
 ) -> None:
-    """Validate one already-parsed proposal candidate. Each entry in `proposal.findings`
-    is either a `fin_<ULID>` id live on `run.routine_name` or a `ref` an `add` op in this
-    same delivery carries, checked against `known_refs`. An entry repeated within the same
-    proposal is refused too — `garden_proposal_findings`'s own primary key can carry a
-    finding only once per proposal."""
+    """Validate one already-parsed proposal candidate: a blank title, class, or body is refused first, then
+    each `proposal.findings` entry must be a `fin_<ULID>` live on `run.routine_name` or a `ref` an `add` op
+    in this delivery carries (`known_refs`), and none may repeat — the primary key carries a finding once
+    per proposal."""
+    for value, field_name in ((proposal.title, "title"), (proposal.class_, "class"), (proposal.body, "body")):
+        try:
+            require_text(value, field_name)
+        except GardenProposalBlankFieldError:
+            raise GardenDeliveryRejected(f"proposal {proposal.ref!r} has a blank {field_name}") from None
     seen: set[str] = set()
     for entry in proposal.findings:
         if entry in seen:
@@ -236,7 +297,7 @@ def validate_delivery(
     first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
     exited_ids = bucket.exited_ids
-    delivered_findings = {f.finding_id: f.actor for f in bucket.citable if f.state == "delivered"}
+    gone_settlements = {f.finding_id: f.run_gone() for f in bucket.citable}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []
@@ -268,7 +329,7 @@ def validate_delivery(
         proposals=proposals,
         proposal_sources=proposal_sources,
         introduced_at=introduced_at,
-        delivered_findings=delivered_findings,
+        gone_settlements=gone_settlements,
     )
 
 

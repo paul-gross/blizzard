@@ -6,10 +6,11 @@ import hashlib
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -18,7 +19,9 @@ _POINTER = {"source": "default", "ref": "7"}
 
 def _ingest(hub, ref: str = "7") -> str:  # type: ignore[no-untyped-def]
     pointer = {"source": "default", "ref": ref}
-    return hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    return chunk_id
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
@@ -331,15 +334,23 @@ def test_claim_allowed_while_only_locally_paused(tmp_path: Path) -> None:
     assert resp.status_code == 201
 
 
-def test_claim_from_an_unregistered_runner_is_not_denied(tmp_path: Path) -> None:
-    """A runner the registry has never heard from cannot be paused there — `set_paused`
-    requires a known runner — so an unregistered claimant is not refused on this brake."""
+def test_claim_from_an_unregistered_runner_is_denied_before_the_race(tmp_path: Path) -> None:
+    """Neither brake nor the runner's capabilities can be judged without a registration, so a
+    claimant the registry has never heard from is refused in the paused-denial shape and the
+    chunk stays claimable. The plain client skips the harness's register-before-claim."""
     hub = build_hub(tmp_path)
     chunk_id = _ingest(hub)
+    assert hub.app is not None
 
-    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
+    resp = TestClient(hub.app).post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
 
-    assert resp.status_code == 201
+    assert resp.status_code == 403
+    assert resp.json() == {
+        "chunk_id": chunk_id,
+        "runner_id": "r-unregistered",
+        "detail": "runner r-unregistered is not registered at the hub",
+    }
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
 
 def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> None:

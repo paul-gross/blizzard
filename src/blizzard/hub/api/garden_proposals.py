@@ -22,6 +22,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.closure import (
+    GardenProposalBodyWithoutMint,
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
 )
@@ -35,11 +36,13 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
+    GardenProposalNoFindingsError,
 )
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.work_items.model import WorkItemFieldBlank
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,
@@ -152,8 +155,9 @@ def pass_garden_proposal(
 ) -> GardenProposalView:
     """Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a
     dismissal — it is the note that stops a later run raising the same response as
-    though it were new. 404 for an unknown proposal, 422 for a blank reason, 409 when
-    the proposal already carries a closure — closure is terminal."""
+    though it were new. 404 for an unknown proposal, 409 when the proposal already
+    carries a closure — closure is terminal, so it wins over every other refusal — and
+    422 for a blank reason."""
     proposal = _get_or_404(proposal_id, services)
     try:
         closure = services.garden_proposal_closure.pass_(proposal, reason=request.reason, by=identity.user_id)
@@ -175,21 +179,10 @@ def accept_garden_proposal(
     hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
     template when the proposal names findings and bare when it names none. When it is
     false, mints nothing and records the decline. Promotes nothing and changes no
-    finding's state. 404 unknown proposal, 409 already closed or a raced ingest, 503 the
-    packaged default graph retired."""
+    finding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`
+    with `mint_work_item` false or a minted item left with a blank title or body, 409
+    already closed or a raced ingest, 503 the packaged default graph retired."""
     proposal = _get_or_404(proposal_id, services)
-    existing = services.garden_proposal_closures.get(proposal_id)
-    if existing is not None:
-        already = GardenProposalAlreadyClosed(proposal_id, existing)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(already)) from None
-    graph = None
-    if request.mint_work_item:
-        try:
-            graph = services.graph_mint.ensure_default(
-                services.default_graph_doc, definition_yaml=services.default_graph_yaml
-            )
-        except DefaultGraphRetired as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     proposal_findings = resolve_proposal_findings(services.findings, proposal.findings)
     try:
         accepted = services.garden_proposal_closure.accept(
@@ -198,11 +191,14 @@ def accept_garden_proposal(
             by=identity.user_id,
             body=request.body,
             mint=request.mint_work_item,
-            graph=graph,
             findings=proposal_findings,
         )
+    except (GardenProposalBodyWithoutMint, WorkItemFieldBlank) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except DefaultGraphRetired as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
@@ -293,14 +289,15 @@ def attach_garden_proposal_findings(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
     """Link the given finding ids to PROPOSAL_ID — works on either origin
-    while open. 404 unknown proposal, 409 already closed, 422 an unknown, exited, or
-    duplicate finding id, or one already linked to this proposal — the whole call is
-    refused, nothing is linked."""
+    while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
+    exited, or duplicate finding id, or one already linked to this proposal — the whole
+    call is refused, nothing is linked."""
     proposal = _get_or_404(proposal_id, services)
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         updated = services.garden_proposal_authoring.attach(proposal, findings)
     except (
+        GardenProposalNoFindingsError,
         DuplicateProposalFindingError,
         GardenProposalFindingExitedError,
         GardenProposalFindingAlreadyLinkedError,
@@ -322,13 +319,13 @@ def detach_garden_proposal_findings(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
     """Unlink the given finding ids from PROPOSAL_ID — works on either
-    origin while open. 404 unknown proposal, 409 already closed, 422 an unknown or
-    duplicate id, or one not linked to this proposal."""
+    origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an
+    unknown or duplicate id, or one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         updated = services.garden_proposal_authoring.detach(proposal, findings)
-    except (DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
+    except (GardenProposalNoFindingsError, DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

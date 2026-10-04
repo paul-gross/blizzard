@@ -20,7 +20,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.operations.queue import QueueList, QueueService
+from blizzard.hub.domain.operations.queue import QueueList, QueueRanking, QueueService
 
 _NO_STATUSES: dict[str, ChunkStatus] = {}
 """The fake repo below pre-filters `ready`/`not_ready` itself, so `QueueService` never
@@ -39,7 +39,7 @@ def _chunk(chunk_id: str, minted_at: datetime = _MINTED) -> Chunk:
 
 def test_never_promoted_chunk_falls_back_to_minted_at() -> None:
     chunk = _chunk("chk_1")
-    position = QueueService._effective_position(chunk, {}, {})
+    position = QueueRanking(positions={}, promoted_ats={}).effective_position(chunk)
     assert position == _MINTED.timestamp()
 
 
@@ -47,14 +47,14 @@ def test_promoted_but_unmoved_chunk_falls_back_to_promoted_at_not_minted_at() ->
     # A chunk minted long ago but promoted late: its fallback sort
     # key is the later promoted_at, so it lands at the tail, not mid-queue by mint order.
     chunk = _chunk("chk_1")
-    position = QueueService._effective_position(chunk, {}, {"chk_1": _PROMOTED})
+    position = QueueRanking(positions={}, promoted_ats={"chk_1": _PROMOTED}).effective_position(chunk)
     assert position == _PROMOTED.timestamp()
     assert position > _MINTED.timestamp()
 
 
 def test_explicit_position_wins_over_both_promoted_at_and_minted_at() -> None:
     chunk = _chunk("chk_1")
-    position = QueueService._effective_position(chunk, {"chk_1": 3.0}, {"chk_1": _PROMOTED})
+    position = QueueRanking(positions={"chk_1": 3.0}, promoted_ats={"chk_1": _PROMOTED}).effective_position(chunk)
     assert position == 3.0
 
 
@@ -65,7 +65,7 @@ def test_ordering_by_effective_position_places_a_late_promoted_old_mint_chunk_la
     b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))
     promoted_ats = {"chk_a": _PROMOTED, "chk_b": datetime(2025, 1, 1, 0, 0, 1, tzinfo=UTC)}
 
-    ordered = sorted([a, b], key=lambda c: QueueService._effective_position(c, {}, promoted_ats))
+    ordered = sorted([a, b], key=QueueRanking(positions={}, promoted_ats=promoted_ats).effective_position)
 
     assert [c.chunk_id for c in ordered] == ["chk_b", "chk_a"]
 

@@ -329,3 +329,19 @@ def test_an_empty_candidate_set_resolves_no_default_graph(tmp_path: Path, monkey
     monkeypatch.setattr(hub.services.graph_mint, "ensure_default_or_none", _boom)
 
     hub.services.work_item_materialization.sweep()  # no proposals at all — must return early
+
+
+def test_a_blank_create_proposal_is_recorded_unresolved_and_mints_nothing(tmp_path: Path) -> None:
+    """A blank title or body is the item's own invariant on every door: the fleet's create
+    is judged unresolvable once, never minted as a blank backlog item."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _ingest(hub)
+    _deliver(hub, chunk_id, node_id, proposals=[_create_proposal(title="   ")])
+
+    hub.services.work_item_materialization.sweep()
+    hub.services.work_item_materialization.sweep()
+
+    assert _hub_items(hub) == []
+    assert _materialization_rows(hub) == {
+        (None, None): (WorkItemMaterializationOutcome.UNRESOLVED.value, "title must not be blank")
+    }

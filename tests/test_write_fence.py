@@ -422,10 +422,11 @@ def test_the_direct_escalation_route_answers_409_when_stale_or_stopped(tmp_path:
 
     stale = _post_escalation(chunk, epoch=1)
     assert stale.status_code == 409 and stale.json()["detail"] == _STALE
-    assert _post_escalation(chunk, epoch=2).status_code == 202
+    chunk.lease(3)  # the restart took epoch 2; the reporting attempt must own the epoch it escalates at
+    assert _post_escalation(chunk, epoch=3).status_code == 202
 
     chunk.stop()
-    stopped = _post_escalation(chunk, epoch=2)
+    stopped = _post_escalation(chunk, epoch=3)
     assert stopped.status_code == 409 and stopped.json()["detail"] == _TERMINAL
     assert chunk.rows(s.escalations) == 1
 

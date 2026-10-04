@@ -84,7 +84,8 @@ class GardenProposalAcceptRequest(BaseModel):
     defaults to `True`: minting a linked hub work item is the default, and declining it
     is the deliberate act. `body` replaces the proposal's own body as the minted item's
     body, wrapped in the "Related findings" template when the proposal cites findings and
-    minted bare otherwise; ignored when `mint_work_item` is `False`."""
+    minted bare otherwise; refused (422) when `mint_work_item` is `False`. A blank
+    `reason` is stored as none."""
 
     model_config = ConfigDict(extra="forbid")
 

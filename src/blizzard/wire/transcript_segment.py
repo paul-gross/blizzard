@@ -105,14 +105,15 @@ class TranscriptSegmentBatch(BaseModel):
 class TranscriptSegmentAck(BaseModel):
     """The hub's per-batch acknowledgement against the transcript lane's high-water mark.
 
-    ``capped`` is the cap-rejection class — acknowledged, content-dropped, and the
-    high-water advances past it, a durable decision that must not re-adjudicate on replay."""
+    ``capped`` records are acknowledged and content-dropped, a durable decision never re-adjudicated on
+    replay; ``refused`` records, whose lease epoch another holder owns, are acknowledged and never stored."""
 
     runner_id: str
     high_water: int
     applied: list[int] = []
     already_applied: list[int] = []
     capped: list[int] = []
+    refused: list[int] = []
 
 
 class TranscriptSegmentIndexEntry(BaseModel):

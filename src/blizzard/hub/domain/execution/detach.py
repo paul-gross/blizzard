@@ -7,14 +7,48 @@ tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalati
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunk.model import Chunk, holds_claim
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, holds_claim
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.runners.route import Route
+
+#: The statuses detach may release a live route from: every non-terminal one, ``delivering`` included.
+DETACHABLE: frozenset[ChunkStatus] = frozenset(ChunkStatus) - TERMINAL_STATUSES
 
 
 class NotRouted(Exception):
-    """A detach targeted a chunk with no live route — there is nothing to release."""
+    """A detach targeted a chunk with no live route, or one whose route holds no claim — there is
+    nothing to release."""
+
+
+def holds(status: ChunkStatus | None) -> bool:
+    """Whether a live route on a chunk at ``status`` is still a holding: a terminal chunk's leftover
+    route is none. A chunk with no status facts counts as held."""
+    return status is None or holds_claim(status)
+
+
+def held_routes(routes: Sequence[Route], statuses: Mapping[str, ChunkStatus]) -> list[Route]:
+    """The routes among ``routes`` that still hold their chunk — retirement's holdings."""
+    return [route for route in routes if holds(statuses.get(route.chunk_id))]
+
+
+def refuse_detach(chunk_id: str, route: Route | None, status: ChunkStatus | None) -> None:
+    """Raise :class:`NotRouted` unless the operator may release ``route`` from a chunk at
+    ``status`` (:data:`DETACHABLE`)."""
+    if route is None:
+        raise NotRouted(f"chunk {chunk_id} has no live route")
+    if status is not None and status not in DETACHABLE:
+        raise NotRouted(f"chunk {chunk_id} is {status}: its route holds no claim")
+
+
+def releasable_by(route: Route | None, status: ChunkStatus | None, *, runner_id: str) -> bool:
+    """Whether retirement's release pass may release ``route`` for ``runner_id``: only while that
+    runner still holds it and the chunk still holds a claim."""
+    return route is not None and route.runner_id == runner_id and holds(status)
 
 
 class DetachService:
@@ -31,12 +65,13 @@ class DetachService:
     def detach(self, chunk: Chunk) -> int:
         """Release the chunk's live route so it re-derives ``ready``.
 
-        Raises :class:`NotRouted` if the chunk has no live route — there is nothing to
-        release. Returns the freshly-written ``route_released.id`` (the
-        activity-feed's key)."""
+        Raises :class:`NotRouted` if the chunk has no live route, or its route is left on a
+        terminal chunk — there is nothing to release. Returns the freshly-written
+        ``route_released.id`` (the activity-feed's key)."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            if handle.route_of(chunk.chunk_id) is None:
-                raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
+            route = handle.route_of(chunk.chunk_id)
+            status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
+            refuse_detach(chunk.chunk_id, route, status)
             return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())
 
     def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
@@ -45,9 +80,11 @@ class DetachService:
         terminal chunk, which holds no claim to release."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             route = handle.route_of(chunk.chunk_id)
-            if route is None or route.runner_id != runner_id:
-                return None
-            facts = handle.facts(chunk.chunk_id)
-            if facts is not None and not holds_claim(facts.status()):
+            status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
+            if not releasable_by(route, status, runner_id=runner_id):
                 return None
             return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())
+
+
+def _status(facts: ChunkFacts | None) -> ChunkStatus | None:
+    return None if facts is None else facts.status()

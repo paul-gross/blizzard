@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.chunk.model import TransitionFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -21,11 +21,13 @@ from blizzard.hub.domain.observability.analytics.events import (
     CandidacyRead,
     DerivationSignature,
     IWriteTranscriptEvents,
+    SegmentDerivationInput,
     TranscriptEvent,
 )
 from blizzard.hub.domain.observability.analytics.extraction import (
     DEFAULT_EXTRACTORS,
     EXTRACTOR_VERSION,
+    ExtractedEvent,
     ITurnEventExtractor,
     extract_events,
 )
@@ -57,6 +59,84 @@ class GraphPins:
             assert newest.graph_id is not None  # narrowed by the filter above
             return newest.graph_id
         return self.mint_pin_by_chunk.get(chunk_id)
+
+
+class ReDeriveScopeRefused(ValueError):
+    """A re-derive naming both a segment and a chunk."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class ReDeriveScope:
+    """What one re-derive covers: one segment, forced regardless of its candidacy; or the
+    candidates of one chunk, or of every chunk. An id that names nothing derives nothing —
+    re-derive is a convergence trigger, not a read."""
+
+    segment_id: str | None = None
+    chunk_id: str | None = None
+
+    @classmethod
+    def of(cls, *, segment_id: str | None, chunk_id: str | None) -> ReDeriveScope:
+        if segment_id is not None and chunk_id is not None:
+            raise ReDeriveScopeRefused("segment_id and chunk_id are mutually exclusive")
+        return cls(segment_id, chunk_id)
+
+    def batch(self, candidates: Sequence[str], limit: int) -> tuple[list[str], int]:
+        """The candidates one call derives — the first ``limit`` — and how many remain for the
+        caller's next call."""
+        to_derive = list(candidates[:limit])
+        return to_derive, len(candidates) - len(to_derive)
+
+
+@dto
+@dataclass(frozen=True)
+class ReDeriveOutcome:
+    """How many segments a re-derive derived — successes only — and how many candidates remain."""
+
+    derived: int
+    remaining: int
+
+
+def stamp_events(
+    extracted: Sequence[ExtractedEvent], current: SegmentDerivationInput, graph_id: str
+) -> list[TranscriptEvent]:
+    """Each extracted event stamped with its segment's node-step context and graph."""
+    return [
+        TranscriptEvent(
+            kind=event.kind,
+            turn_path=event.turn_path,
+            occurrence=event.occurrence,
+            payload=json.dumps(event.payload, sort_keys=True),
+            subject=event.subject,
+            tool=event.tool,
+            chunk_id=current.chunk_id,
+            node_id=current.node_id,
+            epoch=current.epoch,
+            spawn_generation=current.spawn_generation,
+            graph_id=graph_id,
+            depth=event.depth,
+            agent_type=event.agent_type,
+            occurred_at=event.occurred_at,
+        )
+        for event in extracted
+    ]
+
+
+#: The change probe's forced floor — bounds how stale a missed signature can leave reality.
+FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
+
+
+def derivation_due(
+    last_signature: DerivationSignature | None,
+    signature: DerivationSignature,
+    last_full_pass_at: datetime | None,
+    now: datetime,
+) -> bool:
+    """A pass runs when the inputs' signature changed since the last pass, or the forced floor
+    has elapsed since it — always for a process that has run none."""
+    if last_full_pass_at is None or now - last_full_pass_at >= FORCED_FULL_PASS_FLOOR:
+        return True
+    return signature != last_signature
 
 
 class EventDerivationService:
@@ -125,25 +205,7 @@ class EventDerivationService:
         extracted = extract_events(
             current.turns, normalizer_version=current.normalizer_version, extractors=self._extractors
         )
-        events = [
-            TranscriptEvent(
-                kind=event.kind,
-                turn_path=event.turn_path,
-                occurrence=event.occurrence,
-                payload=json.dumps(event.payload, sort_keys=True),
-                subject=event.subject,
-                tool=event.tool,
-                chunk_id=current.chunk_id,
-                node_id=current.node_id,
-                epoch=current.epoch,
-                spawn_generation=current.spawn_generation,
-                graph_id=graph_id,
-                depth=event.depth,
-                agent_type=event.agent_type,
-                occurred_at=event.occurred_at,
-            )
-            for event in extracted
-        ]
+        events = stamp_events(extracted, current, graph_id)
         self._events.replace_segment_events(
             segment_id,
             self._extractor_version,
@@ -155,16 +217,24 @@ class EventDerivationService:
         )
         return True
 
-
-#: The change probe's forced floor — bounds how stale a missed signature can leave reality.
-_FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
+    def re_derive(self, scope: ReDeriveScope, *, limit: int) -> ReDeriveOutcome:
+        """Derive ``scope``: its one segment, or up to ``limit`` of its current candidates.
+        ``derived`` counts the segments actually derived — a candidate gone by now, or one
+        with no resolvable graph pin, is not counted."""
+        if scope.segment_id is not None:
+            pins = self.graph_pins_for([scope.segment_id])
+            return ReDeriveOutcome(derived=1 if self.derive_segment(scope.segment_id, pins) else 0, remaining=0)
+        to_derive, remaining = scope.batch(self.candidate_segment_ids(chunk_id=scope.chunk_id), limit)
+        pins = self.graph_pins_for(to_derive)
+        derived = sum(1 for segment_id in to_derive if self.derive_segment(segment_id, pins))
+        return ReDeriveOutcome(derived=derived, remaining=remaining)
 
 
 class EventDerivationReconciler:
     """The standing convergence pass, stepped by the existing ``Sweep`` driver: derives
     each candidate, then drops rows for any segment no longer visible. Holds, in memory
     only, the last pass's :class:`~blizzard.hub.domain.observability.analytics.events.DerivationSignature`;
-    a fresh process always runs full, and :data:`_FORCED_FULL_PASS_FLOOR` bounds staleness."""
+    a fresh process always runs full, and :data:`FORCED_FULL_PASS_FLOOR` bounds staleness."""
 
     def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents, clock: IClock) -> None:
         self._service = service
@@ -181,8 +251,7 @@ class EventDerivationReconciler:
         below, not re-evaluated."""
         signature = self._events.derivation_signature()
         now = self._clock.now()
-        floor_due = self._last_full_pass_at is None or now - self._last_full_pass_at >= _FORCED_FULL_PASS_FLOOR
-        if not floor_due and signature == self._last_signature:
+        if not derivation_due(self._last_signature, signature, self._last_full_pass_at, now):
             _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
             return
 

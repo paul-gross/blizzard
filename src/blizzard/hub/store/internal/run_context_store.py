@@ -36,9 +36,9 @@ class RunContextStore:
         self._store = store
 
     def for_chunk(self, chunk: Chunk) -> RunContext | None:
-        if not chunk.work_refs:
+        pointer = chunk.originating_ref()
+        if pointer is None:
             return None
-        pointer = chunk.work_refs[0]
         with self._store.read("for_chunk") as conn:
             item_row = conn.execute(
                 select(s.work_items.c.work_item_id).where(

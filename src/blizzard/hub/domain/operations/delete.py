@@ -10,11 +10,12 @@ from __future__ import annotations
 # The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
+from collections.abc import Iterable
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, IWriteWorkItemRepository
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 
 
@@ -42,6 +43,19 @@ class ChunkHasDependents(Exception):
         )
         self.chunk_id = chunk_id
         self.dependent_chunk_ids = dependent_chunk_ids
+
+
+def require_deletable(chunk_id: str, facts: ChunkFacts) -> None:
+    """Refuse a delete outside :attr:`ChunkVerb.DELETE`'s window with :class:`ChunkNotDeletable`."""
+    if not facts.admits(ChunkVerb.DELETE):
+        raise ChunkNotDeletable(chunk_id, facts.status())
+
+
+def require_no_dependents(chunk_id: str, standing: Iterable[DependencyEdge]) -> None:
+    """Refuse deleting a standing prerequisite, naming its dependents sorted (:class:`ChunkHasDependents`)."""
+    dependent_chunk_ids = sorted(e.dependent_chunk_id for e in standing if e.prerequisite_chunk_id == chunk_id)
+    if dependent_chunk_ids:
+        raise ChunkHasDependents(chunk_id, dependent_chunk_ids)
 
 
 class DeleteService:
@@ -78,16 +92,8 @@ class DeleteService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            status = facts.status()
-            if status not in PRE_CLAIM_STATUSES:
-                raise ChunkNotDeletable(chunk.chunk_id, status)
-            dependent_chunk_ids = sorted(
-                edge.dependent_chunk_id
-                for edge in handle.standing_edges()
-                if edge.prerequisite_chunk_id == chunk.chunk_id
-            )
-            if dependent_chunk_ids:
-                raise ChunkHasDependents(chunk.chunk_id, dependent_chunk_ids)
+            require_deletable(chunk.chunk_id, facts)
+            require_no_dependents(chunk.chunk_id, handle.standing_edges())
             # Re-read fresh under the lock: a fold that landed a work ref onto this chunk
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.

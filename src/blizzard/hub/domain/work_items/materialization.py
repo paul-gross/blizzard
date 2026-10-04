@@ -9,22 +9,22 @@ collaborator is either an injected Protocol or another domain-layer service
 
 from __future__ import annotations
 
-import json
-
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunk.ingest import IngestConflict
-from blizzard.hub.domain.chunk.model import (
-    IWriteWorkItemRepository,
-    WorkItemAuthor,
-    WorkItemMaterializationOutcome,
-    WorkRef,
-)
+from blizzard.hub.domain.chunk.model import IWriteWorkItemRepository, WorkItemMaterializationOutcome
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.model import Graph, GraphDoc
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.domain.work_items.proposal_rules import (
+    CreateProposal,
+    Unresolvable,
+    UpdateProposal,
+    judge_update_target,
+    parse_proposal,
+)
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.work_item_materialization")
@@ -99,74 +99,64 @@ class WorkItemMaterializationReconciler:
     def _materialize_one(
         self, row: StampedWorkItemProposal, default_graph: Graph | None
     ) -> WorkItemMaterializationOutcome | None:
-        try:
-            data = json.loads(row.data)
-            if row.kind == "create":
-                return self._materialize_create(row, data, default_graph)
-            return self._materialize_update(row, data)
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            _log.warning("work item proposal has malformed data", proposal_id=row.proposal_id, error=str(exc))
-            return self._record_unresolved(row.proposal_id, pointer=None, reason=f"malformed proposal data: {exc}")
+        proposal = parse_proposal(row)
+        if isinstance(proposal, CreateProposal):
+            return self._materialize_create(row, proposal, default_graph)
+        if isinstance(proposal, UpdateProposal):
+            return self._materialize_update(row, proposal)
+        if proposal.malformed:
+            _log.warning("work item proposal has malformed data", proposal_id=row.proposal_id, error=proposal.reason)
+        return self._record_unresolved(row.proposal_id, proposal)
 
     def _materialize_create(
-        self, row: StampedWorkItemProposal, data: dict, default_graph: Graph | None
+        self, row: StampedWorkItemProposal, proposal: CreateProposal, default_graph: Graph | None
     ) -> WorkItemMaterializationOutcome | None:
         """Always the reserved hub source. ``None`` means a transient failure — the
         default graph was retired (resolved once for the whole pass), or
         an out-of-band ingest pre-empted the allocated ref — left unjudged for the next
         pass, not recorded terminal."""
-        if row.runner_id is None:
-            return self._record_unresolved(
-                row.proposal_id, pointer=None, reason="no proposing runner recorded for this proposal"
-            )
         if default_graph is None:
             return None
-        graph = default_graph
-        author = WorkItemAuthor.fleet(runner_id=row.runner_id, chunk_id=row.chunk_id, node_name=row.node_name)
         try:
             minted = self._edits.materialize_create(
                 row.proposal_id,
-                title=data["title"],
-                body=data["body"],
-                author=author,
-                stated_priority=data.get("stated_priority"),
-                graph=graph,
+                title=proposal.text.title,
+                body=proposal.text.body,
+                author=proposal.author,
+                stated_priority=proposal.stated_priority,
+                graph=default_graph,
             )
         except IngestConflict:
             return None
         return WorkItemMaterializationOutcome.CREATED if minted else None
 
-    def _materialize_update(self, row: StampedWorkItemProposal, data: dict) -> WorkItemMaterializationOutcome | None:
+    def _materialize_update(
+        self, row: StampedWorkItemProposal, proposal: UpdateProposal
+    ) -> WorkItemMaterializationOutcome | None:
         """Resolves only through a source that implements the editor capability —
-        today the hub source alone. Every other unresolvable case (nonexistent, closed,
-        withdrawn) is the work item's own three named cases."""
-        pointer = WorkRef(source=data["source"], ref=data["ref"])
-        if self._work_sources.editor(pointer.source) is None:
-            return self._record_unresolved(
-                row.proposal_id, pointer=pointer, reason=f"source {pointer.source!r} has no editor"
-            )
-        item = self._items.get(pointer.source, pointer.ref)
-        if item is None:
-            return self._record_unresolved(row.proposal_id, pointer=pointer, reason="item does not exist")
-        if item.closure is not None:
-            return self._record_unresolved(row.proposal_id, pointer=pointer, reason=f"item is {item.closure.value}")
+        today the hub source alone. A store write that lands nothing means a closure raced
+        in since the read, left for the next pass to judge."""
+        pointer = proposal.pointer
+        editable = self._work_sources.editor(pointer.source) is not None
+        item = self._items.get(pointer.source, pointer.ref) if editable else None
+        refusal = judge_update_target(item, pointer=pointer, editable=editable)
+        if refusal is not None:
+            return self._record_unresolved(row.proposal_id, refusal)
         updated = self._items.materialize_update(
             proposal_id=row.proposal_id,
             source=pointer.source,
             ref=pointer.ref,
-            evidence=data["evidence"],
+            evidence=proposal.evidence,
             at=self._clock.now(),
         )
         return WorkItemMaterializationOutcome.UPDATED if updated else None
 
-    def _record_unresolved(
-        self, proposal_id: str, *, pointer: WorkRef | None, reason: str
-    ) -> WorkItemMaterializationOutcome:
+    def _record_unresolved(self, proposal_id: str, judgment: Unresolvable) -> WorkItemMaterializationOutcome:
         self._delivery.record_work_item_materialization(
             proposal_id,
             outcome=WorkItemMaterializationOutcome.UNRESOLVED,
-            pointer=pointer,
-            reason=reason,
+            pointer=judgment.pointer,
+            reason=judgment.reason,
             at=self._clock.now(),
         )
         return WorkItemMaterializationOutcome.UNRESOLVED

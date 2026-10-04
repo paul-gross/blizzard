@@ -27,15 +27,7 @@ from blizzard.hub.domain.graph.model import (
     NodeDoc,
     RunStep,
 )
-from blizzard.hub.domain.graph.validation import ValidationResult, Validator
-
-
-class GraphValidationError(Exception):
-    """A graph definition failed mint-time validation — the 422 carrier."""
-
-    def __init__(self, result: ValidationResult) -> None:
-        super().__init__("; ".join(result.errors) or "graph validation failed")
-        self.result = result
+from blizzard.hub.domain.graph.validation import Validator, cross_graph_warnings
 
 
 class DefaultGraphRetired(Exception):
@@ -47,6 +39,18 @@ class DefaultGraphRetired(Exception):
     def __init__(self, name: str) -> None:
         super().__init__(f"every graph named {name!r} is retired — re-enable one or mint a new one before ingesting")
         self.name = name
+
+
+def resolve_default(name: str, *, enabled: Graph | None, any_minted: bool) -> Graph | None:
+    """Which graph work ingested with none lands on: ``enabled``, the newest enabled mint of the
+    default name, when there is one; ``None`` — mint the default — when no graph of the name was
+    ever minted; and :class:`DefaultGraphRetired` when every mint of it is retired, rather than
+    re-minting over an operator's deliberate brake."""
+    if enabled is not None:
+        return enabled
+    if any_minted:
+        raise DefaultGraphRetired(name)
+    return None
 
 
 @domain_model
@@ -153,40 +157,20 @@ class Reification:
 class GraphMintService:
     """Validate, reify, and persist a graph — the ``POST /graphs`` domain rule.
 
-    Holds the *write* graph repository (``bzh:controller-read-only``), and raises
-    :class:`GraphValidationError` so an invalid definition never persists."""
+    Holds the *write* graph repository; the model refuses an invalid definition
+    (:class:`~blizzard.hub.domain.graph.validation.GraphValidationError`) before anything persists."""
 
     def __init__(self, *, graphs: IWriteGraphRepository, clock: IClock) -> None:
         self._graphs = graphs
         self._clock = clock
 
     def mint(self, doc: GraphDoc, *, definition_yaml: str) -> tuple[Graph, list[str]]:
-        result = Validator.of(doc).result
-        if not result.ok:
-            raise GraphValidationError(result)
+        result = Validator.of(doc).require_valid()
         graph = Reification.of(doc, self._clock).graph
-        warnings = [*result.warnings, *self._cross_graph_warnings(graph)]
+        enabled = {t for t in graph.cross_graph_targets() if self._graphs.get_enabled_by_name(t) is not None}
+        warnings = [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
         self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph, warnings
-
-    def _cross_graph_warnings(self, graph: Graph) -> list[str]:
-        """Late-bound resolvability of cross-graph targets — a **warning**,
-        never an error: a ``graph:<name>`` target resolves by name at apply time, so a
-        target not minted yet is legal. The one mint-time step touching the repository,
-        which keeps :class:`Validator` pure."""
-        warnings: list[str] = []
-        seen: set[str] = set()
-        for edge in graph.edges:
-            target = edge.target_graph
-            if target is None or target in seen:
-                continue
-            seen.add(target)
-            if self._graphs.get_enabled_by_name(target) is None:
-                warnings.append(
-                    f"cross-graph target `{target}` names no enabled graph yet — it will resolve "
-                    f"when a graph named `{target}` is minted"
-                )
-        return warnings
 
     def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:
         """Mint ``doc`` only if it differs from ``minted``, the store's newest of its name.
@@ -194,7 +178,7 @@ class GraphMintService:
         Returns the freshly minted :class:`Graph`, ``None`` when already up to date, and
         raises as :meth:`mint` does — an invalid graph is never skipped as "unchanged".
         Comparing *parsed* docs, not source YAML, makes "only if changed" correct."""
-        if minted is not None and minted == doc:
+        if not doc.differs_from(minted):
             return None
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
         return graph
@@ -217,9 +201,9 @@ class GraphMintService:
         by name — pinned by
         tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
-        if existing is not None:
-            return existing
-        if self._graphs.any_minted(doc.name):
-            raise DefaultGraphRetired(doc.name)
+        any_minted = existing is None and self._graphs.any_minted(doc.name)
+        resolved = resolve_default(doc.name, enabled=existing, any_minted=any_minted)
+        if resolved is not None:
+            return resolved
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
         return graph

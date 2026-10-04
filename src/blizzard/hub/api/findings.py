@@ -8,7 +8,8 @@ human-driven exit verbs and `reopen`, delegating to `FindingExitService`."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,7 +21,15 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.garden.findings.model import Finding, FindingFact, FindingNoteRequiredError
+from blizzard.hub.domain.garden.findings.model import (
+    AbsorberNotLive,
+    DuplicateFindingError,
+    Finding,
+    FindingFact,
+    FindingNoteRequiredError,
+    FindingSupersedesItself,
+    FindingTransitionRefused,
+)
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.wire.finding import (
     FindingDetailView,
@@ -159,14 +168,24 @@ def _exit_verb(
     identity: ResolvedIdentity,
     verb: Callable[..., None],
 ) -> list[FindingView]:
-    """The shape every single-note exit verb shares: load or 404, apply `verb`, 422 on a
-    blank note, re-read. `supersede` carries extra validation of its own and stays apart."""
+    """The shape every single-note exit verb shares: load or 404, apply `verb`, map the
+    model's refusal, re-read. `supersede` also loads its absorber and stays apart."""
     findings = _load_or_404(request.finding_ids, services)
-    try:
+    with _refusals_mapped():
         verb(findings, note=request.note, actor=identity.user_id)
-    except FindingNoteRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _reread(findings, services)
+
+
+@contextmanager
+def _refusals_mapped() -> Iterator[None]:
+    """A finding verb's domain refusals, mapped: a state the verb is illegal from is 409; a
+    blank note, a duplicate id, a self-naming or non-live absorber is 422."""
+    try:
+        yield
+    except FindingTransitionRefused as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (FindingNoteRequiredError, DuplicateFindingError, FindingSupersedesItself, AbsorberNotLive) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.post("/findings/resolve", response_model=list[FindingView])
@@ -176,7 +195,8 @@ def resolve_findings(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
-    finding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names
+    finding landed. 404 for an unknown id, 409 for a finding already exited (reopen it
+    first), 422 for a blank note or a duplicate id. A hand resolution names
     no garden proposal — that attribution happens only when a delivery lands."""
     return _exit_verb(request, services, identity, services.finding_exit.resolve)
 
@@ -188,7 +208,8 @@ def confirm_gone_findings(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Confirm by hand that every finding in `finding_ids` no longer reproduces,
-    recording NOTE. 404 for an unknown id, 422 for a blank note."""
+    recording NOTE. 404 for an unknown id, 409 for a finding already exited, 422 for a
+    blank note or a duplicate id."""
     return _exit_verb(request, services, identity, services.finding_exit.confirm_gone)
 
 
@@ -200,7 +221,7 @@ def wont_fix_findings(
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
     hasn't moved, a person has decided it doesn't merit standing regardless. 404 for an
-    unknown id, 422 for a blank note."""
+    unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id."""
     return _exit_verb(request, services, identity, services.finding_exit.wont_fix)
 
 
@@ -211,7 +232,7 @@ def not_a_finding_findings(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
-    an unknown id, 422 for a blank note."""
+    an unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id."""
     return _exit_verb(request, services, identity, services.finding_exit.not_a_finding)
 
 
@@ -222,26 +243,14 @@ def supersede_findings(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
-    recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422
-    for a blank note, a self-superseding id, or a `superseded_by` that isn't itself live."""
-    if request.superseded_by in request.finding_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"finding {request.superseded_by!r} cannot supersede itself",
-        )
+    recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`
+    (checked first, so a self-naming unknown id is 404), 409 for a finding already exited,
+    422 for a blank note, a duplicate id, a self-superseding id, or a `superseded_by` that
+    isn't itself live."""
     findings = _load_or_404(request.finding_ids, services)
     (absorber,) = _load_or_404([request.superseded_by], services)
-    if not absorber.live:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"finding {request.superseded_by!r} is not live and cannot absorb another finding",
-        )
-    try:
-        services.finding_exit.supersede(
-            findings, note=request.note, actor=identity.user_id, superseded_by=request.superseded_by
-        )
-    except FindingNoteRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    with _refusals_mapped():
+        services.finding_exit.supersede(findings, absorber, note=request.note, actor=identity.user_id)
     return _reread(findings, services)
 
 
@@ -252,5 +261,6 @@ def reopen_findings(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was
-    newest, recording NOTE. 404 for an unknown id, 422 for a blank note."""
+    newest, recording NOTE. 404 for an unknown id, 409 for a finding already live, 422 for
+    a blank note or a duplicate id."""
     return _exit_verb(request, services, identity, services.finding_exit.reopen)

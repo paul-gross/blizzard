@@ -183,8 +183,8 @@ def _status_of(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
 
 def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) -> None:
     """An interleaved batch across three chunks — a lease re-mint, an escalation, a
-    question asked-then-answered, and an escalation on a chunk with a cross-graph newest
-    transition — proves the loaded-once-per-batch state preserves the per-fact
+    question asked (its delivery in the same batch is refused: nobody has answered it yet),
+    and an escalation on a chunk with a cross-graph newest transition — proves the loaded-once-per-batch state preserves the per-fact
     publish contract (``bzh:bulk-reconstitution``):
     one frame per applied fact in batch order, each with its own cause and key, a
     question-asked frame just before its chunk-changed, the ``route_created:<id>`` key on
@@ -282,13 +282,14 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
         },
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["applied"] == [1, 2, 3, 4, 5]
+    assert resp.json()["applied"] == [1, 2, 3, 5]
+    assert resp.json()["rejected"] == [4]
 
     frames = _all_frames(hub, since=since)
     kinds = [f["event"] for f in frames]
-    assert kinds == [CHUNK_CHANGED, CHUNK_CHANGED, QUESTION_ASKED_EVENT, CHUNK_CHANGED, CHUNK_CHANGED, CHUNK_CHANGED]
+    assert kinds == [CHUNK_CHANGED, CHUNK_CHANGED, QUESTION_ASKED_EVENT, CHUNK_CHANGED, CHUNK_CHANGED]
 
-    lease_frame, escalate_q_frame, question_asked_frame, question_frame, answer_frame, escalate_m_frame = frames
+    lease_frame, escalate_q_frame, question_asked_frame, question_frame, escalate_m_frame = frames
 
     assert lease_frame["chunk_id"] == chunk_l
     assert lease_frame["cause"] == "claimed"
@@ -308,15 +309,10 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
     assert question_frame["key"] == "questions:qn_1"
     assert question_frame["prev_status"] == q_status_before
 
-    assert answer_frame["chunk_id"] == chunk_q
-    assert answer_frame["cause"] == "question-answered"
-    assert answer_frame["key"] == "question_answers:qn_1"
-    assert answer_frame["prev_status"] == q_status_before
-
-    # publish() only runs after every fact in the batch has already landed, so Q's three
-    # frames all reload the same final post-batch state — differing only in cause/key.
+    # publish() only runs after every fact in the batch has already landed, so Q's two
+    # frames both reload the same final post-batch state — differing only in cause/key.
     for field in ("status", "node", "prev_node", "runner_id", "graph_id"):
-        assert escalate_q_frame.get(field) == question_frame.get(field) == answer_frame.get(field)
+        assert escalate_q_frame.get(field) == question_frame.get(field)
 
     assert escalate_m_frame["chunk_id"] == chunk_m
     assert escalate_m_frame["cause"] == "escalated"
@@ -365,8 +361,9 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
         )
         assert resp.status_code == 202, resp.text
 
-    # Includes the retired-runner guard's registry read and the write fence's lock and guard reads.
-    assert count_queries(hub.engine, call) == 78
+    # Includes the retired-runner guard's read of the claimant's registration (every claimant holds
+    # one) and the write fence's lock, guard, and claimant-ownership reads.
+    assert count_queries(hub.engine, call) == 85
 
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:

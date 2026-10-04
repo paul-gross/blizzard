@@ -124,7 +124,7 @@ class DeliveryRead:
             closed_prs=sorted(closed_prs, key=lambda p: p.repo),
             awaiting_external_merge=external and bool(open_prs),
             landed_repos=rows,
-            landed=bool(rows) or facts.delivery_landed or bool(facts.landed_repos),
+            landed=facts.landed_with(landed.keys()),
         )
 
 

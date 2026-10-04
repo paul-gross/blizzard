@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import CHUNK_CHANGED, EVENT_LOGGED, QUEUE_CHANGED, RUNNER_CHANGED
-from tests.support import build_hub, emitted_events, pointer_token, report_lease
+from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -69,6 +69,7 @@ def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]: 
     """Mint the graph, claim a route, and report the runner-minted lease (epoch 1)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -82,6 +83,7 @@ def test_ingest_frame_carries_graph_id_and_omits_runner_id(tmp_path: Path) -> No
     omits ``runner_id`` entirely — not a ``null`` (AC 5)."""
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     frames = _chunk_changed_frames(hub)
     assert len(frames) == 1
     frame = frames[0]
@@ -119,6 +121,7 @@ def test_claim_carries_cause_claimed_and_runner_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     before = _latest_event_id(hub)
     claim = hub.client.post(
         "/api/fleet/routes",
@@ -244,6 +247,7 @@ def test_lease_minted_via_events_batch_carries_cause_claimed(tmp_path: Path) -> 
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim_since = _latest_event_id(hub)
     assert (
         hub.client.post(
@@ -456,6 +460,7 @@ def test_edited_cause_carries_no_key(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     before = _latest_event_id(hub)
     resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_effort": "high"})
     assert resp.status_code == 202, resp.text
@@ -504,6 +509,7 @@ def test_queue_changed_frame_carries_no_key(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     before = _latest_event_id(hub)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert resp.status_code == 202, resp.text

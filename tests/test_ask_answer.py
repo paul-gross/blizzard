@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import CHUNK_CHANGED
-from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, pointer_token
+from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -56,6 +56,7 @@ nodes:
 def _claim(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -366,13 +367,15 @@ def test_each_question_carries_its_own_delivery_instant(tmp_path: Path) -> None:
 
 
 def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> None:
-    """A delivery is derived, never assumed away, on all three question reads — even for
-    a question that landed a delivery with no answer."""
+    """A delivery is derived, never assumed away, on all three question reads — and a
+    delivery reported against a question with no answer is rejected, so none reads delivered."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
-    # Deliberately no answer: the delivery lands against a still-open question.
-    assert _deliver(hub, chunk_id).status_code == 200
+    # Deliberately no answer: the delivery is reported against a still-open question.
+    delivered = _deliver(hub, chunk_id)
+    assert delivered.status_code == 200
+    assert delivered.json()["rejected"] == [9]
 
     still_open = hub.client.get("/api/questions").json()
     assert [q["question_id"] for q in still_open] == ["qn_1"], "no answer row, so it is still open"
@@ -380,7 +383,7 @@ def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> No
     poll = hub.client.get("/api/fleet/questions/qn_1").json()
 
     assert [still_open[0]["answered"], on_detail["answered"], poll["answered"]] == [False, False, False]
-    assert [still_open[0]["delivered"], on_detail["delivered"], poll["delivered"]] == [True, True, True]
+    assert [still_open[0]["delivered"], on_detail["delivered"], poll["delivered"]] == [False, False, False]
 
 
 def test_question_on_unknown_chunk_is_404(tmp_path: Path) -> None:

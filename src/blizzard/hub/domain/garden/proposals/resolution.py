@@ -8,14 +8,15 @@ interrupted closure and a later reopen is never silently redone."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
-from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.garden.findings.model import Finding, IFindingExitResolver, IReadFindingRepository
-from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
-from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IReadGardenProposalClosureRepository
+from blizzard.hub.domain.garden.proposals.model import GardenProposal, IReadGardenProposalRepository
 
 _log = get_logger("blizzard.hub.garden_proposal_resolution")
 
@@ -25,11 +26,54 @@ def resolve_proposal_findings(
 ) -> list[Finding]:
     """`finding_ids` resolved to their loaded `Finding` rows, in `finding_ids`' own
     order, silently dropping an id that no longer resolves; `live_only` additionally
-    drops one whose current state is not `"live"`. The one walk every proposal→findings
+    drops one a delivery cannot close. The one walk every proposal→findings
     read shares, so none can drift on order, missing-id handling, or liveness."""
-    by_id = findings.get_many(finding_ids)
+    return ordered_findings(finding_ids, findings.get_many(finding_ids), live_only=live_only)
+
+
+def ordered_findings(
+    finding_ids: Sequence[str], by_id: Mapping[str, Finding], *, live_only: bool = False
+) -> list[Finding]:
+    """The findings of `by_id` that `finding_ids` names, in `finding_ids`' order, dropping
+    an id `by_id` lacks; `live_only` additionally drops one a delivery cannot close
+    (:meth:`Finding.allows` refuses `delivered` from any state but `live`)."""
     rows = (by_id.get(fid) for fid in finding_ids)
-    return [f for f in rows if f is not None and (not live_only or f.state == "live")]
+    return [f for f in rows if f is not None and (not live_only or f.allows("delivered"))]
+
+
+@dto
+@dataclass(frozen=True)
+class DeliveryClosure:
+    """The findings a delivered item closes to `delivered`, with the note and actor the
+    closing facts carry and the proposal they answer."""
+
+    findings: list[Finding]
+    note: str
+    actor: str
+    proposal_id: str
+
+
+def delivery_closure(
+    closure: GardenProposalClosure,
+    proposal: GardenProposal,
+    by_id: Mapping[str, Finding],
+    pointer: WorkRef,
+) -> DeliveryClosure | None:
+    """What delivering `pointer`'s item closes: `proposal`'s still-live findings, in its own order,
+    delivered on the accepter's behalf (`blizzard-context:/domain/findings-and-proposals.md` §Closing a
+    proposal). `None` when `closure` is not the accept that minted the item, or no finding it names is
+    still live; the model's own skip (:meth:`Finding.deliver_fact`) leaves the rest as they stand."""
+    if not closure.mints_delivery:
+        return None
+    live = ordered_findings(proposal.findings, by_id, live_only=True)
+    if not live:
+        return None
+    return DeliveryClosure(
+        findings=live,
+        note=f"delivered by {pointer.source}:{pointer.ref}",
+        actor=closure.closed_by,
+        proposal_id=closure.proposal_id,
+    )
 
 
 class GardenProposalDeliveryResolution:
@@ -56,32 +100,23 @@ class GardenProposalDeliveryResolution:
         this method has already closed once (`has_delivery_for_proposal`) all resolve
         nothing."""
         closure = self._closures.find_by_item(pointer.source, pointer.ref)
-        if closure is None:
-            return
-        if closure.closure is not GardenProposalClosureKind.ACCEPTED:
-            return
-        if closure.item_outcome is not GardenProposalItemOutcome.MINTED:
+        if closure is None or not closure.mints_delivery:
             return
         if self._findings.has_delivery_for_proposal(closure.proposal_id):
             return
         proposal = self._proposals.get(closure.proposal_id)
         if proposal is None:
             return
-        live = resolve_proposal_findings(self._findings, proposal.findings, live_only=True)
-        if not live:
+        decided = delivery_closure(closure, proposal, self._findings.get_many(proposal.findings), pointer)
+        if decided is None:
             return
-        self._exits.deliver(
-            live,
-            note=f"delivered by {pointer.source}:{pointer.ref}",
-            actor=closure.closed_by,
-            proposal_id=closure.proposal_id,
-        )
+        self._exits.deliver(decided.findings, note=decided.note, actor=decided.actor, proposal_id=decided.proposal_id)
         _log.info(
             "delivery-triggered finding closure",
             proposal_id=closure.proposal_id,
             source=pointer.source,
             ref=pointer.ref,
-            delivered=len(live),
+            delivered=len(decided.findings),
         )
 
 
@@ -107,19 +142,15 @@ class AnsweredFindingsReader:
         """The findings `chunk`'s own proposal answers, in the proposal's own order —
         `None` when `chunk` carries no work ref, its item names no closure, that closure
         is a pass or a declined accept, or the closure names a proposal that no longer
-        resolves. Reads only `chunk.work_refs[0]`, the same single-ref lookup
+        resolves. Reads only :meth:`Chunk.originating_ref`, the same single-ref lookup
         `IReadRunContextRepository.for_chunk` already makes (`run_context.py`) — a chunk
         that absorbed a garden-minted item's ref via a later fold resolves `None` here
         too, rather than the folded-in proposal."""
-        if not chunk.work_refs:
+        pointer = chunk.originating_ref()
+        if pointer is None:
             return None
-        pointer = chunk.work_refs[0]
         closure = self._closures.find_by_item(pointer.source, pointer.ref)
-        if closure is None:
-            return None
-        if closure.closure is not GardenProposalClosureKind.ACCEPTED:
-            return None
-        if closure.item_outcome is not GardenProposalItemOutcome.MINTED:
+        if closure is None or not closure.mints_delivery:
             return None
         proposal = self._proposals.get(closure.proposal_id)
         if proposal is None:

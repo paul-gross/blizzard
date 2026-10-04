@@ -28,7 +28,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
 )
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -89,6 +89,7 @@ def _hub_rejects(tmp_path: Path, requires_checks: bool, results: list[tuple[str,
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _graph_yaml(requires_checks)}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

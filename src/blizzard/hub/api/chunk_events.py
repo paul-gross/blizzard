@@ -36,10 +36,8 @@ class ChunkFrameState:
         if chunk is None or graph is None:
             return cls(facts=facts, chunk=chunk, graph=graph, from_graph=None, route=None)
 
-        from_graph = None
-        transition = facts.newest_transition()
-        if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
-            from_graph = services.graphs.get(transition.graph_id)
+        off_pin = facts.transition_graph_off_pin(graph.graph_id)
+        from_graph = services.graphs.get(off_pin) if off_pin is not None else None
 
         route = services.chunks.route.route_of(chunk_id)
         return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route)
@@ -71,9 +69,8 @@ def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[s
         graph = graphs_by_id.get(chunk.graph_id) if chunk is not None else None
         from_graph = None
         if chunk is not None and graph is not None:
-            transition = facts.newest_transition()
-            if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
-                from_graph = graphs_by_id.get(transition.graph_id)
+            off_pin = facts.transition_graph_off_pin(graph.graph_id)
+            from_graph = graphs_by_id.get(off_pin) if off_pin is not None else None
         states[chunk_id] = ChunkFrameState(
             facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=routes_by_id.get(chunk_id)
         )

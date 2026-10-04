@@ -15,13 +15,13 @@ from datetime import datetime
 from pydantic import ValidationError
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, narrow_event_log_kind
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, narrow_event_log_kind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -30,6 +30,7 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.execution.questions import parse_instant
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
@@ -120,13 +121,54 @@ class Payload:
     def instant(self, key: str, fallback: datetime) -> datetime:
         """An ISO-8601 stamp, falling back on a malformed one and coerced to UTC
         (``bzh:utc-instants``) — store-and-forward resends the naive stamp it buffered."""
-        value = self.body.get(key)
-        if isinstance(value, str):
-            try:
-                return as_utc(datetime.fromisoformat(value))
-            except ValueError:
-                return fallback
-        return fallback
+        return parse_instant(self.body.get(key), fallback)
+
+
+def requires_route_token(kind: str, chunk_id: str | None) -> bool | None:
+    """Whether a fact of ``kind`` is route-token gated. ``None`` refuses it outright: a gated
+    fact that names no chunk has no route to authorize it against."""
+    if kind not in _ROUTE_TOKEN_GATED_KINDS:
+        return False
+    return True if chunk_id is not None else None
+
+
+def admitted_event_kind(kind: str, severity: str) -> EventLogKind | None:
+    """The event-log kind a runner's ``event.recorded`` lands as — ``None`` for a kind outside
+    the closed vocabulary or a severity other than that kind's own."""
+    narrowed = narrow_event_log_kind(kind)
+    if narrowed is None or severity != EVENT_LOG_SEVERITY[narrowed]:
+        return None
+    return narrowed
+
+
+def subscription_identity(fact: Payload) -> tuple[str, str] | None:
+    """An external-subscription usage fact's ``(slug, name)`` — ``None`` without a non-empty
+    string slug; the name defaults to the slug."""
+    slug = fact.get("slug")
+    if not isinstance(slug, str) or not slug:
+        return None
+    return slug, fact.text("name") or slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class LocalPause:
+    """A runner's local pause or resume, stamped when the runner decided — which may be an outage
+    before its buffer drained — and attributed to the operator unless the fact names who."""
+
+    paused: bool
+    at: datetime
+    by: str
+    reason: str | None
+
+    @classmethod
+    def of(cls, kind: str, fact: Payload, *, now: datetime) -> LocalPause:
+        return cls(
+            paused=kind == RUNNER_LOCALLY_PAUSED,
+            at=fact.instant("at", now),
+            by=fact.string("by", "operator"),
+            reason=fact.text("reason"),
+        )
 
 
 class RunnerFactsService:
@@ -146,23 +188,24 @@ class RunnerFactsService:
         self._clock = clock
 
     def record_lease_minted(
-        self, chunk_id: str, *, epoch: int, runner_id: str, lease_id: str | None = None
+        self, chunk: Chunk, *, epoch: int, runner_id: str, lease_id: str | None = None
     ) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch. A retired
         runner is refused with :class:`RunnerRetired` before anything lands; a mint its
         admission refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`."""
         self._retired.refuse_if_retired(runner_id, action="lease report")
         return self._route.record_lease_minted(
-            chunk_id, epoch=epoch, claimant=Claimant(runner_id, lease_id), at=self._clock.now()
+            chunk.chunk_id, epoch=epoch, claimant=Claimant(runner_id, lease_id), at=self._clock.now()
         )
 
     def record_escalation(
         self,
-        chunk_id: str,
+        chunk: Chunk,
         *,
         runner_id: str,
         epoch: int,
         takeover_command: str,
+        lease_id: str | None = None,
         wrapped_takeover_command: str = "",
         cause: str | None = None,
         detail: str | None = None,
@@ -170,12 +213,14 @@ class RunnerFactsService:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``. A retired
         runner is refused with :class:`RunnerRetired` before anything lands; a write the fence
         refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`, else the new
-        ``escalations.id`` (its activity-feed key)."""
+        ``escalations.id`` (its activity-feed key). The reporting attempt is the claimant, as on
+        the batched path: a runner that does not own the epoch is refused."""
         self._retired.refuse_if_retired(runner_id, action="escalation report")
         return self._escalations.record_escalation(
-            chunk_id,
+            chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
+            claimant=Claimant(runner_id, lease_id),
             takeover_command=takeover_command,
             wrapped_takeover_command=wrapped_takeover_command,
             cause=cause,
@@ -283,10 +328,11 @@ class FactIngestService:
         None)`` on an unknown kind or a route-token rejection."""
         now = self._clock.now()
         fact = Payload(payload)
-        if kind in _ROUTE_TOKEN_GATED_KINDS:
-            chunk_id = fact.text("chunk_id")
-            if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, fact, mode=route_token_mode):
-                return False, None
+        gated = requires_route_token(kind, fact.text("chunk_id"))
+        if gated is None:
+            return False, None
+        if gated and not self._route_token_ok(fact.require_text("chunk_id"), runner_id, fact, mode=route_token_mode):
+            return False, None
         if kind == LEASE_MINTED:
             refusal = self._route.record_lease_minted(
                 fact.require_text("chunk_id"),
@@ -355,9 +401,8 @@ class FactIngestService:
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated: an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            wire_kind = narrow_event_log_kind(fact.require_text("kind"))
-            wire_severity = fact.require_text("severity")
-            if wire_kind is None or wire_severity != EVENT_LOG_SEVERITY[wire_kind]:
+            wire_kind = admitted_event_kind(fact.require_text("kind"), fact.require_text("severity"))
+            if wire_kind is None:
                 _log.warning("event fact outside the closed vocabulary", kind=fact.require_text("kind"))
                 return False, None
             event_id = self._events.record(
@@ -373,19 +418,17 @@ class FactIngestService:
             return True, event_id
         if kind == ANSWER_DELIVERED:
             # Records that the resume-with-answer ran; derives no status of its own.
-            self._questions.record_answer_delivered(
-                question_id=fact.require_text("question_id"), chunk_id=fact.require_text("chunk_id"), at=now
-            )
-            return True, None
+            return self._deliver_answer(fact.require_text("question_id"), fact.require_text("chunk_id"), now=now), None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
             # Advisory, refresh-in-place per (runner_id, slug).
-            slug = fact.get("slug")
-            if not isinstance(slug, str) or not slug:
+            identity = subscription_identity(fact)
+            if identity is None:
                 return False, None
+            slug, name = identity
             self._fleet.record_external_usage(
                 runner_id,
                 slug=slug,
-                name=fact.text("name") or slug,
+                name=name,
                 sampled_at=fact.instant("sampled_at", now),
                 windows_json=_external_usage_windows_json(fact.get("windows", []), runner_id=runner_id, slug=slug),
                 at=now,
@@ -394,13 +437,14 @@ class FactIngestService:
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED:
             # Advisory sibling to the sampled fact above — refresh-in-place per
             # (runner_id, slug), in its own table, never touching the sample row.
-            slug = fact.get("slug")
-            if not isinstance(slug, str) or not slug:
+            identity = subscription_identity(fact)
+            if identity is None:
                 return False, None
+            slug, name = identity
             self._fleet.record_external_usage_miss(
                 runner_id,
                 slug=slug,
-                name=fact.text("name") or slug,
+                name=name,
                 missed_at=fact.instant("missed_at", now),
                 reason=fact.string("reason"),
                 at=now,
@@ -409,16 +453,31 @@ class FactIngestService:
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
             # Runner-scoped and hub-read-only. Stamped off the payload — when the runner decided, not
             # when its buffer drained, which may be an outage later.
+            pause = LocalPause.of(kind, fact, now=now)
             local_pause_id = self._fleet.record_local_pause(
-                runner_id,
-                paused=kind == RUNNER_LOCALLY_PAUSED,
-                at=fact.instant("at", now),
-                by=fact.string("by", "operator"),
-                reason=fact.text("reason"),
+                runner_id, paused=pause.paused, at=pause.at, by=pause.by, reason=pause.reason
             )
             return True, local_pause_id
         _log.warning("unknown runner fact kind", kind=kind)
         return False, None
+
+    def _deliver_answer(self, question_id: str, chunk_id: str, *, now: datetime) -> bool:
+        """Land an ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides: written, a
+        replay that writes nothing, or rejected in the ack (an unknown question too)."""
+        question: NodeQuestion | None = self._questions.get_question(question_id)
+        if question is None:
+            _log.warning("answer delivery for an unknown question", question_id=question_id)
+            return False
+        facts = ChunkFacts.or_default(self._facts.load_facts(question.chunk_id))
+        delivery, detail = question.delivery(
+            chunk_id=chunk_id, superseded_by_restart=facts.restarted_past(question.epoch)
+        )
+        if delivery is QuestionDelivery.REFUSE:
+            _log.warning("answer delivery rejected", question_id=question_id, detail=detail)
+            return False
+        if delivery is QuestionDelivery.RECORD:
+            self._questions.record_answer_delivered(question_id=question_id, chunk_id=chunk_id, at=now)
+        return True
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact — the
@@ -426,7 +485,7 @@ class FactIngestService:
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
         :class:`RouteToken` already rejects as having no live route."""
-        facts = self._facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+        facts = ChunkFacts.or_default(self._facts.load_facts(chunk_id))
         route = self._route.route_of(chunk_id)
         detail = RouteToken(
             facts=facts,

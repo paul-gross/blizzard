@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.chunk.model import WorkRef
-from tests.support import FakeWorkSource, build_hub, ingest, pointer_token, write_chunk_pause_facts
+from tests.support import FakeWorkSource, build_hub, ingest, make_ready, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
 
@@ -242,6 +242,7 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.
+    make_ready(hub, chunk_id)
     build_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -281,6 +282,7 @@ def test_queue_peek_lists_ready_chunks_fifo_and_hides_claimed(tmp_path: Path) ->
     assert [e["position"] for e in entries] == [0, 1]
 
     # Claiming the first removes it from the ready queue.
+    make_ready(hub, first)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": first, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

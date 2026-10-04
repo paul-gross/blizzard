@@ -24,30 +24,25 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.observability.analytics.events import DropFact
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.assembly import (
-    add_step,
+    anchor_records,
     guarded,
-    invocation_entry,
-    runner_step,
-    step_partition,
+    late_chunks,
+    plan_invocations_pass,
+    plan_steps_pass,
 )
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of, take
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
-    EventsPosition,
     IReadEgressEvents,
     IWriteEgressCursor,
-    UsagePosition,
 )
 from blizzard.hub.domain.observability.egress.schema import (
     EVENTS_SCHEMA,
     INVOCATIONS_SCHEMA,
     STEPS_SCHEMA,
 )
-from blizzard.hub.domain.observability.tracing.cursor import CursorKey
-from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.observability.tracing.steps import NodeStep, identify_steps
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -127,8 +122,10 @@ class EgressSweep:
         if not self._latch.is_due(now):
             return
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in self._datasets}
-        if any(cursor is None for cursor in cursors.values()):
-            self._anchor(cursors, now)
+        anchors = anchor_records(cursors, now, self._settle)
+        if anchors:
+            for anchor in anchors:
+                self._egress.append_cursor(anchor)
             return
         egress_pass = EgressPass(started_at=now)
         until = now - self._settle
@@ -156,58 +153,18 @@ class EgressSweep:
             return self._events_pass(cursor, egress_pass, until)
         raise ValueError(f"no egress pass for dataset {dataset!r}")
 
-    # --- the first pass -----------------------------------------------------------------
-
-    def _anchor(self, cursors: dict[str, EgressCheckpoint | None], now: datetime) -> None:
-        """Starts each unanchored dataset's export at ``now`` less the settle window, writing no rows."""
-        at = now - self._settle
-        for dataset, cursor in cursors.items():
-            if cursor is not None:
-                continue
-            step = CursorKey.opening(at) if dataset == STEPS_SCHEMA.name else None
-            events = EventsPosition(at) if dataset == EVENTS_SCHEMA.name else None
-            self._egress.append_cursor(EgressCheckpoint(dataset, step, UsagePosition(at), 0, (), now, events))
-
     # --- steps --------------------------------------------------------------------------
 
     def _steps_pass(self, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime) -> bool | EgressFailure:
         assert cursor.step is not None  # a steps cursor always carries its step position
         window = read_window(self._steps, cursor.step, until, self._batch_limit)
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
-        now = egress_pass.started_at
-        facts: dict[str, StepFacts] = {closed.step.key.chunk_id: closed.facts for closed in window.closed_steps()}
-        steps: dict[str, tuple[NodeStep, ...]] = {
-            closed.step.key.chunk_id: closed.steps for closed in window.closed_steps()
-        }
-        batch: dict[str, tuple[CursorKey, EgressValues]] = {}
-        for closed in window.closed_steps():
-            add_step(batch, closed.facts, closed.steps, closed.step, closed.key, now)
-        late = [row for row in usage if row.chunk_id not in facts]
-        for chunk_id, held in self._steps.step_facts_for(sorted({row.chunk_id for row in late})).items():
-            facts[chunk_id] = held
-            steps[chunk_id] = identify_steps(held)
-        for row in usage:
-            chunk = facts.get(row.chunk_id)
-            step = runner_step(steps[row.chunk_id], row.fact.epoch) if chunk is not None else None
-            if chunk is None or step is None or step.close is None:
-                continue
-            key = CursorKey.of(step)
-            if key <= window.position:
-                add_step(batch, chunk, steps[row.chunk_id], step, key, now)
-        position = usage[-1] if usage else None
-        advanced = EgressCheckpoint(
-            STEPS_SCHEMA.name,
-            window.position,
-            UsagePosition(position.fact.recorded_at, position.usage_id) if position is not None else cursor.usage,
-            len(batch),
-            (),
-            now,
-        )
-        rows = [(step_partition(row), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
-        if rows:
-            return self._write(STEPS_SCHEMA, rows, egress_pass, advanced)
-        if advanced.step != cursor.step or advanced.usage != cursor.usage:
-            self._egress.append_cursor(advanced)
+        late = self._steps.step_facts_for(late_chunks(window, usage))
+        plan = plan_steps_pass(cursor, window, usage, late, egress_pass.started_at)
+        if plan.rows:
+            return self._write(STEPS_SCHEMA, plan.rows, egress_pass, plan.advanced)
+        if plan.moved:
+            self._egress.append_cursor(plan.advanced)
         return False
 
     # --- invocations --------------------------------------------------------------------
@@ -219,28 +176,11 @@ class EgressSweep:
         if not usage:
             return False
         facts = self._steps.step_facts_for(sorted({row.chunk_id for row in usage}))
-        steps = {chunk_id: identify_steps(held) for chunk_id, held in facts.items()}
-        rows: _Rows = []
-        for row in usage:
-            chunk = facts.get(row.chunk_id)
-            entry = (
-                invocation_entry(chunk, steps[row.chunk_id], row, egress_pass.started_at) if chunk is not None else None
-            )
-            if entry is None:
-                _log.warning("usage has no runner step; not exported", usage_id=row.usage_id, chunk_id=row.chunk_id)
-                continue
-            rows.append(entry)
-        last = usage[-1]
-        advanced = EgressCheckpoint(
-            INVOCATIONS_SCHEMA.name,
-            None,
-            UsagePosition(last.fact.recorded_at, last.usage_id),
-            len(rows),
-            (),
-            egress_pass.started_at,
-        )
-        if rows:
-            return self._write(INVOCATIONS_SCHEMA, rows, egress_pass, advanced)
+        page, advanced = plan_invocations_pass(usage, facts, egress_pass.started_at)
+        for row in page.skipped:
+            _log.warning("usage has no runner step; not exported", usage_id=row.usage_id, chunk_id=row.chunk_id)
+        if page.rows:
+            return self._write(INVOCATIONS_SCHEMA, page.rows, egress_pass, advanced)
         self._egress.append_cursor(advanced)
         return False
 

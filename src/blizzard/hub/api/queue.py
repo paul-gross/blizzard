@@ -29,11 +29,14 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
+    DuplicateReorderIds,
     FoldWouldCloseCycle,
     MatchedEntry,
+    NotInList,
     QueueList,
     QueueMatchPolicy,
     QueuePage,
+    SelfAnchoredMove,
     select_matched_entry,
 )
 from blizzard.hub.domain.runners.registration import RunnerCapability
@@ -58,20 +61,6 @@ from blizzard.wire.runner import RunnerCapability as WireRunnerCapability
 router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _refusal_detail(chunk_id: str, *, expected: QueueList, other_ids: set[str]) -> str:
-    """The 409 detail for a chunk resolved against the wrong list — names both lists
-    (``bzh:ranking-is-per-list``) rather than assuming the reader knows which one this
-    route serves."""
-    other = QueueList.NOT_READY if expected is QueueList.READY else QueueList.READY
-    if chunk_id in other_ids:
-        return f"chunk {chunk_id} is not in the {expected.value} list (it is {other.value})"
-    return f"chunk {chunk_id} is not in the {expected.value} list"
-
-
-def _other_list(list_: QueueList) -> QueueList:
-    return QueueList.NOT_READY if list_ is QueueList.READY else QueueList.READY
-
-
 def _blocked_markings(
     services: HubServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
 ) -> dict[str, list[str]]:
@@ -86,33 +75,18 @@ def _blocked_markings(
     return derive_blocked_prerequisites(edges, {**statuses, **resolved})
 
 
-def _refuse(
-    chunk_id: str, *, expected: QueueList, services: HubServices, statuses: Mapping[str, ChunkStatus]
-) -> HTTPException:
-    other_ids = {c.chunk_id for c in services.queue.ordered(_other_list(expected), statuses=statuses)}
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT, detail=_refusal_detail(chunk_id, expected=expected, other_ids=other_ids)
-    )
-
-
 def _replace(
     list_: QueueList, chunk_ids: list[str], services: HubServices, statuses: Mapping[str, ChunkStatus]
 ) -> list[Chunk]:
-    """Resolve ``chunk_ids`` against ``list_``'s current order and replace it — the body
-    ``PUT /api/queue`` and ``PUT /api/backlog`` share, differing only in which list they
-    rank (``bzh:ranking-is-per-list``). ``statuses`` is the caller's one-per-request
-    derivation, threaded through."""
-    if len(set(chunk_ids)) != len(chunk_ids):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
-    current = services.queue.ordered(list_, statuses=statuses)
-    by_id = {chunk.chunk_id: chunk for chunk in current}
-    for chunk_id in chunk_ids:
-        if chunk_id not in by_id:
-            raise _refuse(chunk_id, expected=list_, services=services, statuses=statuses)
-    named_ids = set(chunk_ids)
-    ordered = [by_id[chunk_id] for chunk_id in chunk_ids]
-    ordered.extend(chunk for chunk in current if chunk.chunk_id not in named_ids)
-    services.queue.replace_order(list_, ordered)
+    """Replace ``list_``'s order — the body ``PUT /api/queue`` and ``PUT /api/backlog`` share,
+    differing only in which list they rank (``bzh:ranking-is-per-list``). ``statuses`` is the
+    caller's one-per-request derivation, threaded through."""
+    try:
+        ordered = services.queue.reorder(list_, chunk_ids, statuses=statuses)
+    except DuplicateReorderIds as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except NotInList as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
     return ordered
 
@@ -124,24 +98,16 @@ def _reposition(
     services: HubServices,
     statuses: Mapping[str, ChunkStatus],
 ) -> None:
-    """Resolve ``chunk_id``/``after_chunk_id`` against ``list_``'s current order and
-    reposition — the body ``POST /api/queue/position`` and ``POST /api/backlog/position``
-    share, differing only in which list they rank (``bzh:ranking-is-per-list``).
-    ``statuses`` is the caller's one-per-request derivation, threaded through."""
-    if after_chunk_id == chunk_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
-        )
-    by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered(list_, statuses=statuses)}
-    chunk = by_id.get(chunk_id)
-    if chunk is None:
-        raise _refuse(chunk_id, expected=list_, services=services, statuses=statuses)
-    after: Chunk | None = None
-    if after_chunk_id is not None:
-        after = by_id.get(after_chunk_id)
-        if after is None:
-            raise _refuse(after_chunk_id, expected=list_, services=services, statuses=statuses)
-    services.queue.reposition(list_, chunk, after, statuses=statuses)
+    """Move one chunk within ``list_`` — the body ``POST /api/queue/position`` and
+    ``POST /api/backlog/position`` share, differing only in which list they rank
+    (``bzh:ranking-is-per-list``). ``statuses`` is the caller's one-per-request derivation,
+    threaded through."""
+    try:
+        services.queue.move(list_, chunk_id, after_chunk_id, statuses=statuses)
+    except SelfAnchoredMove as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except NotInList as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
 
 

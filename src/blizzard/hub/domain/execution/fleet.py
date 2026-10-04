@@ -8,11 +8,10 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
-from blizzard.hub.domain.chunk.model import holds_claim
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
-from blizzard.hub.domain.execution.detach import DetachService
+from blizzard.hub.domain.execution.detach import DetachService, held_routes
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
@@ -20,37 +19,12 @@ from blizzard.hub.domain.runners.registration import (
     RetiredRunnerGuard,
     RunnerCapability,
     RunnerLiveness,
+    RunnerNotEnrolled,
     RunnerRegistration,
 )
 from blizzard.hub.domain.runners.route import Route
 
 _log = get_logger("blizzard.hub.registry")
-
-
-class RunnerHoldsRoutes(Exception):
-    """A retire without ``force`` found live routes — each held chunk and its environments."""
-
-    def __init__(self, runner_id: str, holdings: list[Route]) -> None:
-        held = "; ".join(f"{r.chunk_id} (environments: {', '.join(r.environment_ids) or 'none'})" for r in holdings)
-        super().__init__(f"runner {runner_id} holds {len(holdings)} chunk(s): {held} — retire with --force to release")
-        self.runner_id = runner_id
-        self.holdings = holdings
-
-
-class RunnerNotEnrolled(Exception):
-    """A token revocation targeted a runner with no enrolled token."""
-
-    def __init__(self, runner_id: str) -> None:
-        super().__init__(f"runner {runner_id} has no enrolled token to revoke")
-        self.runner_id = runner_id
-
-
-class RunnerNotRetired(Exception):
-    """A reinstate targeted a runner that is not retired."""
-
-    def __init__(self, runner_id: str) -> None:
-        super().__init__(f"runner {runner_id} is not retired")
-        self.runner_id = runner_id
 
 
 @dto
@@ -147,18 +121,16 @@ class FleetService:
 
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
-        then release every held route through ``DetachService`` — a terminal chunk holds none. A
-        first retire without ``force`` refuses with :class:`RunnerHoldsRoutes`; a re-run writes no
-        second fact and re-runs the release pass, which also catches a claim that slipped past the pre-lock check."""
+        then release every held route through ``DetachService`` — a terminal chunk holds none.
+        The registration decides the fact (:meth:`RunnerRegistration.retire`); a re-run writes
+        none and re-runs the release pass, which also catches a claim that slipped past the
+        pre-lock holdings read."""
         runner_id = registration.runner_id
-        if not registration.retired and not force:
-            holdings = self._holdings(runner_id)
-            if holdings:
-                raise RunnerHoldsRoutes(runner_id, holdings)
         now = self._clock.now()
+        fact = registration.retire(self._holdings(runner_id), force=force, by=by, at=now)
         fact_id = None
-        if not registration.retired:
-            fact_id = self._registry.record_lifecycle(runner_id, retired=True, at=now, by=by)
+        if fact is not None:
+            fact_id = self._registry.record_lifecycle(runner_id, retired=fact.retired, at=fact.at, by=fact.by)
         revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
         released = tuple(self._release(route) for route in self._routes.live_routes_of_runner(runner_id))
         outcome = RetireOutcome(
@@ -175,11 +147,9 @@ class FleetService:
         return outcome
 
     def _holdings(self, runner_id: str) -> list[Route]:
-        """The runner's live routes on chunks that still hold a claim — a route left on a
-        terminal chunk is no holding."""
         routes = self._routes.live_routes_of_runner(runner_id)
         facts = self._facts.status_facts_for([route.chunk_id for route in routes])
-        return [route for route in routes if route.chunk_id not in facts or holds_claim(facts[route.chunk_id].status())]
+        return held_routes(routes, {chunk_id: f.status() for chunk_id, f in facts.items()})
 
     def _release(self, route: Route) -> ReleasedRoute | None:
         chunk = self._records.get(route.chunk_id)
@@ -193,18 +163,16 @@ class FleetService:
     def reinstate(self, registration: RunnerRegistration, *, by: str) -> int:
         """Record a ``retired=False`` fact, returning its id. The runner stays unenrolled —
         its token was revoked at retire — so the operator enrolls it afresh."""
-        if not registration.retired:
-            raise RunnerNotRetired(registration.runner_id)
-        fact_id = self._registry.record_lifecycle(registration.runner_id, retired=False, at=self._clock.now(), by=by)
+        fact = registration.reinstate(by=by, at=self._clock.now())
+        fact_id = self._registry.record_lifecycle(fact.runner_id, retired=fact.retired, at=fact.at, by=fact.by)
         _log.info("runner reinstated", runner_id=registration.runner_id, by=by)
         return fact_id
 
     def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
         """Revoke the runner's current token, leaving it registered; returns the revocation id.
         Refuses with :class:`RunnerNotEnrolled` when it holds none."""
-        if registration.token_hash is None:
-            raise RunnerNotEnrolled(registration.runner_id)
-        revocation_id = self._registry.revoke_token(registration.runner_id, at=self._clock.now(), by=by)
+        revocation = registration.revoke_token(by=by, at=self._clock.now())
+        revocation_id = self._registry.revoke_token(revocation.runner_id, at=revocation.at, by=revocation.by)
         if revocation_id is None:  # revoked concurrently between the read and the write
             raise RunnerNotEnrolled(registration.runner_id)
         _log.info("runner token revoked", runner_id=registration.runner_id, by=by)

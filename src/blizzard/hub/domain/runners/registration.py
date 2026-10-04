@@ -6,13 +6,16 @@ its own wider threshold). ``token_hash`` is the one mutable exception; a revoked
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.runners.activity import ActivityEntry
+from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 #: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
@@ -30,6 +33,75 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
 
 #: The one miss reason surfaced as a per-slug ``condition``; the runner's own set shares it via ``blizzard.wire``.
 CREDENTIAL_LAPSED_CONDITION = CREDENTIAL_LAPSED_MISS_REASON
+
+
+class RunnerState(StrEnum):
+    """A registration's lifecycle state, derived from its row. An unregistered runner has no row
+    and so no state: every operator verb on it is an unknown id, and a runner's own contact passes
+    the retired guard with nothing to be retired."""
+
+    UNENROLLED = "unenrolled"
+    ENROLLED = "enrolled"
+    #: Retired implies unenrolled — retirement revokes the token in the same pass.
+    RETIRED = "retired"
+
+
+class RunnerVerb(StrEnum):
+    """Every verb that acts on a registration. The fleet brake (pause and resume) is one verb:
+    a declarative fact appended whichever way it is set."""
+
+    ENROLL = "enroll"
+    REVOKE_TOKEN = "revoke-token"
+    BRAKE = "brake"
+    RETIRE = "retire"
+    REINSTATE = "reinstate"
+    #: The runner's own contact — every route a runner calls for itself, from registration to federation.
+    CONTACT = "contact"
+
+
+_ACTIVE_VERBS = frozenset({RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.ENROLL, RunnerVerb.CONTACT})
+
+#: Which verbs are legal from which state. A plain retire is legal from an active state only
+#: while the runner holds no claim (:meth:`RunnerRegistration.retire`); from ``retired`` it is the
+#: re-run that finishes the release pass. The brake is independent of retirement.
+RUNNER_VERBS: Mapping[RunnerState, frozenset[RunnerVerb]] = {
+    RunnerState.UNENROLLED: _ACTIVE_VERBS,
+    RunnerState.ENROLLED: _ACTIVE_VERBS | {RunnerVerb.REVOKE_TOKEN},
+    RunnerState.RETIRED: frozenset({RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.REINSTATE}),
+}
+
+
+@dto
+@dataclass(frozen=True)
+class LifecycleFact:
+    """A retire (``retired=True``) or reinstate (``retired=False``) fact to append."""
+
+    runner_id: str
+    retired: bool
+    at: datetime
+    by: str
+
+
+@dto
+@dataclass(frozen=True)
+class TokenRevocation:
+    """Revoke the runner's current token: record its hash as revoked and null it, in one write."""
+
+    runner_id: str
+    at: datetime
+    by: str
+
+
+@dto
+@dataclass(frozen=True)
+class TokenRotation:
+    """Enroll a fresh token hash. Any hash it replaces is recorded as revoked in the same write,
+    so rotating is revoking: the old token is refused under every runner-auth mode."""
+
+    runner_id: str
+    token_hash: str
+    at: datetime
+    by: str
 
 
 @domain_model
@@ -75,16 +147,67 @@ class RunnerRegistration:
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
 
+    def state(self) -> RunnerState:
+        """The lifecycle state this row derives: retired first, then whether a token is enrolled."""
+        if self.retired:
+            return RunnerState.RETIRED
+        return RunnerState.UNENROLLED if self.token_hash is None else RunnerState.ENROLLED
+
+    def permits(self, verb: RunnerVerb) -> bool:
+        """Whether ``verb`` is legal from this registration's state (:data:`RUNNER_VERBS`)."""
+        return verb in RUNNER_VERBS[self.state()]
+
     def refuse_if_retired(self, *, action: str) -> None:
         """Raise :class:`RunnerRetired` when this runner is retired — the one guard every
         operation a retired runner must not perform enforces, keyed on the id so a token-less
         caller under ``warn`` is refused too."""
-        if self.retired:
+        if not self.permits(RunnerVerb.CONTACT):
             raise RunnerRetired(self.runner_id, action=action)
+
+    def enroll(self, token_hash: str, *, by: str, at: datetime) -> TokenRotation:
+        """Mint (or rotate to) ``token_hash``. A retired runner raises :class:`RunnerRetired`:
+        ``reinstate`` is the one reinstatement lever."""
+        if not self.permits(RunnerVerb.ENROLL):
+            raise RunnerRetired(self.runner_id, action="enrollment")
+        return TokenRotation(runner_id=self.runner_id, token_hash=token_hash, at=at, by=by)
+
+    def revoke_token(self, *, by: str, at: datetime) -> TokenRevocation:
+        """Revoke the enrolled token, leaving the runner registered. Raises
+        :class:`RunnerNotEnrolled` when it holds none — a retired runner's was revoked at retire."""
+        if not self.permits(RunnerVerb.REVOKE_TOKEN):
+            raise RunnerNotEnrolled(self.runner_id)
+        return TokenRevocation(runner_id=self.runner_id, at=at, by=by)
+
+    def retire(self, holdings: Sequence[Route], *, force: bool, by: str, at: datetime) -> LifecycleFact | None:
+        """The retire fact to append, or ``None`` on a re-run over an already-retired runner,
+        which writes no second fact. ``holdings`` are the runner's live routes on chunks that
+        still hold a claim; a first retire without ``force`` that finds any raises
+        :class:`RunnerHoldsRoutes`. A re-run needs no ``force``: it finishes the release pass."""
+        if self.state() is RunnerState.RETIRED:
+            return None
+        if holdings and not force:
+            raise RunnerHoldsRoutes(self.runner_id, list(holdings))
+        return LifecycleFact(runner_id=self.runner_id, retired=True, at=at, by=by)
+
+    def reinstate(self, *, by: str, at: datetime) -> LifecycleFact:
+        """The ``retired=False`` fact — the reversal and nothing more: the runner stays
+        unenrolled. Raises :class:`RunnerNotRetired` unless it is retired."""
+        if not self.permits(RunnerVerb.REINSTATE):
+            raise RunnerNotRetired(self.runner_id)
+        return LifecycleFact(runner_id=self.runner_id, retired=False, at=at, by=by)
+
+    def refuse_federation(self, redirect_uri: str) -> None:
+        """Refuse an IdP bounce to ``redirect_uri`` for this runner: :class:`UnregisteredRedirect`
+        unless the URI is one it registered (the open-redirect guard), then :class:`RunnerRetired`.
+        In that order, so only a caller already holding a registered redirect URI can tell a
+        retired runner apart."""
+        if not self.is_federation_target(redirect_uri):
+            raise UnregisteredRedirect(self.runner_id)
+        self.refuse_if_retired(action="federation")
 
     def is_federation_target(self, redirect_uri: str) -> bool:
         """Whether the IdP may bounce to ``redirect_uri`` for this runner — the URI must be one
-        it registered. Retirement is refused separately, once the URI has matched."""
+        it registered."""
         return redirect_uri in self.redirect_uris
 
 
@@ -388,11 +511,10 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         Returns the ``runner_token_revocations.id``, or ``None`` when no token was enrolled."""
         ...
 
-    def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        """Overwrite the registration's bearer-token hash — a rotation, not a fact append.
-        Re-enrolling replaces the hash in place, so the prior token stops resolving immediately. ``at``
-        is threaded from the injected clock (``bzh:injected-clock``) for signature symmetry with this
-        seam's other writes; no rotation-audit column exists yet to stamp it into."""
+    def rotate_token(self, rotation: TokenRotation) -> int | None:
+        """Set the registration's bearer-token hash, recording any hash it replaces as revoked
+        (stamped ``rotation.at``/``rotation.by``) in the same transaction. Returns the
+        ``runner_token_revocations.id`` of that revocation, or ``None`` on a first enrollment."""
         ...
 
     def record_external_usage(
@@ -418,6 +540,40 @@ class RunnerRetired(Exception):
 
     def __init__(self, runner_id: str, *, action: str) -> None:
         super().__init__(f"runner {runner_id} is retired — {action} refused; `reinstate` it first")
+        self.runner_id = runner_id
+
+
+class RunnerHoldsRoutes(Exception):
+    """A retire without ``force`` found live routes — each held chunk and its environments."""
+
+    def __init__(self, runner_id: str, holdings: list[Route]) -> None:
+        held = "; ".join(f"{r.chunk_id} (environments: {', '.join(r.environment_ids) or 'none'})" for r in holdings)
+        super().__init__(f"runner {runner_id} holds {len(holdings)} chunk(s): {held} — retire with --force to release")
+        self.runner_id = runner_id
+        self.holdings = holdings
+
+
+class RunnerNotEnrolled(Exception):
+    """A token revocation targeted a runner with no enrolled token."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} has no enrolled token to revoke")
+        self.runner_id = runner_id
+
+
+class RunnerNotRetired(Exception):
+    """A reinstate targeted a runner that is not retired."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} is not retired")
+        self.runner_id = runner_id
+
+
+class UnregisteredRedirect(Exception):
+    """An IdP bounce named a redirect URI the runner never registered — the open-redirect guard."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} registered no such redirect_uri")
         self.runner_id = runner_id
 
 

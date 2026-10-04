@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 from sqlalchemy import text
 
+from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.observability import transcripts as transcripts_domain
 from blizzard.hub.domain.observability.transcripts import (
     RECORD_MAX_BYTES,
@@ -79,6 +80,32 @@ def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_
     assert replay.applied == []
     assert replay.already_applied == [1, 2]
     assert replay.high_water == 2
+
+
+def test_a_record_shipped_under_another_holders_lease_is_refused_unstored_and_advances_the_mark(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    with hub.engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO epoch_owners (chunk_id, epoch, runner_id, recorded_at) VALUES ('ch_1', 1, 'r2', :at)"),
+            {"at": _T0},
+        )
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    batch = [
+        _record(1, turn_range_start=0, turn_range_end=0),
+        _record(2, turn_range_start=0, turn_range_end=0, epoch=2),
+    ]
+
+    first = service.ingest("r1", batch)
+    assert (first.refused, first.applied, first.high_water) == ([1], [2], 2)
+    assert store.natural_key_state("sg_1", 0) == "accepted"
+    assert store.runner_id_for_lease("ch_1", "nd_build", 1) is None
+
+    replay = service.ingest("r1", batch)
+    assert (replay.refused, replay.already_applied, replay.high_water) == ([1], [2], 2)
 
 
 def test_a_batch_straddling_the_mark_applies_only_whats_past_it(tmp_path: Path) -> None:
@@ -357,6 +384,9 @@ class _FakeTranscriptStore:
         if any((r.segment_id, r.turn_range_start) == key for r, _, _ in self.rejected):
             return "rejected"
         return "absent"
+
+    def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
+        return None
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         return self.chunk_bytes

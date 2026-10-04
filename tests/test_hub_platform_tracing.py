@@ -303,6 +303,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        assert client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
         claim = client.post(
             "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},

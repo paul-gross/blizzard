@@ -4,10 +4,11 @@ here, so the set a run sees and the set its delivery may cite are the same by co
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, Finding, IReadFindingRepository
+from blizzard.hub.domain.garden.findings.model import Finding, IReadFindingRepository
 from blizzard.hub.domain.garden.run_context import RunContext
 
 
@@ -22,6 +23,15 @@ class FindingBucket:
     citable: list[Finding]
     exited_ids: frozenset[str]
 
+    @classmethod
+    def of(cls, rows: Sequence[Finding], *, own_scope: str) -> FindingBucket:
+        """The bucket over `rows`, which may name one finding twice (a review-sourced
+        finding the routine also holds): every unexited finding is citable, `own_scope`
+        first; every exited one is only an id."""
+        unique = {f.finding_id: f for f in rows}.values()
+        citable = sorted((f for f in unique if not f.exited), key=lambda f: (f.scope_slug != own_scope, f.finding_id))
+        return cls(citable=citable, exited_ids=frozenset(f.finding_id for f in unique if f.exited))
+
 
 class FindingBucketReader:
     """Reads a run's :class:`FindingBucket`: its routine's own findings across every
@@ -35,10 +45,4 @@ class FindingBucketReader:
     def for_run(self, run: RunContext) -> FindingBucket:
         rows = self._findings.list_for_routine(run.routine_name, include_gone=True)
         rows += self._findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
-        unique = {f.finding_id: f for f in rows}.values()
-        citable = [f for f in unique if f.state not in EXIT_KINDS]
-        citable.sort(key=lambda f: (f.scope_slug != run.scope_slug, f.finding_id))
-        return FindingBucket(
-            citable=citable,
-            exited_ids=frozenset(f.finding_id for f in unique if f.state in EXIT_KINDS),
-        )
+        return FindingBucket.of(rows, own_scope=run.scope_slug)

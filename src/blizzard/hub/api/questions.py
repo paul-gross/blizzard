@@ -20,7 +20,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunk.model import NodeQuestion
+from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
 router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
@@ -78,7 +78,12 @@ def answer_question(
     if pre_answer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
     change = chunk_events.ChunkChanged.before(services, pre_answer.chunk_id)
-    outcome = services.questions.answer(question_id, answer=request.answer, answered_by=identity.username)
+    try:
+        outcome = services.questions.answer(
+            pre_answer, ChunkFacts.or_default(change.facts), answer=request.answer, answered_by=identity.username
+        )
+    except QuestionClosed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     result = AnswerResult(
         won=outcome.won,
         question_id=outcome.question_id,

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.record import ChunkPage
@@ -188,6 +189,7 @@ def _service(
         chunk_records=chunk_records or _FakeChunkRecords(),
         chunk_facts=chunk_facts or _FakeChunkFacts(),
         findings=findings or _FakeFindings(),
+        clock=FixedClock(_UNTIL),
     )
 
 

@@ -7,14 +7,15 @@ The derivations are pure functions over already-loaded domain facts
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
@@ -22,7 +23,7 @@ from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.runners.activity import ActivityEntry
 
 if TYPE_CHECKING:
@@ -161,6 +162,13 @@ class IntendedMigration:
     graph_id: str
     node_name: str | None
 
+    @classmethod
+    def toward(cls, graph_id: str, node_name: str | None) -> IntendedMigration:
+        """The intent toward ``graph_id``: :attr:`MigrationMode.FORCED` onto a named node,
+        else :attr:`MigrationMode.AUTO` — the mode is whether a node is named."""
+        mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
+        return cls(mode=mode, graph_id=graph_id, node_name=node_name)
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -180,6 +188,11 @@ class Chunk:
     # The chunk's standing intent to migrate onto another graph at its next transition
     # — ``None`` while no intent is set.
     intended_migration: IntendedMigration | None = None
+
+    def originating_ref(self) -> WorkRef | None:
+        """The work ref the chunk was minted for — its first; a later fold appends refs after
+        it. ``None`` for a chunk holding no work ref."""
+        return self.work_refs[0] if self.work_refs else None
 
 
 def mint_chunk(
@@ -227,6 +240,12 @@ class DependencyEdge:
     def standing(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """``True`` while the edge is unreleased."""
         return self.released_at is None
+
+    @staticmethod
+    def met_by(prerequisite_status: ChunkStatus | None) -> bool:
+        """Whether a prerequisite at ``prerequisite_status`` meets the edge: only ``done`` does. An
+        absent prerequisite (``None``) reads ``not_ready``, unmet."""
+        return prerequisite_status is ChunkStatus.DONE
 
 
 # --- Facts that feed the derivations ---------------------------------------
@@ -329,6 +348,8 @@ class QuestionFact:
     question_id: str
     asked_at: datetime
     answered: bool = False
+    #: The attempt epoch the question was asked at; ``None`` when the hydrating read omits it.
+    epoch: int | None = None
 
 
 @domain_model
@@ -525,7 +546,7 @@ class OperationalEvent:
     detail: dict | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EscalationOpen:
     """One fleet-wide **open** escalation — the input :class:`EventFeed` folds into the
@@ -537,6 +558,25 @@ class EscalationOpen:
     takeover_command: str
     cause: str | None = None
     detail: str | None = None
+
+    def matches(
+        self,
+        *,
+        severity: EventLogSeverity | None = None,
+        runner_id: str | None = None,
+        chunk_id: str | None = None,
+        since: datetime | None = None,
+    ) -> bool:
+        """Whether this escalation survives the event feed's filters, read as the row it projects
+        into: it carries the ``needs-human`` severity and names no runner, so a ``severity`` filter
+        for any other severity, or any ``runner_id`` filter, excludes it. ``since`` must be aware."""
+        if severity is not None and severity != EVENT_LOG_SEVERITY[_EVENT_NEEDS_HUMAN]:
+            return False
+        if runner_id is not None:
+            return False
+        if chunk_id is not None and chunk_id != self.chunk_id:
+            return False
+        return since is None or self.recorded_at >= since
 
 
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
@@ -644,7 +684,34 @@ class DocketEntry:
     struck_at: datetime | None = None
 
 
-@dto
+class GateState(StrEnum):
+    """Where a gate decision stands: awaiting its choice, decided, or closed with none made."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+    CLOSED_UNDECIDED = "closed_undecided"
+
+
+class GateVerdict(StrEnum):
+    """How a resolution lands on a gate: written, falling through to name the first write's
+    winner, or refused."""
+
+    APPLY = "apply"
+    REPLAY = "replay"
+    REFUSE = "refuse"
+
+
+#: How a resolution lands from each gate state; a resolved gate falls through so the race names its winner.
+GATE_RESOLVE_LEGALITY: Mapping[GateState, GateVerdict] = MappingProxyType(
+    {
+        GateState.OPEN: GateVerdict.APPLY,
+        GateState.RESOLVED: GateVerdict.REPLAY,
+        GateState.CLOSED_UNDECIDED: GateVerdict.REFUSE,
+    }
+)
+
+
+@domain_model
 @dataclass(frozen=True)
 class GateDecision:
     """A gate decision in full — the surfacing/read model.
@@ -673,12 +740,186 @@ class GateDecision:
     def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.resolved_choice is not None
 
+    @property
+    def is_open(self) -> bool:
+        """Whether the gate still awaits its resolution: neither resolved nor carried by a transition."""
+        return self._awaits_resolution()
+
+    @property
+    def closed_undecided(self) -> bool:
+        """Whether a fact closed the gate with no choice made — an operator restart moving the
+        chunk off it. No choice is invented for such a gate."""
+        return self._transitioned_undecided()
+
+    def state(self) -> GateState:
+        """The gate's standing: resolved once a choice is recorded, else closed undecided once a
+        transition carried it, else open."""
+        if self.resolved:
+            return GateState.RESOLVED
+        if self.transitioned:
+            return GateState.CLOSED_UNDECIDED
+        return GateState.OPEN
+
+    def resolve_verdict(self) -> GateVerdict:
+        """How a resolution lands from this gate's state, per :data:`GATE_RESOLVE_LEGALITY`."""
+        return GATE_RESOLVE_LEGALITY[self.state()]
+
+    def _awaits_resolution(self) -> bool:
+        return not self.resolved and not self.transitioned
+
+    def _transitioned_undecided(self) -> bool:
+        return not self.resolved and self.transitioned
+
+    def require_resolvable(self, *, choice: str, struck: Sequence[str], chunk_status: ChunkStatus) -> None:
+        """Refuse a resolution this gate cannot take, in order: a ``choice`` outside the gate's
+        own (:class:`NotADecisionChoice`); then, only while unresolved, a gate already closed —
+        undecided by a restart, or by its chunk ending (:class:`DecisionClosed`) — and a struck
+        id outside the chunk's pending, unstruck proposals (:class:`NotAPendingProposal`). Once
+        resolved every retry falls through, so the first-write-wins race names the winner."""
+        if choice not in {c.name for c in self.choices}:
+            valid = ", ".join(c.name for c in self.choices)
+            raise NotADecisionChoice(f"`{choice}` is not a choice of this decision (one of: {valid})")
+        verdict = self.resolve_verdict()
+        if verdict is GateVerdict.REPLAY:
+            return
+        if verdict is GateVerdict.REFUSE:
+            raise DecisionClosed(f"decision {self.decision_id} was closed undecided by a restart")
+        if not verb_legal_from(ChunkVerb.RESOLVE_DECISION, chunk_status):
+            raise DecisionClosed(f"decision {self.decision_id} closed: chunk {self.chunk_id} is {chunk_status.value}")
+        strikeable = {e.proposal.proposal_id for e in self.docket if not e.struck}
+        unknown = set(struck) - strikeable
+        if unknown:
+            raise NotAPendingProposal(f"not a pending proposal of chunk {self.chunk_id}: {', '.join(sorted(unknown))}")
+
+    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, choice: str) -> str | None:
+        """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the
+        gate belongs to another chunk or node, is not yet resolved, or resolved to another choice."""
+        if self.chunk_id != chunk_id or self.node_id != node_id:
+            return f"decision {self.decision_id} does not match node `{node_name}`"
+        if self.resolved_choice is None:
+            return f"decision {self.decision_id} is not yet resolved"
+        if choice != self.resolved_choice:
+            return f"choice `{choice}` is not the resolved choice `{self.resolved_choice}`"
+        return None
+
+
+class NotADecisionChoice(ValueError):
+    """A resolution named a choice the gate does not offer."""
+
+
+class NotAPendingProposal(ValueError):
+    """A resolution struck a proposal id that is not one of the chunk's pending, unstruck proposals."""
+
+
+class DecisionClosed(Exception):
+    """A resolution reached a gate something already closed undecided: an operator restart moved
+    the chunk off it, or the chunk ended."""
+
 
 def holds_claim(status: ChunkStatus) -> bool:
     """Whether a chunk at this status still holds the route it may be carrying.
     Terminal outranks route liveness: a terminal transition from a runner node stamps no
     ``route.released``, so the raw route fact outlives it."""
     return status not in TERMINAL_STATUSES
+
+
+class ChunkVerb(StrEnum):
+    """A verb that reads a chunk's derived status to decide whether it is legal — the rows of
+    :data:`CHUNK_VERB_LEGALITY`. A verb names the chunk's role when it acts on one end of a
+    relation (``DECLARE_DEPENDENCY`` is the dependent's, ``NAME_AS_PREREQUISITE`` the prerequisite's).
+    An ephemeral (grouped-away or deleted) chunk has no status: every verb reads it as unknown."""
+
+    #: Declare a dependency, as the dependent.
+    DECLARE_DEPENDENCY = "declare-dependency"
+    #: Be named as the prerequisite of a declared dependency.
+    NAME_AS_PREREQUISITE = "name-as-prerequisite"
+    #: Release a standing dependency, as its dependent — the lever that keeps blocked a held state.
+    RELEASE_DEPENDENCY = "release-dependency"
+    #: Let a new ingest mint over a work ref this chunk holds: only once the holder is finished.
+    INGEST_HELD_WORK_REF = "ingest-held-work-ref"
+    #: The operator's promote; on an already-promoted chunk, a replay that writes nothing whatever the status.
+    PROMOTE = "promote"
+    #: The operator's per-chunk pause brake.
+    PAUSE = "pause"
+    #: Lift the operator's per-chunk pause brake.
+    RESUME = "resume"
+    #: The operator's terminal abandonment.
+    STOP = "stop"
+    #: The operator's manual completion. At ``done`` it is a replay that writes nothing.
+    COMPLETE = "complete"
+    #: The operator's forced move onto a node at a fresh epoch, same graph or across graphs.
+    RESTART = "restart"
+    #: Delete the chunk outright.
+    DELETE = "delete"
+    #: Take part in a group, as the survivor or as a chunk folded into it.
+    GROUP = "group"
+    #: Edit the graph pin (also refused once the chunk has moved).
+    EDIT_GRAPH_PIN = "edit-graph-pin"
+    #: Edit the default model, effort, or harnesses.
+    EDIT_DEFAULTS = "edit-defaults"
+    #: Set, overwrite, or clear the intended migration.
+    EDIT_INTENDED_MIGRATION = "edit-intended-migration"
+    #: Be named in a reorder of the ``ready`` queue.
+    REORDER_READY = "reorder-ready"
+    #: Be named in a reorder of the ``not_ready`` backlog.
+    REORDER_BACKLOG = "reorder-backlog"
+    #: A runner's claim of a ready chunk; a chunk whose live route is held refuses it as a lost race first.
+    CLAIM = "claim"
+    #: Rotate the live route's capability token; a route left on an ended chunk confers no tenure.
+    REKEY_ROUTE_TOKEN = "rekey-route-token"
+    #: Read the current node's envelope; an ended chunk has no node-step to run.
+    READ_ENVELOPE = "read-envelope"
+    #: The hub requeue, superseding the open escalation.
+    REQUEUE = "requeue"
+    #: Resolve a still-open gate decision; the chunk ending closes it.
+    RESOLVE_DECISION = "resolve-decision"
+    #: Answer a node question; the chunk ending leaves no session to hear it.
+    ANSWER_QUESTION = "answer-question"
+
+
+_EVERY_STATUS: frozenset[ChunkStatus] = frozenset(ChunkStatus)
+_NON_TERMINAL: frozenset[ChunkStatus] = _EVERY_STATUS - TERMINAL_STATUSES
+
+#: The statuses each :class:`ChunkVerb` is legal from; any other refuses with the verb's own refusal.
+CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyType(
+    {
+        ChunkVerb.DECLARE_DEPENDENCY: PRE_CLAIM_STATUSES,
+        ChunkVerb.NAME_AS_PREREQUISITE: _EVERY_STATUS,
+        ChunkVerb.RELEASE_DEPENDENCY: _EVERY_STATUS,
+        ChunkVerb.INGEST_HELD_WORK_REF: TERMINAL_STATUSES,
+        ChunkVerb.PROMOTE: _NON_TERMINAL,
+        ChunkVerb.PAUSE: _NON_TERMINAL - {ChunkStatus.DELIVERING},
+        ChunkVerb.RESUME: _EVERY_STATUS,
+        ChunkVerb.STOP: _NON_TERMINAL,
+        ChunkVerb.COMPLETE: _EVERY_STATUS,
+        ChunkVerb.RESTART: _NON_TERMINAL,
+        ChunkVerb.DELETE: PRE_CLAIM_STATUSES,
+        ChunkVerb.GROUP: PRE_CLAIM_STATUSES,
+        ChunkVerb.EDIT_GRAPH_PIN: PRE_CLAIM_STATUSES,
+        ChunkVerb.EDIT_DEFAULTS: PRE_CLAIM_STATUSES,
+        ChunkVerb.EDIT_INTENDED_MIGRATION: _NON_TERMINAL,
+        ChunkVerb.REORDER_READY: frozenset({ChunkStatus.READY}),
+        ChunkVerb.REORDER_BACKLOG: frozenset({ChunkStatus.NOT_READY}),
+        ChunkVerb.CLAIM: frozenset({ChunkStatus.READY}),
+        ChunkVerb.REKEY_ROUTE_TOKEN: _NON_TERMINAL,
+        ChunkVerb.READ_ENVELOPE: _NON_TERMINAL,
+        ChunkVerb.REQUEUE: frozenset({ChunkStatus.NEEDS_HUMAN}),
+        ChunkVerb.RESOLVE_DECISION: _NON_TERMINAL,
+        ChunkVerb.ANSWER_QUESTION: _NON_TERMINAL,
+    }
+)
+
+
+def verb_legal_from(verb: ChunkVerb, status: ChunkStatus) -> bool:
+    """Whether ``verb`` is legal on a chunk at ``status``, per :data:`CHUNK_VERB_LEGALITY`."""
+    return status in CHUNK_VERB_LEGALITY[verb]
+
+
+def holds_work_refs(status: ChunkStatus) -> bool:
+    """Whether a chunk at this status still holds its work refs against a new ingest — a live
+    holder. The inverse of :attr:`ChunkVerb.INGEST_HELD_WORK_REF`'s window, read by every
+    live-holder derivation."""
+    return not verb_legal_from(ChunkVerb.INGEST_HELD_WORK_REF, status)
 
 
 @domain_model
@@ -765,6 +1006,23 @@ class ChunkFacts:
             return None
         return max(self.restarts, key=lambda r: (r.recorded_at, r.epoch))
 
+    def restart_history(self) -> list[RestartFact]:
+        """The chunk's operator restarts oldest first, by the ``(recorded_at, epoch)`` key
+        :meth:`newest_restart` selects the tail of."""
+        return sorted(self.restarts, key=lambda r: (r.recorded_at, r.epoch))
+
+    def transition_graph_off_pin(self, pin_graph_id: str) -> str | None:
+        """The graph the newest transition was recorded on when it is not ``pin_graph_id`` — the graph a
+        cross-graph move left, which that transition's own nodes resolve against — else ``None``."""
+        transition = self.newest_transition()
+        if transition is None or transition.graph_id is None or transition.graph_id == pin_graph_id:
+            return None
+        return transition.graph_id
+
+    def admits(self, verb: ChunkVerb) -> bool:
+        """Whether ``verb`` is legal from this chunk's derived status (:data:`CHUNK_VERB_LEGALITY`)."""
+        return verb_legal_from(verb, self.status())
+
     def latest_epoch(self) -> int | None:
         """The chunk's latest fencing epoch — the newest across its leases, restarts, and
         epoch owners.
@@ -807,6 +1065,33 @@ class ChunkFacts:
         graph's entry node."""
         movement = self.latest_movement()
         return movement.node_id if movement is not None else None
+
+    def current_node(self, graph: Graph) -> Node | None:
+        """The chunk's current node on ``graph`` — the newest movement's target, else the graph's
+        entry node. ``None`` when that id names no node there (the reserved terminal)."""
+        return graph.node_by_id(self.current_node_id() or graph.entry_node_id)
+
+    def epoch_floor(self) -> int:
+        """The epoch a fresh node-step envelope carries — the latest fencing epoch, ``0`` before any."""
+        return self.latest_epoch() or 0
+
+    def escalated_at(self, epoch: int) -> bool:
+        """Whether any escalation, open or superseded, was recorded at ``epoch``."""
+        return any(e.epoch == epoch for e in self.escalations)
+
+    def open_escalation_at(self, epoch: int) -> EscalationFact | None:
+        """The open escalation, when the attempt at ``epoch`` raised it; else ``None``."""
+        escalation = self.open_escalation()
+        return escalation if escalation is not None and escalation.epoch == epoch else None
+
+    def open_questions_at(self, epoch: int) -> list[QuestionFact]:
+        """The open questions the attempt at ``epoch`` asked, oldest first."""
+        return [q for q in self.open_questions() if q.epoch == epoch]
+
+    def restarted_past(self, epoch: int) -> bool:
+        """Whether an operator restart minted an epoch above ``epoch`` — the attempt at ``epoch``
+        and its parked session were superseded."""
+        return any(restart.epoch > epoch for restart in self.restarts)
 
     def entered_by_restart(self) -> bool:
         """The chunk's current node visit was forced by an operator restart (#370).
@@ -868,14 +1153,14 @@ class ChunkFacts:
             # Below the human-gated states (a chunk both parked on a question and paused
             # is still, first, waiting on a human) and above delivering/running.
             return ChunkStatus.PAUSED
+        if not self.promoted and not self._has_live_route():
+            # An un-promoted chunk rests ``not_ready``. Above the hub-node test, so a restart that re-aims a
+            # resting chunk onto a hub-executed node does not promote it: only an explicit promote moves it on.
+            return ChunkStatus.NOT_READY
         if self._latest_movement_enters_hub_node():
             return ChunkStatus.DELIVERING
         if self._has_live_route():
             return ChunkStatus.RUNNING
-        if not self.promoted:
-            # An un-promoted chunk rests ``not_ready`` — visible but never claimed. Below every
-            # post-claim state, so only a fresh chunk with no live route lands here.
-            return ChunkStatus.NOT_READY
         return ChunkStatus.READY
 
     def is_ready_but_for_pause(self) -> bool:
@@ -894,6 +1179,14 @@ class ChunkFacts:
             return self.operator_completed_at
         terminal_transition = self.newest_transition() if self.newest_transition_is_terminal() else None
         return terminal_transition.recorded_at if terminal_transition is not None else None
+
+    def finished_before(self, instant: datetime) -> bool:
+        """Whether the chunk is ``done`` and finished strictly before ``instant`` — the board's
+        done-window cut. A ``stopped`` chunk never reads as finished here."""
+        if self.status() is not ChunkStatus.DONE:
+            return False
+        completed_at = self.completed_at()
+        return completed_at is not None and completed_at < instant
 
     def open_escalation(self) -> EscalationFact | None:
         """The newest escalation nothing later superseded, or ``None``.
@@ -968,7 +1261,12 @@ class ChunkFacts:
         ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
         current landing truth; the fact inputs are read alongside for back-compat, so a
         historical chunk still reads landed."""
-        return self.delivery_landed or bool(self.landed_repos) or bool(LandedRepos.of(artifacts).names)
+        return self.landed_with(LandedRepos.of(artifacts).names)
+
+    def landed_with(self, repo_names: Collection[str]) -> bool:
+        """True iff any repo has landed for this chunk: a ``merged/<repo>`` marker names one
+        (``repo_names``), or the back-compat delivery facts already record a landing."""
+        return self.delivery_landed or bool(self.landed_repos) or bool(repo_names)
 
     def bounce_count(self) -> int:
         """The chunk's total recorded delivery kick-backs (#64) — informational.
@@ -1124,7 +1422,7 @@ class ChunkChange:
         transition = facts.newest_transition()
         if transition is not None and transition.from_node_id is not None:
             target_graph = graph
-            if transition.graph_id is not None and transition.graph_id != graph.graph_id and from_graph is not None:
+            if facts.transition_graph_off_pin(graph.graph_id) is not None and from_graph is not None:
                 target_graph = from_graph
             from_node = target_graph.node_by_id(transition.from_node_id)
             prev_node = from_node.name if from_node is not None else None
@@ -1241,7 +1539,7 @@ class FleetSummary:
 # --- Question rows (the ask/answer rendezvous) -------------------------------
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NodeQuestion:
     """A durable question row with its derived answer *and delivery* state. Every state
@@ -1265,6 +1563,70 @@ class NodeQuestion:
     delivered: bool = False
     delivered_at: datetime | None = None
     harness_id: str | None = None
+
+    def require_answerable(self, chunk_status: ChunkStatus) -> None:
+        """Refuse an answer once the question's chunk has ended (:class:`QuestionClosed`): no
+        session remains to hear it (:attr:`ChunkVerb.ANSWER_QUESTION`)."""
+        if not verb_legal_from(ChunkVerb.ANSWER_QUESTION, chunk_status):
+            raise QuestionClosed(f"question {self.question_id} closed: chunk {self.chunk_id} is {chunk_status.value}")
+
+    def delivery(self, *, chunk_id: str, superseded_by_restart: bool) -> tuple[QuestionDelivery, str | None]:
+        """How an ``answer.delivered`` report lands on this question, with a refusal's detail.
+        Delivery is the answer's return trip to the asking session, so it refuses a report naming
+        another chunk, a question not yet answered, and one a restart superseded (answered by the
+        system, never delivered). A repeat of a delivered question is a replay that writes nothing."""
+        if chunk_id != self.chunk_id:
+            return QuestionDelivery.REFUSE, f"question {self.question_id} belongs to chunk {self.chunk_id}"
+        state = self.state(superseded_by_restart=superseded_by_restart)
+        verdict = QUESTION_DELIVERY_LEGALITY[state]
+        if verdict is not QuestionDelivery.REFUSE:
+            return verdict, None
+        if state is QuestionState.SUPERSEDED:
+            return verdict, f"question {self.question_id} was superseded by a restart"
+        return verdict, f"question {self.question_id} is not answered"
+
+    def state(self, *, superseded_by_restart: bool) -> QuestionState:
+        """The question's standing: superseded once a restart answered it for the system, else
+        delivered, answered, or open by its derived rows."""
+        if superseded_by_restart:
+            return QuestionState.SUPERSEDED
+        if not self.answered:
+            return QuestionState.OPEN
+        if self.delivered:
+            return QuestionState.DELIVERED
+        return QuestionState.ANSWERED
+
+
+class QuestionDelivery(StrEnum):
+    """How an ``answer.delivered`` report lands: written, a replay that writes nothing, or refused."""
+
+    RECORD = "record"
+    REPLAY = "replay"
+    REFUSE = "refuse"
+
+
+class QuestionState(StrEnum):
+    """Where a question stands on the answer's return trip to its asking session."""
+
+    OPEN = "open"
+    ANSWERED = "answered"
+    DELIVERED = "delivered"
+    SUPERSEDED = "superseded"
+
+
+#: How an ``answer.delivered`` report lands from each question state: only an answered question records it.
+QUESTION_DELIVERY_LEGALITY: Mapping[QuestionState, QuestionDelivery] = MappingProxyType(
+    {
+        QuestionState.OPEN: QuestionDelivery.REFUSE,
+        QuestionState.ANSWERED: QuestionDelivery.RECORD,
+        QuestionState.DELIVERED: QuestionDelivery.REPLAY,
+        QuestionState.SUPERSEDED: QuestionDelivery.REFUSE,
+    }
+)
+
+
+class QuestionClosed(Exception):
+    """An answer reached a question whose chunk has ended."""
 
 
 @dto

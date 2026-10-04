@@ -10,9 +10,16 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+
+
+def is_completion_replay(facts: ChunkFacts) -> bool:
+    """Whether a completion would replay one already standing: at ``done`` it writes nothing.
+    :attr:`~blizzard.hub.domain.chunk.model.ChunkVerb.COMPLETE` is legal from every status,
+    ``stopped`` included, so a completion is never refused."""
+    return facts.status() is ChunkStatus.DONE
 
 
 class CompleteService:
@@ -41,6 +48,6 @@ class CompleteService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            if facts.status() is ChunkStatus.DONE:
+            if is_completion_replay(facts):
                 return None
             return self._lifecycle.record_completion_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())

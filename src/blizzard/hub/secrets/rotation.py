@@ -19,6 +19,8 @@ from blizzard.hub.domain.config.secrets import (
     SealedSecret,
     SealedValue,
     SecretUnreadable,
+    stale_seals,
+    uncovered_key_ids,
 )
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, secret_keys_dir
 from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher
@@ -69,7 +71,7 @@ def _rotate(
     repo: IResealSecretRepository, keys: IHubKeyProvider, *, directory: DirectoryKeyProvider | None
 ) -> RotationResult:
     rows = repo.list_sealed()
-    missing = {row.sealed.key_id for row in rows} - keys.available_ids()
+    missing = uncovered_key_ids({row.sealed.key_id for row in rows}, keys.available_ids())
     if missing:
         raise ConfigError(
             f"stored secrets are sealed under key generation(s) {sorted(missing)} the key source does not hold — "
@@ -77,7 +79,7 @@ def _rotate(
         )
     target = directory.mint() if directory is not None else keys.current()
     cipher = AesGcmSecretCipher(_Target(keys, target))
-    changes = [_reseal(cipher, row) for row in rows if row.sealed.key_id != target.key_id]
+    changes = [_reseal(cipher, row) for row in stale_seals(rows, target.key_id)]
     repo.reseal(changes)
     if directory is not None:
         directory.promote(target.key_id)

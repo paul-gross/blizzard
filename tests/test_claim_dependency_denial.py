@@ -32,8 +32,8 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
 
 def test_claim_denied_when_the_dependency_is_unmet(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice")
 
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
@@ -51,8 +51,8 @@ def test_claim_denied_when_the_dependency_is_unmet(tmp_path: Path) -> None:
 
 def test_claim_allowed_once_the_prerequisite_reaches_done(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice")
     assert hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id)).status_code == 409
 
@@ -67,8 +67,8 @@ def test_claim_allowed_against_a_prerequisite_already_done_before_the_edge_decla
     """An edge named against a chunk that is already done is accepted and is simply
     already satisfied — no special case at claim time either."""
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
     hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice")
 
@@ -79,8 +79,8 @@ def test_claim_allowed_against_a_prerequisite_already_done_before_the_edge_decla
 
 def test_claim_allowed_once_the_edge_is_released(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     edge = hub.services.dependencies.declare(
         _resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice"
     )
@@ -100,8 +100,8 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     holds the row lock the two share (mirrors ``tests/test_dependency_race.py``'s
     pattern)."""
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     dependent = _resolve(hub, dependent_id)
     prerequisite = _resolve(hub, prerequisite_id)
 
@@ -142,9 +142,9 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
 
 def test_claim_denial_names_the_earliest_declared_unmet_prerequisite(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
-    first_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-1"}], promote=False)
-    second_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-2"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    first_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-1"}])
+    second_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-2"}])
     dependent = _resolve(hub, dependent_id)
     hub.services.dependencies.declare(dependent, _resolve(hub, first_prereq_id), by="user:alice")
     hub.clock.advance(timedelta(seconds=1))  # a distinct `declared_at` — the store's own total order
@@ -160,10 +160,10 @@ def _seed_unmet_dependent(hub: HubHarness, *, prerequisite_count: int) -> str:
     """Every prerequisite but the last-declared one is already done — the earliest-unmet
     scan must walk the whole standing set before landing on the one denial, rather than
     short-circuiting on the first edge."""
-    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
     dependent = _resolve(hub, dependent_id)
     for i in range(prerequisite_count):
-        prereq_id = ingest(hub, [{"source": "default", "ref": f"prereq-{i}"}], promote=False)
+        prereq_id = ingest(hub, [{"source": "default", "ref": f"prereq-{i}"}])
         prereq = _resolve(hub, prereq_id)
         if i < prerequisite_count - 1:
             hub.services.complete.complete(prereq, by="user:alice")

@@ -28,6 +28,7 @@ from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.domain.runners.registration import UnregisteredRedirect
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -209,16 +210,19 @@ def authorize(
                 detail="client=cli requires a PKCE code_challenge (S256) — PKCE is mandatory for this public client",
             )
     else:
+        # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
+        # fingerprint client ids by probing; a retired runner's ``RunnerRetired`` (403) reaches the app handler.
         registration = services.registry.get_runner(client)
-        if registration is None or not registration.is_federation_target(redirect_uri):
-            # One undifferentiated 400 for both cases — the open-redirect guard:
-            # a caller cannot fingerprint valid client ids by probing.
+        unregistered = registration is None
+        if registration is not None:
+            try:
+                registration.refuse_federation(redirect_uri)
+            except UnregisteredRedirect:
+                unregistered = True
+        if unregistered:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="unknown client or unregistered redirect_uri"
             )
-        # Only once the redirect URI has matched: a retired runner gets its own 403, which
-        # only a caller already holding a registered redirect URI can tell apart.
-        registration.refuse_if_retired(action="federation")
 
     identity = resolve_identity(request, services)
     if identity is None:

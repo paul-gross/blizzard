@@ -92,7 +92,7 @@ def _envelope(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
 
 def test_the_declaration_reaches_the_envelope_read(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER], promote=False)
+    chunk_id = ingest(hub, [_POINTER])
     _mint_and_pin(hub, chunk_id)
 
     node = _envelope(hub, chunk_id)["node"]
@@ -114,7 +114,7 @@ def test_the_declaration_reaches_the_envelope_read(tmp_path: Path) -> None:
 
 def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER], promote=False)
+    chunk_id = ingest(hub, [_POINTER])
     _mint_and_pin(hub, chunk_id)
     # `gate` names a model but no effort, so the chunk's effort fills that gap while its
     # model stays outranked.
@@ -140,7 +140,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
     """A node on the bare `fresh`/`resume` vocabulary belongs to no pool but still
     inherits the chunk's defaults."""
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER], promote=False)
+    chunk_id = ingest(hub, [_POINTER])
     _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)
     patched = hub.client.patch(
         f"/api/chunks/{chunk_id}",
@@ -164,7 +164,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
 
 def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER], promote=False)
+    chunk_id = ingest(hub, [_POINTER])
     _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)
 
     node = _envelope(hub, chunk_id)["node"]
@@ -179,7 +179,7 @@ def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp
 
 def test_the_declaration_reaches_the_claim_envelope_too(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER], promote=False)
+    chunk_id = ingest(hub, [_POINTER])
     _mint_and_pin(hub, chunk_id)
     promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert promoted.status_code == 202, promoted.text

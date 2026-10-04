@@ -21,7 +21,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, seed_chunk, seed_graph
+from tests.support import build_hub, count_queries, hub_store_connections, ingest, make_ready, seed_chunk, seed_graph
 from tests.test_ingest_and_queue import _BUILD_REVIEW_DELIVER_YAML, _pass
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -309,6 +309,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     # (a) old + fresh holders of one pointer, over the `hub` source since its `web_url`
     # varies with the live holder — `default`'s ignores `live_holder` entirely.
     old_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
+    make_ready(hub, old_holder_id)
     build_id = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": old_holder_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -333,6 +334,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
 
     hub.clock.advance(timedelta(seconds=1))
     live_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
+    make_ready(hub, live_holder_id)
 
     # (b) a separate dependent/prerequisite pair (the `test_blocked_marking_api.py` shape).
     hub.clock.advance(timedelta(seconds=1))

@@ -32,7 +32,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node, TargetGraphRetired
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
@@ -41,7 +41,6 @@ from blizzard.hub.domain.operations.edit import (
     EditService,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
-    TargetGraphRetired,
 )
 from tests.support import make_graph
 

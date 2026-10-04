@@ -13,7 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MovementKind, TransitionFact, WorkRefLabel
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, MovementKind, TransitionFact, WorkRefLabel
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.wire.envelope import (
     EnvelopeArtifact,
@@ -134,6 +134,14 @@ class EffectiveSession:
         )
 
 
+class NoCurrentNode(Exception):
+    """The chunk has no node-step to run: it has ended, or its current node id names no node."""
+
+    def __init__(self, chunk_id: str) -> None:
+        super().__init__("chunk has no current runner node (terminal)")
+        self.chunk_id = chunk_id
+
+
 @domain_model
 @dataclass(frozen=True)
 class Envelope:
@@ -152,6 +160,33 @@ class Envelope:
     entered_by_restart: bool = False
     # Renders a work ref's source-native token; omitted, no ref carries a label.
     label: WorkRefLabel | None = None
+
+    @classmethod
+    def current(
+        cls,
+        chunk: Chunk,
+        graph: Graph,
+        facts: ChunkFacts,
+        artifacts: list[StoredArtifact],
+        *,
+        label: WorkRefLabel | None = None,
+    ) -> Envelope:
+        """The envelope of the node-step the chunk stands at now — its current node (else the
+        entry) at the epoch floor. Raises :class:`NoCurrentNode` for every ended chunk alike, and
+        for a current node id that names no node."""
+        node = facts.current_node(graph) if facts.admits(ChunkVerb.READ_ENVELOPE) else None
+        if node is None:
+            raise NoCurrentNode(chunk.chunk_id)
+        return cls(
+            chunk=chunk,
+            graph=graph,
+            node=node,
+            artifacts=artifacts,
+            epoch=facts.epoch_floor(),
+            arrival_addendum=Arrival.of_facts(graph, facts).addendum,
+            entered_by_restart=facts.entered_by_restart(),
+            label=label,
+        )
 
     @property
     def work_refs(self) -> list[dict[str, str]]:  # ast-grep-ignore: bzh:property-delegates

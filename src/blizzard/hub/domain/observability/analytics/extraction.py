@@ -21,6 +21,12 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 EXTRACTOR_VERSION = "blizzard-analytics/5"
 
 
+def read_version(named: str | None) -> str:
+    """The extractor version a read covers: the one it names, else the current one — a read
+    never mixes versions, which would double-count an occurrence."""
+    return named or EXTRACTOR_VERSION
+
+
 @dto
 @dataclass(frozen=True)
 class ExtractedEvent:

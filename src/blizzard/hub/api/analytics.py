@@ -24,7 +24,8 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
-from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
+from blizzard.hub.domain.observability.analytics.extraction import read_version
 from blizzard.hub.domain.observability.analytics.operational import (
     DurationStats,
     IReadOperationalAnalytics,
@@ -69,22 +70,12 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
     """A segment scope forces that one segment regardless of its candidacy; a chunk or
     all scope derives up to ``limit`` of that scope's current candidates and reports how
     many remain, so the caller drives to convergence with repeated calls."""
-    if request.segment_id is not None and request.chunk_id is not None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="segment_id and chunk_id are mutually exclusive"
-        )
-    service = services.event_derivation_service
-    if request.segment_id is not None:
-        pins = service.graph_pins_for([request.segment_id])
-        derived = service.derive_segment(request.segment_id, pins)
-        return ReDeriveResponse(derived=1 if derived else 0, remaining=0)
-
-    candidates = service.candidate_segment_ids(chunk_id=request.chunk_id)
-    to_derive = candidates[: request.limit]
-    pins = service.graph_pins_for(to_derive)
-    for segment_id in to_derive:
-        service.derive_segment(segment_id, pins)
-    return ReDeriveResponse(derived=len(to_derive), remaining=len(candidates) - len(to_derive))
+    try:
+        scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
+    except ReDeriveScopeRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    outcome = services.event_derivation_service.re_derive(scope, limit=request.limit)
+    return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining)
 
 
 # --- read-only events/counts --------------------------------------
@@ -194,7 +185,7 @@ def event_criteria(
     byte-identical-spec constraint binds the parameter declarations, not this conversion."""
     normalized = scope.scope.normalized()
     return EventQueryCriteria(
-        extractor_version=scope.extractor_version or EXTRACTOR_VERSION,
+        extractor_version=read_version(scope.extractor_version),
         kind=kind,
         tool=tool,
         subject_prefix=subject_prefix,

@@ -19,8 +19,9 @@ from blizzard.hub.domain.config.secrets import (
     ISecretReader,
     SecretName,
     SecretNotFound,
-    SecretRetired,
     SecretValue,
+    require_revealable,
+    uncovered_key_ids,
 )
 from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher
 from blizzard.hub.secrets.internal.directory_keys import DirectoryKeyProvider
@@ -57,8 +58,7 @@ class StoreSecretReader:
         secret = self._sealed.get_sealed(name.value)
         if secret is None:
             raise SecretNotFound(name.value)
-        if self._catalog.is_retired(name.value):
-            raise SecretRetired(name.value)
+        require_revealable(name.value, retired=self._catalog.is_retired(name.value))
         return self._cipher.open(secret)
 
 
@@ -75,7 +75,7 @@ class KeyCoverage:
 
     @classmethod
     def of(cls, catalog: ISecretCatalog, keys: IHubKeyProvider) -> KeyCoverage:
-        return cls(frozenset(catalog.key_ids_in_use() - keys.available_ids()))
+        return cls(uncovered_key_ids(catalog.key_ids_in_use(), keys.available_ids()))
 
     def check(self) -> None:
         """Refuse to start rather than serve secrets no generation can open."""

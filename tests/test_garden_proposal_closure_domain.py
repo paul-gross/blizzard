@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.proposals.closure import (
     classify_proposal_count_bucket,
 )
 from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed
+from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
 pytestmark = pytest.mark.unit
@@ -109,8 +110,13 @@ def _service(
     return GardenProposalClosureService(
         closures=_as_write_repo(repo),
         items=items if items is not None else _no_mint_items(),
+        default_graph=_untouched_default_graph,
         clock=FixedClock(instant=_T0),
     )
+
+
+def _untouched_default_graph() -> Graph:
+    raise NotImplementedError("should not resolve the default graph")
 
 
 def test_pass_rejects_a_blank_reason() -> None:
@@ -178,7 +184,7 @@ def test_accept_on_an_already_closed_proposal_is_refused_naming_the_existing_clo
     service = _service(repo)
 
     with pytest.raises(GardenProposalAlreadyClosed) as excinfo:
-        service.accept(_proposal(), reason=None, by="u1", body=None, mint=False, graph=None, findings=[])
+        service.accept(_proposal(), reason=None, by="u1", body=None, mint=False, findings=[])
 
     assert excinfo.value.closure == existing
     assert repo.declined == []
@@ -188,9 +194,7 @@ def test_accept_declining_to_mint_records_declined_and_touches_no_item_service()
     repo = _FakeGardenProposalClosureRepo()
     service = _service(repo)
 
-    accepted = service.accept(
-        _proposal(), reason="handled by hand", by="u1", body=None, mint=False, graph=None, findings=[]
-    )
+    accepted = service.accept(_proposal(), reason="handled by hand", by="u1", body=None, mint=False, findings=[])
 
     assert repo.declined == [("gprop_1", "handled by hand", "u1", _T0)]
     assert accepted.chunk_id is None

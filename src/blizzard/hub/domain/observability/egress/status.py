@@ -18,10 +18,20 @@ from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, IReadEgress, IReadEgressEvents
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.lane_failure import failure_ongoing
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import oldest_unsent
 
 EgressState = Literal["on", "off", "rejected"]
+
+
+def egress_state(*, directory_configured: bool, rejected: bool) -> EgressState:
+    """The export is off with no directory, rejected when its settings cannot be honoured, else on."""
+    if not directory_configured:
+        return "off"
+    return "rejected" if rejected else "on"
+
+
 FreeSpaceProbe = Callable[[], int | None]
 _FAILED = "egress-write-failed"
 
@@ -87,16 +97,17 @@ class EgressStatusReader:
 
     def read(self) -> EgressStatus:
         config = self._config
-        if config.directory is None:
+        state = egress_state(directory_configured=config.directory is not None, rejected=self._rejected)
+        if state == "off":
             return self._idle("off", None, None)
-        if self._rejected:
+        if state == "rejected":
             return self._idle("rejected", "egress.format", config.format)
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in config.datasets}
         passes = [cursor for cursor in cursors.values() if cursor is not None]
         last_pass = max(passes, key=lambda cursor: cursor.recorded_at, default=None)
         written = self._egress.newest_cursor_with_files()
         failure = self._egress.newest_egress_failure()
-        ongoing = failure is not None and self._egress.newest_egress_latch() == _FAILED
+        ongoing = failure_ongoing(failure, self._egress.newest_egress_latch(), failed_kind=_FAILED)
         return EgressStatus(
             state="on",
             # A missing path hash key drops only the events dataset; the export stays on and names the variable.

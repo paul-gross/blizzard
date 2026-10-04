@@ -10,10 +10,11 @@ than defaults."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.model import HubWorkItem, IWriteWorkItemRepository, WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
@@ -22,11 +23,12 @@ from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
     Routine,
-    RoutineGraphUnresolvedError,
+    RoutineVerb,
     RunMode,
+    require_graph_resolves,
 )
-from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
-from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.work_items.editing import prepare_mint
 
 
@@ -91,6 +93,88 @@ def compose_charge(
     return "\n".join(lines)
 
 
+def require_routine_runnable(routine: Routine, *, retired: bool) -> None:
+    """A retired routine refuses a run — checked before anything about its scope."""
+    if not Routine.allows(RoutineVerb.RUN, retired=retired):
+        raise RoutineRetiredError(routine.name)
+
+
+def require_related(routine: Routine, scope: Scope, linked: Collection[str]) -> None:
+    """The effective scope must be in the routine's declared set, ``linked``."""
+    if scope.slug not in linked:
+        raise ScopeNotRelatedError(routine.routine_id, scope.slug)
+
+
+def require_scope_open(scope: Scope, *, retired: bool) -> None:
+    """A retired effective scope refuses a run."""
+    if not Scope.allows(ScopeVerb.RUN_AGAINST, retired=retired):
+        raise ScopeRetiredError(scope.slug)
+
+
+def settle_mode(requested: RunMode, baseline: FindingSet | None) -> tuple[RunMode, bool]:
+    """The mode a run settles to and whether it was downgraded: a delta with no
+    recorded baseline for the pair runs full, on the record, never refused."""
+    if requested is RunMode.DELTA and baseline is None:
+        return RunMode.FULL, True
+    return requested, False
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunPlan:
+    """Everything a run decides before it mints: the graph it executes, how the
+    requested mode settled, and the work item's title and charge."""
+
+    graph: Graph
+    effective_mode: RunMode
+    downgraded: bool
+    baseline: FindingSet | None
+    title: str
+    charge: str
+
+
+def plan_run(
+    routine: Routine,
+    *,
+    routine_retired: bool,
+    graph: Graph | None,
+    scope: Scope,
+    scope_retired: bool,
+    linked: Collection[str],
+    requested_mode: RunMode,
+    baseline: FindingSet | None,
+    note: str | None,
+) -> RunPlan:
+    """Decide one run of ``routine`` against ``scope`` from already-loaded values.
+
+    Refusals in order: a retired routine, an unresolved graph, a scope outside the
+    routine's declared set, a retired scope — a routine that cannot run makes no claim
+    about a scope, and the brake never judges a scope the routine has no set claim on."""
+    require_routine_runnable(routine, retired=routine_retired)
+    resolved = require_graph_resolves(graph, routine.graph_name)
+    require_related(routine, scope, linked)
+    require_scope_open(scope, retired=scope_retired)
+    effective_mode, downgraded = settle_mode(requested_mode, baseline)
+    charge = compose_charge(
+        routine_name=routine.name,
+        graph_name=routine.graph_name,
+        scope_slug=scope.slug,
+        scope_description=scope.description,
+        mode=effective_mode,
+        downgraded=downgraded,
+        baseline=baseline,
+        note=note,
+    )
+    return RunPlan(
+        graph=resolved,
+        effective_mode=effective_mode,
+        downgraded=downgraded,
+        baseline=baseline,
+        title=f"{routine.name} run ({effective_mode.value})",
+        charge=charge,
+    )
+
+
 @dto
 @dataclass(frozen=True)
 class RunResult:
@@ -131,8 +215,7 @@ class RunService:
     def refuse_if_retired(self, routine: Routine) -> None:
         """The retired-routine refusal on its own, so an edge can apply it before it
         resolves the run's scope — :meth:`run` applies it again first thing."""
-        if self._routines.is_retired(routine.routine_id):
-            raise RoutineRetiredError(routine.name)
+        require_routine_runnable(routine, retired=self._routines.is_retired(routine.routine_id))
 
     def run(
         self,
@@ -143,58 +226,42 @@ class RunService:
         note: str | None,
         author: WorkItemAuthor,
     ) -> RunResult:
-        self.refuse_if_retired(routine)
-        graph = self._graphs.get_enabled_by_name(routine.graph_name)
-        if graph is None:
-            raise RoutineGraphUnresolvedError(routine.graph_name)
-        if scope.slug not in self._routine_scopes.list_scopes(routine.routine_id):
-            raise ScopeNotRelatedError(routine.routine_id, scope.slug)
-        if self._scopes.is_retired(scope.slug):
-            raise ScopeRetiredError(scope.slug)
-
-        baseline = self._finding_sets.newest_for_routine_scope(routine.name, scope.slug)
-        effective_mode = mode
-        downgraded = False
-        if mode is RunMode.DELTA and baseline is None:
-            effective_mode = RunMode.FULL
-            downgraded = True
-        charge = compose_charge(
-            routine_name=routine.name,
-            graph_name=routine.graph_name,
-            scope_slug=scope.slug,
-            scope_description=scope.description,
-            mode=effective_mode,
-            downgraded=downgraded,
-            baseline=baseline,
+        plan = plan_run(
+            routine,
+            routine_retired=self._routines.is_retired(routine.routine_id),
+            graph=self._graphs.get_enabled_by_name(routine.graph_name),
+            scope=scope,
+            scope_retired=self._scopes.is_retired(scope.slug),
+            linked=self._routine_scopes.list_scopes(routine.routine_id),
+            requested_mode=mode,
+            baseline=self._finding_sets.newest_for_routine_scope(routine.name, scope.slug),
             note=note,
         )
-        title = f"{routine.name} run ({effective_mode.value})"
-
         pointer, chunk, pointer_at = prepare_mint(
             self._items,
             self._work_refs,
             self._clock,
             RESERVED_HUB_SOURCE_NAME,
-            graph=graph,
+            graph=plan.graph,
             default_model=routine.default_model,
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
         item = self._items.create_run_with_chunk(
             pointer=pointer,
-            title=title,
-            body=charge,
+            title=plan.title,
+            body=plan.charge,
             author=author,
             routine_name=routine.name,
             scope_slug=scope.slug,
-            run_mode=effective_mode.value,
+            run_mode=plan.effective_mode.value,
             at=pointer_at,
             chunk=chunk,
         )
         return RunResult(
             item=item,
             chunk_id=chunk.chunk_id,
-            effective_mode=effective_mode,
-            downgraded=downgraded,
-            baseline=baseline,
+            effective_mode=plan.effective_mode,
+            downgraded=plan.downgraded,
+            baseline=plan.baseline,
         )

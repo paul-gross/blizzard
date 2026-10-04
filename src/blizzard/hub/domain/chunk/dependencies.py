@@ -1,8 +1,9 @@
 """Chunk dependency edges — declare and release.
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.dependencies``);
-declaring refuses a cycle and admits only in :data:`PRE_CLAIM_STATUSES`, release has no
-window. Declaring runs under the shared row lock (``bzh:store-exclusive-write``)
+:func:`decide_declare` owns what declaring decides — idempotence first, then the dependent's window
+(:attr:`~blizzard.hub.domain.chunk.model.ChunkVerb.DECLARE_DEPENDENCY`), ephemerality, and the cycle — and
+release has no window. Declaring runs under the shared row lock (``bzh:store-exclusive-write``)
 ``ClaimService``/``EditService``/``RestartService``/``DeleteService`` all take, plus a
 residual fleet-wide ``threading.Lock`` the cycle check alone still needs — pinned by
 ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
@@ -12,16 +13,16 @@ from __future__ import annotations
 # The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 
 
 class DependentNotEditable(Exception):
@@ -69,6 +70,49 @@ class PrerequisiteIsEphemeral(Exception):
         self.chunk_id = chunk_id
 
 
+@domain_model
+@dataclass(frozen=True)
+class EdgeToDeclare:
+    """:func:`decide_declare`'s admission: the ordered pair to mint a fresh standing edge for."""
+
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+
+
+def decide_declare(
+    standing: Sequence[DependencyEdge],
+    *,
+    dependent: Chunk,
+    dependent_facts: ChunkFacts | None,
+    prerequisite_chunk_id: str,
+    prerequisite_ephemeral: bool,
+) -> DependencyEdge | EdgeToDeclare:
+    """Decide a declaration of ``dependent`` on ``prerequisite_chunk_id`` over the loaded standing edges,
+    the first rule that fires deciding: an already-standing pair replays as that edge; a dependent with no
+    facts is :class:`ChunkNotFound`; then :class:`DependentNotEditable`, :class:`PrerequisiteIsEphemeral`
+    (a minted prerequisite is admitted at any status), and :class:`DependencyWouldCloseCycle`.
+    Otherwise the pair to mint."""
+    existing = next(
+        (
+            edge
+            for edge in standing
+            if edge.dependent_chunk_id == dependent.chunk_id and edge.prerequisite_chunk_id == prerequisite_chunk_id
+        ),
+        None,
+    )
+    if existing is not None:
+        return existing
+    if dependent_facts is None:
+        raise ChunkNotFound(dependent.chunk_id)
+    if not dependent_facts.admits(ChunkVerb.DECLARE_DEPENDENCY):
+        raise DependentNotEditable(dependent.chunk_id, dependent_facts.status())
+    if prerequisite_ephemeral:
+        raise PrerequisiteIsEphemeral(prerequisite_chunk_id)
+    if would_close_a_cycle(standing, [(dependent.chunk_id, prerequisite_chunk_id)]):
+        raise DependencyWouldCloseCycle(dependent.chunk_id, prerequisite_chunk_id)
+    return EdgeToDeclare(dependent_chunk_id=dependent.chunk_id, prerequisite_chunk_id=prerequisite_chunk_id)
+
+
 class DependencyService:
     """Declare and release a dependency edge between two chunks — the operator's ``a
     depends on b`` and its release."""
@@ -91,50 +135,26 @@ class DependencyService:
         # names, so the cycle check itself still needs one lock over the whole graph.
         self._cycle_lock = cycle_lock
 
-    def declare(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
-        """Declare that ``dependent`` depends on ``prerequisite``.
+    def declare(self, dependent: Chunk, prerequisite: Chunk | str, *, by: str) -> DependencyEdge:
+        """Declare that ``dependent`` depends on ``prerequisite`` — its loaded chunk, or the id of
+        one minted but since gone ephemeral, which has no loaded chunk to pass.
 
-        Idempotent: an already-standing pair is reported back rather than refused.
-        Otherwise refuses, writing nothing, when ``dependent`` is gone or not
-        :data:`PRE_CLAIM_STATUSES`, ``prerequisite`` is ephemeral, or it would close a cycle."""
-        with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite.chunk_id]) as handle:
-            return self._declare_locked(handle, dependent, prerequisite, by=by)
-
-    def _declare_locked(
-        self, handle: ILockedChunkRead, dependent: Chunk, prerequisite: Chunk, *, by: str
-    ) -> DependencyEdge:
-        standing = handle.standing_edges()
-        existing = next(
-            (
-                e
-                for e in standing
-                if e.dependent_chunk_id == dependent.chunk_id and e.prerequisite_chunk_id == prerequisite.chunk_id
-            ),
-            None,
-        )
-        if existing is not None:
-            return existing
-
-        # A `None` load means gone under this lock — refuse rather than
-        # substitute a synthetic status, mirroring `DeleteService.delete`.
-        facts = handle.facts(dependent.chunk_id)
-        if facts is None:
-            raise ChunkNotFound(dependent.chunk_id)
-        status = facts.status()
-        if status not in PRE_CLAIM_STATUSES:
-            raise DependentNotEditable(dependent.chunk_id, status)
-
-        # Re-derived under the same lock: closes the race against every writer holding it
-        # — delete and the fold both included.
-        if handle.is_ephemeral(prerequisite.chunk_id):
-            raise PrerequisiteIsEphemeral(prerequisite.chunk_id)
-
-        if would_close_a_cycle(standing, [(dependent.chunk_id, prerequisite.chunk_id)]):
-            raise DependencyWouldCloseCycle(dependent.chunk_id, prerequisite.chunk_id)
-
-        return self._dependencies.declare_locked(
-            handle, dependent.chunk_id, prerequisite.chunk_id, by=by, at=self._clock.now()
-        )
+        Reads the standing edges, the dependent's facts, and the prerequisite's ephemerality under
+        the lock, and writes whatever :func:`decide_declare` decides."""
+        prerequisite_id = prerequisite if isinstance(prerequisite, str) else prerequisite.chunk_id
+        with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite_id]) as handle:
+            decision = decide_declare(
+                handle.standing_edges(),
+                dependent=dependent,
+                dependent_facts=handle.facts(dependent.chunk_id),
+                prerequisite_chunk_id=prerequisite_id,
+                prerequisite_ephemeral=handle.is_ephemeral(prerequisite_id),
+            )
+            if isinstance(decision, DependencyEdge):
+                return decision
+            return self._dependencies.declare_locked(
+                handle, decision.dependent_chunk_id, decision.prerequisite_chunk_id, by=by, at=self._clock.now()
+            )
 
     def release(self, edge: DependencyEdge, *, by: str) -> DependencyEdge:
         """Release ``edge``'s ``(dependent_chunk_id, prerequisite_chunk_id)`` pair — the
@@ -166,7 +186,7 @@ def derive_blocked_prerequisites(
         dependent_status = statuses.get(edge.dependent_chunk_id)
         if dependent_status is not None and dependent_status not in PRE_CLAIM_STATUSES:
             continue
-        if statuses.get(edge.prerequisite_chunk_id) is ChunkStatus.DONE:
+        if edge.met_by(statuses.get(edge.prerequisite_chunk_id)):
             continue
         unmet.setdefault(edge.dependent_chunk_id, []).append(edge.prerequisite_chunk_id)
     return unmet
@@ -181,6 +201,25 @@ def derive_blocked_markings(
         dependent: prerequisites[0]
         for dependent, prerequisites in derive_blocked_prerequisites(standing_edges, statuses).items()
     }
+
+
+@domain_model
+@dataclass(frozen=True)
+class BlockedMarking:
+    """A dependent's blocked marking: the earliest-declared unmet prerequisite it names, and how many
+    prerequisites are unmet in all. Full rule: `blizzard-context:/domain/work/statuses.md` §The blocked
+    marking."""
+
+    prerequisite_chunk_id: str
+    unmet_count: int
+
+    @classmethod
+    def of(cls, unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedMarking | None:
+        """The marking over one dependent's whole unmet set, in declared order — one entry of
+        :func:`derive_blocked_prerequisites`. An absent or empty set is no marking."""
+        if not unmet_prerequisite_chunk_ids:
+            return None
+        return cls(prerequisite_chunk_id=unmet_prerequisite_chunk_ids[0], unmet_count=len(unmet_prerequisite_chunk_ids))
 
 
 @dto
@@ -237,7 +276,7 @@ def derive_chunk_neighborhood(
     return ChunkNeighborhood(prerequisites=prerequisites, dependents=dependents)
 
 
-def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, str]]) -> bool:
+def would_close_a_cycle(standing: Iterable[DependencyEdge], added: list[tuple[str, str]]) -> bool:
     """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into ``standing``'s edges close a cycle
     in the resulting graph? ``standing`` is assumed acyclic already, so a cycle can only pass through one of
     ``added`` — one pair or a whole fold's edge set alike."""

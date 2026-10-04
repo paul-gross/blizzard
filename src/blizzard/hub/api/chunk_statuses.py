@@ -33,9 +33,8 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
                 route_runner_id=route.runner_id if route is not None else None,
                 pause=pause_view(facts.open_pause()),
                 latest_epoch=facts.latest_epoch(),
-                # Oldest first — mirrors `ChunkHistoryView.restarts`'s own
-                # `(recorded_at, epoch)` order, the documented contract on the wire field.
-                restart_epochs=[r.epoch for r in sorted(facts.restarts, key=lambda r: (r.recorded_at, r.epoch))],
+                # Oldest first, as `ChunkHistoryView.restarts` — the documented contract on the wire field.
+                restart_epochs=[r.epoch for r in facts.restart_history()],
                 cost=usage_total_view(facts.usage_total()),
                 decision=ChunkDecisionStatusView(
                     decision_id=decision.decision_id,

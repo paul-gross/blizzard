@@ -25,6 +25,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     MARKER_PREFIX,
+    chunk_has_ended,
     enqueue_close_intents,
     fence,
     insert_proposals,
@@ -153,9 +154,11 @@ class ChunkDecisionsStore:
         return closed
 
     def list_open_decisions(self) -> list[GateDecision]:
-        """Unresolved (``resolved_choice is None``) filtered in SQL via a ``NOT EXISTS``
-        against ``decision_resolutions``, then hydrated in one batched pass through
-        :meth:`_hydrate`."""
+        """The gates still awaiting a resolution: unresolved (``resolved_choice is None``)
+        filtered in SQL via a ``NOT EXISTS`` against ``decision_resolutions``, hydrated in one
+        batched pass through :meth:`_hydrate`. A stopped or done chunk closes its gates, so the
+        SQL also drops every gate whose chunk has ended; :attr:`GateDecision.is_open` then drops
+        the ones a transition closed undecided."""
         not_resolved = ~(
             select(s.decision_resolutions.c.decision_id)
             .where(s.decision_resolutions.c.decision_id == s.decisions.c.decision_id)
@@ -163,9 +166,11 @@ class ChunkDecisionsStore:
         )
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
-                select(s.decisions).where(not_resolved).order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
+                select(s.decisions)
+                .where(not_resolved & ~chunk_has_ended(s.decisions.c.chunk_id))
+                .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
             ).all()
-            return self._hydrate(conn, rows)
+            return [d for d in self._hydrate(conn, rows) if d.is_open]
 
     def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
         """Every requested chunk's docket, exactly what ``_pending_proposals`` would

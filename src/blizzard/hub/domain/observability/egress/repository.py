@@ -57,6 +57,19 @@ class EgressCheckpoint:
     recorded_at: datetime
     events: EventsPosition | None = None
 
+    @property
+    def position(self) -> datetime:
+        """Where the dataset stood: its step cursor's instant, else its events cursor's, else its usage
+        position's."""
+        return self._derive_position()
+
+    def _derive_position(self) -> datetime:
+        if self.step is not None:
+            return self.step.at
+        if self.events is not None:
+            return self.events.at
+        return self.usage.recorded_at
+
 
 @dto
 @dataclass(frozen=True)

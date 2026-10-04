@@ -6,7 +6,6 @@ before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
 
@@ -15,7 +14,6 @@ from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
-from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -25,7 +23,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.garden.findings.trend import Trend
+from blizzard.hub.domain.garden.findings.trend import InvalidTrendWindow, Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (
     Routine,
@@ -37,7 +35,8 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
-from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps, SweepWindow
+from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.wire.chunk import ChunkIngestConflict
@@ -123,49 +122,6 @@ def _parse_instant(value: str, *, field: str) -> datetime:
         ) from exc
 
 
-def _require_until_after_since(since: datetime, until: datetime) -> None:
-    if until <= since:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
-
-
-@dto
-@dataclass(frozen=True)
-class _TrendWindow:
-    """One ``GET /routines/trend`` request's parsed window (`SpendWindow`'s own shape,
-    `src/blizzard/hub/api/spend.py`) — a malformed edge or a
-    non-positive ``period_days`` is the 422 it names."""
-
-    since: datetime
-    until: datetime
-    introduced_boundary: datetime
-    period_days: int
-
-    #: The span/`period_days` bucket cap — otherwise unbounded.
-    _MAX_PERIODS = 366
-
-    @classmethod
-    def of(cls, *, since: str, until: str, introduced_boundary: str, period_days: int) -> _TrendWindow:
-        if period_days < 1:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="period_days must be at least 1"
-            )
-        parsed_since = _parse_instant(since, field="since")
-        parsed_until = _parse_instant(until, field="until")
-        _require_until_after_since(parsed_since, parsed_until)
-        span_days = (parsed_until - parsed_since).total_seconds() / 86400
-        if span_days / period_days > cls._MAX_PERIODS:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"since/until/period_days would bucket more than {cls._MAX_PERIODS} periods",
-            )
-        return cls(
-            since=parsed_since,
-            until=parsed_until,
-            introduced_boundary=_parse_instant(introduced_boundary, field="introduced_boundary"),
-            period_days=period_days,
-        )
-
-
 def _trend_view(trend: Trend) -> TrendView:
     return TrendView(
         routine_name=trend.routine_name,
@@ -206,18 +162,19 @@ def routine_trend(
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
     withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
     unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
-    non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`."""
+    non-positive span, or a span/`period_days` pair bucketing past `TrendWindow.MAX_PERIODS`."""
     if services.routines.get_by_name(routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
-    window = _TrendWindow.of(since=since, until=until, introduced_boundary=introduced_boundary, period_days=period_days)
-    trend = services.garden_trend.trend(
-        routine,
-        since=window.since,
-        until=window.until,
-        period_days=window.period_days,
-        introduced_boundary=window.introduced_boundary,
-    )
-    return _trend_view(trend)
+    parsed_since = _parse_instant(since, field="since")
+    parsed_until = _parse_instant(until, field="until")
+    parsed_boundary = _parse_instant(introduced_boundary, field="introduced_boundary")
+    try:
+        window = TrendWindow.of(
+            since=parsed_since, until=parsed_until, introduced_boundary=parsed_boundary, period_days=period_days
+        )
+    except InvalidTrendWindow as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _trend_view(services.garden_trend.trend(routine, window))
 
 
 def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCountsRowView:
@@ -254,7 +211,10 @@ def routine_proposal_counts(
     on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
-    _require_until_after_since(parsed_since, parsed_until)
+    try:
+        require_until_after_since(parsed_since, parsed_until)
+    except InvalidWindowError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     if routine is not None and services.routines.get_by_name(routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     rows = services.garden_proposals.counts_by_class(
@@ -437,25 +397,6 @@ def enable_routine(
     return _routine_view(routine, retired=False)
 
 
-@dto
-@dataclass(frozen=True)
-class _SweepWindow:
-    """One ``GET /routines/{routine_id}/sweeps`` request's parsed window — the
-    measurement series' own ``[since, until)``; last-swept ignores it. Reuses
-    `_parse_instant`/`_require_until_after_since` so a malformed instant or an
-    inverted span answers the same 422 both routes name."""
-
-    since: datetime
-    until: datetime
-
-    @classmethod
-    def of(cls, *, since: str, until: str) -> _SweepWindow:
-        parsed_since = _parse_instant(since, field="since")
-        parsed_until = _parse_instant(until, field="until")
-        _require_until_after_since(parsed_since, parsed_until)
-        return cls(since=parsed_since, until=parsed_until)
-
-
 def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:
     return GardenSweepsView(
         routine_name=sweeps.routine_name,
@@ -497,7 +438,12 @@ def routine_sweeps(
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    window = _SweepWindow.of(since=since, until=until)
+    parsed_since = _parse_instant(since, field="since")
+    parsed_until = _parse_instant(until, field="until")
+    try:
+        window = SweepWindow.of(parsed_since, parsed_until)
+    except InvalidWindowError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     sweeps = services.garden_sweeps.sweeps(routine, since=window.since, until=window.until)
     return _sweeps_view(sweeps)
 
@@ -555,10 +501,8 @@ def run_routine(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown mode {request.mode!r}"
         ) from exc
     try:
-        slug = (
-            ScopeSlug.parse(request.scope_slug)
-            if request.scope_slug is not None
-            else ScopeSlug.parse(routine.default_scope_slug)
+        slug = routine.effective_scope_slug(
+            ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
         )
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

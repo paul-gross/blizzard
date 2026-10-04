@@ -73,8 +73,10 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.secrets import IHubKeyProvider
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -589,6 +591,31 @@ def forge_state(double: TestClient) -> dict[str, object]:
     return double.forge_state  # type: ignore[attr-defined]
 
 
+class RunnerFleetClient(TestClient):
+    """The hub harness's client: before a claim through ``POST /api/fleet/routes`` it registers the
+    claiming runner when the hub holds no registration for it, as a live runner does every tick —
+    the hub refuses a claim from an unregistered runner. A registration already standing, a retired
+    one included, is left exactly as it is. A test pinning the unregistered refusal claims through
+    a plain ``TestClient(hub.app)``."""
+
+    def __init__(self, app: FastAPI, *, fleet: FleetService, registry: IReadRunnerRegistry) -> None:
+        super().__init__(app)
+        self._fleet = fleet
+        self._registry = registry
+        self._registering = threading.Lock()
+
+    def post(self, url: Any, *args: Any, **kwargs: Any) -> Any:
+        body = kwargs.get("json")
+        if str(url) == "/api/fleet/routes" and isinstance(body, dict) and isinstance(body.get("runner_id"), str):
+            self._register(body["runner_id"], str(body.get("workspace_id") or "w1"))
+        return super().post(url, *args, **kwargs)
+
+    def _register(self, runner_id: str, workspace_id: str) -> None:
+        with self._registering:
+            if self._registry.get_runner(runner_id) is None:
+                self._fleet.register(runner_id, workspace_id)
+
+
 @dataclass
 class HubHarness:
     """A wired hub app plus the collaborators a test drives and asserts against."""
@@ -743,7 +770,7 @@ def build_hub(
         egress_path_key=egress_path_key,
     )
     app = create_app(config, services=services)
-    client = TestClient(app)
+    client = RunnerFleetClient(app, fleet=services.fleet, registry=services.registry)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
     client.get("/api/_route_cache_warm")
@@ -1020,9 +1047,20 @@ def assert_all_timestamps_utc(payload: object) -> None:
             assert_all_timestamps_utc(item)
 
 
+def make_ready(hub: HubHarness, chunk_id: str) -> None:
+    """Promote ``chunk_id`` through the promote service — a replay once promoted — so a claim
+    finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None, f"unknown chunk {chunk_id}"
+    facts = ChunkFacts.or_default(hub.services.chunks.facts.load_facts(chunk_id))
+    hub.services.promote.promote(chunk, facts=facts, statuses=hub.services.chunks.facts.load_live_statuses())
+
+
 def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict:
-    """Claim ``chunk_id`` for ``runner_id`` through POST /routes — the route a runner must hold
-    before its first ``lease.minted`` above the claim's reservation is admitted."""
+    """Promote ``chunk_id`` (a replay once promoted) and claim it for ``runner_id`` through POST
+    /routes — the route a runner must hold before its first ``lease.minted`` above the claim's
+    reservation is admitted. Only a ``ready`` chunk is claimable."""
+    make_ready(hub, chunk_id)
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": runner_id, "workspace_id": "w1", "environment_ids": ["env-a"]},

@@ -27,6 +27,7 @@ from tests.support import (
     count_queries,
     emitted_events,
     hub_store_connections,
+    make_ready,
     seed_session,
     seed_user,
 )
@@ -442,6 +443,7 @@ def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
+    make_ready(hub, chunk_id)
     claimed = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

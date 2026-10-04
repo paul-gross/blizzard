@@ -44,16 +44,16 @@ def _resolve_dependent(services: HubServices, chunk_id: str) -> Chunk:
     return chunk
 
 
-def _resolve_prerequisite(services: HubServices, chunk_id: str) -> Chunk:
-    """Resolve the named prerequisite, telling an ephemeral id (grouped-away or deleted)
-    from one never minted via the further ``is_ephemeral`` read. Raises
-    :class:`PrerequisiteIsEphemeral` for the former, 404 for the latter — an early-out
-    only; ``DependencyService`` re-derives the same fact, and is the sole guard, under the lock."""
+def _resolve_prerequisite(services: HubServices, chunk_id: str) -> Chunk | str:
+    """Resolve the named prerequisite to its chunk, or — for an id minted but since gone ephemeral
+    (grouped-away or deleted), which has no chunk to load — to the id itself; 404 for an id never
+    minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide, under
+    the lock."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is not None:
         return chunk
     if services.chunks.lifecycle.is_ephemeral(chunk_id):
-        raise PrerequisiteIsEphemeral(chunk_id)
+        return chunk_id
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
 
 
@@ -93,17 +93,12 @@ def declare_dependency(
 ) -> object:
     """Declare that CHUNK depends on ``prerequisite_chunk_id``.
 
-    Idempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone
-    ephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this
-    write; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite."""
+    Idempotent: an already-standing pair is reported back, even past the dependent's window or once the
+    prerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;
+    409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite."""
     dependent = _resolve_dependent(services, chunk_id)
-    existing = services.chunks.dependencies.standing_edge(dependent.chunk_id, request.prerequisite_chunk_id)
-    if existing is not None:
-        # Outside the shared claim lock: a concurrent release can land between this read
-        # and the response, so this may report an edge just released (benign staleness).
-        return _edge_view(existing)
+    prerequisite = _resolve_prerequisite(services, request.prerequisite_chunk_id)
     try:
-        prerequisite = _resolve_prerequisite(services, request.prerequisite_chunk_id)
         edge = services.dependencies.declare(dependent, prerequisite, by=request.by)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -73,6 +73,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
 
     hub.client.post(
         "/api/fleet/routes",
@@ -140,6 +141,7 @@ def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) ->
     hub = build_hub(tmp_path)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).json()
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     summary = next(g for g in hub.client.get("/api/graphs").json() if g["graph_id"] == graph["graph_id"])

@@ -53,13 +53,17 @@ from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
     ClaimDeniedIncompatible,
+    ClaimDeniedNotReady,
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
+    ClaimDeniedUnregistered,
+    RekeyDeniedTerminal,
 )
-from blizzard.hub.domain.execution.envelope import Arrival, Envelope
+from blizzard.hub.domain.execution.completion import MigrationTargets
+from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.graph.model import FollowLatest, Graph, Mint
+from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerCapability, RunnerRetired
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
@@ -72,7 +76,7 @@ from blizzard.wire.chunk import (
 )
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
+from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     EscalationReport,
     LeaseMintReport,
@@ -166,59 +170,23 @@ def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="lease segments belong to another runner")
 
 
-@dataclass(frozen=True)
-class MigrationTargets:
-    """The three graphs one completion's apply may be moved onto — each resolved at the edge so the apply
-    service stays a pure taker-of-objects (``bzh:domain-takes-objects``), and each **total**: an
-    unresolvable or retired target folds to ``None``, leaving apply's failure path the authoritative one."""
-
-    services: HubServices
-    chunk: Chunk
-    graph: Graph
-    submission: CompletionSubmission
-    follow_latest_default: bool
-
-    @property
-    def cross_graph(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
-        """What a cross-graph migration edge names, resolved by name — ``None`` when the edge
-        is not cross-graph, names no enabled graph, or is missing outright. Pinned by
-        ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
-        from_node = self.graph.node_by_id(self.submission.from_node_id)
-        if from_node is None:
-            return None
-        edge = self.graph.edge_for_choice(from_node.node_id, self.submission.choice)
-        if edge is None or edge.target_graph is None:
-            return None
-        return self.services.graphs.get_enabled_by_name(edge.target_graph)
-
-    @property
-    def intended(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
-        """The chunk's standing migration intent, resolved by id — ``None`` when none is set,
-        the target was never minted, or it has since been retired, which leaves the intent set (pinned by
-        ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
-        intent = self.chunk.intended_migration
-        if intent is None:
-            return None
-        target = self.services.graphs.get(intent.graph_id)
-        if target is None or self.services.graphs.is_retired(target.graph_id):
-            return None
-        return target
-
-    @property
-    def follow_latest(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
-        """The newer same-name mint a follow-latest chunk drifts to — ``None`` when an explicit
-        :attr:`intended` wins outright, when the effective policy resolves ``false`` (the graph's own
-        tri-state, else the hub default), or when the name resolves to nothing or to no newer mint."""
-        if self.chunk.intended_migration is not None:
-            return None
-        graphs = self.services.graphs
-        policy = FollowLatest.of(graphs.follow_latest(self.graph.graph_id), hub_default=self.follow_latest_default)
-        if not policy.enabled:
-            return None
-        newest = graphs.get_enabled_by_name(self.graph.name)
-        if newest is None or not Mint.of(newest).newer_than(Mint.of(self.graph)):
-            return None
-        return newest
+def _migration_targets(
+    services: HubServices, chunk: Chunk, graph: Graph, submission: CompletionSubmission, *, follow_latest_default: bool
+) -> MigrationTargets:
+    """Load the graphs one completion may move the chunk onto; :class:`MigrationTargets` decides."""
+    graphs = services.graphs
+    cross_graph_name = MigrationTargets.cross_graph_name(graph, submission)
+    intent = chunk.intended_migration
+    intent_graph = graphs.get(intent.graph_id) if intent is not None else None
+    return MigrationTargets.of(
+        chunk,
+        graph,
+        cross_graph=graphs.get_enabled_by_name(cross_graph_name) if cross_graph_name is not None else None,
+        intent_graph=intent_graph,
+        intent_retired=intent_graph is not None and graphs.is_retired(intent_graph.graph_id),
+        follow_latest=FollowLatest.of(graphs.follow_latest(graph.graph_id), hub_default=follow_latest_default),
+        newest_same_name=graphs.get_enabled_by_name(graph.name) if intent is None else None,
+    )
 
 
 # Fleet-side counterparts — delegate to the shared rendering, never duplicate it.
@@ -343,21 +311,14 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = facts.current_node_id() or graph.entry_node_id
-    node = graph.node_by_id(node_id)
-    if node is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="chunk has no current runner node (terminal)")
-    return Envelope(
-        chunk=chunk,
-        graph=graph,
-        node=node,
-        artifacts=services.chunks.artifacts.load_artifacts(chunk_id),
-        epoch=facts.latest_epoch() or 0,
-        arrival_addendum=Arrival.of_facts(graph, facts).addendum,
-        entered_by_restart=facts.entered_by_restart(),
-        label=services.work_ref_label,
-    ).wire
+    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
+    try:
+        envelope = Envelope.current(
+            chunk, graph, facts, services.chunks.artifacts.load_artifacts(chunk_id), label=services.work_ref_label
+        )
+    except NoCurrentNode as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return envelope.wire
 
 
 def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
@@ -617,8 +578,8 @@ def claim_route(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
-    """Claim a chunk; 403 if the runner is paused or retired at the hub, 409 if already claimed,
-    already terminal ({done, stopped}), standing on an unmet prerequisite,
+    """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
+    already terminal ({done, stopped}), not ready, standing on an unmet prerequisite,
     or incompatible with the runner's stored capabilities, else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
     chunk = services.chunks.record.get(claim.chunk_id)
@@ -642,9 +603,16 @@ def claim_route(
     except ClaimDeniedPaused as exc:
         denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id)
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=denial.model_dump())
+    except ClaimDeniedUnregistered as exc:
+        unregistered = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=unregistered.model_dump())
     except ClaimDeniedTerminal as exc:
         terminal_denial = RouteClaimTerminalDenial(chunk_id=claim.chunk_id, status=exc.status.value)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=terminal_denial.model_dump())
+    except ClaimDeniedNotReady as exc:
+        # The status-carrying 409 shape: a runner skips the chunk as it does an ended one.
+        not_ready_denial = RouteClaimTerminalDenial(chunk_id=claim.chunk_id, status=exc.status.value, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=not_ready_denial.model_dump())
     except ClaimDeniedDependency as exc:
         dependency_denial = RouteClaimDependencyDenial(
             chunk_id=claim.chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
@@ -681,12 +649,16 @@ def rekey_route_token(
     """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
-    when the route's runner is retired."""
+    when the route's runner is retired; 409 when the chunk has ended."""
     route = services.chunks.route.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
     fleet.assert_owns(route.runner_id)
-    route_token = services.claim.rekey(route)
+    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
+    try:
+        route_token = services.claim.rekey(route, facts)
+    except RekeyDeniedTerminal as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=route_token)
 
 
@@ -706,12 +678,7 @@ def submit_completion(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    targets = MigrationTargets(services, chunk, graph, submission, follow_latest_default=fleet.follow_latest)
-    # Must precede apply() below — after apply() this always answers True, silencing the
-    # publish_queue_changed() fresh-migration check further down.
-    already_migrated = services.chunks.movement.accepted_migration(
-        chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
-    )
+    targets = _migration_targets(services, chunk, graph, submission, follow_latest_default=fleet.follow_latest)
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.apply.apply(
         chunk,
@@ -719,18 +686,16 @@ def submit_completion(
         submission,
         route_token_mode=fleet.route_token_mode,
         produces_mode=fleet.produces_mode,
-        target_graph=targets.cross_graph,
-        intended_target_graph=targets.intended,
-        follow_latest_graph=targets.follow_latest,
+        targets=targets,
     )
     response = result.response
-    fresh_migration = response.outcome is ApplyOutcome.MIGRATED and not already_migrated
+    fresh_migration = result.fresh_migration
     cause = "migrated" if fresh_migration else "node-completed"
     # `key` names the fact this call wrote, per each cause's own mapped fact table:
     # `migration_id` only for a genuine `migrated`, `transition_id` only when a fresh row backs it.
-    if fresh_migration and result.migration_id is not None:
+    if fresh_migration:
         key = f"chunk_migrations:{result.migration_id}"
-    elif not fresh_migration and result.transition_id is not None:
+    elif result.transition_id is not None:
         key = f"transitions:{result.transition_id}"
     else:
         key = None
@@ -759,7 +724,9 @@ def submit_decision(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    result = services.decisions.submit(chunk, graph, submission, route_token_mode=fleet.route_token_mode)
+    result = services.decisions.submit(
+        chunk, graph, submission, route_token_mode=fleet.route_token_mode, produces_mode=fleet.produces_mode
+    )
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
     change.publish(cause="decision-submitted", key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
@@ -777,10 +744,11 @@ def report_lease(
     """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired,
     409 when its admission refuses it."""
     fleet.assert_owns(report.runner_id)
-    if services.chunks.record.get(chunk_id) is None:
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     refusal = services.runner_facts.record_lease_minted(
-        chunk_id, epoch=report.epoch, runner_id=report.runner_id, lease_id=report.lease_id
+        chunk, epoch=report.epoch, runner_id=report.runner_id, lease_id=report.lease_id
     )
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
@@ -797,13 +765,15 @@ def report_escalation(
     """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired,
     409 when fenced out."""
     fleet.assert_owns(report.runner_id)
-    if services.chunks.record.get(chunk_id) is None:
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     escalation_id = services.runner_facts.record_escalation(
-        chunk_id,
+        chunk,
         epoch=report.epoch,
         runner_id=report.runner_id,
+        lease_id=report.lease_id,
         takeover_command=report.takeover_command,
         wrapped_takeover_command=report.wrapped_takeover_command,
         cause=report.cause,

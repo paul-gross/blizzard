@@ -12,7 +12,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.routines import Routine, RoutineNameTakenError
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -274,3 +274,14 @@ def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
 
     assert scope_store.list_scopes("rtn_1") == []
     assert [f.finding_id for f in finding_store.list_for("nightly", "blizzard")] == ["fnd_1"]
+
+
+def test_a_create_losing_the_name_to_a_concurrent_one_raises_name_taken(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine(routine_id="rtn_1", name="nightly"))
+
+    with pytest.raises(RoutineNameTakenError) as raised:
+        store.create(_routine(routine_id="rtn_2", name="nightly"))
+
+    assert raised.value.name == "nightly"
+    assert store.get("rtn_2") is None

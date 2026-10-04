@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository, Routine
+from blizzard.hub.domain.garden.runs.window import require_until_after_since
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 
 
@@ -115,6 +116,30 @@ def compute_sweeps(
     )
 
 
+@domain_model
+@dataclass(frozen=True)
+class SweepWindow:
+    """The ``[since, until)`` a measurement series reads; an empty or inverted span
+    refuses."""
+
+    since: datetime
+    until: datetime
+
+    @classmethod
+    def of(cls, since: datetime, until: datetime) -> SweepWindow:
+        require_until_after_since(since, until)
+        return cls(since=since, until=until)
+
+
+def sweep_coverage(declared: set[str], retired: set[str], facts: list[SweepFact]) -> tuple[list[str], list[SweepFact]]:
+    """The scopes a routine's last-swept table covers and the facts it folds: every
+    declared scope not retired, plus a retired declared one only where a fact already
+    records it swept. A scope unlinked since being swept never resurfaces through its
+    own fact."""
+    live_declared = sorted(slug for slug in declared if slug not in retired)
+    return live_declared, [fact for fact in facts if fact.scope_slug in declared]
+
+
 class GardenSweepsService:
     """Reads a routine's last-swept table and measurement series, delegating the fold
     to `compute_sweeps`. Takes the resolved `Routine` (`bzh:domain-takes-objects`) —
@@ -132,10 +157,9 @@ class GardenSweepsService:
         self._routine_scopes = routine_scopes
 
     def sweeps(self, routine: Routine, *, since: datetime, until: datetime) -> GardenSweeps:
-        declared = set(self._routine_scopes.list_scopes(routine.routine_id))
-        retired = self._scopes.retired_slugs()
-        live_declared = [slug for slug in declared if slug not in retired]
-        # A scope unlinked since being swept must not resurface via its own fact — the
-        # union below is only for a scope still in `declared` that's since been retired.
-        facts = [fact for fact in self._repo.sweeps_for_routine(routine.name) if fact.scope_slug in declared]
+        live_declared, facts = sweep_coverage(
+            set(self._routine_scopes.list_scopes(routine.routine_id)),
+            self._scopes.retired_slugs(),
+            self._repo.sweeps_for_routine(routine.name),
+        )
         return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)

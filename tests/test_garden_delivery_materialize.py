@@ -192,7 +192,9 @@ def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> 
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
-    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], delivered_findings={"fin_1": "u_1"})
+    validated = ValidatedDelivery(
+        run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", "u_1")}
+    )
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
@@ -224,7 +226,9 @@ def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too()
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
-    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], delivered_findings={"fin_1": None})
+    validated = ValidatedDelivery(
+        run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", None)}
+    )
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
 
-from sqlalchemy import Connection, Select, func, insert, select
+from sqlalchemy import ColumnElement, Connection, Select, func, insert, or_, select
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.roles import entity
@@ -24,7 +24,6 @@ from blizzard.hub.domain.chunk.model import (
     RouteCreatedFact,
     RouteHistory,
     RouteReleasedFact,
-    WorkItemCloseOutcome,
     WorkItemMaterializationOutcome,
     WorkRef,
 )
@@ -33,6 +32,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Epoc
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 
 
@@ -449,6 +449,28 @@ def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
     return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
 
 
+def chunk_has_ended(chunk_id: ColumnElement[str]) -> ColumnElement[bool]:
+    """The SQL predicate that the chunk named by the correlated ``chunk_id`` column is stopped
+    or done — a terminal fact, or a transition into the reserved terminal that no newer
+    lease, restart or ownership epoch has superseded. The set-wise form of
+    :func:`chunk_is_terminal` and :func:`_reached_terminal_at`."""
+    t = s.transitions
+    newer = [
+        select(table.c.chunk_id).where((table.c.chunk_id == t.c.chunk_id) & (table.c.epoch > t.c.epoch)).exists()
+        for table in (s.lease_facts, s.chunk_restarts, s.epoch_owners)
+    ]
+    reached_terminal = (
+        select(t.c.transition_id)
+        .where((t.c.chunk_id == chunk_id) & (t.c.to_node_id == RESERVED_TERMINAL) & ~or_(*newer))
+        .exists()
+    )
+    return or_(
+        select(s.chunk_stopped.c.chunk_id).where(s.chunk_stopped.c.chunk_id == chunk_id).exists(),
+        select(s.chunk_completed.c.chunk_id).where(s.chunk_completed.c.chunk_id == chunk_id).exists(),
+        reached_terminal,
+    )
+
+
 def fence(
     conn: Connection,
     chunk_id: str,
@@ -541,9 +563,7 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
         for r in conn.execute(
             select(s.work_item_closures.c.source, s.work_item_closures.c.ref).where(
                 (s.work_item_closures.c.chunk_id == chunk_id)
-                & s.work_item_closures.c.outcome.in_(
-                    [WorkItemCloseOutcome.CLOSED.value, WorkItemCloseOutcome.GONE.value]
-                )
+                & s.work_item_closures.c.outcome.in_(sorted(outcome.value for outcome in TERMINAL_CLOSE_OUTCOMES))
             )
         ).all()
     }
