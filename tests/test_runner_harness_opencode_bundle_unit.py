@@ -28,8 +28,7 @@ from blizzard.runner.harness.opencode.bundle import (
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.harness.sections import HarnessSections, section_of
-from blizzard.runner.harness.wiring import publish_harness_bundle, shared_inputs
+from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, section_of, shared_inputs
 from blizzard.runner.runtime import init_environment
 from tests.harness_sections import opencode, sections, with_claude_code
 from tests.runner_fakes import FakeProbe

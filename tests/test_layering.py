@@ -84,6 +84,11 @@ _MOVED_HOMES = {
     "TurnKind": "blizzard.foundation.transcripts",
     "TranscriptUnavailable": "blizzard.foundation.transcripts",
     "TranscriptProvenance": "blizzard.foundation.transcripts",
+    # ``IProcessProbe`` is left out: the leases domain declares its own narrower protocol by that name.
+    "LinuxProcessProbe": "blizzard.runner.process.probe",
+    "HarnessTelemetryPlan": "blizzard.runner.domain.tracing.harness_telemetry_plan",
+    "HEARTBEAT_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
+    "SESSION_END_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
 }
 
 
@@ -680,6 +685,136 @@ def test_internal_check_catches_every_import_form(tmp_path: Path, importer: str,
 )
 def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, importer: str, statement: str) -> None:
     assert _plant(tmp_path, importer, statement) == []
+
+
+_ADAPTER_PACKAGES = ("claude_code", "opencode")
+_PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
+
+
+def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | None, may_name: bool) -> str | None:
+    """Why one imported ``module`` breaches the adapter boundary for its importer, or ``None``."""
+    loop = f"{harness.rsplit('.', 1)[0]}.loop"
+    if in_harness and (module == loop or module.startswith(f"{loop}.")):
+        return "harness -> loop"
+    target = next(
+        (
+            name
+            for name in _ADAPTER_PACKAGES
+            if module == f"{harness}.{name}" or module.startswith(f"{harness}.{name}.")
+        ),
+        None,
+    )
+    if target is None or target == own:
+        return None
+    if own is not None:
+        return "adapter -> other adapter"
+    return None if may_name else "adapter named outside wiring and the composition roots"
+
+
+def _adapter_isolation_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    """Every import statement breaching the harness adapter boundary under ``src_root``: the
+    harness core or any other module naming an adapter package, an adapter naming the other, and
+    any harness module importing ``runner/loop``. ``harness/wiring.py`` and ``exempt`` may name
+    an adapter."""
+    harness = f"{src_root.name}.runner.harness"
+    wiring = src_root / "runner" / "harness" / "wiring.py"
+    violations: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        parts = path.relative_to(src_root).parts
+        in_harness = parts[:2] == ("runner", "harness")
+        own = parts[2] if in_harness and len(parts) > 3 and parts[2] in _ADAPTER_PACKAGES else None
+        may_name = path == wiring or path in exempt
+        tree = ast.parse(path.read_text(), filename=str(path))
+        breaches: dict[int, str] = {}
+        for lineno, module in _resolved_imports(path, tree, src_root):
+            breach = _adapter_breach(module, harness=harness, in_harness=in_harness, own=own, may_name=may_name)
+            if breach is not None:
+                breaches.setdefault(lineno, f"{module} ({breach})")
+        shown = path.relative_to(src_root.parent.parent)
+        violations += [f"{shown}:{lineno} imports {breach}" for lineno, breach in sorted(breaches.items())]
+    return violations
+
+
+def test_adapters_are_named_only_by_the_harness_wiring_and_the_composition_roots() -> None:
+    """The harness core names no adapter, an adapter never names the other, and only
+    ``harness/wiring.py`` and the composition roots import an adapter package
+    (``bzh:pluggable-seams``); nothing under ``harness/`` imports ``runner/loop``."""
+    violations = _adapter_isolation_violations(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
+    assert not violations, f"S — adapter isolation: {violations}"
+
+
+def _plant_harness(tmp_path: Path, importer: str, statement: str) -> list[str]:
+    """A harness tree with both adapter packages, a core module, the wiring module, and a loop
+    package, where ``importer`` holds one ``statement``."""
+    src = tmp_path / "blizzard"
+    for rel in (
+        "__init__.py",
+        "runner/__init__.py",
+        "runner/loop/__init__.py",
+        "runner/loop/steps.py",
+        "runner/loop_wiring.py",
+        "runner/api/__init__.py",
+        "runner/harness/__init__.py",
+        "runner/harness/core.py",
+        "runner/harness/wiring.py",
+        "runner/harness/claude_code/__init__.py",
+        "runner/harness/claude_code/section.py",
+        "runner/harness/opencode/__init__.py",
+        "runner/harness/opencode/a.py",
+        "runner/harness/opencode/paths.py",
+        "runner/harness/opencode/compatibility/__init__.py",
+    ):
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("")
+    (src / importer).parent.mkdir(parents=True, exist_ok=True)
+    (src / importer).write_text(f"{statement}\n")
+    return _adapter_isolation_violations(src, exempt=frozenset({src / "runner" / "composition.py"}))
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement", "breach"),
+    [
+        ("runner/harness/core.py", "from blizzard.runner.harness.opencode.a import X", "adapter named outside"),
+        ("runner/harness/core.py", "from blizzard.runner.harness import claude_code", "adapter named outside"),
+        ("runner/harness/core.py", "from .opencode import a", "adapter named outside"),
+        ("runner/harness/opencode/a.py", "from blizzard.runner.harness.claude_code.section import X", "other adapter"),
+        ("runner/harness/opencode/a.py", "from ..claude_code import section", "other adapter"),
+        ("runner/harness/opencode/compatibility/x.py", "from ...claude_code import section", "other adapter"),
+        ("runner/api/x.py", "import blizzard.runner.harness.claude_code.section", "adapter named outside"),
+        ("runner/harness/core.py", "from blizzard.runner.loop.steps import X", "harness -> loop"),
+        ("runner/harness/opencode/a.py", "from blizzard.runner import loop", "harness -> loop"),
+    ],
+)
+def test_adapter_isolation_catches_every_breach(tmp_path: Path, importer: str, statement: str, breach: str) -> None:
+    violations = _plant_harness(tmp_path, importer, statement)
+    assert len(violations) == 1
+    assert breach in violations[0]
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("runner/harness/wiring.py", "from blizzard.runner.harness.opencode.a import X"),
+        ("runner/harness/wiring.py", "from .claude_code import section"),
+        ("runner/composition.py", "from blizzard.runner.harness.claude_code.section import X"),
+        ("runner/harness/opencode/compatibility/x.py", "from blizzard.runner.harness.opencode import paths"),
+        ("runner/harness/opencode/a.py", "from .compatibility import x"),
+        ("runner/harness/opencode/a.py", "from blizzard.runner.harness.core import X"),
+        ("runner/harness/core.py", "from blizzard.runner.loop_wiring import X"),
+        ("runner/api/x.py", "from blizzard.runner.harness.core import X"),
+    ],
+)
+def test_adapter_isolation_admits_wiring_roots_and_own_adapter(tmp_path: Path, importer: str, statement: str) -> None:
+    assert _plant_harness(tmp_path, importer, statement) == []
+
+
+def test_the_process_probe_is_declared_under_runner_process() -> None:
+    """``IProcessProbe`` and ``LinuxProcessProbe`` live in ``runner/process/`` beside the
+    owned-process seam they extend, so a harness reaches the probe without importing
+    ``runner/loop``; :data:`_MOVED_HOMES` routes every import of the concrete probe there."""
+    tree = ast.parse(_PROCESS_PROBE_FILE.read_text(), filename=str(_PROCESS_PROBE_FILE))
+    declared = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+    assert {"IProcessProbe", "LinuxProcessProbe"} <= declared
 
 
 _LOOP_DIR = _RUNNER_DIR / "loop"

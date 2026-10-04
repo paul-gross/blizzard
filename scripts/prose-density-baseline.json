@@ -4868,13 +4868,13 @@
    "comments": 10,
    "docstrings": 29,
    "over_cap": 2,
-   "total": 316
+   "total": 317
   },
   "blizzard/runner/config.py": {
-   "comments": 114,
+   "comments": 113,
    "docstrings": 112,
    "over_cap": 34,
-   "total": 1045
+   "total": 1044
   },
   "blizzard/runner/config_table.py": {
    "comments": 0,
@@ -5178,9 +5178,9 @@
   },
   "blizzard/runner/harness/__init__.py": {
    "comments": 0,
-   "docstrings": 5,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 25
+   "total": 26
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 15,
@@ -5201,10 +5201,10 @@
    "total": 17
   },
   "blizzard/runner/harness/bundle.py": {
-   "comments": 3,
+   "comments": 4,
    "docstrings": 23,
    "over_cap": 0,
-   "total": 271
+   "total": 273
   },
   "blizzard/runner/harness/claude_code/__init__.py": {
    "comments": 0,
@@ -5282,7 +5282,7 @@
    "comments": 0,
    "docstrings": 12,
    "over_cap": 0,
-   "total": 94
+   "total": 82
   },
   "blizzard/runner/harness/claude_code/transcript.py": {
    "comments": 54,
@@ -5291,10 +5291,10 @@
    "total": 504
   },
   "blizzard/runner/harness/claude_code/worker_settings.py": {
-   "comments": 4,
+   "comments": 2,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 54
+   "total": 50
   },
   "blizzard/runner/harness/compatibility.py": {
    "comments": 11,
@@ -5304,9 +5304,9 @@
   },
   "blizzard/runner/harness/declaration.py": {
    "comments": 7,
-   "docstrings": 13,
+   "docstrings": 30,
    "over_cap": 0,
-   "total": 97
+   "total": 160
   },
   "blizzard/runner/harness/env_allowlist.py": {
    "comments": 6,
@@ -5608,12 +5608,6 @@
    "over_cap": 0,
    "total": 127
   },
-  "blizzard/runner/harness/sections.py": {
-   "comments": 1,
-   "docstrings": 26,
-   "over_cap": 0,
-   "total": 145
-  },
   "blizzard/runner/harness/spawn_cwd.py": {
    "comments": 1,
    "docstrings": 11,
@@ -5633,10 +5627,16 @@
    "total": 102
   },
   "blizzard/runner/harness/wiring.py": {
-   "comments": 1,
-   "docstrings": 23,
+   "comments": 2,
+   "docstrings": 28,
    "over_cap": 0,
-   "total": 155
+   "total": 227
+  },
+  "blizzard/runner/harness/worker_hooks.py": {
+   "comments": 2,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 11
   },
   "blizzard/runner/harness/workspace_prompts.py": {
    "comments": 0,
@@ -7180,7 +7180,7 @@
    "comments": 2,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 46
+   "total": 47
   },
   "journey/__init__.py": {
    "comments": 0,
@@ -8890,7 +8890,7 @@
    "comments": 7,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 312
+   "total": 310
   },
   "test_harness_telemetry_receiver.py": {
    "comments": 11,
@@ -9229,10 +9229,10 @@
    "total": 2014
   },
   "test_layering.py": {
-   "comments": 19,
-   "docstrings": 134,
+   "comments": 20,
+   "docstrings": 147,
    "over_cap": 7,
-   "total": 2032
+   "total": 2167
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -10084,7 +10084,7 @@
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 129
+   "total": 128
   },
   "test_runner_harness_opencode_compatibility.py": {
    "comments": 12,
@@ -10654,7 +10654,7 @@
    "comments": 11,
    "docstrings": 15,
    "over_cap": 0,
-   "total": 203
+   "total": 204
   },
   "test_session_store.py": {
    "comments": 1,

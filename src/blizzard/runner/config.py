@@ -23,8 +23,9 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.sections import HarnessSections
+from blizzard.runner.harness.wiring import HarnessSections
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
@@ -38,8 +39,6 @@ _WINTER_OTEL_PREFIX = "WINTER_OTEL_"
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
-# The runner-owned directory the published harness-config snapshots live under.
-HARNESS_CONFIG_DIRNAME = "harness-config"
 # The local API's unix socket, under the state dir beside the store; filesystem
 # permissions are its access control.
 SOCKET_FILENAME = "runner.sock"

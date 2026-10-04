@@ -2,7 +2,7 @@
 
 Harness-neutral vocabulary only: a probe supplies its pinned version and its observations through
 ``ICompatibilityProbe``, and this module closes the roster and classifies them. Every
-harness-specific binding, the pinned version included, lives under ``harness/internal``.
+harness-specific binding, the pinned version included, lives in its adapter package.
 """
 
 from __future__ import annotations

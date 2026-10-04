@@ -7,8 +7,9 @@ from dataclasses import replace
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.declaration import IHarnessSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.harness.sections import HarnessSections, IHarnessSection, section_of, with_section
+from blizzard.runner.harness.wiring import HarnessSections, section_of, with_section
 
 
 def claude_code(config: RunnerConfig) -> ClaudeCodeSection:

@@ -2,42 +2,30 @@
 ``service.name`` its telemetry leaves the runner with, and the per-signal plan for pointing a worker's exporters
 at the runner.
 
-The plan type and the names live in ``domain/tracing/harness_telemetry_plan.py``, re-exported here. The plan is
-derived once, at the composition root; Claude Code's name rules live in ``claude_code/telemetry.py``."""
+The plan type and the names live in ``domain/tracing/harness_telemetry_plan.py``. The plan is derived once, at the
+composition root; Claude Code's name rules live in ``claude_code/telemetry.py``."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
-from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.tracing.harness_telemetry_plan import (
-    CLAUDE_CODE_LOGS_SCOPE,
-    CLAUDE_CODE_METRICS_SCOPE,
-    CLAUDE_CODE_SCOPES,
-    CLAUDE_CODE_SERVICE_NAME,
-    CLAUDE_CODE_TRACING_SCOPE,
-    HarnessTelemetryPlan,
-)
+from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.sections import section_of
+from blizzard.runner.harness.wiring import section_of
 
-__all__ = [
-    "CLAUDE_CODE_LOGS_SCOPE",
-    "CLAUDE_CODE_METRICS_SCOPE",
-    "CLAUDE_CODE_SCOPES",
-    "CLAUDE_CODE_SERVICE_NAME",
-    "CLAUDE_CODE_TRACING_SCOPE",
-    "HarnessTelemetryPlan",
-    "plan_harness_telemetry",
-]
+if TYPE_CHECKING:
+    from blizzard.runner.config import RunnerConfig
+
+__all__ = ["plan_harness_telemetry"]
 
 
 def plan_harness_telemetry(

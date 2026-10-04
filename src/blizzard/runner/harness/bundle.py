@@ -18,8 +18,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from blizzard.foundation.roles import domain_model, dto
-from blizzard.runner.config import HARNESS_CONFIG_DIRNAME, ConfigError
+from blizzard.runner.config_table import ConfigError
 
+# The runner-owned directory the published harness-config snapshots live under.
+HARNESS_CONFIG_DIRNAME = "harness-config"
 SNAPSHOTS_DIRNAME = "snapshots"
 STAGING_DIRNAME = "staging"
 CURRENT_LINK = "current"

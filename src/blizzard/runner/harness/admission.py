@@ -1,5 +1,5 @@
 """The harness package's public face for version admission and offline classification —
-delegating to ``harness/internal/`` (``bzh:internal-visibility``)."""
+delegating to :mod:`.harness_shared` and :mod:`.offline_compatibility`."""
 
 from __future__ import annotations
 

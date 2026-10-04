@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from blizzard.runner.harness.sections import HARNESS_SECTION_KINDS
+from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
