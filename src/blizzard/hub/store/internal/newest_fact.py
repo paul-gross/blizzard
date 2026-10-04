@@ -2,7 +2,7 @@
 append-only fact table (package-private).
 
 One group-by-max join, portable across backends (``bzh:sql-portable``): rows read grow with
-the number of keys asked for, not with each key's fact history (``bzh:live-set-read``)."""
+the number of keys asked for, not with each key's fact history (``bzh:newest-per-key-read``)."""
 
 from __future__ import annotations
 
