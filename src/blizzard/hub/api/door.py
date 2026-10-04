@@ -6,13 +6,10 @@ value record ``api``."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Depends, Header
 
-from blizzard.auth_core import Permission
-from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 
@@ -25,18 +22,14 @@ def request_door(raw: str | None) -> Door:
     return _CLIENT_DOORS.get((raw or "").strip().lower(), Door.API)
 
 
-def request_context(permission: Permission) -> Callable[..., ChangeContext]:
-    """A dependency factory: gate on ``permission``, then name the actor (the authenticated
-    identity, never a body field) and the door."""
+def request_door_of(x_blizzard_door: Annotated[str | None, Header()] = None) -> Door:
+    """A dependency: the door the request's ``X-Blizzard-Door`` header names."""
+    return request_door(x_blizzard_door)
 
-    # Bound as a default, not an ``Annotated`` metadata: the module's string annotations
-    # resolve against module globals, which cannot see ``permission``.
-    gate = Depends(require(permission))
 
-    def _dependency(
-        identity: ResolvedIdentity = gate,
-        x_blizzard_door: Annotated[str | None, Header()] = None,
-    ) -> ChangeContext:
-        return ChangeContext(actor=identity.user_id, door=request_door(x_blizzard_door))
+def change_context(identity: ResolvedIdentity, door: Door) -> ChangeContext:
+    """Who is writing — the authenticated identity, never a body field — and through which door."""
+    return ChangeContext(actor=identity.user_id, door=door)
 
-    return _dependency
+
+RequestDoor = Annotated[Door, Depends(request_door_of)]

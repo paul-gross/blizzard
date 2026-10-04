@@ -218,6 +218,13 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # The work-source item routes — the same two permissions the chunk
     # work-item read and its mutations already sit behind.
     ("GET", "/api/work-sources"): FLEET_VIEW,
+    ("POST", "/api/work-sources"): CONFIG_EDIT,
+    ("GET", "/api/work-sources/{source}"): FLEET_VIEW,
+    ("PATCH", "/api/work-sources/{source}"): CONFIG_EDIT,
+    ("POST", "/api/work-sources/{source}/retire"): CONFIG_EDIT,
+    ("POST", "/api/work-sources/{source}/enable"): CONFIG_EDIT,
+    ("GET", "/api/config/schema/{kind}"): FLEET_VIEW,
+    ("GET", "/api/config/changes"): FLEET_VIEW,
     ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
     ("POST", "/api/work-sources/{source}/items"): CHUNK_CONTROL,
     ("GET", "/api/work-sources/{source}/items/{ref}"): FLEET_VIEW,

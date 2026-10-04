@@ -263,7 +263,7 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     world.authoring.edit_work_source(world.source(), WorkSourceEdit(annotate=True), OP)
 
     everything = world.log.page(before=None, limit=100, record_kind=None, record_key=None)
-    ids = [c.id for c in everything]
+    ids = [c.id for c in everything if c.id is not None]
     assert ids == sorted(ids, reverse=True)
     assert len(everything) == 3
     older = world.log.page(before=ids[0], limit=1, record_kind=None, record_key=None)

@@ -21,11 +21,10 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.api.door import request_context
+from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.work_sources import (
     ConfigFieldError,
     ConfigRevisionConflict,
@@ -178,7 +177,8 @@ def list_work_sources(
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
 def create_work_source(
     request: WorkSourceDocument,
-    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> WorkSourceSummary:
     """Store a new work source at revision 1. 422 naming the field for a bad name, provider,
@@ -193,7 +193,7 @@ def create_work_source(
         secret=request.secret,
     )
     try:
-        record = services.config_authoring.create_work_source(request.name, fields, ctx)
+        record = services.config_authoring.create_work_source(request.name, fields, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (WorkSourceNameTaken, WorkSourceLocatorTaken) as exc:
@@ -216,7 +216,8 @@ def get_work_source(source: str, services: Annotated[HubServices, Depends(get_se
 def patch_work_source(
     source: str,
     request: WorkSourcePatchRequest,
-    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
@@ -228,7 +229,9 @@ def patch_work_source(
     present = request.model_fields_set
     edit = WorkSourceEdit(**{name: getattr(request, name) for name in present})
     try:
-        edited = services.config_authoring.edit_work_source(record, edit, ctx, if_match=if_match)
+        edited = services.config_authoring.edit_work_source(
+            record, edit, change_context(identity, door), if_match=if_match
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, WorkSourceLocatorTaken) as exc:
@@ -239,7 +242,8 @@ def patch_work_source(
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
 def retire_work_source(
     source: str,
-    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
@@ -247,7 +251,9 @@ def retire_work_source(
     retired source changes nothing. 404 unknown, 409 for `hub` or a stale `If-Match`."""
     record = _writable(source, services)
     try:
-        retired = services.config_authoring.retire_work_source(record, ctx, if_match=if_match)
+        retired = services.config_authoring.retire_work_source(
+            record, change_context(identity, door), if_match=if_match
+        )
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _summary(retired, services)
@@ -256,7 +262,8 @@ def retire_work_source(
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
 def enable_work_source(
     source: str,
-    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
@@ -264,7 +271,9 @@ def enable_work_source(
     409 for `hub` or a stale `If-Match`, 422 when its secret has since been retired."""
     record = _writable(source, services)
     try:
-        enabled = services.config_authoring.enable_work_source(record, ctx, if_match=if_match)
+        enabled = services.config_authoring.enable_work_source(
+            record, change_context(identity, door), if_match=if_match
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
