@@ -6,6 +6,7 @@ import { injectHubFleetSpendQuery } from '../fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../health/health.query';
 import { injectHubQueueQuery } from '../queue/queue.query';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
+import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../fleet/runners.query';
 
 import { startOfLocalDayIso } from '../../local-day';
@@ -26,7 +27,7 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNex
  *
  * Every number and row here comes from queries {@link BoardPage}'s desktop shell
    * already reads — `injectHubBoardChunksQuery`, `injectHubQueueQuery`,
-   * `injectHubQuestionsQuery`, `injectHubRunnersQuery`, `injectHubHealthQuery`,
+   * `injectHubQuestionsQuery`, `injectHubDecisionsQuery`, `injectHubRunnersQuery`, `injectHubHealthQuery`,
    * `injectHubFleetSpendQuery` —
  * plus the same `FleetLiveUpdates` spine the app root starts: no new backend
  * plumbing, per the mobile README's shared-guts inventory ("Reuses chunks.query
@@ -54,6 +55,7 @@ export class GlanceBoard {
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly questionsQuery = injectHubQuestionsQuery();
+  private readonly decisionsQuery = injectHubDecisionsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly health = injectHubHealthQuery();
   private readonly live = inject(FleetLiveUpdates);
@@ -65,15 +67,16 @@ export class GlanceBoard {
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);
+  private readonly decisions = computed(() => this.decisionsQuery.data() ?? []);
   private readonly runners = computed(() => (this.runnersQuery.data() ?? []).filter((runner) => !runner.retired));
   private readonly now = injectNowSignal(60_000);
 
   /**
-   * Open asks first (the more specific "why"), then any chunk in a
-   * human-attention tone (`chunk-lanes.ts`'s `STATUS_TONE` — `waiting` or
-   * `needs`) an open ask hasn't already covered — folded into one
-   * attention-ordered list (the mock's "Needs you"), deduped by chunk id so a
-   * parked chunk with an open ask shows once, not twice.
+   * Open asks first (the more specific "why"), then open gates, then any chunk
+   * in a human-attention tone (`chunk-lanes.ts`'s `STATUS_TONE` — `waiting` or
+   * `needs`) neither has already covered — folded into one attention-ordered
+   * list (the mock's "Needs you"), deduped by chunk id so a parked chunk with an
+   * open ask or gate shows once, not twice.
    */
   protected readonly needsYou = computed<readonly AttentionRow[]>(() => {
     const rows = new Map<string, AttentionRow>();
@@ -85,6 +88,18 @@ export class GlanceBoard {
         tone: 'waiting',
         pillLabel: 'ask',
         sub: question.question,
+      });
+    }
+    const runnerOf = new Map(this.chunks().map((chunk) => [chunk.chunk_id, chunk.runner_id ?? null]));
+    for (const decision of this.decisions()) {
+      if (rows.has(decision.chunk_id)) continue;
+      rows.set(decision.chunk_id, {
+        chunkId: decision.chunk_id,
+        shortId: compactRef(decision.chunk_id),
+        runnerId: runnerOf.get(decision.chunk_id) ?? null,
+        tone: 'waiting',
+        pillLabel: 'gate',
+        sub: decision.node_name,
       });
     }
     for (const chunk of this.chunks()) {
@@ -168,12 +183,12 @@ export class GlanceBoard {
 
   /** Each panel's async state, derived independently (AC 4) — a panel withholds
    * its empty copy on its own reads' loading/error, regardless of the other
-   * panels. "Needs you" folds in the questions read (an ask can arrive before
-   * or after the chunk list settles); "In motion" and "Done today" are both
+   * panels. "Needs you" folds in the questions and decisions reads (an ask or a
+   * gate can arrive before or after the chunk list settles); "In motion" and "Done today" are both
    * slices of the same chunks read alone; "Up next" owns both the chunk and
    * queue reads; spend is its own query. */
   protected readonly needsYouState = computed<KitAsyncStateValue>(() =>
-    asyncStateOf([this.chunksQuery, this.questionsQuery], this.needsYou().length === 0),
+    asyncStateOf([this.chunksQuery, this.questionsQuery, this.decisionsQuery], this.needsYou().length === 0),
   );
 
   protected readonly inMotionState = computed<KitAsyncStateValue>(() =>

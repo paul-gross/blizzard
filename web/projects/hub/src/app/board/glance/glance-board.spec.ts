@@ -431,3 +431,71 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
     expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
   });
 });
+
+describe('GlanceBoard — open gates in "Needs you"', () => {
+  const ASK = 'ch_01gateask00000000000000000000';
+  const GATE = 'ch_01gateopen0000000000000000000';
+  const WAITING = 'ch_01gatewaiting000000000000000';
+  const chunk = (chunkId: string, runnerId: string) => ({
+    chunk_id: chunkId,
+    graph_id: 'gr_1',
+    status: 'waiting_on_human',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    model: 'claude-opus-4-8',
+    runner_id: runnerId,
+  });
+  const decision = (decisionId: string, chunkId: string) => ({
+    decision_id: decisionId,
+    chunk_id: chunkId,
+    node_id: 'nd_gate',
+    node_name: 'approve-gate',
+    epoch: 1,
+    submitted_at: '2026-07-16T00:00:01Z',
+    choices: [{ name: 'approve', description: '' }],
+  });
+  let stub: RequestClientStub;
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      // The list order is deliberately the reverse of the attention order.
+      if (method === 'GET' && path === '/api/chunks') {
+        return { chunks: [chunk(WAITING, 'r3'), chunk(GATE, 'r2'), chunk(ASK, 'r1')], next_cursor: null };
+      }
+      if (method === 'GET' && path === '/api/queue') return { entries: [] };
+      if (method === 'GET' && path === '/api/questions') {
+        return [{ question_id: 'qn_1', chunk_id: ASK, runner_id: 'r1', question: 'Which branch?', options: [] }];
+      }
+      // The ask's chunk also carries a gate — it must still show once, as the ask.
+      if (method === 'GET' && path === '/api/decisions') return { decisions: [decision('dc_1', GATE), decision('dc_2', ASK)] };
+      if (method === 'GET' && path === '/api/runners') return { runners: [] };
+      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
+      if (method === 'GET' && path === '/api/spend') return SPEND;
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [GlanceBoard],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it('orders an ask, then a gate, then a plain waiting chunk, deduped by chunk', async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const rows = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="needs-you-row"]'));
+    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([ASK, GATE, WAITING]);
+    expect(rows[0].textContent).toContain('ask');
+    expect(rows[1].textContent).toContain('gate');
+    expect(rows[1].textContent).toContain('approve-gate');
+    expect(rows[1].textContent).toContain('r2');
+    expect(rows[2].textContent).toContain('waiting');
+  });
+});

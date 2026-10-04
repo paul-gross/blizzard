@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 import { KitTextInput } from '../kit/kit-text-input';
+import { FleetWhen } from '../when-display/fleet-when';
 import { ChunkEscalation } from './chunk-escalation';
 import { ChunkGateDocket } from './chunk-gate-docket';
 
@@ -49,7 +50,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, ChunkGateDocket, KitButton, KitTextInput],
+  imports: [ChunkEscalation, ChunkGateDocket, FleetWhen, KitButton, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -142,10 +143,18 @@ export class ChunkAwaitingHuman {
       : 'Delivering to the agent…';
   }
 
-  /** The chunk's live gate decision while it still awaits the resolving transition. */
+  /** The chunk's live gate decision — not yet resolved, so its choices are still offered. */
   protected readonly openDecision = computed<DecisionView | null>(() => {
     const decision = this.detail().decision;
-    return decision && !decision.transitioned ? decision : null;
+    return decision && !decision.transitioned && !decision.resolved_choice ? decision : null;
+  });
+
+  /** The chunk's gate decision once resolved but before the runner records the resolving
+   * transition — rendered as who chose what, and when, in place of the choices. Once the
+   * transition lands the chunk detail stops carrying it. */
+  protected readonly resolvedDecision = computed<DecisionView | null>(() => {
+    const decision = this.detail().decision;
+    return decision && !decision.transitioned && decision.resolved_choice ? decision : null;
   });
 
   /** The live draft for one question's answer field — `''` for a question the

@@ -29,6 +29,7 @@ const RUNNING = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 const ASKED = 'ch_01KXKVVF1J3D6H6VYZ3XYNBBBB';
 const READY = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY1';
 const READY_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY2';
+const GATED = 'ch_01KXKVVF1J3D6H6VYZ3XYNGATE';
 const GONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNGONE';
 const BACKLOG = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG1';
 const BACKLOG_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG2';
@@ -109,6 +110,7 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
         chunks: [
           CHUNK(RUNNING, 'running'),
           CHUNK(ASKED, 'waiting_on_human'),
+          CHUNK(GATED, 'waiting_on_human'),
           CHUNK(READY, 'ready'),
           CHUNK(READY_NEXT, 'ready'),
           CHUNK(BACKLOG, 'not_ready'),
@@ -128,6 +130,21 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
           asked_at: '2026-07-16T11:30:00.000Z',
         },
       ];
+    }
+    if (path === '/api/decisions') {
+      return {
+        decisions: [
+          {
+            decision_id: 'dc_01',
+            chunk_id: GATED,
+            node_id: 'nd_gate',
+            node_name: 'approve-gate',
+            epoch: 1,
+            submitted_at: '2026-07-16T11:30:00.000Z',
+            choices: [{ name: 'approve', description: '' }],
+          },
+        ],
+      };
     }
     if (path.endsWith('/work-items')) return { items: [] };
     const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
@@ -206,10 +223,11 @@ describe('BoardPage', () => {
 
     expect(el.querySelector('app-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The one rail composes beside the board: runners, asks, activity feed. The
+    // The one rail composes beside the board: runners, asks, gates, activity feed. The
     // titlebar itself lives at the app root now.
     expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="questions-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gates-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="activity-panel"]')).toBeTruthy();
   });
 
@@ -235,6 +253,17 @@ describe('BoardPage', () => {
     expect(activity.closest('.col')).toBe(rail);
     // Below the asks, not above them: runners → asks → activity.
     expect(questions.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('flags only the chunks with an open decision with the gate marker, and lists them in the rail', async () => {
+    const { el } = await open();
+
+    expect(card(el, GATED).querySelector('[data-testid="chunk-gate"]')).not.toBeNull();
+    // A parked chunk with an ask but no decision is not a gate.
+    expect(card(el, ASKED).querySelector('[data-testid="chunk-gate"]')).toBeNull();
+    expect(card(el, RUNNING).querySelector('[data-testid="chunk-gate"]')).toBeNull();
+    expect(el.querySelectorAll('[data-testid="chunk-gate"]')).toHaveLength(1);
+    expect(el.querySelector(`[data-testid="rail-gate"][data-chunk="${GATED}"]`)).not.toBeNull();
   });
 
   it('renders a ready chunk exactly once across the whole page (issue #22)', async () => {

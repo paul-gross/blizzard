@@ -112,7 +112,12 @@ def resolve_decision(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
-        conflict = DecisionResolutionConflict(decision_id=decision_id, already_resolved_by=result.resolved_by)
+        conflict = DecisionResolutionConflict(
+            decision_id=decision_id,
+            already_resolved_by=result.resolved_by,
+            resolved_choice=(decision.resolved_choice or "") if decision is not None else "",
+            resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
+        )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     if decision is not None:
         key = f"decision_resolutions:{decision_id}"

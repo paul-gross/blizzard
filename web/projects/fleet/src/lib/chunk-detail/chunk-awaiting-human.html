@@ -1,4 +1,4 @@
-@if (openQuestions().length > 0 || openDecision()) {
+@if (openQuestions().length > 0 || openDecision() || resolvedDecision()) {
   <div class="awaiting" data-testid="awaiting-human">
     <div class="s-head"><span class="tag">Awaiting human</span></div>
     @for (q of openQuestions(); track q.question_id) {
@@ -77,6 +77,18 @@
           [canResolve]="canResolve()"
           (struckChange)="onDocketStruckChange($event)"
         />
+      </div>
+    }
+    @if (resolvedDecision(); as d) {
+      <div class="gate" data-testid="resolved-decision">
+        <div class="gate-head">
+          <span class="tag">Gate</span>
+          <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
+        </div>
+        <!-- Resolved, awaiting the runner's transition: the choices give way to the outcome. -->
+        <p class="gate-resolved" data-testid="decision-resolved-line">
+          <span class="gate-choice">{{ d.resolved_choice }}</span> by {{ d.resolved_by || 'operator' }}@if (d.resolved_at; as at) {, <fleet-when [iso]="at" />}
+        </p>
       </div>
     }
   </div>

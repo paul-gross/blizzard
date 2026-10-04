@@ -101,8 +101,10 @@ class DecisionResolutionResponse(BaseModel):
 
 
 class DecisionResolutionConflict(BaseModel):
-    """The 409 body: the decision was already resolved (the loser is told who won)."""
+    """The 409 body: the decision was already resolved (the loser is told who won, with what, and when)."""
 
     decision_id: str
     already_resolved_by: str
+    resolved_choice: str = ""
+    resolved_at: str = ""
     detail: str = "decision already resolved"

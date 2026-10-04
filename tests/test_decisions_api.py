@@ -122,6 +122,9 @@ def test_resolutions_resolves_first_write_wins(tmp_path: Path) -> None:
     )
     assert second.status_code == 409, second.text
     assert second.json()["already_resolved_by"] == "operator"
+    assert second.json()["resolved_choice"] == "approve"
+    assert second.json()["resolved_at"] == first.json()["resolved_at"]
+    assert second.json()["resolved_at"] != ""
 
 
 def test_resolutions_unknown_decision_is_404(tmp_path: Path) -> None:

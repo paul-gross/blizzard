@@ -1,0 +1,59 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+fleet-kit-panel.fill {
+  flex: 1;
+}
+.gg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.gg:hover {
+  background: color-mix(in srgb, var(--amber) 6%, transparent);
+}
+.gg:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+.h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.cid {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.origin {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+.node {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.opts {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}

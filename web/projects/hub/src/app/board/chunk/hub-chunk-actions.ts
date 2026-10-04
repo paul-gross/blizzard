@@ -1,6 +1,6 @@
 import { type Provider, computed, signal } from '@angular/core';
 import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
-import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure } from '../chunks/human.mutations';
+import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
 import { answerQuestionMutationKey } from '../../mutation-keys';
 import { hasPermission, injectMeQuery } from '../../auth/me.query';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
@@ -18,8 +18,8 @@ const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
  * The two report channels stay separate for the dock's reason ("report, don't swallow"):
  * a 404/409/422 must read as a failure rather than a tap that appears to do nothing, and a
  * lost first-write-wins answer race — the phone being the surface most likely to lose one
- * — reads as an outcome naming the winner, not a failure; `readAnswerFailure` owns that
- * fold so this page and the dock cannot drift. Both clear at the start of every action, so
+ * — reads as an outcome naming the winner, not a failure, and so does a lost resolve race;
+ * `readAnswerFailure` and `readDecisionFailure` own those folds so this page and the dock cannot drift. Both clear at the start of every action, so
  * a stale outcome never sits beside an unrelated failure.
  */
 export function injectHubChunkActions(): ChunkPageActions {
@@ -64,7 +64,13 @@ export function injectHubChunkActions(): ChunkPageActions {
       beginAction();
       resolveMutation.mutate(
         { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId, struck: event.struck },
-        { onError: (error) => actionError.set(errorMessage(error, 'Resolve failed.')) },
+        {
+          onError: (error) => {
+            const failure = readDecisionFailure(error);
+            if (failure.kind === 'outcome') actionOutcome.set(failure.message);
+            else actionError.set(failure.message);
+          },
+        },
       );
     },
     editGraph(event: EditGraphEvent): void {

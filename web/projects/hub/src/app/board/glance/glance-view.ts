@@ -14,8 +14,8 @@ import {
   type Tone,
 } from 'fleet';
 
-/** One "Needs you" row — an open ask (the more specific reason) or a chunk
- * whose derived tone is `waiting`/`needs` with no open ask of its own. */
+/** One "Needs you" row — an open ask (the more specific reason), an open gate,
+ * or a chunk whose derived tone is `waiting`/`needs` with neither. */
 export interface AttentionRow {
   readonly chunkId: string;
   readonly shortId: string;
@@ -23,10 +23,12 @@ export interface AttentionRow {
   /** The row's badge color — `chunk-lanes.ts`'s `STATUS_TONE` vocabulary
    * (`waiting` or `needs`), never a parallel color table. */
   readonly tone: Tone;
-  /** The badge's text — `ask` for an open question, `needs human` for an
-   * escalation, `waiting` for a parked (e.g. paused) chunk with no open ask. */
+  /** The badge's text — `ask` for an open question, `gate` for an open
+   * decision, `needs human` for an escalation, `waiting` for a parked (e.g.
+   * paused) chunk with no open ask or gate. */
   readonly pillLabel: string;
-  /** The ask's own question text, or a fallback naming where the chunk sits. */
+  /** The ask's own question text, the gate's node name, or a fallback naming
+   * where the chunk sits. */
   readonly sub: string;
 }
 

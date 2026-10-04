@@ -1,0 +1,39 @@
+<fleet-kit-panel
+  class="fill"
+  aria-label="Open gates"
+  data-testid="gates-panel"
+  label="Open gates · awaiting decision"
+  [count]="gates().length || null"
+  countTestid="gates-count"
+>
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      loadingTestid="gates-loading"
+      errorText="FAILED TO LOAD GATES"
+      errorTestid="gates-error"
+      emptyText="NO OPEN GATES"
+      emptyTestid="gates-empty"
+    >
+      @for (gate of gates(); track gate.decision_id) {
+        <button
+          type="button"
+          class="gg"
+          data-testid="rail-gate"
+          [attr.data-chunk]="gate.chunk_id"
+          [attr.aria-label]="'Open chunk ' + shortId(gate.chunk_id) + ' to resolve its gate'"
+          (click)="selectChunk.emit(gate.chunk_id)"
+        >
+          <span class="h">
+            <span class="cid" data-testid="rail-gate-chunk">{{ shortId(gate.chunk_id) }}</span>
+            <span class="origin" data-testid="rail-gate-origin">{{ origin(gate) }}</span>
+          </span>
+          <span class="node" data-testid="rail-gate-node">{{ gate.node_name }}</span>
+          @if (choices(gate); as choiceLine) {
+            <span class="opts" data-testid="rail-gate-choices">{{ choiceLine }}</span>
+          }
+        </button>
+      }
+    </fleet-kit-async-state>
+</fleet-kit-panel>

@@ -5,6 +5,8 @@ import { type ChunkSummary, asyncState, errorMessage, injectChunkUrlSelection, t
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
+import { GatesPanel } from './gates/gates-panel';
+import { injectHubDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../fleet/runner-panel';
 import { chunkDeleteMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../mutation-keys';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
@@ -40,6 +42,7 @@ function withRequestedPosition(order: readonly string[], move: RepositionVars): 
  * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
  *   (MVP criterion 11), then {@link QuestionsPanel}, the fleet's open agent asks —
  *   clicking one opens its chunk in the dock, where it is answered — then
+ *   {@link GatesPanel}, the fleet's open gates, opened the same way — then
  *   {@link ActivityPanel}'s live feed.
  *
  * The READY and BACKLOG lanes are board cards like every other chunk, reordered in
@@ -63,7 +66,7 @@ function withRequestedPosition(order: readonly string[], move: RepositionVars): 
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, RunnerPanel],
+  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -76,6 +79,8 @@ export class BoardPage {
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
+  /** The fleet-wide open-decision read — the same cache entry {@link GatesPanel} reads. */
+  private readonly decisionsQuery = injectHubDecisionsQuery();
   private readonly repositionQueue = injectRepositionQueueMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
   );
@@ -141,6 +146,12 @@ export class BoardPage {
   /** The board's chunk list — `done` chunks older than the board window are not in it;
    * empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+
+  /** Every chunk id with an open decision — joined here, in the container, so each
+   * card takes a plain `gate` flag rather than reading the decisions itself. */
+  protected readonly gatedChunkIds = computed<ReadonlySet<string>>(
+    () => new Set((this.decisionsQuery.data() ?? []).map((decision) => decision.chunk_id)),
+  );
 
   /** The board's async state (AC 1, AC 2) — derived from the chunks query
    * alone: the queue read only supplies the READY lane's order, so it never

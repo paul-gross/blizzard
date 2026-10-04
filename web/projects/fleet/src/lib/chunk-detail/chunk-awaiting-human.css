@@ -81,6 +81,15 @@
 .gate-runner {
   color: var(--text);
 }
+.gate-resolved {
+  margin: 0;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.gate-choice {
+  color: var(--cyan);
+}
 .chips {
   display: flex;
   flex-wrap: wrap;

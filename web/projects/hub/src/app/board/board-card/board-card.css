@@ -228,3 +228,11 @@
 .blk-state {
   color: var(--label);
 }
+/* The open-decision marker sits beside the status and never shrinks: it is the
+   one thing on the card that says a person is being waited on. */
+.gate {
+  flex: none;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}

@@ -8,6 +8,7 @@ import {
   hubEventsKey,
   hubFleetSpendKey,
   hubQuestionsKey,
+  hubDecisionsKey,
   hubQueueKey,
   hubRunnersKey,
 } from '../query-keys';
@@ -199,10 +200,11 @@ function chunkQuestionKeys(data: HubEventPayload): readonly (readonly unknown[])
   return [hubQuestionsKey, hubChunksKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
 }
 
-/** A decision-opened/-resolved frame invalidates the fleet list and that chunk's
- * detail when named — same status-flip reasoning as {@link chunkQuestionKeys}. */
+/** A decision-opened/-resolved frame invalidates the fleet list, the fleet-wide
+ * open-decision list, and that chunk's detail when named — same status-flip
+ * reasoning as {@link chunkQuestionKeys}. */
 function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
-  return [hubChunksKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
+  return [hubChunksKey, hubDecisionsKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
 }
 
 /**

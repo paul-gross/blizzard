@@ -20,13 +20,14 @@ const BASE: BoardCard = {
   blockedOnStatus: null,
 };
 
-async function render(card: BoardCard) {
+async function render(card: BoardCard, gated = false) {
   await TestBed.configureTestingModule({
     imports: [BoardCardComponent],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardCardComponent);
   fixture.componentRef.setInput('card', card);
+  fixture.componentRef.setInput('gated', gated);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }
@@ -245,5 +246,22 @@ describe('BoardCardComponent delivery block', () => {
   it('shows the open PR link in the needs-human lane', async () => {
     const needs = await render({ ...BASE, status: 'needs_human', openPrs: [PR] });
     expect(needs.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
+  });
+});
+
+describe('BoardCardComponent gate marker', () => {
+  const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', node: 'approve-gate', completedAt: null };
+
+  it('marks a card `gate` when its chunk has an open decision, beside the unchanged status', async () => {
+    const el = await render(WAITING, true);
+
+    expect(el.querySelector('[data-testid="chunk-gate"]')?.textContent?.trim()).toBe('gate');
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+  });
+
+  it('carries no marker when the chunk is not flagged', async () => {
+    const el = await render(WAITING);
+
+    expect(el.querySelector('[data-testid="chunk-gate"]')).toBeNull();
   });
 });

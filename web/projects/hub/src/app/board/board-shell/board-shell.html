@@ -8,6 +8,7 @@
           [cards]="cardsFor(col.key)"
           [count]="countFor(col.key)"
           [selectedChunkId]="selectedChunkId()"
+          [gatedChunkIds]="gatedChunkIds()"
           [reorderControls]="col.key === 'ready' || col.key === 'notready'"
           [canControl]="canControl()"
           [canReorder]="canReorder()"

@@ -8,6 +8,7 @@
       [backlogOrder]="backlogLaneOrder()"
       [state]="boardState()"
       [selectedChunkId]="selected()"
+      [gatedChunkIds]="gatedChunkIds()"
       [canControl]="canControl()"
       [canReorder]="canReorder()"
       (selectChunk)="select($event)"
@@ -27,6 +28,7 @@
   <div class="col rail-right">
     <app-runner-panel />
     <app-questions-panel (selectChunk)="select($event)" />
+    <app-gates-panel (selectChunk)="select($event)" />
     <app-activity-panel class="rail-activity" />
   </div>
 </main>
