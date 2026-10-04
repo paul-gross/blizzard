@@ -250,10 +250,7 @@ class GardenProposal:
         """Refuse `verb` with :class:`GardenProposalAlreadyClosed` when
         :data:`GARDEN_PROPOSAL_TRANSITIONS` does not allow it from the state `closure`
         puts this proposal in."""
-        if closure is None:
-            state = GardenProposalState.OPEN
-        else:
-            state = garden_proposal_state(closure.closure, closure.item_outcome)
+        state = closure.state if closure is not None else GardenProposalState.OPEN
         if not verb_legal_from(state, verb):
             assert closure is not None  # every verb but DELIVER is legal while open
             raise GardenProposalAlreadyClosed(self.proposal_id, closure)

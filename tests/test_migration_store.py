@@ -298,7 +298,6 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
     assert landed["executor"] == "hub"
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    make_ready(hub, chunk_id)
     hub.promote(chunk_id)
     node_id = hub.client.post(
         "/api/fleet/routes",

@@ -140,6 +140,14 @@ def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: 
     return registration
 
 
+def refuse_rekey(route: Route, facts: ChunkFacts) -> None:
+    """Refuse rotating ``route``'s token once its chunk has ended (:class:`RekeyDeniedTerminal`):
+    a route left on a stopped or done chunk confers no tenure, so no token is minted for it."""
+    status = facts.status()
+    if not verb_legal_from(ChunkVerb.REKEY_ROUTE_TOKEN, status):
+        raise RekeyDeniedTerminal(chunk_id=route.chunk_id, status=status)
+
+
 def first_unmet_prerequisite(
     chunk_id: str, edges: Sequence[DependencyEdge], prerequisite_facts: Mapping[str, ChunkFacts]
 ) -> str | None:
@@ -324,17 +332,12 @@ class ClaimService:
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
     def rekey(self, route: Route, facts: ChunkFacts) -> str:
-        """Rotate a live route's capability token — the lost-plaintext
-        recovery: a claim whose route-token response was never read back has no other
-        way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
-        the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
-        token, re-run idempotent. Takes the already-resolved route and the chunk's facts
-        (``bzh:domain-takes-objects``); a route left on an ended chunk raises
-        :class:`RekeyDeniedTerminal`."""
+        """Rotate a live route's capability token — the lost-plaintext recovery: a claim whose route-token
+        response was never read back has no other way to learn it. Appends a new ``route_token_minted`` fact
+        (``bzh:facts-not-status``), newest-fact-wins, re-run idempotent; :func:`refuse_rekey` refuses a
+        route left on an ended chunk."""
         self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
-        status = facts.status()
-        if not verb_legal_from(ChunkVerb.REKEY_ROUTE_TOKEN, status):
-            raise RekeyDeniedTerminal(chunk_id=route.chunk_id, status=status)
+        refuse_rekey(route, facts)
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

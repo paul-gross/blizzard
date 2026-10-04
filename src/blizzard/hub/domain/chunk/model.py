@@ -864,6 +864,7 @@ class ChunkVerb(StrEnum):
     RESOLVE_DECISION = "resolve-decision"
     #: Answer a node question; the chunk ending leaves no session to hear it.
     ANSWER_QUESTION = "answer-question"
+    HUB_ADVANCE = "hub-advance"
 
 
 _EVERY_STATUS: frozenset[ChunkStatus] = frozenset(ChunkStatus)
@@ -895,6 +896,7 @@ CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyTy
         ChunkVerb.REQUEUE: frozenset({ChunkStatus.NEEDS_HUMAN}),
         ChunkVerb.RESOLVE_DECISION: _NON_TERMINAL,
         ChunkVerb.ANSWER_QUESTION: _NON_TERMINAL,
+        ChunkVerb.HUB_ADVANCE: _NON_TERMINAL - {ChunkStatus.NOT_READY},
     }
 )
 
@@ -1059,6 +1061,16 @@ class ChunkFacts:
         """The chunk's current node on ``graph`` — the newest movement's target, else the graph's
         entry node. ``None`` when that id names no node there (the reserved terminal)."""
         return graph.node_by_id(self.current_node_id() or graph.entry_node_id)
+
+    def hub_advance_node(self, graph: Graph) -> Node | None:
+        """The generic hub command node a hub-advance may run for this chunk, or ``None``: the
+        chunk must stand at one, by its newest movement, at a status :attr:`ChunkVerb.HUB_ADVANCE`
+        is legal from — never one resting un-promoted, nor one that has ended."""
+        node_id = self.current_node_id()
+        node = graph.node_by_id(node_id) if node_id is not None else None
+        if node is None or not node.is_hub_command_node:
+            return None
+        return node if verb_legal_from(ChunkVerb.HUB_ADVANCE, self.status()) else None
 
     def epoch_floor(self) -> int:
         """The epoch a fresh node-step envelope carries — the latest fencing epoch, ``0`` before any."""

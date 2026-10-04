@@ -63,7 +63,12 @@ def test_the_verb_table_declares_every_state() -> None:
         RunnerVerb.CONTACT,
     }
     assert RUNNER_VERBS[RunnerState.ENROLLED] == RUNNER_VERBS[RunnerState.UNENROLLED] | {RunnerVerb.REVOKE_TOKEN}
-    assert RUNNER_VERBS[RunnerState.RETIRED] == {RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.REINSTATE}
+    assert RUNNER_VERBS[RunnerState.RETIRED] == {
+        RunnerVerb.BRAKE,
+        RunnerVerb.RETIRE,
+        RunnerVerb.REINSTATE,
+        RunnerVerb.REVOKE_TOKEN,
+    }
 
 
 def test_the_brake_is_legal_from_every_state() -> None:
@@ -103,6 +108,11 @@ def test_enroll_refuses_a_retired_runner() -> None:
 
 def test_revoke_token_of_an_enrolled_runner_is_the_revocation() -> None:
     assert _ENROLLED.revoke_token(by="op", at=_AT) == TokenRevocation(runner_id="runner-a", at=_AT, by="op")
+
+
+def test_revoke_token_of_a_retired_runner_still_holding_a_stale_hash_is_the_revocation() -> None:
+    stale = replace(_RETIRED, token_hash="hash-old")
+    assert stale.revoke_token(by="op", at=_AT) == TokenRevocation(runner_id="runner-a", at=_AT, by="op")
 
 
 @pytest.mark.parametrize("registration", [_UNENROLLED, _RETIRED])

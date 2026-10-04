@@ -150,6 +150,7 @@ from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -366,8 +367,7 @@ class HubServices:
     garden_sweeps: GardenSweepsService
     #: A routine's runs are readable — the run list and one run's own delta.
     garden_run: GardenRunService
-    #: The forge-status annotation reconciler — present only when a work source opts into
-    #: annotation.
+    #: The forge-status annotation reconciler, always built; ``None`` only on a store-free double.
     annotation: AnnotationReconciler | None
 
 
@@ -965,9 +965,10 @@ def build_services(
             findings=finding_store,
             clock=clock,
         ),
-        annotation=(
-            AnnotationReconciler(work_refs=chunk_work_refs, work_sources=work_sources)
-            if work_sources.annotating_names()
-            else None
+        annotation=AnnotationReconciler(
+            work_refs=chunk_work_refs,
+            work_sources=work_sources,
+            memory=ForgeAnnotationStore(store_connections),
+            clock=clock,
         ),
     )

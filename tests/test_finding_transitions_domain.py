@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.findings.model import (
     EXIT_KINDS,
     FINDING_STATES,
@@ -283,3 +284,12 @@ def test_deliver_facts_writes_only_the_live_findings() -> None:
     )
 
     assert [f.finding_id for f in facts] == ["fin_1"]
+
+
+@pytest.mark.parametrize("state", sorted(FINDING_STATES))
+def test_a_run_may_cite_exactly_the_findings_the_table_lets_it_observe_or_flag_gone(state: str) -> None:
+    finding = _finding(state=state)
+    bucket = FindingBucket.of([finding], own_scope="runner")
+    citable = finding in bucket.citable
+    assert citable == finding.allows("observed") == finding.allows("gone")
+    assert (finding.finding_id in bucket.exited_ids) is not citable

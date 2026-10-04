@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.domain.garden.findings.trend import InvalidTrendWindow, TrendWindow, compute_trend
+from blizzard.hub.domain.garden.runs.window import InvalidWindowError
 
 pytestmark = pytest.mark.unit
 
@@ -28,8 +29,8 @@ def test_a_non_positive_period_is_refused(period_days: int) -> None:
 
 
 @pytest.mark.parametrize("until", [_SINCE, _SINCE - timedelta(days=1)])
-def test_a_non_positive_span_is_refused(until: datetime) -> None:
-    with pytest.raises(InvalidTrendWindow, match="until must be after since"):
+def test_a_non_positive_span_is_refused_by_the_shared_forward_span_rule(until: datetime) -> None:
+    with pytest.raises(InvalidWindowError, match="until must be after since"):
         TrendWindow.of(since=_SINCE, until=until, introduced_boundary=_SINCE, period_days=1)
 
 

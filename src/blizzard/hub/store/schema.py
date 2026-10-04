@@ -1635,3 +1635,17 @@ work_item_sequence = Table(
     Column("source", String, primary_key=True),
     Column("next_ref", Integer, nullable=False),
 )
+
+# --- Forge annotation memory (forge_annotation_facts) --------------------------
+# Append-only, one row per entry to or exit from the annotated set; the newest says whether a clear is owed.
+
+forge_annotation_facts = Table(
+    "forge_annotation_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("source_name", String, nullable=False),
+    Column("annotating", Boolean, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
+Index("ix_forge_annotation_facts_source_name_id", forge_annotation_facts.c.source_name, forge_annotation_facts.c.id)

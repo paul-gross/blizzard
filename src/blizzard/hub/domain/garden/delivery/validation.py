@@ -72,17 +72,6 @@ class ValidatedDelivery:
     #: Every citable finding's :meth:`Finding.run_gone`: the fact kind and actor a run's `gone` lands as.
     gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict)
 
-    @property
-    def delivered_findings(self) -> dict[str, str | None]:
-        """Every currently-`delivered` finding — the ones a `gone` settles to `resolved` —
-        valued by its closer's actor, or `None`."""
-        return delivered_closers(self.gone_settlements)
-
-
-def delivered_closers(gone_settlements: Mapping[str, tuple[str, str | None]]) -> dict[str, str | None]:
-    """The findings whose `gone` settles to `resolved` — the delivered ones — by closer."""
-    return {fid: actor for fid, (kind, actor) in gone_settlements.items() if kind == "resolved"}
-
 
 @dto
 @dataclass(frozen=True)

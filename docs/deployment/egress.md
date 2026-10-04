@@ -243,8 +243,11 @@ the last pass and file, the last error and the free space. Run it first, and aga
 - **Backfill** writes the rows of a window again without moving a cursor:
   `blizzard hub egress backfill --since <t>
   --until <t>`, narrowed with `--dataset`. The rows are assembled as live
-  ones are, from the record as it stands, into new files with `backfill` in their names. `--dry-run` counts and writes
-  nothing, and a window over `backfill_max_window` is refused.
+  ones are, from the record as it stands, into new files with `backfill` in their names. A window over
+  `backfill_max_window`, or one whose `--until` is in the future, is refused. A window that reaches past a dataset's
+  live cursor is written anyway, and the live export writes those rows again when its cursor gets there. `--dry-run`
+  counts and writes nothing, and works with the export off, which is a cheap way to size a window; without it, a hub
+  with the export off refuses the backfill.
 - **Reset** moves one dataset's cursor: `blizzard hub egress reset --dataset <name> --to <t>`. Forward skips the window
   and never exports it; back repeats it into new files. The move is recorded as an `egress-cursor-reset` event. When an
   export is turned off and on again its cursor resumes where it stopped, so the directory holds no gap unless you reset.

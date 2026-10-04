@@ -6,7 +6,6 @@ import hashlib
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
@@ -337,12 +336,11 @@ def test_claim_allowed_while_only_locally_paused(tmp_path: Path) -> None:
 def test_claim_from_an_unregistered_runner_is_denied_before_the_race(tmp_path: Path) -> None:
     """Neither brake nor the runner's capabilities can be judged without a registration, so a
     claimant the registry has never heard from is refused in the paused-denial shape and the
-    chunk stays claimable. The plain client skips the harness's register-before-claim."""
-    hub = build_hub(tmp_path)
+    chunk stays claimable."""
+    hub = build_hub(tmp_path, auto_register_claimants=False)
     chunk_id = _ingest(hub)
-    assert hub.app is not None
 
-    resp = TestClient(hub.app).post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
 
     assert resp.status_code == 403
     assert resp.json() == {

@@ -27,8 +27,10 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
+    RekeyDeniedTerminal,
     first_unmet_prerequisite,
     refuse_paused_runner,
+    refuse_rekey,
 )
 from blizzard.hub.domain.graph.model import Choice, Edge, Node
 from blizzard.hub.domain.runners.registration import RunnerCapability, RunnerRegistration, RunnerRetired
@@ -129,6 +131,28 @@ def test_an_ended_chunk_is_refused_as_terminal_even_while_a_route_is_held(
     with pytest.raises(ClaimDeniedTerminal) as refused:
         _admit(facts, route=_route())
     assert refused.value.status is status
+
+
+_HELD = replace(_READY, routes_created=[RouteCreatedFact(created_at=_T0)])
+
+
+@pytest.mark.parametrize(
+    ("facts", "status"),
+    [
+        (replace(_HELD, stopped=True, stopped_at=_T0), ChunkStatus.STOPPED),
+        (replace(_HELD, operator_completed=True, operator_completed_at=_T0), ChunkStatus.DONE),
+    ],
+)
+def test_a_route_left_on_an_ended_chunk_is_not_rekeyed(facts: ChunkFacts, status: ChunkStatus) -> None:
+    with pytest.raises(RekeyDeniedTerminal) as refused:
+        refuse_rekey(_route(), facts)
+    assert (refused.value.chunk_id, refused.value.status) == ("chk_1", status)
+    assert str(refused.value) == f"chunk chk_1 is {status.value}, its route confers no tenure"
+
+
+def test_a_route_on_a_live_chunk_is_rekeyed() -> None:
+    assert _HELD.status() is ChunkStatus.RUNNING
+    refuse_rekey(_route(), _HELD)
 
 
 def test_a_held_route_is_a_lost_race_before_the_status_window() -> None:

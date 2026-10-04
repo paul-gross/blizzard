@@ -2,7 +2,8 @@
 
 ``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk,
 runner, workspace, and the acquired env ids. Exactly one claim per chunk is accepted; a
-second races and loses with **409**, and a paused claimant is refused with **403**."""
+second races and loses with **409**, and an unregistered, retired, or paused claimant is
+refused with **403**."""
 
 from __future__ import annotations
 
@@ -41,9 +42,10 @@ class RouteClaimConflict(BaseModel):
 
 
 class RouteClaimTerminalDenial(BaseModel):
-    """The 409 body: the chunk is already terminal ({done, stopped}) — refused outright,
-    not a race loss. Distinct from a claim conflict: no other runner holds
-    this chunk, it simply can never be claimed again."""
+    """The status-carrying 409 body: the chunk stands at a status no claim is legal from — refused
+    outright, not a race loss or claim conflict. ``status`` tells the cases apart: an ended chunk
+    (``done``, ``stopped``) can never be claimed again, while one not ready (``not_ready``, an unclaimed
+    ``paused``, or a human-gated or delivering chunk with no route) may become claimable later."""
 
     chunk_id: str
     status: str
@@ -73,7 +75,8 @@ class RouteClaimIncompatibleDenial(BaseModel):
 
 
 class RouteClaimPausedDenial(BaseModel):
-    """The 403 body: the claiming runner is paused at the hub registry.
+    """The 403 body: the claiming runner itself is refused — paused at the hub registry,
+    retired, or not registered there at all — and ``detail`` names which.
 
     Distinct from a claim conflict — this claim never entered the race."""
 

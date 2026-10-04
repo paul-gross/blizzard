@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
@@ -27,36 +26,6 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
-
-
-class GardenProposalCountBucket(StrEnum):
-    """Which of the four garden-proposal-count buckets a proposal falls
-    into, classified by its current closure state — never stored, always derived by
-    :func:`classify_proposal_count_bucket`."""
-
-    OPEN = "open"
-    PASSED = "passed"
-    ACCEPTED_WITH_ITEM = "accepted_with_item"
-    ACCEPTED_WITHOUT_ITEM = "accepted_without_item"
-
-
-def classify_proposal_count_bucket(
-    closure: GardenProposalClosureKind | None, item_outcome: GardenProposalItemOutcome | None
-) -> GardenProposalCountBucket:
-    """A proposal's count bucket from its current closure state: no
-    closure is `OPEN`, `PASSED` is `PASSED`, and `ACCEPTED` splits on `item_outcome`
-    into `ACCEPTED_WITH_ITEM`/`ACCEPTED_WITHOUT_ITEM`. Raises rather than misclassify
-    an `ACCEPTED` closure with no `item_outcome` — `GardenProposalClosureService.accept`
-    never leaves one unset."""
-    if closure is None:
-        return GardenProposalCountBucket.OPEN
-    if closure is GardenProposalClosureKind.PASSED:
-        return GardenProposalCountBucket.PASSED
-    if item_outcome is GardenProposalItemOutcome.MINTED:
-        return GardenProposalCountBucket.ACCEPTED_WITH_ITEM
-    if item_outcome is GardenProposalItemOutcome.DECLINED:
-        return GardenProposalCountBucket.ACCEPTED_WITHOUT_ITEM
-    raise ValueError(f"accepted closure carries no item_outcome: {closure!r}")
 
 
 @domain_model

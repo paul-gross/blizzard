@@ -6205,7 +6205,7 @@
         "type": "object"
       },
       "HubAdvanceResponse": {
-        "description": "The result of one on-demand hub-advance (#65). A generic hub command node runs ``run:`` to\ncompletion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the\nslot was held by a different chunk and this call deferred without touching anything \u2014 not an\nerror.",
+        "description": "The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to\ncompletion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the\nslot was held by a different chunk and this call deferred without touching anything \u2014 not an\nerror.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -6270,7 +6270,7 @@
         "type": "string"
       },
       "HubMarkerRequest": {
-        "description": "The mid-run marker callback's body (#65).",
+        "description": "The mid-run marker callback's body.",
         "properties": {
           "content": {
             "default": "",
@@ -7055,7 +7055,7 @@
         "type": "object"
       },
       "PendingView": {
-        "description": "A hub node's in-progress poll (#66) \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
+        "description": "A hub node's in-progress poll \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
         "properties": {
           "next_poll_at": {
             "title": "Next Poll At",
@@ -17614,7 +17614,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step (#65), running that node's\nhub-side command once under the fleet-wide serialization\nslot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported\n``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node\nat all \u2014 ``detail`` names which. The request declares no ``runner_id`` to confine against.",
+        "description": "Drive a chunk parked at a generic hub command node one step, running that node's\nhub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``\nelapsed, or the chunk is not parked at a hub command node it may drive \u2014 ``detail`` names which.\nThe request declares no ``runner_id`` to confine against.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {

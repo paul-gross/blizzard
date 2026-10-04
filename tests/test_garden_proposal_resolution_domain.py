@@ -10,7 +10,7 @@ closure names a proposal that no longer resolves. Plain unit tests over fakes
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -189,8 +189,9 @@ class _FakeFindings:
 class _RecordingWriteRepo:
     batches: list[list[FactEntry]] = field(default_factory=list)
 
-    def record_facts(self, entries: list[FactEntry]) -> None:
+    def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         self.batches.append(list(entries))
+        return []
 
 
 def _resolution(

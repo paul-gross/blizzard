@@ -3398,7 +3398,7 @@
         "type": "object"
       },
       "PendingView": {
-        "description": "A hub node's in-progress poll (#66) \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
+        "description": "A hub node's in-progress poll \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
         "properties": {
           "next_poll_at": {
             "title": "Next Poll At",

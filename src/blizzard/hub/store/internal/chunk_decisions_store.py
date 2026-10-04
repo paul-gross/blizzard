@@ -154,11 +154,10 @@ class ChunkDecisionsStore:
         return closed
 
     def list_open_decisions(self) -> list[GateDecision]:
-        """The gates still awaiting a resolution: unresolved (``resolved_choice is None``)
-        filtered in SQL via a ``NOT EXISTS`` against ``decision_resolutions``, hydrated in one
-        batched pass through :meth:`_hydrate`. A stopped or done chunk closes its gates, so the
-        SQL also drops every gate whose chunk has ended; :attr:`GateDecision.is_open` then drops
-        the ones a transition closed undecided."""
+        """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
+        The SQL drops resolved gates and gates whose chunk has ended — a read optimization mirroring
+        :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
+        and :attr:`GateDecision.is_open` drops the ones a transition closed undecided."""
         not_resolved = ~(
             select(s.decision_resolutions.c.decision_id)
             .where(s.decision_resolutions.c.decision_id == s.decisions.c.decision_id)

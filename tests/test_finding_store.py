@@ -14,10 +14,11 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden.findings.model import FactEntry, Finding
+from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingAlreadyExited, FindingExitService
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -132,6 +133,52 @@ def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
         )
 
     assert store.get("fin_1").observed_count == 0  # type: ignore[union-attr]
+
+
+def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expected_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1")
+    _add(store, finding_id="fin_2")
+    store.record_fact("fin_1", kind="resolved", at=_LATER, note="n", actor="a")
+
+    moved = store.record_facts(
+        [
+            FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n"),
+            FactEntry(finding_id="fin_2", kind="wont-fix", at=_LATER, note="n"),
+        ],
+        expect={"fin_1": "live", "fin_2": "live"},
+    )
+
+    assert moved == ["fin_1"]
+    assert store.get("fin_1").state == "resolved"  # type: ignore[union-attr]
+    assert store.get("fin_2").state == "live"  # type: ignore[union-attr]
+
+
+def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1")
+
+    moved = store.record_facts(
+        [FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n")], expect={"fin_1": "live"}
+    )
+
+    assert moved == []
+    assert store.get("fin_1").state == "wont-fix"  # type: ignore[union-attr]
+
+
+def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1")
+    stale = store.get("fin_1")
+    assert stale is not None
+    service = FindingExitService(repo=store, clock=FixedClock(instant=_LATER))
+    service.resolve([stale], note="fixed", actor="a")
+
+    with pytest.raises(FindingAlreadyExited):
+        service.resolve([stale], note="fixed again", actor="b")
+
+    _finding, facts = store.get_with_facts("fin_1")  # type: ignore[misc]
+    assert [f.kind for f in facts].count("resolved") == 1
 
 
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:

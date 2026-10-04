@@ -342,7 +342,7 @@ class BounceView(BaseModel):
 
 
 class HubAdvanceResponse(BaseModel):
-    """The result of one on-demand hub-advance (#65). A generic hub command node runs ``run:`` to
+    """The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
     completion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the
     slot was held by a different chunk and this call deferred without touching anything — not an
     error."""
@@ -356,7 +356,7 @@ class HubAdvanceResponse(BaseModel):
 
 
 class PendingView(BaseModel):
-    """A hub node's in-progress poll (#66) — whether a chunk parked at a hub node is about to run its
+    """A hub node's in-progress poll — whether a chunk parked at a hub node is about to run its
     first attempt or is already mid-poll, and when the next is due. Never itself a status."""
 
     node_name: str
@@ -364,7 +364,7 @@ class PendingView(BaseModel):
 
 
 class HubMarkerRequest(BaseModel):
-    """The mid-run marker callback's body (#65)."""
+    """The mid-run marker callback's body."""
 
     name: str
     content: str = ""
@@ -573,7 +573,7 @@ class ChunkDetail(BaseModel):
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # Per-node-step usage history, oldest first.
     usage: list[ChunkUsageView] = []
-    # A hub command node's in-progress poll (#66) — non-None iff the newest transition enters a hub
+    # A hub command node's in-progress poll — non-None iff the newest transition enters a hub
     # node and a poll fact is recorded for that visit with no later transition. Never a status.
     pending: PendingView | None = None
     # Informational, never a status (#63): true iff any repo has landed, whether or not delivery has

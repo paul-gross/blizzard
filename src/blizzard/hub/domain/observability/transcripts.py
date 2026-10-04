@@ -232,6 +232,24 @@ class SegmentWrite(StrEnum):
         return self in (SegmentWrite.KEEP, SegmentWrite.INSERT_ACCEPTED, SegmentWrite.UPDATE_TO_ACCEPTED)
 
 
+class LeaseSegmentsNotOwned(Exception):
+    """A runner asked to read back a lease's stored segments another runner shipped."""
+
+    def __init__(self, *, owning_runner_id: str, requesting_runner_id: str) -> None:
+        super().__init__("lease segments belong to another runner")
+        self.owning_runner_id = owning_runner_id
+        self.requesting_runner_id = requesting_runner_id
+
+
+def refuse_foreign_lease_read(owning_runner_id: str | None, *, requesting_runner_id: str) -> None:
+    """Refuse a runner's read-back of a lease's segments when another runner shipped them
+    (:class:`LeaseSegmentsNotOwned`). Keyed on stored-segment authorship on purpose — the read
+    answers whose stored segments these are, which ingest's :func:`ships_from_lease_holder` keeps
+    equal to the epoch's holder. ``None`` (the hub holds nothing) is no refusal."""
+    if owning_runner_id is not None and owning_runner_id != requesting_runner_id:
+        raise LeaseSegmentsNotOwned(owning_runner_id=owning_runner_id, requesting_runner_id=requesting_runner_id)
+
+
 def ships_from_lease_holder(owner: EpochOwner | None, runner_id: str) -> bool:
     """Whether a record shipped by ``runner_id`` comes from its lease's holder. An epoch owned by
     the hub or by another runner refuses it; an epoch with no owner recorded yet admits it, since

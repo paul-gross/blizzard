@@ -38,13 +38,16 @@ def question_list(cli: CliContext) -> None:
 def question_answer(cli: CliContext, question_id: str, answer_text: str, answered_by: str) -> None:
     """Answer an open question (first-write-wins CAS at the hub).
 
-    A racing second answer loses and is told who already answered. A pure client of
+    A racing second answer loses and is told who already answered; a question whose chunk
+    has ended is refused with the hub's reason. A pure client of
     ``POST /api/questions/{id}/answers``."""
     resp = cli.send(
         "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
     )
     if resp.status_code == httpx.codes.CONFLICT:
-        winner = resp.json()
-        raise click.ClickException(f"already answered by {winner.get('answered_by')}: {winner.get('answer')!r}")
+        body = resp.json()
+        if "answered_by" in body:
+            raise click.ClickException(f"already answered by {body['answered_by']}: {body.get('answer')!r}")
+        raise click.ClickException(str(body.get("detail", "question is closed")))
     cli.check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
     cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")

@@ -645,7 +645,7 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding()
     assert result.deltas == [delta]
 
 
-def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
+def test_validate_delivery_settles_a_delivered_findings_gone_by_actor() -> None:
     """A `delivered` finding is a valid delta target (`delivered`
     is outside `EXIT_KINDS`) and its closer's actor rides on the result for
     materialization to settle a later `gone` op with."""
@@ -658,13 +658,13 @@ def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
         bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor="u_1")]),
     )
 
-    assert result.delivered_findings == {_FIN1: "u_1"}
+    assert result.gone_settlements[_FIN1] == ("resolved", "u_1")
 
 
 def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> None:
     """A `delivered` finding whose closing fact carries no actor must still gate a later
     `gone` op to settling, not fall through to flagging plain `gone` —
-    `delivered_findings` keys on state alone, never on the actor being truthy."""
+    `gone_settlements` keys on state alone, never on the actor being truthy."""
     delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id=_FIN1, note="no longer reproduces")])
 
     result = validate_delivery(
@@ -674,8 +674,7 @@ def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> Non
         bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor=None)]),
     )
 
-    assert _FIN1 in result.delivered_findings
-    assert result.delivered_findings[_FIN1] is None
+    assert result.gone_settlements[_FIN1] == ("resolved", None)
 
 
 def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:

@@ -7,7 +7,7 @@ reversible); `class_`/`locus` are opaque to the hub, same doc."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -104,6 +104,14 @@ class FindingAlreadyExited(FindingTransitionRefused):
         super().__init__(
             finding_id, kind, state, f"finding {finding_id!r} is already {state!r}; reopen it before {kind!r}"
         )
+
+
+class FindingWriteContended(ValueError):
+    """A finding verb whose write kept losing its state guard to concurrent writes."""
+
+    def __init__(self, finding_ids: Sequence[str]) -> None:
+        self.finding_ids = list(finding_ids)
+        super().__init__(f"findings {', '.join(self.finding_ids)} kept changing under the write; retry")
 
 
 class FindingNotReopenable(FindingTransitionRefused):
@@ -436,9 +444,11 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         """Append one fact — never touches the `findings` row."""
         ...
 
-    def record_facts(self, entries: Sequence[FactEntry]) -> None:
+    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
-        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. ``expect`` maps a
+        finding id to the state its facts were built from; when any named finding has moved off
+        it by the time the write lands, nothing is written and those ids are returned."""
         ...
 
 
@@ -514,12 +524,15 @@ def deliver_facts(
     return [fact for fact in facts if fact is not None]
 
 
+#: How many times a finding verb re-reads and re-asks the model after losing its state guard.
+_GUARD_ATTEMPTS = 3
+
+
 class FindingExitService:
-    """The human-driven exit verbs, `reopen`, and `deliver`
-    — delivery-triggered and provisional, not an exit, until the owning routine's next
-    run settles it. Every method takes already-loaded :class:`Finding` objects
-    (`bzh:domain-takes-objects`), asks the model for the batch's facts at the clock's
-    instant, and writes them in one all-or-nothing `record_facts`."""
+    """The human-driven exit verbs, `reopen`, and the provisional, delivery-triggered `deliver`, over
+    already-loaded :class:`Finding` objects; each writes the batch's facts in one all-or-nothing
+    `record_facts` guarded on the states they were built from, re-asking the model when a concurrent
+    write wins the guard."""
 
     def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:
         self._repo = repo
@@ -534,7 +547,9 @@ class FindingExitService:
         `resolved` if it still holds or reviving it to `live` if it does not, rather than
         a delivery alone declaring the ground changed."""
         at = self._clock.now()
-        self._repo.record_facts(deliver_facts(findings, note=note, actor=actor, at=at, proposal_id=proposal_id))
+        self._record(
+            findings, lambda batch: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id)
+        )
 
     def confirm_gone(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
         self._exit(findings, kind="gone-confirmed", note=note, actor=actor)
@@ -547,7 +562,7 @@ class FindingExitService:
 
     def supersede(self, findings: Sequence[Finding], absorber: Finding, *, note: str, actor: str) -> None:
         at = self._clock.now()
-        self._repo.record_facts(supersede_facts(findings, absorber, note=note, actor=actor, at=at))
+        self._record(findings, lambda batch: supersede_facts(batch, absorber, note=note, actor=actor, at=at))
 
     def reopen(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
         self._exit(findings, kind="reopened", note=note, actor=actor)
@@ -556,7 +571,19 @@ class FindingExitService:
         self, findings: Sequence[Finding], *, kind: str, note: str, actor: str, proposal_id: str | None = None
     ) -> None:
         at = self._clock.now()
-        self._repo.record_facts(exit_facts(findings, kind, note=note, actor=actor, at=at, proposal_id=proposal_id))
+        self._record(
+            findings, lambda batch: exit_facts(batch, kind, note=note, actor=actor, at=at, proposal_id=proposal_id)
+        )
+
+    def _record(self, findings: Sequence[Finding], facts_for: Callable[[Sequence[Finding]], list[FactEntry]]) -> None:
+        batch = list(findings)
+        for _ in range(_GUARD_ATTEMPTS):
+            if not self._repo.record_facts(facts_for(batch), expect={f.finding_id: f.state for f in batch}):
+                return
+            reloaded = self._repo.get_many([f.finding_id for f in batch])
+            batch = [reloaded.get(f.finding_id, f) for f in batch]
+        facts_for(batch)
+        raise FindingWriteContended([f.finding_id for f in batch])
 
 
 @domain_model

@@ -2215,7 +2215,7 @@ export type PauseView = {
 /**
  * PendingView
  *
- * A hub node's in-progress poll (#66) — whether a chunk parked at a hub node is about to run its
+ * A hub node's in-progress poll — whether a chunk parked at a hub node is about to run its
  * first attempt or is already mid-poll, and when the next is due. Never itself a status.
  */
 export type PendingView = {

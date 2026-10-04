@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
+from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 
 #: A finding's birth, every way it leaves the live set, and its own undo — `observed`/
 #: `gone` carry no trend meaning of their own.
@@ -69,9 +70,9 @@ class Trend:
     age: TrendAgeCut
 
 
-class InvalidTrendWindow(ValueError):
+class InvalidTrendWindow(InvalidWindowError):
     """A trend window that cannot be bucketed: a non-positive `period_days`, a non-positive
-    span, or more periods than :attr:`TrendWindow.MAX_PERIODS`."""
+    span (:func:`require_until_after_since`), or more periods than :attr:`TrendWindow.MAX_PERIODS`."""
 
 
 @domain_model
@@ -93,8 +94,7 @@ class TrendWindow:
     def of(cls, *, since: datetime, until: datetime, introduced_boundary: datetime, period_days: int) -> TrendWindow:
         if period_days < 1:
             raise InvalidTrendWindow("period_days must be at least 1")
-        if until <= since:
-            raise InvalidTrendWindow("until must be after since")
+        require_until_after_since(since, until)
         span_days = (until - since).total_seconds() / 86400
         if span_days / period_days > cls.MAX_PERIODS:
             raise InvalidTrendWindow(f"since/until/period_days would bucket more than {cls.MAX_PERIODS} periods")

@@ -503,7 +503,6 @@ def test_queue_changed_frame_carries_no_key(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    make_ready(hub, chunk_id)
     before = _latest_event_id(hub)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert resp.status_code == 202, resp.text

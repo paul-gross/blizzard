@@ -39,14 +39,17 @@ def decision_list(cli: CliContext) -> None:
 def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by: str) -> None:
     """Resolve an open decision by picking CHOICE (first-write-wins).
 
-    A pure client of ``POST /api/decisions/{id}/resolutions`` (the pluralized
-    resolution route)."""
+    A racing second resolution loses and is told who already resolved; a decision closed undecided — by a
+    restart, or by its chunk ending — is refused with the hub's reason. A pure client of
+    ``POST /api/decisions/{id}/resolutions``."""
     resp = cli.send(
         "post", f"/api/decisions/{decision_id}/resolutions", json_body={"choice": choice, "resolved_by": resolved_by}
     )
     if resp.status_code == httpx.codes.CONFLICT:
-        winner = resp.json()
-        raise click.ClickException(f"already resolved by {winner.get('already_resolved_by')}")
+        body = resp.json()
+        if "already_resolved_by" in body:
+            raise click.ClickException(f"already resolved by {body['already_resolved_by']}")
+        raise click.ClickException(str(body.get("detail", "decision is closed")))
     cli.check(
         resp,
         "POST /decisions/{id}/resolutions",
