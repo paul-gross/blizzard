@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import Engine
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
@@ -367,6 +367,12 @@ class HubCore:
     #: Sealed secret rows — composition-only, never a ``HubServices`` field.
     secrets: SecretStore
     clock: IClock
+
+
+def build_process_core(engine: Engine) -> HubCore:
+    """:func:`build_hub_core` on the one process clock — the hosted app and the offline
+    verbs build their core through here."""
+    return build_hub_core(engine, clock=SystemClock())
 
 
 def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:

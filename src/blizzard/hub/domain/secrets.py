@@ -61,6 +61,14 @@ class SecretUnreadable(Exception):
         self.key_id = key_id
 
 
+class SecretRotationConflict(Exception):
+    """A row changed between a rotation's read and its commit — nothing was re-sealed."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"secret {name} changed during key rotation; nothing was re-sealed — re-run it")
+        self.name = name
+
+
 @dataclass(frozen=True)
 class SecretName:
     """A validated secret name — the only way to obtain one is :meth:`parse`."""
@@ -157,6 +165,28 @@ class ISealedSecretRepository(Protocol):
     """Sealed rows. Held by the reader, key rotation, and nothing on the request plane."""
 
     def get_sealed(self, name: str) -> SealedSecret | None: ...
+
+
+@dataclass(frozen=True)
+class Reseal:
+    """One row's value re-sealed under another key generation at the same revision."""
+
+    name: str
+    revision: int
+    from_key_id: str
+    sealed: SealedValue
+
+
+class IResealSecretRepository(ISealedSecretRepository, Protocol):
+    """Whole-store re-sealing for key rotation — held by the rotation verb alone."""
+
+    def list_sealed(self) -> list[SealedSecret]: ...
+
+    def reseal(self, changes: list[Reseal]) -> None:
+        """Apply every change in one transaction, each a compare-and-set on
+        ``(revision, key_id)``; :class:`SecretRotationConflict` on any miss, with nothing
+        applied. Moves only ``key_id``, ``ciphertext``, and ``nonce``."""
+        ...
 
 
 class IWriteSecretRepository(ISecretCatalog, Protocol):

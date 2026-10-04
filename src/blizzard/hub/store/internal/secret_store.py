@@ -14,13 +14,16 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.secrets import (
+    IResealSecretRepository,
     ISealedSecretRepository,
     IWriteSecretRepository,
+    Reseal,
     SealedSecret,
     SealedValue,
     SecretAlreadyExists,
     SecretRecord,
     SecretRevisionConflict,
+    SecretRotationConflict,
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
@@ -119,8 +122,10 @@ class SecretStore:
                     secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
                 ).where(secrets.c.name == name)
             ).one_or_none()
-        if row is None:
-            return None
+        return self._sealed_of(row) if row is not None else None
+
+    @staticmethod
+    def _sealed_of(row) -> SealedSecret:  # type: ignore[no-untyped-def]
         return SealedSecret(
             name=row.name,
             revision=row.revision,
@@ -130,6 +135,30 @@ class SecretStore:
                 nonce=base64.b64decode(row.nonce),
             ),
         )
+
+    def list_sealed(self) -> list[SealedSecret]:
+        with self._store.read("list_sealed") as conn:
+            rows = conn.execute(
+                select(
+                    secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
+                ).order_by(secrets.c.name)
+            ).all()
+        return [self._sealed_of(row) for row in rows]
+
+    def reseal(self, changes: list[Reseal]) -> None:
+        with self._store.write("reseal", expect=(SecretRotationConflict,)) as conn:
+            for change in changes:
+                moved = conn.execute(
+                    update(secrets)
+                    .where(
+                        secrets.c.name == change.name,
+                        secrets.c.revision == change.revision,
+                        secrets.c.key_id == change.from_key_id,
+                    )
+                    .values(**_sealed_columns(change.sealed))
+                ).rowcount
+                if moved != 1:
+                    raise SecretRotationConflict(change.name)
 
     def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str) -> None:
         with self._store.write("record_lifecycle") as conn:
@@ -159,4 +188,8 @@ def _conforms_secret_store(x: SecretStore) -> IWriteSecretRepository:
 
 
 def _conforms_sealed_secret_store(x: SecretStore) -> ISealedSecretRepository:
+    return x
+
+
+def _conforms_reseal_secret_store(x: SecretStore) -> IResealSecretRepository:
     return x

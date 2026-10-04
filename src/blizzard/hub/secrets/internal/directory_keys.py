@@ -28,7 +28,7 @@ class DirectoryKeyProvider:
         self._dir.mkdir(parents=True, exist_ok=True)
         self._dir.chmod(_DIR_MODE)
         if not self._meta_path.exists():
-            generation = self._mint()
+            generation = self.mint()
             self._write_meta(current=generation.key_id, previous=None)
 
     def current(self) -> KeyGeneration:
@@ -54,13 +54,30 @@ class DirectoryKeyProvider:
     def _meta_path(self) -> Path:
         return self._dir / _META_FILENAME
 
-    def _mint(self) -> KeyGeneration:
+    def mint(self) -> KeyGeneration:
+        """Write a fresh generation's file without naming it current — readable at once,
+        sealing nothing until :meth:`promote`."""
         generation = generation_of(secrets.token_bytes(KEY_BYTES))
         path = self._dir / f"{generation.key_id}{_KEY_SUFFIX}"
         path.touch(mode=_FILE_MODE)
         path.chmod(_FILE_MODE)
         path.write_bytes(generation.material)
         return generation
+
+    def promote(self, key_id: str) -> None:
+        """Name ``key_id`` current and demote the generation it replaces to ``previous``."""
+        old = str(self._read_meta()["current"])
+        self._write_meta(current=key_id, previous=old if old != key_id else self._read_meta().get("previous"))
+
+    def prune(self, referenced: frozenset[str]) -> None:
+        """Delete every generation file that is neither current, previous, nor referenced by a row."""
+        meta = self._read_meta()
+        keep = {str(meta["current"]), *referenced}
+        if meta.get("previous"):
+            keep.add(str(meta["previous"]))
+        for path in self._dir.glob(f"*{_KEY_SUFFIX}"):
+            if path.stem not in keep:
+                path.unlink()
 
     def _read_meta(self) -> dict[str, str | None]:
         return json.loads(self._meta_path.read_text())

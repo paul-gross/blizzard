@@ -5,6 +5,8 @@ the process list; no verb prints a value."""
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import click
@@ -25,7 +27,7 @@ class SecretListing(Listing):
 
 @click.group("secret")
 def secret_group() -> None:
-    """Operator verbs over the write-only secret store: set, list, show, retire, enable."""
+    """Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key."""
 
 
 @secret_group.command("set", cls=FleetCommand)
@@ -44,6 +46,32 @@ def secret_set(cli: CliContext, name: str) -> None:
         cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
     body = resp.json()
     cli.show_lines(body, f"secret {name} set at revision {body['revision']}")
+
+
+@secret_group.command("rotate-key")
+@click.option(
+    "--dir",
+    "directory",
+    default=".",
+    envvar="BZ_HUB_DIR",
+    help="Hub runtime directory (overrides $BZ_HUB_DIR).",
+)
+def secret_rotate_key(directory: str) -> None:
+    """Re-seal every secret under the hub's current key — offline, on the hub host.
+
+    Directory mode mints a new key generation and promotes it; env mode re-seals under
+    $BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A running
+    hub keeps reading every secret throughout. Exits non-zero, changing nothing, when a
+    concurrent replace races the rotation — re-run it."""
+    from blizzard.hub.app import rotate_secret_keys
+    from blizzard.hub.config import ConfigError, HubConfig
+    from blizzard.hub.domain.secrets import SecretRotationConflict
+
+    try:
+        result = rotate_secret_keys(HubConfig.load(Path(directory)), os.environ)
+    except (ConfigError, SecretRotationConflict) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"re-sealed {result.resealed} secret(s) under key generation {result.key_id}")
 
 
 @secret_group.command("list", cls=FleetCommand)
