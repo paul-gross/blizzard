@@ -22,18 +22,18 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
+from blizzard.runner.harness.claude_code.denials import CLAUDE_CODE_DENIED_TOOLS
+from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
-from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
-from blizzard.runner.harness.internal.claude_code_section import WORKER_SETTINGS_FILENAME
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_permission_resolver import (
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.permissions.permission_resolver import (
     OpenCodeEffectivePermissions,
     OpenCodePermissionResolveError,
 )
-from blizzard.runner.harness.internal.opencode_section import OPENCODE_WORKER_CONFIG_FILENAME
-from blizzard.runner.harness.internal.opencode_shapes import OpenCodePermissionRule
+from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILENAME
+from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import claude_code

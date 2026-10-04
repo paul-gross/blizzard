@@ -31,13 +31,13 @@ from blizzard.runner.loop.chunk_status_cache import IChunkViews
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
-from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler

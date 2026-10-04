@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import IO, Protocol
 
 from blizzard.foundation.roles import dto
-from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.process.probe import IProcessProbe
 
 # ``man 2 prctl`` — arms the child's own death signal (the trampoline clears it with a literal 0).
 _PR_SET_PDEATHSIG = 1

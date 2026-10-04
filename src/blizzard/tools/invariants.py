@@ -28,7 +28,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
-from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
+from blizzard.runner.process.probe import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.

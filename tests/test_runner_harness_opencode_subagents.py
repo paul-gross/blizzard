@@ -13,13 +13,13 @@ import structlog
 from structlog.testing import capture_logs
 
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_descendant_usage import OpenCodeDescendantUsage
-from blizzard.runner.harness.internal.opencode_export import OpenCodeExportError
-from blizzard.runner.harness.internal.opencode_normalizer import build_turns, child_candidate_of
-from blizzard.runner.harness.internal.opencode_price_cache import OpenCodeModelPrice, OpenCodeRate
-from blizzard.runner.harness.internal.opencode_shapes import OpenCodePart, parse_session_export
-from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.shapes import OpenCodePart, parse_session_export
+from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError
+from blizzard.runner.harness.opencode.transcript.normalizer import build_turns, child_candidate_of
+from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
+from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDescendantUsage
+from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from tests.repo_files import repo_root
@@ -549,7 +549,7 @@ def test_with_no_collector_usage_is_the_root_alone(spawn_executor: Executor) -> 
 
 
 def test_the_fixture_files_are_not_a_corpus(tmp_path: Path) -> None:
-    from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
-    from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
+    from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
+    from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 
     assert "1.18.32" not in admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)

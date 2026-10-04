@@ -40,15 +40,15 @@ from blizzard.runner.harness.compatibility import (
     ProbeObservation,
     classify_observation,
 )
-from blizzard.runner.harness.internal import opencode_process
-from blizzard.runner.harness.internal.opencode_attach import LoopbackAttachProxyFactory
-from blizzard.runner.harness.internal.opencode_compaction import IOpenCodeCompactor, OpenCodeCompactionResult
-from blizzard.runner.harness.internal.opencode_diagnostic import run_opencode_compatibility
-from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence, OpenCodeEvidenceError
-from blizzard.runner.harness.internal.opencode_facts import provider_refusal
-from blizzard.runner.harness.internal.opencode_landlock import landlock_version
-from blizzard.runner.harness.internal.opencode_loopback import UrllibLoopbackTransport
-from blizzard.runner.harness.internal.opencode_probe import (
+from blizzard.runner.harness.opencode.compatibility import process as opencode_process
+from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
+from blizzard.runner.harness.opencode.compatibility.compaction import IOpenCodeCompactor, OpenCodeCompactionResult
+from blizzard.runner.harness.opencode.compatibility.diagnostic import run_opencode_compatibility
+from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence, OpenCodeEvidenceError
+from blizzard.runner.harness.opencode.compatibility.facts import provider_refusal
+from blizzard.runner.harness.opencode.compatibility.landlock import landlock_version
+from blizzard.runner.harness.opencode.compatibility.loopback import UrllibLoopbackTransport
+from blizzard.runner.harness.opencode.compatibility.probe import (
     ADMITTED_OPENCODE_RANGE_DISPLAY,
     BOUNDARY_FAULT_SUMMARY,
     INTERNAL_FAULT_SUMMARY,
@@ -56,21 +56,21 @@ from blizzard.runner.harness.internal.opencode_probe import (
     SHAPE_FAULT_SUMMARY,
     OpenCodeCompatibilityProbe,
 )
-from blizzard.runner.harness.internal.opencode_process import (
+from blizzard.runner.harness.opencode.compatibility.process import (
     IOpenCodeProcess,
     OpenCodeProcessError,
     OpenCodeProcessResult,
     OpenCodeStartedProcess,
     SubprocessOpenCodeProcess,
 )
-from blizzard.runner.harness.internal.opencode_scratch_config import (
+from blizzard.runner.harness.opencode.compatibility.scratch_config import (
     child_env,
     prepare_isolation,
     provision_disposable_auth,
 )
-from blizzard.runner.harness.internal.opencode_scratch_git import SubprocessOpenCodeScratchGit
-from blizzard.runner.harness.internal.opencode_shapes import OpenCodeShapeError, parse_run_jsonl
-from blizzard.runner.harness.internal.opencode_transcript import TranscriptExportSample
+from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
+from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
+from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_run_jsonl
 
 pytestmark = pytest.mark.component
 

@@ -11,8 +11,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.harness.bundle import published_snapshot
-from blizzard.runner.harness.bundle_layouts import inspect_harness_bundle
-from blizzard.runner.harness.catalog import HARNESS_CATALOG, declared, shared_inputs
+from blizzard.runner.harness.wiring import HARNESS_CATALOG, declared, inspect_harness_bundle, shared_inputs
 
 
 @click.group("harness")

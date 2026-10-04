@@ -31,7 +31,6 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
-from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.shutdown_drain import ShutdownDrain
@@ -45,6 +44,7 @@ from blizzard.runner.loop.transcript_backfill import (
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess

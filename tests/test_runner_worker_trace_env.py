@@ -10,7 +10,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.harness_shared import build_identity_env
+from blizzard.runner.harness.harness_shared import build_identity_env
 
 pytestmark = pytest.mark.unit
 

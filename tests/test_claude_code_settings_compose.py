@@ -7,13 +7,13 @@ from typing import Any
 import pytest
 
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
-from blizzard.runner.harness.internal.claude_code_settings_compose import (
+from blizzard.runner.harness.claude_code.denials import CLAUDE_CODE_DENIED_TOOLS
+from blizzard.runner.harness.claude_code.settings_compose import (
     SettingsCollision,
     compose_settings,
     resolved_permission_mode,
 )
-from blizzard.runner.harness.worker_settings import WorkerSettings
+from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 
 pytestmark = pytest.mark.unit
 

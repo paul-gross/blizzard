@@ -51,16 +51,16 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.catalog import configured_tiers
-from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan, plan_harness_telemetry
+from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan, plan_harness_telemetry
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.internal.harness_registry import (
+from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
+    configured_tiers,
 )
-from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.loop.capability_snapshot import default_harness_id
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.process.probe import LinuxProcessProbe
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore

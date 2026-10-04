@@ -1,4 +1,4 @@
-"""``harness/internal/opencode_cursor.py::MessagePartCursor.admit`` — unit tier, hermetic:
+"""``harness/opencode/transcript/cursor.py::MessagePartCursor.admit`` — unit tier, hermetic:
 identity-based admission and its own pruning bound. This acceptance criterion named the
 token bound as unit-tested, but no such test existed until review; this file is that
 test, plus its own pairing proof against the pinned compaction corpus."""
@@ -9,16 +9,16 @@ import json
 
 import pytest
 
-from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
-from blizzard.runner.harness.internal.opencode_cursor import (
+from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.opencode.shapes import parse_session_export
+from blizzard.runner.harness.opencode.transcript.cursor import (
     CursorMark,
     MessagePartCursor,
     MessagePartIdentity,
     MessagePartRevision,
     records_for_export,
 )
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
-from blizzard.runner.harness.internal.opencode_shapes import parse_session_export
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit

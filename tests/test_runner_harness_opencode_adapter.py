@@ -22,25 +22,25 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
-from blizzard.runner.harness.internal.opencode_adapter import (
+from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
+from blizzard.runner.harness.opencode.adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
     OpenCodeAdapter,
     _PendingOpenCodeIdentity,
 )
-from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
-from blizzard.runner.harness.internal.opencode_price_cache import (
+from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.opencode.usage.price_cache import (
     FileOpenCodePriceCatalog,
     IOpenCodePriceCatalog,
     OpenCodeContextTier,
     OpenCodeModelPrice,
     OpenCodeRate,
 )
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
+from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope

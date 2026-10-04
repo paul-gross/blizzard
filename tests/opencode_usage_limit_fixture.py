@@ -16,11 +16,11 @@ strings in the installed ``opencode-ai`` binary (``opencode-ai@1.18.31``, resolv
   ordinary transient rate limit).
 - ``statusCode: 429`` matches the binary's own retryable-status set for an
   ``AI_APICallError`` (``isRetryable:...j===429...``) and OpenCode's own provider-refusal
-  status roster (``opencode_facts.py::_PROVIDER_REFUSAL_STATUSES``).
+  status roster (``opencode/compatibility/facts.py::_PROVIDER_REFUSAL_STATUSES``).
 
 This is the shape :meth:`OpenCodeAdapter.classify_usage_limit` reads: a ``type: "error"``
 run event whose ``error.data.statusCode`` is 429 and whose ``error.data.message`` names a
-usage limit — parseable by the production ``opencode_shapes.parse_run_event``, never a
+usage limit — parseable by the production ``opencode.shapes.parse_run_event``, never a
 shape the mock's own writer invents independently (``blizzard_mock``'s
 ``usage_limited()`` re-emits this same literal)."""
 

@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]

@@ -35,33 +35,28 @@ from blizzard.runner.harness.compatibility import (
     ProbeObservation,
     classify_observation,
 )
-from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
-from blizzard.runner.harness.internal.opencode_attach import (
+from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
+from blizzard.runner.harness.opencode.compatibility.attach import (
     OpenCodeAttachProxy,
     OpenCodeAttachRequest,
     OpenCodeAttachSignal,
 )
-from blizzard.runner.harness.internal.opencode_cursor import (
-    CursorError,
-    MessagePartCursor,
-    MessagePartRevision,
-    records_for_export,
-)
-from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence
-from blizzard.runner.harness.internal.opencode_facts import has_exact_permission_denial
-from blizzard.runner.harness.internal.opencode_loopback import (
+from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence
+from blizzard.runner.harness.opencode.compatibility.facts import has_exact_permission_denial
+from blizzard.runner.harness.opencode.compatibility.loopback import (
     LoopbackRequest,
     LoopbackResponse,
     LoopbackTransportError,
     UrllibLoopbackTransport,
 )
-from blizzard.runner.harness.internal.opencode_probe import (
+from blizzard.runner.harness.opencode.compatibility.probe import (
     ADMITTED_OPENCODE_RANGE,
     ADMITTED_OPENCODE_RANGE_DISPLAY,
     PINNED_OPENCODE_VERSION,
 )
-from blizzard.runner.harness.internal.opencode_sanitizer import REDACTED, sanitize_json, sanitize_value
-from blizzard.runner.harness.internal.opencode_shapes import (
+from blizzard.runner.harness.opencode.compatibility.sanitizer import REDACTED, sanitize_json, sanitize_value
+from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample, inspect_transcript
+from blizzard.runner.harness.opencode.shapes import (
     OpenCodeRunEvent,
     OpenCodeSessionInfo,
     OpenCodeShapeError,
@@ -75,7 +70,12 @@ from blizzard.runner.harness.internal.opencode_shapes import (
     parse_session_export,
     parse_worker_config,
 )
-from blizzard.runner.harness.internal.opencode_transcript import TranscriptExportSample, inspect_transcript
+from blizzard.runner.harness.opencode.transcript.cursor import (
+    CursorError,
+    MessagePartCursor,
+    MessagePartRevision,
+    records_for_export,
+)
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit

@@ -363,7 +363,7 @@
     {
       "id": "opencode-admitted-version-range-current-bounds",
       "statement": "The runner OpenCode admitted-version range (ADMITTED_OPENCODE_RANGE) is currently >=1.18.25,<2.0.",
-      "owner": "src/blizzard/runner/harness/internal/opencode_probe.py#<module>",
+      "owner": "src/blizzard/runner/harness/opencode/compatibility/probe.py#<module>",
       "owner_kind": "module",
       "owner_assert": {
         "quote": ">=1.18.25,<2.0"
@@ -375,7 +375,7 @@
       ],
       "sites": [
         {
-          "file": "src/blizzard/runner/harness/internal/opencode_probe.py",
+          "file": "src/blizzard/runner/harness/opencode/compatibility/probe.py",
           "symbol": "<module>",
           "role": "owner"
         },
@@ -420,7 +420,7 @@
     {
       "id": "claude-code-admitted-version-range-current-bounds",
       "statement": "The runner Claude Code admitted-version range (ADMITTED_CLAUDE_CODE_RANGE) is currently >=2.1,<3.0.",
-      "owner": "src/blizzard/runner/harness/internal/claude_code_health.py#<module>",
+      "owner": "src/blizzard/runner/harness/claude_code/health.py#<module>",
       "owner_kind": "module",
       "owner_assert": {
         "quote": ">=2.1,<3.0"
@@ -431,7 +431,7 @@
       ],
       "sites": [
         {
-          "file": "src/blizzard/runner/harness/internal/claude_code_health.py",
+          "file": "src/blizzard/runner/harness/claude_code/health.py",
           "symbol": "<module>",
           "role": "owner"
         },

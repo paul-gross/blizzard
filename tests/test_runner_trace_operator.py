@@ -22,7 +22,7 @@ from blizzard.runner.domain.tracing.receiver_limits import ReceiverCount, Receiv
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
-from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
+from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease

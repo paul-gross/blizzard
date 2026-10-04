@@ -29,7 +29,7 @@ from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.domain.tracing.sweep import announce_rejected_tracing
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.trace_driver import TraceSweepDriver
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver

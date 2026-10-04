@@ -21,7 +21,8 @@ pytestmark = pytest.mark.component
 def _no_ambient_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setattr(
-        "blizzard.runner.harness.ambient_conflicts.MANAGED_SETTINGS_PATHS", (tmp_path / "absent-managed.json",)
+        "blizzard.runner.harness.claude_code.ambient_conflicts.MANAGED_SETTINGS_PATHS",
+        (tmp_path / "absent-managed.json",),
     )
 
 
@@ -64,7 +65,7 @@ def test_status_reports_a_claude_code_conflict_after_the_autonomy_line(
 ) -> None:
     managed = tmp_path / "managed-settings.json"
     managed.write_text(json.dumps({"disableAllHooks": True}))
-    monkeypatch.setattr("blizzard.runner.harness.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
+    monkeypatch.setattr("blizzard.runner.harness.claude_code.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
     runtime = _runtime(tmp_path)
 
     assert _status(runtime)[:2] == [
@@ -76,7 +77,7 @@ def test_status_reports_a_claude_code_conflict_after_the_autonomy_line(
 def test_a_disabled_claude_code_reports_no_conflict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     managed = tmp_path / "managed-settings.json"
     managed.write_text(json.dumps({"disableAllHooks": True}))
-    monkeypatch.setattr("blizzard.runner.harness.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
+    monkeypatch.setattr("blizzard.runner.harness.claude_code.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
     runtime = _runtime(tmp_path, edit=("[claude_code]\nenabled = true\n", "[claude_code]\nenabled = false\n"))
 
     assert not any("config conflict" in line for line in _status(runtime))

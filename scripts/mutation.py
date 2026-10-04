@@ -120,7 +120,7 @@ _MUTMUT_PYPROJECT = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encod
 # Applied on top of every scope, so a scope row never has to restate the committed exclusions.
 PYPROJECT_DO_NOT_MUTATE: tuple[str, ...] = tuple(_MUTMUT_PYPROJECT["do_not_mutate"])
 # Copied into a sandbox and run by a bare interpreter, where mutmut's trampoline import cannot resolve.
-STANDALONE_SCRIPT_EXCLUSION = "src/blizzard/runner/harness/internal/opencode_tool_boundary.py"
+STANDALONE_SCRIPT_EXCLUSION = "src/blizzard/runner/harness/opencode/compatibility/tool_boundary.py"
 GLOBAL_EXCLUSIONS = (*PYPROJECT_DO_NOT_MUTATE, STANDALONE_SCRIPT_EXCLUSION)
 # The tier [tool.mutmut].pytest_add_cli_args selects; a test file with nothing in this tier
 # would only be deselected, so selection leaves it out of the fingerprint mutmut keys on.

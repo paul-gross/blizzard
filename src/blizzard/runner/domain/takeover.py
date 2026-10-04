@@ -22,13 +22,13 @@ from blizzard.runner.domain.elicitation import IWriteElicitationRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.outbound import IWriteOutboundRepository
-from blizzard.runner.domain.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:

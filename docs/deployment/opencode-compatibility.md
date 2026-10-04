@@ -160,9 +160,9 @@ exit status, and the sanitized evidence together.
 ## Admitting a candidate version
 
 This page's live diagnostic (above) runs against a version already inside the runner's admitted range —
-`ADMITTED_OPENCODE_RANGE` (`src/blizzard/runner/harness/internal/opencode_probe.py`), a
+`ADMITTED_OPENCODE_RANGE` (`src/blizzard/runner/harness/opencode/compatibility/probe.py`), a
 `packaging.specifiers.SpecifierSet`. Admission is judged on the *normalized* observed version — the bare semantic
-version `normalize_opencode_version` (`src/blizzard/runner/harness/internal/harness_shared.py`) extracts from the
+version `normalize_opencode_version` (`src/blizzard/runner/harness/harness_shared.py`) extracts from the
 binary's raw `--version` output — checked for range membership, never against the raw output text itself or as an
 equality check against one pinned literal; a pre-release version is always excluded, and a version that fails to parse
 reads as not admitted rather than raising.

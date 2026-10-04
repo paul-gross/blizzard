@@ -1,7 +1,7 @@
 """The per-signal plan for Claude Code's own telemetry, and the names its telemetry carries once received.
 
 Pure value types and constants: the plan is derived at the composition root
-(:mod:`blizzard.runner.harness.harness_telemetry`) and read from here."""
+(:mod:`blizzard.runner.harness.claude_code.telemetry_plan`) and read from here."""
 
 from __future__ import annotations
 

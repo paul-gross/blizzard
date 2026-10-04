@@ -19,24 +19,24 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.health import (
+    ADMITTED_CLAUDE_CODE_RANGE_DISPLAY,
+    ClaudeCodeHealthProbe,
+)
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_health import (
-    ADMITTED_CLAUDE_CODE_RANGE_DISPLAY,
-    ClaudeCodeHealthProbe,
-)
-from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
-from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE_DISPLAY
-from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE_DISPLAY
+from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.harness_sections import claude_code, opencode, sections
 
 pytestmark = pytest.mark.component

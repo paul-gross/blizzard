@@ -1,4 +1,4 @@
-"""``harness/internal/claude_code_normalizer.py``.
+"""``harness/claude_code/normalizer.py``.
 
 Unit tier: :meth:`NormalizedFile.of_lines` / ``.join_sidecars`` need no filesystem —
 thinking turns, structured tool input, sidechain assembly and its record-level link
@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
-from blizzard.runner.harness.internal.claude_code_normalizer import NormalizedFile, Run, TranscriptEntry
+from blizzard.runner.harness.claude_code import normalizer as normalizer_module
+from blizzard.runner.harness.claude_code.normalizer import NormalizedFile, Run, TranscriptEntry
 from tests import transcript_fixtures as fx
 
 # --- TranscriptEntry collapse — env/asst/tool ---

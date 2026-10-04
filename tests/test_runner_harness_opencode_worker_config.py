@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
-from blizzard.runner.harness.internal.opencode_worker_config import render_worker_config, write_worker_config
+from blizzard.runner.harness.opencode.shapes import parse_worker_config
+from blizzard.runner.harness.opencode.worker_config import render_worker_config, write_worker_config
 
 pytestmark = pytest.mark.unit
 

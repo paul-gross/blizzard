@@ -95,8 +95,8 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
-from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop_wiring import ResumeMarking
+from blizzard.runner.process.probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService

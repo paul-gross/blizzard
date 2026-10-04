@@ -26,32 +26,32 @@ from blizzard.runner.harness.compatibility import (
     CompatibilityProbe,
     EvidenceState,
 )
-from blizzard.runner.harness.internal.opencode_attach import LoopbackAttachProxyFactory
-from blizzard.runner.harness.internal.opencode_compaction import (
+from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
+from blizzard.runner.harness.opencode.compatibility.compaction import (
     IOpenCodeCompactor,
     OpenCodeCompactionResult,
     SubprocessOpenCodeCompactor,
     compaction_transition_observed,
 )
-from blizzard.runner.harness.internal.opencode_diagnostic import run_opencode_compatibility
-from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence
-from blizzard.runner.harness.internal.opencode_landlock import landlock_version
-from blizzard.runner.harness.internal.opencode_loopback import UrllibLoopbackTransport
-from blizzard.runner.harness.internal.opencode_probe import (
+from blizzard.runner.harness.opencode.compatibility.diagnostic import run_opencode_compatibility
+from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence
+from blizzard.runner.harness.opencode.compatibility.landlock import landlock_version
+from blizzard.runner.harness.opencode.compatibility.loopback import UrllibLoopbackTransport
+from blizzard.runner.harness.opencode.compatibility.probe import (
     INTERNAL_FAULT_SUMMARY,
     PINNED_OPENCODE_VERSION,
     OpenCodeCompatibilityProbe,
 )
-from blizzard.runner.harness.internal.opencode_process import (
+from blizzard.runner.harness.opencode.compatibility.process import (
     IOpenCodeProcess,
     OpenCodeStartedProcess,
     SubprocessOpenCodeProcess,
 )
-from blizzard.runner.harness.internal.opencode_scratch_git import (
+from blizzard.runner.harness.opencode.compatibility.scratch_git import (
     OpenCodeScratchRepo,
     SubprocessOpenCodeScratchGit,
 )
-from blizzard.runner.harness.internal.opencode_transcript import TranscriptExportSample
+from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]

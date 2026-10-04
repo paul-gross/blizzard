@@ -10,9 +10,9 @@ from concurrent.futures import Executor
 
 import pytest
 
+from blizzard.runner.harness.claude_code import adapter as adapter_module
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal import claude_code_adapter as adapter_module
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from tests.runner_fakes import FakeProbe
 

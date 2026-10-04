@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 from packaging.version import Version
 
+from blizzard.runner.harness.claude_code.health import ADMITTED_CLAUDE_CODE_RANGE, ClaudeCodeHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
-from blizzard.runner.harness.internal.claude_code_health import ADMITTED_CLAUDE_CODE_RANGE, ClaudeCodeHealthProbe
-from blizzard.runner.harness.internal.offline_compatibility import DEFAULT_CORPUS_ROOT, admitted_corpus_versions
-from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.offline_compatibility import DEFAULT_CORPUS_ROOT, admitted_corpus_versions
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.component

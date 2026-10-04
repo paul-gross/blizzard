@@ -1,4 +1,4 @@
-"""``harness/internal/opencode_export.py`` — the ``opencode export`` subprocess seam (unit).
+"""``harness/opencode/transcript/export.py`` — the ``opencode export`` subprocess seam (unit).
 
 Mirrors ``test_runner_harness_adapter.py``'s own ``observe_version`` coverage: a scripted
 ``subprocess.run``, never a real ``opencode`` binary."""
@@ -10,7 +10,7 @@ import subprocess
 import pytest
 
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal.opencode_export import OpenCodeExportError, SubprocessOpenCodeExporter
+from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError, SubprocessOpenCodeExporter
 
 _EMPTY = AllowlistedEnv.of(())
 
