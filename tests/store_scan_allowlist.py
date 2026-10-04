@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.hub.domain.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.runner.domain.outbound import IReadOutboundRepository
@@ -246,14 +247,21 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
         "first — proposals are minted at gardening-routine pace (one per accepted "
         "remediation), a materially smaller volume than the chunk fleet itself.",
     ),
-    TableWideAllowance(
+    # transcript_event_derivations: its key and time-leading index serve every other read; these two are the
+    # derivation sweep's own bookkeeping, filtering on extractor_version alone, not a per-request hot path.
+    MethodScopedAllowance(
+        IReadTranscriptEvents,
+        "candidacy",
         "transcript_event_derivations",
         200,
-        "TranscriptEventStore.candidacy/derivation_markers filter on extractor_version "
-        "alone, the trailing half of this table's (segment_id, extractor_version) "
-        "primary key — no index leads with extractor_version. Both are the event "
-        "derivation sweep's own internal bookkeeping reads (event_derivation.sweep()), "
-        "not a per-request hot path.",
+        "filters on extractor_version alone, the trailing half of the primary key; the derivation sweep's own read.",
+    ),
+    MethodScopedAllowance(
+        IReadTranscriptEvents,
+        "derivation_markers",
+        "transcript_event_derivations",
+        200,
+        "filters on extractor_version alone, the trailing half of the primary key; the derivation sweep's own read.",
     ),
     # --- deliberate whole-table read of an otherwise-indexed table ---------------------
     MethodScopedAllowance(

@@ -28,8 +28,10 @@ from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.analytics.events import DerivationMarker
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.egress.repository import EpochKey, EventsPosition
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
@@ -51,6 +53,7 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -65,6 +68,7 @@ from tests.support import hub_store_connections
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
+_MARKER = DerivationMarker("sg_x", "v", "fp", _NOW, 0, True)
 
 
 @dataclass(frozen=True)
@@ -186,6 +190,42 @@ _ADAPTER_CASES = [
         lambda store: ChunkDependenciesStore(store, FixedClock(_NOW)),
         lambda a: a.list_standing_edges(),
         "list_standing_edges",
+    ),
+    _AdapterCase(
+        "EgressEventStore.markers_after",
+        lambda store: EgressEventStore(store),
+        lambda a: a.markers_after(EventsPosition(_NOW), _NOW, 1, extractor_version=None),
+        "egress_markers_after",
+    ),
+    _AdapterCase(
+        "EgressEventStore.drops_after",
+        lambda store: EgressEventStore(store),
+        lambda a: a.drops_after(EventsPosition(_NOW), _NOW, 1),
+        "egress_drops_after",
+    ),
+    _AdapterCase(
+        "EgressEventStore.derivations",
+        lambda store: EgressEventStore(store),
+        lambda a: a.derivations([_MARKER]),
+        "egress_derivations",
+    ),
+    _AdapterCase(
+        "EgressEventStore.epochs_minted_between",
+        lambda store: EgressEventStore(store),
+        lambda a: a.epochs_minted_between(_NOW, _NOW, None, 1),
+        "egress_epochs_minted_between",
+    ),
+    _AdapterCase(
+        "EgressEventStore.epoch_markers",
+        lambda store: EgressEventStore(store),
+        lambda a: a.epoch_markers([EpochKey("ch_x", 1)], extractor_version=None),
+        "egress_epoch_markers",
+    ),
+    _AdapterCase(
+        "EgressEventStore.epoch_drops",
+        lambda store: EgressEventStore(store),
+        lambda a: a.epoch_drops([EpochKey("ch_x", 1)]),
+        "egress_epoch_drops",
     ),
     _AdapterCase("FindingStore", lambda store: FindingStore(store), lambda a: a.get("fin_x"), "get"),
     _AdapterCase("FindingSetStore", lambda store: FindingSetStore(store), lambda a: a.get("fins_x"), "get"),

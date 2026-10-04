@@ -2166,7 +2166,8 @@ def test_egress_is_off_with_working_defaults_when_the_table_is_absent(tmp_path: 
     assert egress == EgressConfig()
     assert egress.directory is None
     assert egress.format == "ndjson"
-    assert egress.datasets == ("steps", "invocations")
+    assert egress.datasets == ("steps", "invocations", "events")
+    assert egress.extractor_versions == "current"
     assert (egress.settle_seconds, egress.min_free_bytes) == (300, 1024**3)
 
 
@@ -2186,8 +2187,11 @@ def test_egress_scaffold_leaves_the_switch_off_and_every_other_knob_commented_at
         "max_rows_per_file",
         "file_paths",
         "path_key_env",
+        "extractor_versions",
     ):
         assert f"# {key} = " in text
+    assert '# datasets = ["steps", "invocations", "events"]\n' in text
+    assert '# extractor_versions = "current"\n' in text
     assert '# file_paths = "relative"\n' in text
     assert '# path_key_env = "BZ_EGRESS_PATH_KEY"\n' in text
     (root / "blizzard-hub.toml").write_text(text)
@@ -2208,6 +2212,7 @@ def test_egress_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) ->
         max_rows_per_file=20,
         min_free_bytes=0,
         backfill_max_window=3600,
+        extractor_versions="all",
     )
     config = dataclasses.replace(HubConfig.scaffold(root), egress=egress)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
@@ -2217,11 +2222,14 @@ def test_egress_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) ->
 @pytest.mark.unit
 def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_writes_them(tmp_path: Path) -> None:
     root = _hub_egress_root(
-        tmp_path, '\n[egress]\ndirectory = "/srv/egress"\ndatasets = ["invocations", "steps"]\nsettle_seconds = 0\n'
+        tmp_path,
+        '\n[egress]\ndirectory = "/srv/egress"\ndatasets = ["events", "invocations", "steps"]\nsettle_seconds = 0\n'
+        'extractor_versions = "all"\n',
     )
     egress = HubConfig.load(root).egress
     assert egress.directory == Path("/srv/egress")
-    assert egress.datasets == ("steps", "invocations")
+    assert egress.datasets == ("steps", "invocations", "events")
+    assert egress.extractor_versions == "all"
     assert egress.settle_seconds == 0
     assert egress.sweep_seconds == 60
 
@@ -2249,7 +2257,7 @@ def test_egress_file_paths_default_to_relative_with_the_conventional_key_variabl
         ("directory", '""'),
         ("directory", "3"),
         ("format", '"csv"'),
-        ("datasets", '["events"]'),
+        ("datasets", '["traces"]'),
         ("datasets", "[]"),
         ("datasets", '"steps"'),
         ("sweep_seconds", "0"),
@@ -2264,6 +2272,8 @@ def test_egress_file_paths_default_to_relative_with_the_conventional_key_variabl
         ("file_paths", "3"),
         ("path_key_env", '""'),
         ("path_key_env", "3"),
+        ("extractor_versions", '"newest"'),
+        ("extractor_versions", "1"),
     ],
 )
 def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> None:

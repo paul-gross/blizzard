@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, SelfTestResultRecord
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -59,6 +60,21 @@ def test_a_different_harness_is_never_confused_with_another_ones_result(tmp_path
     assert store.latest_selftest_result("opencode") is None
 
 
+class _SlowWriter:
+    """Delegates to a real store, holding each write back long enough that a reader
+    polling the run's status would see it go terminal first under the wrong ordering."""
+
+    def __init__(self, store: IWriteSelfTestResultRepository) -> None:
+        self._store = store
+
+    def latest_selftest_result(self, harness_id: str) -> SelfTestResultRecord | None:
+        return self._store.latest_selftest_result(harness_id)
+
+    def record_selftest_result(self, *, harness_id: str, status: str, error: str | None, recorded_at: datetime) -> None:
+        time.sleep(0.3)
+        self._store.record_selftest_result(harness_id=harness_id, status=status, error=error, recorded_at=recorded_at)
+
+
 def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repository(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
@@ -68,7 +84,7 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
         scratch_git=SubprocessScratchGit(),
         process=_RecordingProcessProbe(),
         clock=clock,
-        results=store,
+        results=_SlowWriter(store),
     )
 
     run = service.start("claude_code")

@@ -20,7 +20,8 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.egress.repository import UsagePosition
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.egress.repository import EventsPosition, UsagePosition
 from blizzard.hub.domain.egress.rows import InvocationRow, StepRow
 from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.egress.sweep import EgressSweep
@@ -39,6 +40,7 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
 )
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (
@@ -57,6 +59,7 @@ _SETTLED = EgressConfig(directory=Path("unused"), settle_seconds=0, sweep_second
 _LOW_DISK = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=5, required_bytes=10)
 _IO = EgressFailure(EgressFailureCause.IO_ERROR, "no such directory")
 _SEQ = itertools.count(1000)
+_PATHS = FilePathPolicy("absolute")
 
 
 def _hub(tmp_path: Path, config: EgressConfig | None = None) -> tuple[HubHarness, Graph]:
@@ -84,6 +87,8 @@ def _sweep(
     return EgressSweep(
         steps=TraceStore(connections, graphs=hub.services.graphs, label=label),
         egress=store or EgressStore(connections),
+        event_reads=EgressEventStore(connections),
+        paths=_PATHS,
         writer=writer,
         events=hub.services.event_log,
         clock=hub.clock,
@@ -174,10 +179,13 @@ def test_a_directory_yields_the_sweep_and_the_first_pass_writes_only_the_anchor(
     assert steps.usage == invocations.usage == UsagePosition(anchor)
     assert invocations.step is None
     assert (steps.row_count, invocations.row_count) == (0, 0)
+    events = _store(hub).newest_cursor("events")
+    assert events is not None
+    assert (events.events, events.step) == (EventsPosition(anchor), None)
     assert writer.batches == []
     _sweep(hub, writer, config).sweep()
     assert writer.batches == []
-    assert _cursor_rows(hub) == 2
+    assert _cursor_rows(hub) == 3
 
 
 def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_manifest(tmp_path: Path) -> None:
@@ -204,7 +212,7 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
     assert step["invocations"] == 2
     assert step["cost_billed_usd"] == Decimal("1.000000000")
     # steps wrote first: invocations' commit already saw steps' cursor row, and neither had advanced before its own.
-    assert seen == [(2, 0), (3, 1)]
+    assert seen == [(3, 0), (4, 1)]
     steps = _store(hub).newest_cursor("steps")
     assert steps is not None
     assert (steps.row_count, len(steps.files)) == (1, 2)

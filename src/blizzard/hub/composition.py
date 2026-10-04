@@ -13,7 +13,7 @@ import tempfile
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import httpx
@@ -67,6 +67,7 @@ from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.egress.backfill import EgressBackfill
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.egress.reset import EgressReset
 from blizzard.hub.domain.egress.status import EgressStatusReader
 from blizzard.hub.domain.egress.sweep import EgressSweep
@@ -136,6 +137,7 @@ from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEve
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -237,6 +239,8 @@ class HubServices:
     egress_export: EgressSweep | None
     #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
     egress_unavailable: EgressUnavailable | None
+    #: The unset ``path_key_env`` variable that dropped the ``events`` dataset from a running export; else ``None``.
+    egress_missing_path_key: str | None
     #: The operator's read of the fact export — always composed, so status answers with the export off.
     egress_status: EgressStatusReader
     #: Moves a dataset's cursor — always composed; it refuses while the export is off.
@@ -474,6 +478,18 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
     return writer
 
 
+def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig, FilePathPolicy | None, str | None]:
+    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks. The
+    third value names the unset key variable when a configured ``events`` dataset was dropped for it."""
+    try:
+        return config, FilePathPolicy(config.file_paths, key), None
+    except ValueError:
+        if "events" not in config.datasets:
+            return config, None, None
+        kept = replace(config, datasets=tuple(name for name in config.datasets if name != "events"))
+        return kept, None, config.path_key_env
+
+
 def build_services(
     core: HubCore,
     *,
@@ -502,6 +518,7 @@ def build_services(
     tracing_settings: TracingSettings | None = None,
     platform_tracer: IPlatformTracer | None = None,
     egress: EgressConfig | None = None,
+    egress_path_key: bytes | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -568,7 +585,7 @@ def build_services(
         clock=clock,
         replay_max_window=trace_config.replay_max_window,
     )
-    egress_config = egress or EgressConfig()
+    egress_config, egress_paths, egress_missing_key = _egress_paths(egress or EgressConfig(), egress_path_key)
     egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
@@ -581,12 +598,17 @@ def build_services(
         else None
     )
     egress_store = EgressStore(store_connections)
+    egress_event_store = EgressEventStore(store_connections)
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
+    # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
+    egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
     egress_status = EgressStatusReader(
         config=egress_config,
         rejected=egress_unavailable is not None,
+        missing_path_key=egress_missing_path_key,
         egress=egress_store,
+        event_reads=egress_event_store,
         steps=trace_store,
         clock=clock,
         free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
@@ -595,6 +617,8 @@ def build_services(
         EgressSweep(
             steps=trace_store,
             egress=egress_store,
+            event_reads=egress_event_store,
+            paths=egress_paths,
             writer=egress_writer,
             events=event_log,
             clock=clock,
@@ -610,14 +634,18 @@ def build_services(
         clock=clock,
         config=egress_config,
         active=egress_export is not None,
+        missing_path_key=egress_missing_path_key,
         pass_lock=egress_pass_lock,
     )
     egress_backfill = EgressBackfill(
         steps=trace_store,
         egress=egress_store,
+        event_reads=egress_event_store,
+        paths=egress_paths,
         clock=clock,
         config=egress_config,
         writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
+        missing_path_key=egress_missing_path_key,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -817,6 +845,7 @@ def build_services(
         trace_replay=trace_replay,
         egress_export=egress_export,
         egress_unavailable=egress_unavailable,
+        egress_missing_path_key=egress_missing_path_key,
         egress_status=egress_status,
         egress_reset=egress_reset,
         egress_backfill=egress_backfill,

@@ -32,6 +32,7 @@ __all__ = [
     "derivation_id",
     "derivation_rows",
     "dropped_row",
+    "missing_key_reason",
 ]
 
 RECORD_DERIVATION = "derivation"
@@ -71,6 +72,11 @@ class FilePathPolicy:
     def _hash(self, path: str) -> str:
         assert self.key is not None
         return hmac.new(self.key, path.encode(), hashlib.sha256).hexdigest()
+
+
+def missing_key_reason(variable: str) -> str:
+    """Why the ``events`` dataset is off: its file path policy hashes paths and ``variable`` holds no key."""
+    return f"the events dataset is off: egress.path_key_env names {variable}, which is unset or empty"
 
 
 def _relative_to(path: str, working_directory: str) -> str | None:

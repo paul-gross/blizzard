@@ -306,6 +306,39 @@ def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Pat
     assert _shape() == (True, True)
 
 
+def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """Hub-only — downgrades to the revision's own parent, so each index and cursor column is asserted."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _shape() -> tuple[bool, bool, bool, set[str]]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            inspector = sa.inspect(engine)
+
+            def indexes(table: str) -> set[str]:
+                return {str(i["name"]) for i in inspector.get_indexes(table)}
+
+            columns = {c["name"] for c in inspector.get_columns("egress_cursor")}
+            return (
+                "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
+                in indexes("transcript_event_derivations"),
+                "ix_lease_facts_minted_at" in indexes("lease_facts"),
+                "ix_transcript_event_drops_chunk_id_epoch" in indexes("transcript_event_drops"),
+                columns & {"segment_id", "extractor_version"},
+            )
+        finally:
+            engine.dispose()
+
+    assert _shape() == (True, True, True, {"segment_id", "extractor_version"})
+
+    runner.downgrade("20261004_1000_hub_secrets")
+    assert _shape() == (False, False, False, set())
+
+    runner.upgrade("head")
+    assert _shape() == (True, True, True, {"segment_id", "extractor_version"})
+
+
 def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """A pre-cause escalation row reads back with no cause or detail: no backfill."""
     config = hub_runtime.init_environment(tmp_path)

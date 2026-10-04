@@ -16,8 +16,9 @@ from typing import Literal
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IWriteEgressCursor, UsagePosition
-from blizzard.hub.domain.egress.schema import STEPS_SCHEMA
+from blizzard.hub.domain.egress.event_rows import missing_key_reason
+from blizzard.hub.domain.egress.repository import EgressCursorRecord, EventsPosition, IWriteEgressCursor, UsagePosition
+from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import CursorKey
 
@@ -50,6 +51,7 @@ class EgressReset:
         clock: IClock,
         config: EgressConfig,
         active: bool,
+        missing_path_key: str | None = None,
         pass_lock: threading.Lock,
     ) -> None:
         self._egress = egress
@@ -58,11 +60,14 @@ class EgressReset:
         self._datasets = config.datasets
         self._settle = timedelta(seconds=config.settle_seconds)
         self._active = active
+        self._missing_path_key = missing_path_key
         self._lock = pass_lock
 
     def reset(self, dataset: str, to: datetime) -> ResetResult:
         if not self._active:
             raise ResetUnavailable("the egress export is not configured; there is no cursor to reset")
+        if dataset == EVENTS_SCHEMA.name and self._missing_path_key is not None:
+            raise ResetRefused(missing_key_reason(self._missing_path_key))
         if dataset not in self._datasets:
             raise ResetRefused(f"dataset {dataset!r} is not configured; the export writes {', '.join(self._datasets)}")
         now = self._clock.now()
@@ -73,16 +78,7 @@ class EgressReset:
             previous = _position_at(cursor)
             # The first pass would anchor at now less the settle window, so an unanchored dataset moves from there.
             standing = previous if previous is not None else now - self._settle
-            self._egress.append_cursor(
-                EgressCursorRecord(
-                    dataset,
-                    CursorKey.opening(to) if dataset == STEPS_SCHEMA.name else None,
-                    UsagePosition(to),
-                    0,
-                    (),
-                    now,
-                )
-            )
+            self._egress.append_cursor(_moved(dataset, to, now))
         direction: Literal["skipped", "repeated"] = "skipped" if to > standing else "repeated"
         self._events.record(
             kind="egress-cursor-reset",
@@ -102,7 +98,22 @@ class EgressReset:
         return ResetResult(dataset, previous, to, direction)
 
 
+def _moved(dataset: str, to: datetime, now: datetime) -> EgressCursorRecord:
+    """``dataset``'s cursor at ``to``: before every fact at or after it, in that dataset's own order."""
+    if dataset == STEPS_SCHEMA.name:
+        return EgressCursorRecord(dataset, CursorKey.opening(to), UsagePosition(to), 0, (), now)
+    if dataset == INVOCATIONS_SCHEMA.name:
+        return EgressCursorRecord(dataset, None, UsagePosition(to), 0, (), now)
+    if dataset == EVENTS_SCHEMA.name:
+        return EgressCursorRecord(dataset, None, UsagePosition(to), 0, (), now, EventsPosition(to))
+    raise ResetRefused(f"no cursor to reset for dataset {dataset!r}")
+
+
 def _position_at(cursor: EgressCursorRecord | None) -> datetime | None:
     if cursor is None:
         return None
-    return cursor.step.at if cursor.step is not None else cursor.usage.recorded_at
+    if cursor.step is not None:
+        return cursor.step.at
+    if cursor.events is not None:
+        return cursor.events.at
+    return cursor.usage.recorded_at

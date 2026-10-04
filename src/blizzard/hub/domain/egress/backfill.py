@@ -5,7 +5,8 @@ alone — never :class:`IWriteEgressCursor` — so it cannot move a cursor by co
 pass uses from a local position that is never stored, assembles each row through the live sweep's own functions,
 and writes through a writer of its own (the writer is single-caller, and its file names derive from its token), so it
 never contends with the sweep or with another backfill. It reconciles no late usage: it assembles from the record
-as it stands."""
+as it stands. ``events`` selects by step start, not derivation time (``fact-egress/events/spec/export.md``
+§Backfill)."""
 
 from __future__ import annotations
 
@@ -16,9 +17,12 @@ from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, step_partition
-from blizzard.hub.domain.egress.repository import IReadEgress, UsagePosition
-from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy, missing_key_reason
+from blizzard.hub.domain.egress.events_window import events_rows, position_of
+from blizzard.hub.domain.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
+from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.tracing.steps import identify_steps
@@ -91,12 +95,20 @@ class EgressBackfill:
         *,
         steps: IReadTraceSteps,
         egress: IReadEgress,
+        event_reads: IReadEgressEvents,
+        paths: FilePathPolicy | None,
         clock: IClock,
         config: EgressConfig,
         writers: Callable[[], IEgressWriter] | None,
+        missing_path_key: str | None = None,
     ) -> None:
+        if EVENTS_SCHEMA.name in config.datasets and paths is None:
+            raise ValueError("the events dataset needs a file path policy")
         self._steps = steps
         self._egress = egress
+        self._event_reads = event_reads
+        self._paths = paths
+        self._extractor_version = EXTRACTOR_VERSION if config.extractor_versions == "current" else None
         self._clock = clock
         self._datasets = config.datasets
         self._batch_limit = config.batch_limit
@@ -104,6 +116,7 @@ class EgressBackfill:
         self._max_window = timedelta(seconds=config.backfill_max_window)
         self._max_window_seconds = config.backfill_max_window
         self._writers = writers
+        self._missing_path_key = missing_path_key
 
     def backfill(self, since: datetime, until: datetime, *, dataset: str | None, dry_run: bool) -> BackfillResult:
         if self._writers is None:
@@ -114,6 +127,8 @@ class EgressBackfill:
             raise BackfillWindowRefused(
                 f"window is wider than backfill_max_window ({self._max_window_seconds} seconds)"
             )
+        if dataset == EVENTS_SCHEMA.name and self._missing_path_key is not None:
+            raise BackfillWindowRefused(missing_key_reason(self._missing_path_key))
         if dataset is not None and dataset not in self._datasets:
             raise BackfillWindowRefused(
                 f"dataset {dataset!r} is not configured; the export writes {', '.join(self._datasets)}"
@@ -123,10 +138,19 @@ class EgressBackfill:
             if dataset is not None and name != dataset:
                 continue
             run.tallies[name] = _Tally()
-            failure = self._steps_window(run) if name == STEPS_SCHEMA.name else self._invocations_window(run)
+            failure = self._window(name, run)
             if failure is not None:
                 return run.result(failure)
         return run.result()
+
+    def _window(self, dataset: str, run: _Run) -> EgressFailure | None:
+        if dataset == STEPS_SCHEMA.name:
+            return self._steps_window(run)
+        if dataset == INVOCATIONS_SCHEMA.name:
+            return self._invocations_window(run)
+        if dataset == EVENTS_SCHEMA.name:
+            return self._events_window(run)
+        raise BackfillWindowRefused(f"dataset {dataset!r} cannot be backfilled")
 
     # --- steps --------------------------------------------------------------------------
 
@@ -166,9 +190,39 @@ class EgressBackfill:
                 return failure
             position = UsagePosition(usage[-1].fact.recorded_at, usage[-1].usage_id)
 
+    # --- events -------------------------------------------------------------------------
+
+    def _events_window(self, run: _Run) -> EgressFailure | None:
+        """Pages the epochs with a lease minted in the window. A runner step starts at its epoch's first mint, so
+        every step that started in the window is among them; rows of a step that started earlier are dropped."""
+        assert self._paths is not None  # checked at construction
+        after: EpochKey | None = None
+        while True:
+            epochs = self._event_reads.epochs_minted_between(run.since, run.until, after, self._batch_limit)
+            if not epochs:
+                return None
+            markers = self._event_reads.epoch_markers(epochs, extractor_version=self._extractor_version)
+            drops = self._event_reads.epoch_drops(epochs)
+            derivations = {
+                (held.marker.segment_id, held.marker.extractor_version): held
+                for held in self._event_reads.derivations(markers)
+            }
+            facts = self._steps.step_facts_for(sorted({epoch.chunk_id for epoch in epochs}))
+            items = sorted([*markers, *drops], key=position_of)
+            rows = [
+                entry
+                for entry in events_rows(items, derivations, facts, self._paths, run.now)
+                if run.since <= _step_started_at(entry[1]) < run.until
+            ]
+            if rows and (failure := self._place(run, EVENTS_SCHEMA, rows, EXTRACTOR_VERSION)) is not None:
+                return failure
+            after = epochs[-1]
+
     # --- placing ------------------------------------------------------------------------
 
-    def _place(self, run: _Run, schema: DatasetSchema, rows: _Rows) -> EgressFailure | None:
+    def _place(
+        self, run: _Run, schema: DatasetSchema, rows: _Rows, extractor_version: str | None = None
+    ) -> EgressFailure | None:
         """One page is one backfill pass with its own manifest; a dry run only counts the files it would place."""
         by_partition: dict[date, list[EgressRow]] = defaultdict(list)
         for partition, row in rows:
@@ -178,7 +232,7 @@ class EgressBackfill:
             tally.rows += len(rows)
             tally.files += sum(-(-len(part) // self._max_rows_per_file) for part in by_partition.values())
             return None
-        egress_pass = EgressPass(started_at=run.now, backfill=True)
+        egress_pass = EgressPass(started_at=run.now, backfill=True, extractor_version=extractor_version)
         placed: list[PlacedFile] = []
         for partition in sorted(by_partition):
             written = guarded(
@@ -195,3 +249,9 @@ class EgressBackfill:
         tally.rows += len(rows)
         tally.files += len(placed)
         return None
+
+
+def _step_started_at(row: EgressRow) -> datetime:
+    value = row.values["step_started_at"]
+    assert isinstance(value, datetime)
+    return value

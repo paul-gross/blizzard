@@ -115,23 +115,25 @@ class DirectoryEgressWriter:
     def commit_pass(self, egress_pass: EgressPass, placed: Sequence[PlacedFile]) -> ManifestCommitted | EgressFailure:
         if (low := self._disk_guard()) is not None:
             return low
-        document = {
+        document: dict[str, object] = {
             "pass_started_at": rfc3339_utc(egress_pass.started_at),
             "backfill": egress_pass.backfill,
-            "files": [
-                {
-                    "path": f.path,
-                    "dataset": f.dataset,
-                    "version": f.version,
-                    "partition": str(f.partition),
-                    "rows": f.rows,
-                    "first_position": f.first_position,
-                    "last_position": f.last_position,
-                    "sha256": f.sha256,
-                }
-                for f in placed
-            ],
         }
+        if egress_pass.extractor_version is not None:
+            document["extractor_version"] = egress_pass.extractor_version
+        document["files"] = [
+            {
+                "path": f.path,
+                "dataset": f.dataset,
+                "version": f.version,
+                "partition": str(f.partition),
+                "rows": f.rows,
+                "first_position": f.first_position,
+                "last_position": f.last_position,
+                "sha256": f.sha256,
+            }
+            for f in placed
+        ]
         encoded = (json.dumps(document, indent=2) + "\n").encode()
         path = Path("_manifests") / self._name(None, egress_pass, "json")
         result = self._place(path, lambda out: _write_all(out, encoded))
