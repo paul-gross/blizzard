@@ -15,6 +15,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.pagination import encode_cursor
 from blizzard.hub.domain.work import UsageFact, UsageTotal
 from tests.support import FakeWorkSource, build_hub, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
@@ -222,6 +223,29 @@ def test_by_name_folds_a_graph_minted_twice_into_one_row_per_name(tmp_path: Path
     assert folded[0]["cost_usd"] == pytest.approx(0.3)
 
 
+def test_by_name_resolves_each_node_to_its_own_graph_and_node_name(tmp_path: Path) -> None:
+    """Two graphs whose names differ and whose node names differ, plus usage on a node no
+    graph defines: each id resolves through both correlation predicates to its own names."""
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    admin = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
+    other_yaml = _GRAPH_YAML.replace("name: default-delivery", "name: other-delivery").replace("review", "audit")
+    other = hub.client.post("/api/graphs", json={"definition_yaml": other_yaml}, headers=_cookie(admin))
+    assert other.status_code == 201, other.text
+    other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["review"], epoch=1, seq=1, cost_usd=0.1)
+    _push_usage(hub, chunk_id=chunk_id, node_id=other_nodes["audit"], epoch=1, seq=2, cost_usd=0.2)
+    _push_usage(hub, chunk_id=chunk_id, node_id="nd_gone", epoch=1, seq=3, cost_usd=0.4)
+
+    resp = hub.client.get("/api/analytics/spend/nodes", params={"by_name": "true"}, headers=_cookie(token))
+
+    assert {r["key"]: r["cost_usd"] for r in resp.json()["spend"]} == {
+        "default-delivery/review": pytest.approx(0.1),
+        "other-delivery/audit": pytest.approx(0.2),
+        "nd_gone": pytest.approx(0.4),
+    }
+
+
 def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path) -> None:
     hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
@@ -286,7 +310,20 @@ def test_spend_by_chunk_pages_with_a_cursor(tmp_path: Path) -> None:
     assert {first.json()["spend"][0]["chunk_id"], second.json()["spend"][0]["chunk_id"]} == {chunk_a, chunk_b}
 
 
-@pytest.mark.parametrize("cursor", ["not-a-chunk-id", "", "ch", "ch_A"])
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-a-chunk-id",
+        "",
+        "ch",
+        "ch_A",
+        "ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B",
+        encode_cursor("ch_A"),
+        encode_cursor("run_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+        encode_cursor(7),
+        encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B", "ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+    ],
+)
 def test_spend_by_chunk_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
     hub, token, _graph_id, _nodes = _seeded_hub(tmp_path)
 

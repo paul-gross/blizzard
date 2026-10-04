@@ -35,6 +35,7 @@ from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -90,6 +91,7 @@ from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
+from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -1083,6 +1085,32 @@ def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
     conn.execute(
         sa.insert(_GRAPHS).values(graph_id=graph_id, name="g", entry_node_id="nd_1", definition_yaml="", created_at=at)
     )
+
+
+def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str], at: datetime) -> None:
+    """Mint one graph with real, named nodes through the graph store's own write path —
+    ``nodes`` maps node id to node name, the first being the entry. ``seed_graph`` writes no
+    ``graph_nodes``, so a test that needs names to resolve mints through here."""
+    node_rows = [
+        Node(
+            node_id=node_id,
+            graph_id=graph_id,
+            name=node_name,
+            executor=Executor.RUNNER,
+            prompt="p",
+            checks=[],
+            produces=[],
+            session=SessionMode.FRESH,
+            judged_by=JudgedBy.WORKER,
+            retries_max=None,
+            retries_exhausted=None,
+        )
+        for node_id, node_name in nodes.items()
+    ]
+    graph = Graph(
+        graph_id=graph_id, name=name, entry_node_id=node_rows[0].node_id, nodes=node_rows, edges=[], created_at=at
+    )
+    GraphStore(hub_store_connections(engine)).mint(graph, definition_yaml="", at=at)
 
 
 def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
