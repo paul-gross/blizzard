@@ -16,7 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.domain.secrets import SecretAuthoring, SecretName, SecretRotationConflict
+from blizzard.hub.domain.secrets import SecretName, SecretRotationConflict
 from blizzard.hub.secrets import (
     ENV_SECRET_KEY,
     ENV_SECRET_KEY_PREVIOUS,
@@ -28,7 +28,7 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.support import hub_store_connections
+from tests.support import OP, config_authoring, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -52,9 +52,9 @@ class _World:
 
     def seed(self, environ: dict[str, str], **values: str) -> None:
         keys = hub_key_provider(environ, data_dir=self.config.data_dir)
-        authoring = SecretAuthoring(secrets=self.store, cipher=secret_cipher(keys), clock=FixedClock(_NOW))
+        authoring = config_authoring(self.engine, keys=keys, clock=FixedClock(_NOW))
         for name, value in values.items():
-            authoring.create(SecretName.parse(name), value, by="op")
+            authoring.create_secret(SecretName.parse(name), value, OP)
 
     def reveal(self, environ: dict[str, str], name: str) -> str:
         keys = hub_key_provider(environ, data_dir=self.config.data_dir)

@@ -85,7 +85,7 @@ def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient)
     assert client.post("/api/secrets/gh-test/enable").json()["retired"] is False
     shown = client.get("/api/secrets/gh-test").json()
     assert shown["revision"] == 2
-    assert set(shown) == {"name", "revision", "replaced_at", "replaced_by", "created_at", "retired"}
+    assert set(shown) == {"name", "revision", "replaced_at", "replaced_by", "created_at", "retired", "references"}
     assert client.get("/api/secrets/missing").status_code == 404
 
 

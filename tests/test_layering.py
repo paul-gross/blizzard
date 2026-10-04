@@ -905,3 +905,51 @@ def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> Non
         module = tmp_path / "m.py"
         module.write_text(statement + "\n")
         assert _secret_plaintext_imports(module), statement
+
+
+_CONFIGURED_WRITE_NAMES = frozenset({"IWriteSecretRepository", "IWriteWorkSourceRepository"})
+_CONFIGURED_WRITE_HOMES = frozenset(
+    {
+        _HUB_DIR / "domain" / "config" / "authoring.py",
+        _HUB_DIR / "domain" / "config" / "work_sources.py",
+        _HUB_DIR / "domain" / "secrets.py",
+        _HUB_DIR / "composition.py",
+    }
+)
+
+
+def _configured_write_imports(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return [
+        a.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for a in node.names
+        if a.name in _CONFIGURED_WRITE_NAMES
+    ]
+
+
+def _configured_write_holders(root: Path, *, exempt: frozenset[Path]) -> dict[str, list[str]]:
+    return {
+        str(path.relative_to(_REPO_ROOT)): names
+        for path in sorted(root.rglob("*.py"))
+        if path not in exempt and "store/internal" not in path.as_posix() and (names := _configured_write_imports(path))
+    }
+
+
+def test_only_config_authoring_holds_a_configured_write_repository() -> None:
+    """``bzh:controller-read-only``: a configured record is written through ``ConfigAuthoring``
+    alone, so every write appends its change row. The adapters and the composition root
+    that wire them are the only other places the write Protocols are named."""
+    violations = _configured_write_holders(_SRC_DIR, exempt=_CONFIGURED_WRITE_HOMES)
+    assert not violations, f"only ConfigAuthoring may name a configured write repository: {violations}"
+
+
+def test_configured_write_guard_catches_a_second_holder(tmp_path: Path) -> None:
+    for statement in (
+        "from blizzard.hub.domain.config.work_sources import IWriteWorkSourceRepository",
+        "from blizzard.hub.domain.secrets import IWriteSecretRepository as Writer",
+    ):
+        module = tmp_path / "rogue.py"
+        module.write_text(statement + "\n")
+        assert _configured_write_imports(module), statement

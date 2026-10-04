@@ -18,24 +18,26 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.api.door import request_context
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.config.changes import ChangeContext, RecordRef
 from blizzard.hub.domain.secrets import (
     SecretAlreadyExists,
     SecretName,
     SecretNameError,
     SecretRecord,
+    SecretReferenced,
     SecretRetired,
     SecretRevisionConflict,
 )
-from blizzard.wire.secret import SecretCreateRequest, SecretReplaceRequest, SecretView
+from blizzard.wire.secret import RecordRefView, SecretCreateRequest, SecretReplaceRequest, SecretView
 
 SECRETS_PREFIX = "/api/secrets"
 
 router = APIRouter(prefix=SECRETS_PREFIX, tags=["secrets"], dependencies=[Depends(reject_runner_principal)])
 
 
-def secret_view(record: SecretRecord, *, retired: bool) -> SecretView:
+def secret_view(record: SecretRecord, *, retired: bool, references: list[RecordRef] | None = None) -> SecretView:
     return SecretView(
         name=record.name,
         revision=record.revision,
@@ -43,6 +45,7 @@ def secret_view(record: SecretRecord, *, retired: bool) -> SecretView:
         replaced_by=record.replaced_by,
         created_at=iso_utc(record.created_at),
         retired=retired,
+        references=[RecordRefView(kind=r.kind.value, key=r.key) for r in references or []],
     )
 
 
@@ -73,13 +76,13 @@ def _existing(services: HubServices, raw: str) -> SecretRecord:
 @router.post("", response_model=SecretView, status_code=status.HTTP_201_CREATED)
 def create_secret(
     request: SecretCreateRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
     """Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name."""
     name = _parse_name(request.name)
     try:
-        record = services.secret_authoring.create(name, request.value.get_secret_value(), by=identity.user_id)
+        record = services.config_authoring.create_secret(name, request.value.get_secret_value(), ctx)
     except SecretAlreadyExists as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return secret_view(record, retired=False)
@@ -89,7 +92,7 @@ def create_secret(
 def replace_secret(
     name: str,
     request: SecretReplaceRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
 ) -> SecretView:
@@ -98,14 +101,14 @@ def replace_secret(
     404 on an unknown name."""
     record = _existing(services, name)
     try:
-        replaced = services.secret_authoring.replace(
-            record, request.value.get_secret_value(), by=identity.user_id, if_match=if_match
+        replaced = services.config_authoring.replace_secret(
+            record, request.value.get_secret_value(), ctx, if_match=if_match
         )
     except SecretRevisionConflict as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SecretRetired as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc}; enable it first") from exc
-    return secret_view(replaced, retired=False)
+    return secret_view(replaced, retired=False, references=services.secret_references.referrers_of([name])[name])
 
 
 @router.get("", response_model=list[SecretView], dependencies=[Depends(require(FLEET_VIEW))])
@@ -114,39 +117,45 @@ def list_secrets(
 ) -> list[SecretView]:
     """Every secret's metadata, retired ones hidden unless `include_retired`."""
     retired = services.secret_catalog.retired_names()
-    return [
-        secret_view(r, retired=r.name in retired)
-        for r in services.secret_catalog.list_all()
-        if include_retired or r.name not in retired
-    ]
+    records = [r for r in services.secret_catalog.list_all() if include_retired or r.name not in retired]
+    references = services.secret_references.referrers_of([r.name for r in records])
+    return [secret_view(r, retired=r.name in retired, references=references[r.name]) for r in records]
 
 
 @router.get("/{name}", response_model=SecretView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_secret(name: str, services: Annotated[HubServices, Depends(get_services)]) -> SecretView:
     """One secret's metadata; 404 on an unknown name."""
     record = _existing(services, name)
-    return secret_view(record, retired=services.secret_catalog.is_retired(record.name))
+    return secret_view(
+        record,
+        retired=services.secret_catalog.is_retired(record.name),
+        references=services.secret_references.referrers_of([record.name])[record.name],
+    )
 
 
 @router.post("/{name}/retire", response_model=SecretView)
 def retire_secret(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
-    """Retire a secret — a reversible brake; 404 on an unknown name."""
+    """Retire a secret — a reversible brake; 404 on an unknown name, 409 naming the active
+    records that still reference it."""
     record = _existing(services, name)
-    services.secret_lifecycle.retire(record, by=identity.user_id)
-    return secret_view(record, retired=True)
+    try:
+        services.config_authoring.retire_secret(record, ctx)
+    except SecretReferenced as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return secret_view(record, retired=True, references=services.secret_references.referrers_of([name])[name])
 
 
 @router.post("/{name}/enable", response_model=SecretView)
 def enable_secret(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    ctx: Annotated[ChangeContext, Depends(request_context(CONFIG_EDIT))],
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
     """Re-enable a retired secret; idempotent, 404 on an unknown name."""
     record = _existing(services, name)
-    services.secret_lifecycle.enable(record, by=identity.user_id)
-    return secret_view(record, retired=False)
+    services.config_authoring.enable_secret(record, ctx)
+    return secret_view(record, retired=False, references=services.secret_references.referrers_of([name])[name])

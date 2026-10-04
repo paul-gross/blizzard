@@ -57,6 +57,9 @@ from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunks.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.chunks.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
 from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, UsagePosition
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.fleet import Route
@@ -72,7 +75,7 @@ from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.secrets import ISecretCatalog, SecretAuthoring, SecretLifecycle, SecretName
+from blizzard.hub.domain.secrets import ISecretCatalog, SecretName
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCursorRecord
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
@@ -97,6 +100,7 @@ from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
 from blizzard.runner.domain.artifacts import GraphArtifactRecord, IReadGraphArtifactRepository
@@ -1090,12 +1094,23 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- secrets ----------------------------------------------------------------------------
     secret_store = SecretStore(store_connections)
-    secret_authoring = SecretAuthoring(
-        secrets=secret_store, cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")), clock=clock
+    config = ConfigAuthoring(
+        work_sources=WorkSourceRecordStore(store_connections),
+        secrets=secret_store,
+        cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
+        clock=clock,
     )
-    secret_authoring.create(SecretName.parse("gh-token"), "tok-a", by="operator")
-    retired_secret = secret_authoring.create(SecretName.parse("old-token"), "tok-b", by="operator")
-    SecretLifecycle(secrets=secret_store, clock=clock).retire(retired_secret, by="operator")
+    operator = ChangeContext(actor="operator", door=Door.API)
+    config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)
+    retired_secret = config.create_secret(SecretName.parse("old-token"), "tok-b", operator)
+    config.retire_secret(retired_secret, operator)
+    config.create_work_source(
+        "census-source",
+        WorkSourceFields(
+            provider="github", locator="acme/census", api_base=None, web_base=None, annotate=False, secret="gh-token"
+        ),
+        operator,
+    )
 
     routine = hub.services.routine_authoring.create(
         name="gardening",
@@ -2017,6 +2032,14 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
     (ISecretCatalog, "retired_names"): lambda w: w.secrets.retired_names(),
     (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
+    (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get("census-source"),
+    (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many(["census-source"]),
+    (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
+        include_retired=True
+    ),
+    (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
+        before=None, limit=10, record_kind=None, record_key=None
+    ),
     (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.scope_a),
     (IReadScopeRepository, "list_all"): lambda w: w.hub.services.scopes.list_all(),
     (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.scope_c),

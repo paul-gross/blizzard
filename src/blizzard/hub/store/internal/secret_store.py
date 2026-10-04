@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.secrets import (
     IResealSecretRepository,
     ISealedSecretRepository,
@@ -22,10 +23,13 @@ from blizzard.hub.domain.secrets import (
     SealedValue,
     SecretAlreadyExists,
     SecretRecord,
+    SecretReferenced,
     SecretRevisionConflict,
     SecretRotationConflict,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.work_source_record_store import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 
 _METADATA = (
@@ -43,7 +47,7 @@ class SecretStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str) -> SecretRecord:
+    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretRecord:
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
                 conn.execute(
@@ -56,11 +60,14 @@ class SecretStore:
                         created_at=at,
                     )
                 )
+                append_change(conn, change)
         except IntegrityError as exc:
             raise SecretAlreadyExists(name) from exc
         return SecretRecord(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at)
 
-    def replace(self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str) -> SecretRecord:
+    def replace(
+        self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
+    ) -> SecretRecord:
         with self._store.write("replace") as conn:
             moved = conn.execute(
                 update(secrets)
@@ -68,6 +75,8 @@ class SecretStore:
                 .values(**_sealed_columns(sealed), revision=from_revision + 1, replaced_at=at, replaced_by=by)
             ).rowcount
             row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one()
+            if moved == 1:
+                append_change(conn, change)
         if moved != 1:
             raise SecretRevisionConflict(name, current=row.revision)
         return self._of(row)
@@ -160,9 +169,14 @@ class SecretStore:
                 if moved != 1:
                     raise SecretRotationConflict(change.name)
 
-    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str) -> None:
+    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
         with self._store.write("record_lifecycle") as conn:
+            if retired:
+                referrers = active_referrers(conn, [name])[name]
+                if referrers:
+                    raise SecretReferenced(name, referrers)
             conn.execute(insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by))
+            append_change(conn, change)
 
     @staticmethod
     def _of(row) -> SecretRecord:  # type: ignore[no-untyped-def]

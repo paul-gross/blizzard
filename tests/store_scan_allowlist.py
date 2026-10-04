@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.runner.domain.outbound import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -153,7 +154,7 @@ _DECISION_CLOSURE_REASON = (
 
 # Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
-    "an operator-created fleet entity (registered runner, scope, secret, routine, graph, hub "
+    "an operator-created fleet entity (registered runner, scope, secret, work source, routine, graph, hub "
     "user) or an auth event about one — bounded by how many of those entities exist "
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
@@ -201,6 +202,7 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("scope_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("secrets", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("secret_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("work_source_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routines", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graphs", 200, _FLEET_CONFIG_REASON),
@@ -262,5 +264,14 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
         "ix_finding_facts_finding_set_id don't cover — finding_facts's OTHER reads (by "
         "finding_id or finding_set_id) do hit an index; this one deliberately checks a "
         "rare, one-per-proposal delivery fact those indexes don't serve.",
+    ),
+    MethodScopedAllowance(
+        IReadConfigChanges,
+        "page",
+        "config_changes",
+        200,
+        "the change log's newest-first keyset walk orders by the integer primary key and stops at "
+        "`limit` (capped at 200), so it reads at most one page however long the log grows; the "
+        "optional record filters hit ix_config_changes_record.",
     ),
 ]
