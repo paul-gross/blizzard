@@ -31,6 +31,13 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.leases import Lease
+from blizzard.runner.domain.tracing.harness_telemetry_plan import (
+    CLAUDE_CODE_LOGS_SCOPE,
+    CLAUDE_CODE_METRICS_SCOPE,
+    CLAUDE_CODE_SCOPES,
+    CLAUDE_CODE_SERVICE_NAME,
+    CLAUDE_CODE_TRACING_SCOPE,
+)
 from blizzard.runner.domain.tracing.receiver import (
     MAX_BODY_BYTES,
     Admission,
@@ -40,13 +47,6 @@ from blizzard.runner.domain.tracing.receiver import (
     admit_log_records,
 )
 from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds
-from blizzard.runner.harness.claude_code.telemetry_plan import (
-    CLAUDE_CODE_LOGS_SCOPE,
-    CLAUDE_CODE_METRICS_SCOPE,
-    CLAUDE_CODE_SCOPES,
-    CLAUDE_CODE_SERVICE_NAME,
-    CLAUDE_CODE_TRACING_SCOPE,
-)
 
 router = APIRouter(include_in_schema=False)
 

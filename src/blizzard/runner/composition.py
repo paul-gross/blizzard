@@ -40,6 +40,7 @@ from blizzard.runner.domain.tracing.attributes import (
     RUNNER_ID,
     resource_attributes,
 )
+from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -51,7 +52,7 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan, plan_harness_telemetry
+from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import (

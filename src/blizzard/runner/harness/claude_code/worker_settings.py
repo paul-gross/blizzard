@@ -1,8 +1,8 @@
 """The runner-owned worker hook file.
 
-:class:`WorkerSettings` is the single source of its content. Both hook verbs take their
-identity from the spawn environment, so the hook commands need no arguments. The file
-ships with the runner — nothing is materialized into a project repo."""
+:class:`WorkerSettings` is the single source of its content; the commands its hooks run are
+:mod:`blizzard.runner.harness.worker_hooks`'s. The file ships with the runner — nothing is
+materialized into a project repo."""
 
 from __future__ import annotations
 
@@ -12,11 +12,7 @@ from typing import Any
 
 from blizzard.foundation.roles import dto
 from blizzard.runner.harness.claude_code.denials import CLAUDE_CODE_DENIED_TOOLS
-
-#: The command a worker's PostToolUse hook runs — a pure client of the local API.
-HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
-#: The command a worker's SessionEnd hook runs — the "declared done" signal.
-SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
+from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND, SESSION_END_HOOK_COMMAND
 
 
 @dto

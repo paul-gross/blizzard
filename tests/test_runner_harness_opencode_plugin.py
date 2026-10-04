@@ -15,7 +15,6 @@ import pytest
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
-from blizzard.runner.harness.claude_code.worker_settings import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.plugin import (
@@ -30,6 +29,7 @@ from blizzard.runner.harness.opencode.plugin import (
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
 from blizzard.runner.harness.opencode.worker_config import render_worker_config, write_worker_config
 from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.runner_fakes import make_envelope
 from tests.support_opencode_binary import worker_binary

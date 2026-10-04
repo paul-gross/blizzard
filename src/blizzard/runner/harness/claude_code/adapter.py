@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
+from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -31,7 +32,6 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
-from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher

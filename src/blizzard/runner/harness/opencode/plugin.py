@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blizzard.runner.harness.claude_code.worker_settings import HEARTBEAT_HOOK_COMMAND
+from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND
 
 # Matches the pinned compatibility corpus's `contracts/opencode/1.18.25/success.json` shape.
 PLUGIN_DIRNAME = "plugins"

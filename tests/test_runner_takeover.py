@@ -28,10 +28,10 @@ from blizzard.runner.domain.takeover import (
     TakeoverOpenScope,
     TakeoverService,
 )
+from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.claude_code.telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.process_launch import ProcessLauncher
