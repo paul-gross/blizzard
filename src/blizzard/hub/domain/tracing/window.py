@@ -83,8 +83,7 @@ def select_window(
 
     Every item closing before ``frontier`` was read, so with no truncation the cursor may pass to it
     even when its rows closed nothing unsent — that is what keeps a saturated read from stalling. With
-    neither, every closing fact through ``newest`` — the latest instant the read returned — was read, so the
-    cursor passes that instant and the next read starts strictly after it."""
+    neither, every closing fact through ``newest`` was read, so the cursor passes it."""
     closed: list[TraceItem] = []
     for chunk in facts:
         steps = identify_steps(chunk)
