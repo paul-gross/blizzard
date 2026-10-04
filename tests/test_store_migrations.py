@@ -1351,6 +1351,6 @@ def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_pat
         "content_digest": "d",
     }
 
-    values = _spawn_cwd_round_trip(config, hub_runtime.migration_runner(config), "20261003_0900_egress_cursor", row)
+    values = _spawn_cwd_round_trip(config, hub_runtime.migration_runner(config), "20261003_1200_event_drops", row)
 
     assert values == [None]

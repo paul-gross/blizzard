@@ -1,8 +1,8 @@
 """The worker's working directory onto transcript_segments (hub store tree).
 
 One guarded, nullable column — un-backfilled, so NULL declares unknown, never a value.
-Revision ID: 20261003_1000_hub_transcript_segment_spawn_cwd
-Revises: 20261003_0900_egress_cursor
+Revision ID: 20261003_1300_hub_transcript_segment_spawn_cwd
+Revises: 20261003_1200_event_drops
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20261003_1000_hub_transcript_segment_spawn_cwd"
-down_revision: str | None = "20261003_0900_egress_cursor"
+revision: str = "20261003_1300_hub_transcript_segment_spawn_cwd"
+down_revision: str | None = "20261003_1200_event_drops"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
