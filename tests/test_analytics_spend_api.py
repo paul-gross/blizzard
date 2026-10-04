@@ -15,6 +15,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.pagination import encode_cursor
 from blizzard.hub.domain.work import UsageFact, UsageTotal
 from tests.support import FakeWorkSource, build_hub, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
@@ -286,7 +287,20 @@ def test_spend_by_chunk_pages_with_a_cursor(tmp_path: Path) -> None:
     assert {first.json()["spend"][0]["chunk_id"], second.json()["spend"][0]["chunk_id"]} == {chunk_a, chunk_b}
 
 
-@pytest.mark.parametrize("cursor", ["not-a-chunk-id", "", "ch", "ch_A"])
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-a-chunk-id",
+        "",
+        "ch",
+        "ch_A",
+        "ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B",
+        encode_cursor("ch_A"),
+        encode_cursor("run_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+        encode_cursor(7),
+        encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B", "ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+    ],
+)
 def test_spend_by_chunk_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
     hub, token, _graph_id, _nodes = _seeded_hub(tmp_path)
 

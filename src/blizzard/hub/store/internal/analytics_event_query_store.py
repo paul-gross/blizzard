@@ -7,7 +7,6 @@ own docstring). All ``sqlalchemy`` usage stays confined here (``bzh:dependency-i
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -20,12 +19,12 @@ from blizzard.hub.domain.analytics.queries import (
     EventRecord,
     IReadAnalyticsEventQueries,
 )
-from blizzard.hub.domain.pagination import MalformedCursor
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
-#: The whole cursor format this adapter mints: a row id, plain and unsigned.
-_CURSOR = re.compile(r"[0-9]+")
+#: ``events``' cursor is the shared codec over one part: the last row's id.
+_CURSOR_ARITY = 1
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -65,9 +64,10 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
 
 
 def _decode_cursor(cursor: str) -> int:
-    if not _CURSOR.fullmatch(cursor):
+    parts = decode_cursor(cursor)
+    if len(parts) != _CURSOR_ARITY or type(parts[0]) is not int or parts[0] < 0:
         raise MalformedCursor(cursor)
-    return int(cursor)
+    return parts[0]
 
 
 def _events_stmt(criteria: EventQueryCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
@@ -142,7 +142,7 @@ class AnalyticsEventQueryStore:
         with self._store.read("events") as conn:
             rows = conn.execute(_events_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
-        next_cursor = str(page_rows[-1].id) if len(rows) > limit else None
+        next_cursor = encode_cursor(page_rows[-1].id) if len(rows) > limit else None
         return EventPage(events=[_to_record(row) for row in page_rows], next_cursor=next_cursor)
 
     def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:

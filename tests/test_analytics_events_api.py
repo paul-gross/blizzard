@@ -13,6 +13,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.pagination import encode_cursor
 from tests.support import build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 
@@ -261,7 +262,23 @@ def test_events_pages_with_a_cursor(tmp_path: Path) -> None:
     assert second.json()["events"][0]["id"] != first.json()["events"][0]["id"]
 
 
-@pytest.mark.parametrize("cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0"])
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-an-id",
+        " 2 ",
+        "+3",
+        "1_0",
+        "-1",
+        "",
+        "2.0",
+        "7",
+        encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+        encode_cursor(7, 8),
+        encode_cursor(-1),
+        encode_cursor(True),
+    ],
+)
 def test_events_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 

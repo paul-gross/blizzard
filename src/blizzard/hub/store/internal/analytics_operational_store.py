@@ -33,7 +33,7 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
-from blizzard.hub.domain.pagination import MalformedCursor
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -122,14 +122,21 @@ def _to_transition_movement(row: Any) -> TransitionMovement:
     )
 
 
+#: ``spend_by_chunk``'s cursor has one part: the last row's chunk id.
+_CURSOR_ARITY = 1
+
+
 def _decode_chunk_cursor(cursor: str) -> str:
-    """``spend_by_chunk``'s whole cursor format: a plain chunk id — validated through the
-    canonical id parser rather than a hand-rolled pattern, so a too-short or malformed
-    value 422s instead of being accepted as a keyset offset."""
-    parsed = Id.parse(cursor)
+    """``spend_by_chunk``'s cursor: the shared codec over one part, a chunk id — validated
+    through the canonical id parser rather than a hand-rolled pattern, so a too-short or
+    malformed value 422s instead of being accepted as a keyset offset."""
+    parts = decode_cursor(cursor)
+    if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str):
+        raise MalformedCursor(cursor)
+    parsed = Id.parse(parts[0])
     if parsed is None or not parsed.has_prefix(CHUNK_PREFIX):
         raise MalformedCursor(cursor)
-    return cursor
+    return parts[0]
 
 
 def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Select[Any]:
@@ -371,7 +378,7 @@ class AnalyticsOperationalStore:
         with self._store.read("spend_by_chunk") as conn:
             rows = conn.execute(_spend_by_chunk_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
-        next_cursor = page_rows[-1].key if len(rows) > limit else None
+        next_cursor = encode_cursor(page_rows[-1].key) if len(rows) > limit else None
         return ChunkSpendPage(records=[_to_spend_stats(row) for row in page_rows], next_cursor=next_cursor)
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:

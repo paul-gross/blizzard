@@ -16,6 +16,7 @@ from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.pagination import encode_cursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_event_query_store as store_module
 
@@ -39,7 +40,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
         "_filtered_stmt": m._filtered_stmt(select(s.transcript_events), _CRITERIA),
-        "_events_stmt": m._events_stmt(_CRITERIA, cursor="7", limit=200),
+        "_events_stmt": m._events_stmt(_CRITERIA, cursor=encode_cursor(7), limit=200),
         "_counts_stmt": m._counts_stmt(_CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
         "_counts_by_node_stmt": m._counts_by_node_stmt(_CRITERIA),
     }

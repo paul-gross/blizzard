@@ -17,6 +17,7 @@ from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.pagination import encode_cursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_operational_store as store_module
 
@@ -40,7 +41,9 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_spend_group_stmt": m._spend_group_stmt(_CRITERIA, group_col=s.usage_facts.c.node_id),
         "_spend_by_node_stmt": m._spend_by_node_stmt(_CRITERIA),
         "_spend_by_graph_stmt": m._spend_by_graph_stmt(_CRITERIA),
-        "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(_CRITERIA, cursor="ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B", limit=200),
+        "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(
+            _CRITERIA, cursor=encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"), limit=200
+        ),
         "_judged_distribution_stmt": m._judged_distribution_stmt(_CRITERIA),
         "_candidate_lease_epochs_stmt": m._candidate_lease_epochs_stmt(_CRITERIA),
         "_candidate_chunk_ids_stmt": m._candidate_chunk_ids_stmt(_CRITERIA),

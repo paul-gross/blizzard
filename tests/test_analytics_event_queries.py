@@ -16,6 +16,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.pagination import encode_cursor
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
@@ -306,7 +307,9 @@ def test_paging_covers_the_result_set_exactly_once_with_no_repeats(store: Analyt
     assert len(seen) == len(set(seen)) == 5
 
 
-@pytest.mark.parametrize("cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0"])
+@pytest.mark.parametrize(
+    "cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0", "7", encode_cursor("x"), encode_cursor(1, 2)]
+)
 def test_a_cursor_no_page_minted_is_refused_by_the_seam_that_mints_them(
     store: AnalyticsEventQueryStore, cursor: str
 ) -> None:
