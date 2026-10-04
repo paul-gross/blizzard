@@ -43,3 +43,15 @@ export function asyncStateOf(queries: readonly AsyncStateQuery[], isEmpty: boole
   if (queries.some((query) => query.isError())) return 'error';
   return isEmpty ? 'empty' : 'ready';
 }
+
+/**
+ * The rest state a selection-gated read owns before its own triad: `'empty'`
+ * while `resting` (nothing selected yet), else {@link asyncState}. Branching
+ * on the rest state first is what keeps a disabled query — `isPending()`
+ * forever, see the trap on {@link asyncState} — from rendering as a permanent
+ * loading spinner.
+ */
+export function restingAsyncState(resting: boolean, query: AsyncStateQuery, isEmpty: boolean): KitAsyncStateValue {
+  if (resting) return 'empty';
+  return asyncState(query, isEmpty);
+}
