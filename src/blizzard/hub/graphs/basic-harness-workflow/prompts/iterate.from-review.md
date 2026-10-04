@@ -11,8 +11,12 @@ one.
 A finding is refuted when it is factually wrong, rests on a false premise, or demands work this change's scale does not
 warrant — not merely because fixing it is inconvenient or because a different call would have been made: a defensible
 finding that is simply disliked gets fixed. Findings about prose and convention are judgements, not failed assertions,
-so good-faith disagreement is ordinary — and since `review` is a full cold read every pass, a deliberate call left
-unrefuted is re-discovered and re-raised every round.
+so good-faith disagreement is ordinary — and since a `review` re-visit confirms every prior finding is fixed or refuted,
+a deliberate call left unrefuted is re-raised every round.
 
 Each refutation records the finding's anchor in the form `<repo>/<path>:<line>` copied verbatim, the id being answered,
 and the argument with its evidence.
+
+Commit each repair as a new commit on top of the reviewed tip — never amend, rebase, or merge the base branch while
+repairing. `review` re-visits by diffing from the tip it last judged, and rewritten history or base motion buries the
+repair in that diff; integration is `pre-push`'s.

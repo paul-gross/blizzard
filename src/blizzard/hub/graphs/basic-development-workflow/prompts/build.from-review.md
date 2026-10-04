@@ -9,7 +9,11 @@ Check each finding against the current code first — one an earlier attempt alr
 Refute a finding that is factually wrong, rests on a false premise, or demands work beyond the change's scale — never
 merely because fixing is inconvenient; a defensible finding you dislike gets fixed. Record each refutation in
 `review-finding-refutes`: the finding's anchor (`<repo>/<path>:<line>`) copied verbatim, the id answered, and the
-argument with evidence — the reviewer matches on the anchor, since a fresh pass renumbers ids. A refutation is a claim
-to be adjudicated, not a veto: the reviewer either accepts it and stops raising the finding, or rejects it and answers
-your argument. Review is a full cold read every pass, so a declined finding with no refutation on record is re-raised
-every round.
+argument with evidence — the reviewer matches on the anchor, since every pass renumbers ids. A refutation is a claim to
+be adjudicated, not a veto: the reviewer either accepts it and stops raising the finding, or rejects it and answers your
+argument. A review re-visit confirms every prior finding is fixed or refuted, so a declined finding with no refutation
+on record is re-raised every round.
+
+Commit each repair as a new commit on top of the reviewed tip — never amend, rebase, or merge the base branch while
+repairing. Review re-visits by diffing from the tip it last judged, and rewritten history or base motion buries the
+repair in that diff; integration is `pre-push`'s.

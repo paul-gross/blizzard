@@ -135,9 +135,9 @@ nodes:
       # separate from build's — a fixer that has not already argued with the reviewer
     produces:
       # The refutation channel (see prompts/iterate.from-review.md): review findings
-      # this node declines rather than fixes, with the argument. `review` is a fresh
-      # cold read every pass, so without this it re-raises a deliberately declined
-      # finding forever; it now must accept or reject each refutation explicitly.
+      # this node declines rather than fixes, with the argument. A `review` re-visit
+      # re-checks every prior finding, so without this it re-raises a deliberately
+      # declined finding forever; it now must accept or reject each refutation explicitly.
       - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
