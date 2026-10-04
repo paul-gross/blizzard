@@ -18,7 +18,7 @@ from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_graph, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, mint_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -26,6 +26,11 @@ _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 _ROUTINE = "nightly"
 _SCOPE = "blizzard"
 _GRAPH_ID = "gr_analytics"
+#: A second mint of the same graph name, with its own node id — what `by_name` folds back together.
+_REMINT_GRAPH_ID = "gr_analytics_remint"
+_NODE_ID = "nd_build"
+_REMINT_NODE_ID = "nd_build_remint"
+_GRAPH_NAME = "adv"
 
 #: Every fleet analytics route this module holds to the same-rows/404/422 sweeps.
 _COUNTS_ROUTES = [
@@ -52,8 +57,7 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     """A work item with its own resting chunk, plus a recorded run context for it
     unless ``with_run_context`` is False — the chunk id the route resolves through."""
     store_connections = hub_store_connections(hub.engine)
-    with hub.engine.begin() as conn:
-        seed_graph(conn, _GRAPH_ID, at=_NOW)
+    mint_graph(hub.engine, _GRAPH_ID, name=_GRAPH_NAME, nodes={_NODE_ID: "build"}, at=_NOW)
     items = WorkItemStore(store_connections)
     item = seed_work_item(items, graph_id=_GRAPH_ID, author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
@@ -104,7 +108,7 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
     }
 
 
-def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str) -> None:
+def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str, segment_id: str = "sg_1", seq: int = 1) -> None:
     spawn = _tool_turn(2, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z")
     # A sidechain under the spawn (the agent-types row): a main-lane
     # spawn's own `agent_type` column is unset (test_analytics_events_api.py's own
@@ -122,8 +126,8 @@ def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str) -> None:
         spawn,
     ]
     record = {
-        "seq": 1,
-        "segment_id": "sg_1",
+        "seq": seq,
+        "segment_id": segment_id,
         "chunk_id": chunk_id,
         "node_id": node_id,
         "epoch": 1,
@@ -146,13 +150,24 @@ def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str) -> None:
 def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str]:
     """A routine-run chunk carrying a file_read/skill_invocation/agent_spawn triad and
     two usage facts on the same node — enough live data for every counts/spend route to
-    return a non-empty row."""
+    return a non-empty row. The graph was minted twice under one name, a second chunk pinned
+    to the remint carrying the same triad and a usage fact on the remint's own node, so
+    `by_name=true` has two mints to fold on every counts/spend route."""
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)
-    node_id = "nd_build"
-    _push_transcript(hub, chunk_id=chunk_id, node_id=node_id)
-    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=0.2)
+    _push_transcript(hub, chunk_id=chunk_id, node_id=_NODE_ID)
+    _push_usage(hub, chunk_id=chunk_id, node_id=_NODE_ID, epoch=1, seq=2, cost_usd=0.1)
+    _push_usage(hub, chunk_id=chunk_id, node_id=_NODE_ID, epoch=1, seq=3, cost_usd=0.2)
+    mint_graph(hub.engine, _REMINT_GRAPH_ID, name=_GRAPH_NAME, nodes={_REMINT_NODE_ID: "build"}, at=_NOW)
+    remint_item = seed_work_item(
+        WorkItemStore(hub_store_connections(hub.engine)),
+        graph_id=_REMINT_GRAPH_ID,
+        author=WorkItemAuthor.user("u_1"),
+        at=_NOW,
+    )
+    remint_chunk = f"ch_{remint_item.ref}"
+    _push_transcript(hub, chunk_id=remint_chunk, node_id=_REMINT_NODE_ID, segment_id="sg_2", seq=4)
+    _push_usage(hub, chunk_id=remint_chunk, node_id=_REMINT_NODE_ID, epoch=1, seq=5, cost_usd=0.4)
     return hub, chunk_id
 
 
@@ -219,16 +234,45 @@ def test_same_rows_as_the_operator_route(tmp_path: Path, suffix: str) -> None:
     assert fleet.json()[key] != []  # a window covering the seed proves the window reaches the query
 
 
-@pytest.mark.parametrize("suffix", ["counts/nodes", "spend/nodes", "spend/graphs"])
+_BY_NAME_ROUTES = ["counts/nodes", "spend/nodes", "spend/graphs"]
+_BY_NAME_WINDOW = {"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z"}
+
+
+@pytest.mark.parametrize("suffix", _BY_NAME_ROUTES)
 def test_by_name_rows_equal_the_operator_route(tmp_path: Path, suffix: str) -> None:
     hub, chunk_id = _seeded_hub(tmp_path)
-    params = {"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z", "by_name": "true"}
+    params = {**_BY_NAME_WINDOW, "by_name": "true"}
 
     fleet = hub.client.get(_fleet_path(chunk_id, suffix), params=params)
     operator = hub.client.get(_OPERATOR_PATH[suffix], params=params)
+    unfolded = hub.client.get(_OPERATOR_PATH[suffix], params=_BY_NAME_WINDOW)
 
     assert fleet.status_code == 200, fleet.text
     assert fleet.json() == operator.json()
+    key = "counts" if suffix.startswith("counts/") else "spend"
+    assert len(unfolded.json()[key]) == 2  # two mints really exist, so the equal rows above are folded ones
+    assert len(fleet.json()[key]) == 1
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected_key"), [("counts/nodes", "adv/build"), ("spend/nodes", "adv/build"), ("spend/graphs", "adv")]
+)
+def test_the_operator_route_folds_both_mints_into_one_named_row(tmp_path: Path, suffix: str, expected_key: str) -> None:
+    hub, _chunk_id = _seeded_hub(tmp_path)
+
+    resp = hub.client.get(_OPERATOR_PATH[suffix], params={**_BY_NAME_WINDOW, "by_name": "true"})
+
+    assert resp.status_code == 200, resp.text
+    if suffix.startswith("counts/"):
+        [row] = resp.json()["counts"]
+        unfolded = hub.client.get(_OPERATOR_PATH[suffix], params=_BY_NAME_WINDOW).json()["counts"]
+        assert row["count"] == sum(r["count"] for r in unfolded)
+        assert (row["graph_name"], row["node_name"]) == (_GRAPH_NAME, "build")
+    else:
+        [row] = resp.json()["spend"]
+        assert row["input_tokens"] == 300
+        assert row["cost_usd"] == pytest.approx(0.7)
+    assert row["key"] == expected_key
 
 
 @pytest.mark.parametrize("suffix", _ROUTES)
