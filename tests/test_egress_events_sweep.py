@@ -56,10 +56,10 @@ class _Events:
         self.hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()
 
-    def segment(self, segment_id: str) -> None:
+    def segment(self, segment_id: str, chunk_id: str | None = None) -> None:
         record = SegmentRecord(
             segment_id=segment_id,
-            chunk_id=self.chunk_id,
+            chunk_id=chunk_id or self.chunk_id,
             node_id=_node_id(self.graph),
             epoch=1,
             spawn_generation=1,
@@ -77,12 +77,14 @@ class _Events:
             record, byte_count=1, codec="zlib", at=self.hub.clock.now()
         )
 
-    def derive(self, segment_id: str, events: int, *, version: str = EXTRACTOR_VERSION) -> None:
+    def derive(
+        self, segment_id: str, events: int, *, version: str = EXTRACTOR_VERSION, chunk_id: str | None = None
+    ) -> None:
         self.hub.clock.advance(timedelta(seconds=1))
         TranscriptEventStore(hub_store_connections(self.hub.engine)).replace_segment_events(
             segment_id,
             version,
-            [self._event(turn) for turn in range(events)],
+            [self._event(turn, chunk_id or self.chunk_id) for turn in range(events)],
             complete=True,
             content_fingerprint="fp",
             at=self.hub.clock.now(),
@@ -95,7 +97,7 @@ class _Events:
             frozenset({segment_id}), at=self.hub.clock.now()
         )
 
-    def _event(self, turn: int) -> TranscriptEvent:
+    def _event(self, turn: int, chunk_id: str) -> TranscriptEvent:
         return TranscriptEvent(
             kind="file_read",
             turn_path=str(turn),
@@ -103,7 +105,7 @@ class _Events:
             payload=json.dumps({"input": _PLANTED}),
             subject=f"/work/src/f{turn}.py",
             tool="Read",
-            chunk_id=self.chunk_id,
+            chunk_id=chunk_id,
             node_id=_node_id(self.graph),
             epoch=1,
             spawn_generation=1,

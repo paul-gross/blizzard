@@ -630,6 +630,8 @@ def build_services(
     egress_backfill = EgressBackfill(
         steps=trace_store,
         egress=egress_store,
+        event_reads=egress_event_store,
+        paths=egress_paths,
         clock=clock,
         config=egress_config,
         writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
