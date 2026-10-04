@@ -16,11 +16,13 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
@@ -1447,6 +1449,42 @@ def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(t
     completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
     assert len(completions) == 1
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
+
+
+def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  # type: ignore[no-untyped-def]
+    """A crash before the fresh elicitation launches leaves the stale one standing: the retry
+    carries the same superseded identity, so it appends nothing a second time."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=clock,
+    )
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — usage-limited, parked with the record left standing
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    standing = store.in_flight_elicitation("lease_1", 1)
+    assert standing is not None
+    key = iso_utc(standing.first_launched_at)
+    harness.usage_limit = None
+
+    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    first = store.current_start("lease_1", 1, "judge")
+    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    replayed = store.current_start("lease_1", 1, "judge")
+
+    assert first is not None and replayed == first
+    assert first.at == _NOW + timedelta(minutes=1)
 
 
 def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_path):  # type: ignore[no-untyped-def]

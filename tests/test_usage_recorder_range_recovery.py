@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -365,6 +366,70 @@ def test_a_readable_judge_boundary_caps_the_worker_sample_at_its_own_start(  # t
     assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 5
 
 
+def test_an_advanced_judge_range_starts_at_the_advance_and_the_worker_range_ends_at_the_marker(  # type: ignore[no-untyped-def]
+    tmp_path,
+) -> None:
+    """A park-resume advances the standing judge boundary: the judge's own range starts at the
+    advance, so a fresh classification never re-reads the stale signal, while the worker's
+    range still ends where the judge actually started — the marker."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=_NOW,
+    )
+    kinds: list[tuple[InvocationBoundaryKind, str | None]] = [("spawn", None), ("judge", "tail-at-judge")]
+    for kind, position in kinds:
+        store.record_boundary_open(
+            lease_id="lease_a",
+            chunk_id=_CHUNK_ID,
+            node_id=_NODE_ID,
+            epoch=1,
+            generation=1,
+            kind=kind,
+            start_position=position,
+            opened_at=_NOW,
+        )
+    store.record_boundary_advance(
+        lease_id="lease_a",
+        generation=1,
+        kind="judge",
+        superseded_invocation="el-1",
+        start_position="tail-at-advance",
+        advanced_at=_NOW,
+    )
+    source = FakeTranscriptSource(
+        lines_by_session={_SESSION_ID: ["a line"]},
+        tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-now")},
+    )
+    sample = UsageSample(
+        kind="spawn",
+        model="m",
+        input_tokens=5,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
+    harness = FakeHarness(handle=handle, verdict=None, transcript_usage=sample, transcript_source=source)
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    recorder = _recorder(store, registry)
+
+    lease_a = store.active_lease("lease_a")
+    assert lease_a is not None
+    recorder.judge_transcript_lines(lease_a, [], generation=1)
+    recorder.worker_transcript_lines(lease_a, [], generation=1)
+
+    assert source.read_raw_lines_calls == [
+        (_SESSION_ID, TranscriptPosition("tail-at-advance"), TranscriptPosition("tail-now")),
+        (_SESSION_ID, None, TranscriptPosition("tail-at-judge")),
+    ]
+
+
 def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entirely(  # type: ignore[no-untyped-def]
     tmp_path,
 ) -> None:
@@ -423,8 +488,8 @@ def test_advance_boundary_moves_the_judge_transcript_range_past_a_stale_signal( 
 ) -> None:
     """A judge-usage-limit park's resume reuses the SAME ``(lease, generation,
     "judge")`` boundary for its fresh elicitation — ``record_boundary_open``'s check-then-
-    insert never mints a second row for one generation's judge phase. Without advancing that
-    standing boundary in place, the fresh elicitation's own classification would re-read the
+    insert never mints a second row for one generation's judge phase. Without an advance past
+    that standing marker, the fresh elicitation's own classification would re-read the
     limited elicitation's own rate-limit signal off the transcript forever."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
@@ -462,17 +527,18 @@ def test_advance_boundary_moves_the_judge_transcript_range_past_a_stale_signal( 
     ]
 
     # A second row is never minted for the same (lease, generation, "judge") — this call
-    # reuses and advances the standing one, past the limited elicitation's own turn.
-    store.advance_boundary(
+    # reuses the standing marker and appends an advance past the limited elicitation's own turn.
+    store.record_boundary_advance(
         lease_id="lease_a",
         generation=1,
         kind="judge",
+        superseded_invocation="el-limited",
         start_position="tail-after-limited-elicitation",
-        opened_at=_NOW,
+        advanced_at=_NOW,
     )
-    advanced = store.boundary("lease_a", 1, "judge")
-    assert advanced is not None
-    assert advanced.start_position == "tail-after-limited-elicitation"
+    marker = store.boundary("lease_a", 1, "judge")
+    assert marker is not None
+    assert marker.start_position == "tail-at-first-judge"
 
     recorder.judge_transcript_lines(lease_a, bindings=[], generation=1)
     assert source.read_raw_lines_calls[-1] == (

@@ -294,6 +294,14 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         start_position=None,
         opened_at=_t(9),
     )
+    stores.invocation_boundaries.record_boundary_advance(
+        lease_id=lease_2,
+        generation=2,
+        kind="resume",
+        superseded_invocation="el-1",
+        start_position=None,
+        advanced_at=_t(9),
+    )
     record_usage(
         stores.usage,
         lease_id=lease_2,
@@ -770,6 +778,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.read.elicitations.in_flight_elicitations_by_lease()
     ),
     (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
+        w.lease_2, 2, "resume"
+    ),
+    (IReadInvocationBoundaryRepository, "current_start"): lambda w: w.read.invocation_boundaries.current_start(
         w.lease_2, 2, "resume"
     ),
     (IReadInvocationBoundaryRepository, "open_boundaries_for_lease"): lambda w: (

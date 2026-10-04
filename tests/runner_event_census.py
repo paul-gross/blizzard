@@ -129,9 +129,9 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "close_boundaries_for_lease": Silent(
         _INTERNAL_BOOKKEEPING + " (blizzard#437 D11 — closing a lease's invocation boundaries)"
     ),
-    "advance_boundary": Silent(
-        _INTERNAL_BOOKKEEPING + " (blizzard#594 — moving a standing judge boundary's own start forward"
-        " across a judge-usage-limit park's resume, in place of a second row)"
+    "record_boundary_advance": Silent(
+        _INTERNAL_BOOKKEEPING + " (an append-only advance of a standing judge boundary's start across a"
+        " judge park or backoff resume, runner-local recovery bookkeeping)"
     ),
     "record_overload": Published(
         LEASE_CHANGED,

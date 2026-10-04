@@ -165,7 +165,7 @@ class UsageRecorder:
             # earlier generation's already-recorded lines.
             return []
         return self._read_range(
-            lease.lease_id, session, bindings, generation=generation, start=boundary, end_kind="judge"
+            lease.lease_id, session, bindings, generation=generation, start=boundary.start_position, end_kind="judge"
         )
 
     def judge_transcript_lines(
@@ -178,10 +178,12 @@ class UsageRecorder:
         session = lease.session
         if session is None or not self.transcripts_wired:
             return []
-        boundary = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
-        if boundary is None or boundary.start_unreadable:
+        start = self.invocation_boundaries.current_start(lease.lease_id, generation, "judge")
+        if start is None or start.start_unreadable:
             return []
-        return self._read_range(lease.lease_id, session, bindings, generation=generation, start=boundary, end_kind=None)
+        return self._read_range(
+            lease.lease_id, session, bindings, generation=generation, start=start.start_position, end_kind=None
+        )
 
     def _read_range(
         self,
@@ -190,7 +192,7 @@ class UsageRecorder:
         bindings: list[EnvBindingRecord],
         *,
         generation: int,
-        start: InvocationBoundaryRecord,
+        start: str | None,
         end_kind: InvocationBoundaryKind | None,
     ) -> list[str]:
         fallback_workdir = bindings[0].workdir if bindings else None
@@ -222,7 +224,7 @@ class UsageRecorder:
                 end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
         else:
             end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
-        start_position = TranscriptPosition(start.start_position) if start.start_position is not None else None
+        start_position = TranscriptPosition(start) if start is not None else None
         return source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start_position, end=end)
 
     def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundaryRecord | None:

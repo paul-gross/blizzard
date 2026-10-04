@@ -10,10 +10,11 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.invocation_boundaries import (
     InvocationBoundaryKind,
     InvocationBoundaryRecord,
+    InvocationBoundaryStart,
     IWriteInvocationBoundaryRepository,
 )
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.schema import invocation_boundaries
+from blizzard.runner.store.schema import invocation_boundaries, invocation_boundary_advances
 
 _log = get_logger("blizzard.runner.store")
 
@@ -90,29 +91,84 @@ class InvocationBoundaryStore:
             )
         _log.info("invocation boundary opened", lease_id=lease_id, generation=generation, kind=kind, chunk_id=chunk_id)
 
-    def advance_boundary(
+    def record_boundary_advance(
         self,
         *,
         lease_id: str,
         generation: int,
         kind: InvocationBoundaryKind,
+        superseded_invocation: str,
         start_position: str | None,
-        opened_at: datetime,
+        advanced_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
+        # Check-then-insert in one transaction, mirroring `record_boundary_open`
+        # (`bzh:sql-portable`).
         with self._store.begin() as conn:
-            conn.execute(
-                invocation_boundaries.update()
-                .where(
+            marker = conn.execute(
+                select(invocation_boundaries.c.id).where(
                     and_(
                         invocation_boundaries.c.lease_id == lease_id,
                         invocation_boundaries.c.generation == generation,
                         invocation_boundaries.c.kind == kind,
                     )
                 )
-                .values(start_position=start_position, start_unreadable=start_unreadable, opened_at=opened_at)
+            ).one_or_none()
+            if marker is None:
+                return
+            existing = conn.execute(
+                select(invocation_boundary_advances.c.id).where(
+                    and_(
+                        invocation_boundary_advances.c.lease_id == lease_id,
+                        invocation_boundary_advances.c.generation == generation,
+                        invocation_boundary_advances.c.kind == kind,
+                        invocation_boundary_advances.c.superseded_invocation == superseded_invocation,
+                    )
+                )
+            ).first()
+            if existing is not None:
+                return
+            conn.execute(
+                invocation_boundary_advances.insert().values(
+                    lease_id=lease_id,
+                    generation=generation,
+                    kind=kind,
+                    superseded_invocation=superseded_invocation,
+                    start_position=start_position,
+                    start_unreadable=start_unreadable,
+                    advanced_at=advanced_at,
+                )
             )
         _log.info("invocation boundary advanced", lease_id=lease_id, generation=generation, kind=kind)
+
+    def current_start(
+        self, lease_id: str, generation: int, kind: InvocationBoundaryKind
+    ) -> InvocationBoundaryStart | None:
+        advances = self._store.all(
+            select(invocation_boundary_advances)
+            .where(
+                and_(
+                    invocation_boundary_advances.c.lease_id == lease_id,
+                    invocation_boundary_advances.c.generation == generation,
+                    invocation_boundary_advances.c.kind == kind,
+                )
+            )
+            .order_by(invocation_boundary_advances.c.advanced_at.desc(), invocation_boundary_advances.c.id.desc())
+            .limit(1)
+        )
+        if advances:
+            a = advances[0]
+            return InvocationBoundaryStart(
+                start_position=str(a.start_position) if a.start_position is not None else None,
+                start_unreadable=bool(a.start_unreadable),
+                at=a.advanced_at,
+            )
+        marker = self.boundary(lease_id, generation, kind)
+        if marker is None:
+            return None
+        return InvocationBoundaryStart(
+            start_position=marker.start_position, start_unreadable=marker.start_unreadable, at=marker.opened_at
+        )
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
         # An UPDATE over `closed_at IS NULL` — naturally idempotent under a crash-and-retry

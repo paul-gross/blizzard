@@ -566,6 +566,26 @@ invocation_boundaries = Table(
 )
 Index("ix_invocation_boundaries_lease_id", invocation_boundaries.c.lease_id)
 
+# Append-only advances; `superseded_invocation` is the idempotency key.
+invocation_boundary_advances = Table(
+    "invocation_boundary_advances",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("superseded_invocation", String, nullable=False),
+    Column("start_position", String, nullable=True),
+    Column("start_unreadable", Boolean, nullable=False, server_default=false()),
+    Column("advanced_at", UtcDateTime, nullable=False),
+)
+Index(
+    "ix_invocation_boundary_advances_boundary",
+    invocation_boundary_advances.c.lease_id,
+    invocation_boundary_advances.c.generation,
+    invocation_boundary_advances.c.kind,
+)
+
 # --- SSO federation jti replay cache ----------------
 # The `jti` primary key alone is the single-use guarantee, enforced by the store.
 
