@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 import type { RunnerRow } from './runner-rows';
 
-import { FleetView } from './fleet-view';
+import { RunnersView } from './runners-view';
 
 /** The design tokens are a global stylesheet loaded via each app's build `styles`,
  * never by a standalone component test (`board/hover-tint.shell-sweep.spec.ts`'s own
@@ -157,10 +157,10 @@ const ROWS: readonly RunnerRow[] = [
 
 async function render() {
   await TestBed.configureTestingModule({
-    imports: [FleetView],
+    imports: [RunnersView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(FleetView);
+  const fixture = TestBed.createComponent(RunnersView);
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('rows', ROWS);
   fixture.componentRef.setInput('canPause', true);

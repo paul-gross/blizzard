@@ -128,7 +128,7 @@ describe('the board route (route-table mobile/desktop fork)', () => {
 /**
  * The route table's `/fleet` entry: mobile-only, with no desktop counterpart —
  * a desktop-width hit redirects to `/board`. Exercised through the real
- * router rather than by rendering `FleetPage` directly, so a regression that
+ * router rather than by rendering `RunnersPage` directly, so a regression that
  * breaks the guard or redirect wiring itself is caught here.
  */
 describe('the fleet route (mobile-only, redirects to /board on desktop)', () => {

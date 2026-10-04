@@ -293,12 +293,21 @@ function sweepPlacement({ root, memory = null }) {
  * Prove the placement detector can still fail, before trusting it over the tree
  * (`bzh:case-pins-its-own-name`): a unit only one app reaches and a `fleet` file importing
  * an app must each be caught, and a unit both apps reach — through the `fleet` barrel and a
- * sub-barrel, the shape a file-level resolver gets wrong — must pass.
+ * sub-barrel, the shape a file-level resolver gets wrong — must pass. A grouping folder's
+ * children are judged one by one: a child one app reaches is caught beside a sibling both reach.
  */
 function assertPlacementDetectorWorks() {
   const root = '/placement-fixture';
   const memory = new Map([
-    [`${root}/projects/fleet/src/public-api.ts`, "export * from './lib/shared';\nexport * from './lib/hub-only';\n"],
+    [
+      `${root}/projects/fleet/src/public-api.ts`,
+      "export * from './lib/shared';\nexport * from './lib/hub-only';\n" +
+        "export * from './lib/core/hub-tool';\nexport * from './lib/core/both-tool';\n",
+    ],
+    // A grouping folder's children are units of their own: `core/hub-tool` is caught though
+    // its sibling `core/both-tool` reaches both apps.
+    [`${root}/projects/fleet/src/lib/core/hub-tool.ts`, 'export const hubTool = 3;\n'],
+    [`${root}/projects/fleet/src/lib/core/both-tool.ts`, 'export const bothTool = 4;\n'],
     [`${root}/projects/fleet/src/shell-api.ts`, ''],
     [`${root}/projects/fleet/src/lib/shared/index.ts`, "export { sharedThing } from './shared-thing';\n"],
     [`${root}/projects/fleet/src/lib/shared/shared-thing.ts`, 'export const sharedThing = 1;\n'],
@@ -310,9 +319,13 @@ function assertPlacementDetectorWorks() {
     [`${root}/projects/hub/src/app/app-thing.ts`, 'export const appThing = 2;\n'],
     [
       `${root}/projects/hub/src/main.ts`,
-      "import { sharedThing, hubThing } from 'fleet';\nexport const used = [sharedThing, hubThing];\n",
+      "import { sharedThing, hubThing, hubTool, bothTool } from 'fleet';\n" +
+        'export const used = [sharedThing, hubThing, hubTool, bothTool];\n',
     ],
-    [`${root}/projects/runner/src/main.ts`, "import { sharedThing } from 'fleet';\nexport const used = sharedThing;\n"],
+    [
+      `${root}/projects/runner/src/main.ts`,
+      "import { sharedThing, bothTool } from 'fleet';\nexport const used = [sharedThing, bothTool];\n",
+    ],
     [
       `${root}/projects/runner/src/main.spec.ts`,
       "import { hubThing } from 'fleet';\nexport const specOnly = hubThing;\n",
@@ -326,6 +339,15 @@ function assertPlacementDetectorWorks() {
   }
   if (units.some((u) => u.unit === 'shared')) {
     throw new Error('placement self-test: a unit both apps reach was flagged');
+  }
+  const hubTool = units.find((u) => u.unit === 'core/hub-tool.ts');
+  if (!hubTool || hubTool.reach.join(',') !== 'hub') {
+    throw new Error('placement self-test: a grouping-folder child only the hub reaches was not caught as hub-only');
+  }
+  if (units.some((u) => u.unit === 'core' || u.unit === 'core/both-tool.ts')) {
+    throw new Error(
+      'placement self-test: a grouping-folder child both apps reach was flagged, or the folder collapsed into one unit',
+    );
   }
   if (!appImports.some((i) => i.file === path.join('projects', 'fleet', 'src', 'lib', 'hub-only', 'hub-thing.ts'))) {
     throw new Error('placement self-test: a fleet file importing an app project was not caught');

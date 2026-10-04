@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import type { RunnerRow } from './runner-rows';
 
-import { FleetView } from './fleet-view';
+import { RunnersView } from './runners-view';
 
 const NOW = new Date().toISOString();
 
@@ -22,16 +22,16 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   ...over,
 });
 
-describe('FleetView (mobile Fleet screen)', () => {
+describe('RunnersView (mobile Fleet screen)', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [FleetView],
+      imports: [RunnersView],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
 
   it('renders each row with its liveness, workspace, and claims — off plain inputs alone', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_online', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' }] }),
@@ -54,7 +54,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('names a runner with no current work as idle rather than an empty claims list', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_idle')]);
     await fixture.whenStable();
@@ -65,7 +65,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('shows the empty state for no rows once loaded', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'empty');
     fixture.componentRef.setInput('rows', []);
     await fixture.whenStable();
@@ -75,7 +75,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('withholds the empty copy while the registry read is pending', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'loading');
     fixture.componentRef.setInput('rows', []);
     await fixture.whenStable();
@@ -86,7 +86,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('shows an error state when the registry read fails', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'error');
     fixture.componentRef.setInput('rows', []);
     await fixture.whenStable();
@@ -96,7 +96,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('names a spend-ceiling escalation reason on the locally-paused badge', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_ceiling', { locally_paused: true, locally_paused_reason: 'spend ceiling $5.00 reached' }),
@@ -110,7 +110,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders a slot bar for a reported capacity, and omits it when null', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_cap', { env_capacity: 4, used: 2 }),
@@ -128,7 +128,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   const FRESH_PACE = { sampledAt: NOW, refreshedLabel: 'refreshed 0s ago', freshness: 'fresh' as const, missReason: null };
 
   it('renders one pace bar per folded subscription window', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_paced', {
@@ -155,7 +155,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders per-subscription groups without merging identical window labels', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
@@ -193,7 +193,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders no subscription-usage component when the row has no declared subscriptions', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_unsampled')]);
     await fixture.whenStable();
@@ -204,7 +204,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('reports no usage windows for a subscription with a sampled empty window list', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_unsampled', {
@@ -222,7 +222,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('reads "no sample yet" for a declared, never-sampled slug, naming its miss reason', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_never', {
@@ -248,7 +248,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders the aging/stale refreshed label with its own data-freshness attribute', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_aging', {
@@ -275,7 +275,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     const target = row('rn_online');
     fixture.componentRef.setInput('rows', [target]);
@@ -290,7 +290,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('withholds the hub pause/resume brake when canPause is false, keeping the row and its paused badges', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_paused', { hub_paused: true })]);
     fixture.componentRef.setInput('canPause', false);
@@ -303,7 +303,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('defaults to withholding the brake when canPause is unset', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_online')]);
     await fixture.whenStable();
@@ -315,7 +315,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   // --- Pending disable + inline error (`bzh:frontend-pending-override`) ----------
 
   it("disables a row's own toggle while its runner id is in pendingRunnerIds, re-enabling once cleared", async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_online'), row('rn_paused', { hub_paused: true })]);
     fixture.componentRef.setInput('canPause', true);
@@ -337,7 +337,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders actionError as a visible inline notice, and nothing when null', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_online')]);
     fixture.componentRef.setInput('actionError', 'Pause failed.');
@@ -356,7 +356,7 @@ describe('FleetView (mobile Fleet screen)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
     it('reads a fresh heartbeat as "seen Ns ago"', async () => {
-      const fixture = TestBed.createComponent(FleetView);
+      const fixture = TestBed.createComponent(RunnersView);
       fixture.componentRef.setInput('state', 'ready');
       fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z', nowMs: REF })]);
       await fixture.whenStable();
@@ -366,7 +366,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('marks a retired runner with when and by whom', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_gone', { retired: true, retired_at: '2026-09-28T00:00:00Z', retired_by: 'op' }),
@@ -382,7 +382,7 @@ describe('FleetView (mobile Fleet screen)', () => {
   });
 
   it('renders the show-retired chip reflecting the flag and emits its toggle', async () => {
-    const fixture = TestBed.createComponent(FleetView);
+    const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', []);
     const toggled = vi.fn();
