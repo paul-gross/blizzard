@@ -15,8 +15,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope` boundary, is
   `blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects`; this
   file states none of that prose, only what the rule mechanically checks:
-  - Scoped to `src/blizzard/hub/domain/**` and `src/blizzard/runner/domain/**` — a domain operation's own home, not the
-    whole repo.
+  - Scoped to `src/blizzard/hub/domain/**` and the runner's domain-core modules, listed file by file in the rule's
+    `files:` — a domain operation's own home, not the whole repo.
   - A domain *operation* is a public method; a leading-underscore helper is an internal step, not an edge-facing entry
     point, and is exempt even when it shares the same id-in, load-by-id shape.
   - Matches a public method taking a `*_id: str` parameter whose body calls a `get_`/`load_`-prefixed method on `self.*`

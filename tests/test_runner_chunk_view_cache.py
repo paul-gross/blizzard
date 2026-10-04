@@ -262,10 +262,23 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
 def test_no_module_under_runner_loop_imports_chunk_detail() -> None:
     """The migration's own acceptance criterion: every one of the nine
     per-chunk reads now goes through ``IChunkViews``/``ChunkStatusView``, never the full
-    ``ChunkDetail`` aggregate."""
-    loop_dir = repo_root() / "src" / "blizzard" / "runner" / "loop"
+    ``ChunkDetail`` aggregate — across the tick and every concept package its steps live in."""
+    runner_dir = repo_root() / "src" / "blizzard" / "runner"
+    step_packages = (
+        "loop",
+        "lifecycle",
+        "hub",
+        "leases",
+        "transcripts",
+        "throttle",
+        "usage",
+        "tracing",
+        "process",
+        "environments",
+        "harness",
+    )
     offenders = []
-    for path in sorted(loop_dir.rglob("*.py")):
+    for path in sorted(p for package in step_packages for p in (runner_dir / package).rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and any(alias.name == "ChunkDetail" for alias in node.names):

@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
@@ -18,31 +17,28 @@ from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.wiring import section_of
-
-if TYPE_CHECKING:
-    from blizzard.runner.config import RunnerConfig
 
 __all__ = ["plan_harness_telemetry"]
 
 
 def plan_harness_telemetry(
-    config: RunnerConfig,
+    section: ClaudeCodeSection,
     *,
+    worker_env: AllowlistedEnv,
     bundle: BundleSnapshot | None,
     runner_environ: Mapping[str, str],
     enabled: bool,
 ) -> HarnessTelemetryPlan:
-    """The plan for a Claude Code worker spawned under ``config``. ``enabled`` is ``[tracing] harness_telemetry``
-    together with platform tracing. The operator's destination is read from the worker's allowlisted env and
-    from the ``env`` of the settings document the adapter passes. Every signal is off where the runner has no
-    enabled Claude Code binding."""
-    if not enabled or not section_of(config.harness_sections, CLAUDE_CODE_HARNESS_ID).enabled:
+    """The plan for a Claude Code worker spawned under ``section`` with ``worker_env``. ``enabled`` is
+    ``[tracing] harness_telemetry`` together with platform tracing. The operator's destination is read from
+    ``worker_env`` and from the ``env`` of the settings document the adapter passes. Every signal is off
+    where the runner has no enabled Claude Code binding."""
+    if not enabled or not section.enabled:
         return HarnessTelemetryPlan()
-    spawn_env = {k: v for k, v in config.worker_env.variables.items() if k not in RUNNER_OWNED_NAMES}
-    visible = {**spawn_env, **_settings_env(_effective_settings_path(config, bundle))}
+    spawn_env = {k: v for k, v in worker_env.variables.items() if k not in RUNNER_OWNED_NAMES}
+    visible = {**spawn_env, **_settings_env(_effective_settings_path(section, bundle))}
 
     def outcome(signal: TelemetrySignal) -> HarnessTelemetryOutcome:
         if operator_configured(signal, visible):
@@ -58,13 +54,11 @@ def plan_harness_telemetry(
     )
 
 
-def _effective_settings_path(config: RunnerConfig, bundle: BundleSnapshot | None) -> str | None:
+def _effective_settings_path(section: ClaudeCodeSection, bundle: BundleSnapshot | None) -> str | None:
     """The document the adapter passes as ``--settings``: the published bundle's composed one, else the runner's own."""
     delivery = ClaudeCodeBundleDelivery.of(bundle)
     if delivery is not None:
         return str(delivery.settings)
-    section = section_of(config.harness_sections, CLAUDE_CODE_HARNESS_ID)
-    assert isinstance(section, ClaudeCodeSection)
     return section.worker_settings_path
 
 

@@ -759,7 +759,9 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
             OpenCodeSection(binary=_fake_opencode_binary(tmp_path / "opencode-bin")),
         ),
     )
-    harnesses = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
+    harnesses = build_production_harness_registry(
+        config.harness_settings, process=LinuxProcessProbe(), executor=spawn_executor
+    )
     client = TestClient(create_app(config, harnesses=harnesses))
 
     for harness_id in (CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID):

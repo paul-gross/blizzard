@@ -28,9 +28,9 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
-    WorkspaceRepo,
 )
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
+from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy

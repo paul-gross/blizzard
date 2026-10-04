@@ -123,7 +123,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
             try:
                 store = SqlAlchemyRunnerStore(engine, runner_store_errors())
                 assert chunk_id not in store.held_environment_ids()
-                provider = build_workspace_provider(config, held_ids=store.held_environment_ids)
+                provider = build_workspace_provider(config.workspace_settings, held_ids=store.held_environment_ids)
                 assert provider.repos(chunk_id) == [], "released worktree remained authorized after process death"
             finally:
                 engine.dispose()

@@ -23,8 +23,8 @@ from blizzard.runner.environments.repository import (
 )
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.leases.operator_requests import IReadRequeueRepository
 from blizzard.runner.lifecycle.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
-from blizzard.runner.operator.requeue import IReadRequeueRepository
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest

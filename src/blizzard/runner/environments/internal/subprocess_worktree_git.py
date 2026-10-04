@@ -10,17 +10,13 @@ from __future__ import annotations
 import subprocess
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.environments.worktree import IWorktreeGit
+from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 
 _log = get_logger("blizzard.runner.worktree")
 
 # A tick reaches this seam, so it must be bounded — the value is generous
 # (a remote round-trip, not a build) rather than tuned, mirroring `checks.py`'s own default.
 WORKTREE_GIT_TIMEOUT = 60
-
-
-class WorktreeGitError(RuntimeError):
-    """A git operation against a leased worktree failed."""
 
 
 class SubprocessWorktreeGit:

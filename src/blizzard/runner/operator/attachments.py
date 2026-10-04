@@ -6,53 +6,14 @@ place the write happens (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Protocol
-
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
 
-__all__ = ["AttachmentRejected", "AttachmentService", "IReadAttachmentRepository", "IWriteAttachmentRepository"]
-
-
-class IReadAttachmentRepository(Protocol):
-    """Read-only attachment queries (held by read-path edges)."""
-
-    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
-        """The lease's explicit artifact submissions, newest content per ``name``.
-        Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
-        the same name reads back as the replacement, never a duplicate."""
-        ...
-
-    def attachment_names_for_lease(self, lease_id: str) -> set[str]:
-        """Just the names attached for ``lease_id`` — the produces-coverage check's own lean
-        read: it only ever needs to know WHICH names are attached, never their
-        content, so this skips fetching and materializing ``attachments_for_lease``'s values."""
-        ...
-
-
-class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
-    """Read-write attachment store — held only by the domain."""
-
-    def record_attachment(
-        self,
-        *,
-        lease_id: str,
-        chunk_id: str,
-        node_id: str,
-        epoch: int,
-        name: str,
-        content: str,
-        attached_at: datetime,
-    ) -> None:
-        """Append a worker's explicit artifact submission for ``name``, a
-        single committed transaction so it survives a ``kill -9`` before the completion
-        submission reads it. Append-only: a later call for the same ``(lease_id, name)``
-        is a correction, read back as the replacement, never merged."""
-        ...
+__all__ = ["AttachmentRejected", "AttachmentService"]
 
 
 # The armed crash window (``bzh:crash-point-registry``): the attach row is

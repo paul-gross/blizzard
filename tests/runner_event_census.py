@@ -150,7 +150,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         LEASE_CHANGED,
         "DormantSession.park_on_ask (runner/lifecycle/dormant.py) — cause='dormant'. The ask itself "
         "is already visible from record_ask's own 'asked' frame, but this write separately flips "
-        "LeaseActivity.state (domain/leases.py) to 'parked' via parked_lease_ids(), which GET "
+        "LeaseActivity.state (runner/leases/__init__.py) to 'parked' via parked_lease_ids(), which GET "
         "/api/leases renders as the row's headline label — a real leases-rail transition, "
         "distinct from open_asks()'s own unaffected derivation.",
     ),

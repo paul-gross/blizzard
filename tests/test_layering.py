@@ -29,7 +29,6 @@ _RUNNER_DIR = _SRC_DIR / "runner"
 _HUB_STORE_INTERNAL_DIR = _HUB_DIR / "store" / "internal"
 _HUB_STORE_ERRORS_FILE = _HUB_DIR / "store" / "errors.py"
 _RUNNER_STORE_DIR = _RUNNER_DIR / "store"
-_RUNNER_DOMAIN_DIR = _RUNNER_DIR / "domain"
 _WIRE_DIR = _SRC_DIR / "wire"
 _AUTH_CORE_DIR = _SRC_DIR / "auth_core"
 
@@ -104,8 +103,12 @@ def _imported_modules(path: Path) -> set[str]:
 
 
 def _violations(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
+    return _file_violations(sorted(root.rglob("*.py")), forbidden_prefixes)
+
+
+def _file_violations(paths: Iterable[Path], forbidden_prefixes: tuple[str, ...]) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in paths:
         for module in sorted(_imported_modules(path)):
             if any(module == prefix or module.startswith(f"{prefix}.") for prefix in forbidden_prefixes):
                 violations.append(f"{path.relative_to(_REPO_ROOT)} imports {module}")
@@ -308,20 +311,6 @@ def test_no_protocol_is_declared_under_runner_store() -> None:
     ``runner/store/`` holds only adapters, schema, and errors, never a Protocol."""
     violations = _protocol_declarations(_RUNNER_STORE_DIR)
     assert not violations, f"F — runner/store/ must declare no Protocol: {violations}"
-
-
-def test_no_runner_domain_module_imports_from_runner_store() -> None:
-    """AC1: a domain module owns its own seam Protocol — it never reaches
-    into ``runner/store/`` for one, which would invert the dependency arrow."""
-    violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.store",))
-    assert not violations, f"G — runner/domain/ must not import from runner/store/: {violations}"
-
-
-def test_no_runner_domain_module_imports_from_runner_loop_or_api() -> None:
-    """A domain module owns its own seam Protocol — it never reaches outward into
-    ``runner/loop/`` or ``runner/api/`` for one."""
-    violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.loop", "blizzard.runner.api"))
-    assert not violations, f"runner/domain/ must not import from runner/loop/ or runner/api/: {violations}"
 
 
 _RUNNER_STORE_INTERNAL_DIR = _RUNNER_STORE_DIR / "internal"
@@ -985,9 +974,9 @@ _BUNDLE_FORMS = (
 @pytest.mark.parametrize("name", sorted(_STORE_BUNDLES))
 @pytest.mark.parametrize("form", _BUNDLE_FORMS)
 def test_store_bundle_check_catches_a_bundle_outside_the_edges(tmp_path: Path, name: str, form: str) -> None:
-    src = _plant_tree(tmp_path, {"runner/domain/service.py": form.format(name)})
+    src = _plant_tree(tmp_path, {"runner/leases/service.py": form.format(name)})
     violations = _naming_sites(src / "runner", _STORE_BUNDLES, exempt=frozenset(), src_root=src)
-    assert violations == [f"src/blizzard/runner/domain/service.py:{len(form.splitlines())} names {name}"]
+    assert violations == [f"src/blizzard/runner/leases/service.py:{len(form.splitlines())} names {name}"]
 
 
 def test_store_bundle_check_admits_the_edges_and_driver(tmp_path: Path) -> None:
@@ -1058,10 +1047,10 @@ _DOMAIN_CORE_FORBIDDEN = ("fastapi", "starlette", "sqlalchemy", "click", "httpx"
 
 
 def test_domain_core_imports_no_framework_or_driver() -> None:
-    """``hub/domain/`` and ``runner/domain/`` are framework-free (``bzh:domain-core``): no
-    web framework, driver, CLI, or HTTP-client import."""
-    violations = _violations(_HUB_DIR / "domain", _DOMAIN_CORE_FORBIDDEN) + _violations(
-        _RUNNER_DOMAIN_DIR, _DOMAIN_CORE_FORBIDDEN
+    """``hub/domain/`` and every runner domain-core module are framework-free (``bzh:domain-core``):
+    no web framework, driver, CLI, or HTTP-client import."""
+    violations = _violations(_HUB_DIR / "domain", _DOMAIN_CORE_FORBIDDEN) + _file_violations(
+        _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS), _DOMAIN_CORE_FORBIDDEN
     )
     assert not violations, f"Q — a domain core must import no framework or driver: {violations}"
 
@@ -1085,6 +1074,20 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 _DOMAIN_SHARED_KERNEL = "kernel"
 
 
+def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[list[str]]]]:
+    """Each import statement in ``path``, wherever it sits (function bodies and ``TYPE_CHECKING``
+    blocks included), as its line and the dotted segments of every name it binds — a relative import
+    resolved against the module's own package under ``src_root``."""
+    package = list(path.relative_to(src_root).with_suffix("").parts)[:-1]
+    for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+        if isinstance(node, ast.Import):
+            yield node.lineno, [alias.name.split(".") for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = package[: len(package) - (node.level - 1)] if node.level else []
+            base = [*base, *(node.module.split(".") if node.module else [])]
+            yield node.lineno, [[*base, alias.name] for alias in node.names]
+
+
 def _domain_layer_crossings(domain_dir: Path, layers: dict[str, frozenset[str]]) -> list[str]:
     """Every import of a ``blizzard.hub.domain`` package its importer's layer does not allow, wherever it
     sits in the module (function bodies and ``TYPE_CHECKING`` blocks included), resolved as
@@ -1102,36 +1105,25 @@ def _domain_layer_crossings(domain_dir: Path, layers: dict[str, frozenset[str]])
             violations.append(f"{'/'.join(rel)} sits in undeclared package {own}")
             continue
         allowed = {own, _DOMAIN_SHARED_KERNEL, *layers[own]} if own is not None else set()
-        package = list(path.relative_to(src_root).with_suffix("").parts)[:-1]
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                named = [alias.name.split(".") for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                base = package[: len(package) - (node.level - 1)] if node.level else []
-                base = [*base, *(node.module.split(".") if node.module else [])]
-                named = [[*base, alias.name] for alias in node.names]
-            else:
-                continue
+        for lineno, named in _import_statements(path, src_root):
             for module in named:
                 if module[: len(umbrella)] != umbrella:
                     continue
                 target = module[len(umbrella)] if len(module) > len(umbrella) else None
                 if target not in allowed:
                     violations.append(
-                        f"{'/'.join(rel)}:{node.lineno} ({own or 'the umbrella'}) imports {'.'.join(module)}"
+                        f"{'/'.join(rel)}:{lineno} ({own or 'the umbrella'}) imports {'.'.join(module)}"
                         f" ({target or 'the umbrella'})"
                     )
                     break
     return violations
 
 
-def _layer_cycle(layers: dict[str, frozenset[str]]) -> list[str]:
-    """A cycle through the declared edges plus every package's implicit edge to the shared kernel, as the
-    packages along it — empty when the layers are acyclic."""
+def _layer_cycle(layers: Mapping[str, frozenset[str]], kernel: str | None = _DOMAIN_SHARED_KERNEL) -> list[str]:
+    """A cycle through the declared edges plus every package's implicit edge to the shared ``kernel``, if
+    any, as the packages along it — empty when the layers are acyclic."""
     edges = {
-        pkg: set(deps) | ({_DOMAIN_SHARED_KERNEL} if pkg != _DOMAIN_SHARED_KERNEL else set())
-        for pkg, deps in layers.items()
+        pkg: set(deps) | ({kernel} if kernel is not None and pkg != kernel else set()) for pkg, deps in layers.items()
     }
     state: dict[str, int] = {}
     stack: list[str] = []
@@ -1231,6 +1223,266 @@ def test_domain_layer_cycle_check_catches_a_cycle(layers: dict[str, frozenset[st
     cycle = _layer_cycle(layers)
     assert cycle
     assert cycle[0] == cycle[-1]
+
+
+#: Each runner node -> the nodes it may import besides itself (``bzh:domain-package-layers``); the rest are edges.
+_RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
+    "config_table": frozenset(),
+    "process": frozenset(),
+    "events": frozenset(),
+    "environments": frozenset(),
+    "harness": frozenset({"config_table", "environments", "process"}),
+    "subscriptions": frozenset(),
+    "auth": frozenset(),
+    "leases": frozenset({"environments", "events", "harness", "process"}),
+    "hub": frozenset({"auth", "events", "leases"}),
+    "transcripts": frozenset({"environments", "harness", "hub", "leases"}),
+    "throttle": frozenset({"events", "harness", "leases"}),
+    "usage": frozenset({"environments", "events", "harness", "leases", "process", "subscriptions", "transcripts"}),
+    "lifecycle": frozenset(
+        {"auth", "environments", "events", "harness", "hub", "leases", "process", "throttle", "transcripts", "usage"}
+    ),
+    "operator": frozenset({"auth", "leases", "lifecycle"}),
+    "tracing": frozenset({"harness", "hub", "leases", "transcripts"}),
+    "selftest": frozenset({"environments", "harness", "lifecycle", "process"}),
+    "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
+    "harness/claude_code": frozenset({"config_table", "harness", "process", "subscriptions"}),
+    "harness/opencode": frozenset({"config_table", "harness", "process"}),
+    "harness/wiring": frozenset({"config_table", "harness", "process", "harness/claude_code", "harness/opencode"}),
+    "stores": frozenset(
+        {
+            "auth",
+            "environments",
+            "harness",
+            "hub",
+            "leases",
+            "lifecycle",
+            "operator",
+            "throttle",
+            "tracing",
+            "transcripts",
+            "usage",
+        }
+    ),
+    "loop": frozenset(
+        {
+            "config_table",
+            "process",
+            "events",
+            "environments",
+            "harness",
+            "subscriptions",
+            "leases",
+            "hub",
+            "transcripts",
+            "throttle",
+            "usage",
+            "lifecycle",
+            "tracing",
+            "stores",
+        }
+    ),
+}
+_RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
+_RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
+
+
+def _runner_node(segments: Iterable[str]) -> str | None:
+    """The dependency node a dotted path under ``blizzard.runner`` (given as its segments) belongs to: a
+    ``harness`` subnode, else its first segment; ``None`` for the bare ``blizzard.runner`` package."""
+    parts = list(segments)
+    if not parts:
+        return None
+    if len(parts) > 1 and f"{parts[0]}/{parts[1]}" in _RUNNER_SUBNODES:
+        return f"{parts[0]}/{parts[1]}"
+    return parts[0]
+
+
+def _runner_module_node(path: Path, runner_dir: Path) -> str | None:
+    rel = path.relative_to(runner_dir).with_suffix("").parts
+    return _runner_node(rel[:-1] if rel[-1] == "__init__" else rel)
+
+
+def _runner_layer_crossings(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[str]:
+    """Every ``blizzard.runner`` import by a module of a declared node that its node's row does not allow,
+    wherever it sits in the module, resolved as :func:`_import_statements` resolves it — an import of a module
+    that is no node at all (``config``, ``composition``, ``api``, the bare package) included."""
+    src_root = runner_dir.parent.parent
+    umbrella = list(runner_dir.relative_to(src_root).parts)
+    violations: list[str] = []
+    for path in sorted(runner_dir.rglob("*.py")):
+        own = _runner_module_node(path, runner_dir)
+        if own is None or own not in layers:
+            continue
+        allowed = {own, *layers[own]}
+        for lineno, named in _import_statements(path, src_root):
+            for module in named:
+                if module[: len(umbrella)] != umbrella:
+                    continue
+                target = _runner_node(module[len(umbrella) :])
+                if target not in allowed:
+                    violations.append(
+                        f"{path.relative_to(runner_dir)}:{lineno} ({own}) imports {'.'.join(module)}"
+                        f" ({target or 'the bare package'})"
+                    )
+                    break
+    return violations
+
+
+def _undeclared_runner_packages(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[str]:
+    """Every runner package outside the edge packages that maps to no node — a new package enters the graph."""
+    undeclared: list[str] = []
+    for init in sorted(runner_dir.rglob("__init__.py")):
+        rel = init.parent.relative_to(runner_dir).parts
+        if rel and rel[0] not in _RUNNER_EDGE_PACKAGES and _runner_node(rel) not in layers:
+            undeclared.append("/".join(rel))
+    return undeclared
+
+
+def _runner_domain_core_files(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[Path]:
+    """Every module of a runner node that declares a ``@domain_model`` class or a ``Protocol`` port — the
+    runner's ``bzh:domain-core``, in whichever concept package it sits."""
+    files: list[Path] = []
+    for path in sorted(runner_dir.rglob("*.py")):
+        if _runner_module_node(path, runner_dir) not in layers:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+            if isinstance(node, ast.ClassDef) and (
+                any(_terminal(decorator) == "domain_model" for decorator in node.decorator_list)
+                or any(_terminal(base) == "Protocol" for base in node.bases)
+            ):
+                files.append(path)
+                break
+    return files
+
+
+def test_runner_packages_import_only_what_their_layer_allows() -> None:
+    violations = _runner_layer_crossings(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    assert not violations, f"a runner package may import only its own layer's dependencies: {violations}"
+
+
+def test_runner_package_layers_are_acyclic() -> None:
+    assert _layer_cycle(_RUNNER_PACKAGE_LAYERS, kernel=None) == []
+    assert all(dep in _RUNNER_PACKAGE_LAYERS for deps in _RUNNER_PACKAGE_LAYERS.values() for dep in deps)
+    undeclared = _undeclared_runner_packages(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    assert not undeclared, f"every runner package outside api/, cli/ and store/ is a declared node: {undeclared}"
+
+
+def test_runner_domain_core_selection_holds_the_lease_model() -> None:
+    assert _RUNNER_DIR / "leases" / "__init__.py" in _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+
+
+def test_no_runner_domain_module_imports_from_runner_store() -> None:
+    """AC1: a domain module owns its own seam Protocol — it never reaches
+    into ``runner/store/`` for one, which would invert the dependency arrow."""
+    files = _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    violations = _file_violations(files, ("blizzard.runner.store",))
+    assert not violations, f"G — a runner domain-core module must not import from runner/store/: {violations}"
+
+
+def test_no_runner_domain_core_module_imports_from_runner_api() -> None:
+    """A domain module owns its own seam Protocol — it never reaches outward into ``runner/api/`` for one."""
+    files = _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    violations = _file_violations(files, ("blizzard.runner.api",))
+    assert not violations, f"a runner domain-core module must not import from runner/api/: {violations}"
+
+
+#: A planted runner exercising the node, subnode, and edge kinds of :data:`_RUNNER_PACKAGE_LAYERS`.
+_PLANTED_RUNNER_LAYERS: dict[str, frozenset[str]] = {
+    "config_table": frozenset(),
+    "leases": frozenset(),
+    "hub": frozenset({"leases"}),
+    "harness": frozenset({"config_table"}),
+    "harness/claude_code": frozenset({"harness"}),
+    "harness/wiring": frozenset({"harness", "harness/claude_code"}),
+}
+
+
+def _plant_runner(tmp_path: Path, files: dict[str, str]) -> Path:
+    runner = tmp_path / "blizzard" / "runner"
+    for rel, text in {
+        "../__init__.py": "",
+        "__init__.py": "",
+        "config.py": "C = 1\n",
+        "config_table.py": "T = 1\n",
+        "leases/__init__.py": "",
+        "leases/record.py": "R = 1\n",
+        "hub/__init__.py": "",
+        "hub/client.py": "H = 1\n",
+        "harness/__init__.py": "",
+        "harness/wiring.py": "W = 1\n",
+        "harness/claude_code/__init__.py": "",
+        "harness/claude_code/section.py": "S = 1\n",
+        **files,
+    }.items():
+        (runner / rel).parent.mkdir(parents=True, exist_ok=True)
+        (runner / rel).write_text(text)
+    return runner
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "caught"),
+    [
+        ("leases/ports.py", "from blizzard.runner.hub.client import H", True),
+        ("leases/ports.py", "import blizzard.runner.hub.client", True),
+        ("leases/ports.py", "from blizzard.runner import hub", True),
+        ("leases/ports.py", "def f():\n    from blizzard.runner.hub.client import H", True),
+        ("leases/ports.py", _TYPE_CHECKING_IMPORT.format("from blizzard.runner.hub.client import H"), True),
+        ("leases/ports.py", "from ..hub.client import H", True),
+        ("leases/ports.py", "from .. import hub", True),
+        ("leases/ports.py", "from blizzard.runner.config import C", True),
+        ("leases/ports.py", "import blizzard.runner", True),
+        ("leases/__init__.py", "from blizzard.runner.hub.client import H", True),
+        ("harness/claude_code/plan.py", "from blizzard.runner.harness.wiring import W", True),
+        ("harness/claude_code/plan.py", "from blizzard.runner.harness import wiring", True),
+        ("harness/claude_code/plan.py", "from blizzard.runner.config_table import T", True),
+        ("harness/core.py", "from blizzard.runner.harness.claude_code.section import S", True),
+        ("hub/ports.py", "from blizzard.runner.leases.record import R", False),
+        ("hub/ports.py", "from ..leases import record", False),
+        ("leases/ports.py", "from .record import R", False),
+        ("harness/claude_code/plan.py", "from blizzard.runner.harness import H", False),
+        ("harness/claude_code/plan.py", "from .section import S", False),
+        ("harness/wiring.py", "from blizzard.runner.harness.claude_code.section import S", False),
+        ("harness/core.py", "from blizzard.runner.config_table import T", False),
+        ("config.py", "from blizzard.runner.hub.client import H", False),
+        ("leases/ports.py", "import blizzard.hub.config", False),
+    ],
+)
+def test_runner_layer_check_counts_every_import_form(tmp_path: Path, rel: str, text: str, caught: bool) -> None:
+    violations = _runner_layer_crossings(_plant_runner(tmp_path, {rel: f"{text}\n"}), _PLANTED_RUNNER_LAYERS)
+    assert len(violations) == (1 if caught else 0), violations
+
+
+@pytest.mark.parametrize(
+    ("rel", "caught"),
+    [("mystery/__init__.py", True), ("harness/contracts/__init__.py", False), ("api/routes/__init__.py", False)],
+)
+def test_runner_package_check_catches_an_undeclared_package(tmp_path: Path, rel: str, caught: bool) -> None:
+    undeclared = _undeclared_runner_packages(_plant_runner(tmp_path, {rel: ""}), _PLANTED_RUNNER_LAYERS)
+    assert len(undeclared) == (1 if caught else 0), undeclared
+
+
+def test_runner_layer_cycle_check_catches_a_cycle() -> None:
+    cycle = _layer_cycle({"hub": frozenset({"leases"}), "leases": frozenset({"hub"})}, kernel=None)
+    assert cycle
+    assert cycle[0] == cycle[-1]
+
+
+def test_runner_domain_core_selection_keys_on_domain_models_and_ports(tmp_path: Path) -> None:
+    runner = _plant_runner(
+        tmp_path,
+        {
+            "leases/model.py": "from blizzard.foundation.roles import domain_model\n@domain_model\nclass Lease: ...\n",
+            "leases/port.py": "from typing import Protocol\nclass IReadLeases(Protocol): ...\n",
+            "leases/view.py": "from blizzard.foundation import roles\n@roles.domain_model\nclass View: ...\n",
+            "hub/plain.py": "from blizzard.foundation.roles import dto\n@dto\nclass Row: ...\n",
+            "config.py": "from typing import Protocol\nclass IConfig(Protocol): ...\n",
+        },
+    )
+    selected = {
+        path.relative_to(runner).as_posix() for path in _runner_domain_core_files(runner, _PLANTED_RUNNER_LAYERS)
+    }
+    assert selected == {"leases/model.py", "leases/port.py", "leases/view.py"}
 
 
 _COMPOSITION_ROOT_FILES = (

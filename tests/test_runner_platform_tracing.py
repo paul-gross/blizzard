@@ -55,6 +55,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
+from blizzard.runner.harness.wiring import claude_code_section
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.context import LoopContext
@@ -1201,7 +1202,13 @@ def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_config
         db_url="sqlite://",
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
     )
-    plan = plan_harness_telemetry(config, bundle=None, runner_environ=_ENDPOINT, enabled=True)
+    plan = plan_harness_telemetry(
+        claude_code_section(config.harness_sections),
+        worker_env=config.worker_env,
+        bundle=None,
+        runner_environ=_ENDPOINT,
+        enabled=True,
+    )
     assert plan.traces is HarnessTelemetryOutcome.OPERATOR_CONFIGURED
 
     exporter = InMemorySpanExporter()

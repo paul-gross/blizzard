@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from blizzard.runner.config import RunnerConfig, WorkspaceRepo
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.provider import WorkspaceRepo
 from tests.e2e.test_acceptance_loop import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,

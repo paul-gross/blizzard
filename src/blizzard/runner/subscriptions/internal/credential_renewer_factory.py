@@ -8,15 +8,14 @@ binding, which keeps today's read-only behaviour exactly."""
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess
-from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_OPENAI
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_OPENAI, SubscriptionSource
 
 
 def select_renewer(
-    declaration: SubscriptionDeclaration,
+    declaration: SubscriptionSource,
     *,
     clock: IClock,
     subprocess: IOneShotProcess,

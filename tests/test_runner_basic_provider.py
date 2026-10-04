@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import RunnerConfig, WorkspaceRepo
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.internal.git import EnvGitError
-from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError
+from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError, WorkspaceRepo
 from blizzard.runner.runtime import init_environment
 
 
@@ -44,7 +44,7 @@ def test_scaffolded_runner_uses_an_ordinary_directory_without_winter(tmp_path: P
     config_file = runtime / "blizzard-runner.toml"
     config_file.write_text(config_file.read_text() + f'\n[[workspace_repo]]\nname = "toy"\nurl = "{repo.url}"\n')
     config = RunnerConfig.load(runtime)
-    provider = build_workspace_provider(config)
+    provider = build_workspace_provider(config.workspace_settings)
 
     assert config.workspace_provider == "basic"
     assert isinstance(provider, BasicWorkspaceProvider)

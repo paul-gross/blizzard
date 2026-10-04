@@ -20,12 +20,15 @@ from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.auth.roles import RolePolicy
+from blizzard.runner.auth.session import CALLBACK_PATH
 from blizzard.runner.config_table import ConfigError, Table
-from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
+from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings
+from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.wiring import HarnessSections
+from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
@@ -63,10 +66,6 @@ ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
 # The browser-reachable base URLs this runner answers on, comma-separated.
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
-
-# The federation callback route, owned here so the registered URI set and the URL the bounce
-# presents cannot drift; `runner.auth.federation` imports it rather than restating the literal.
-CALLBACK_PATH = "/api/auth/callback"
 
 # Reconciliation-loop defaults — the runner is machine-level and single-workspace.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
@@ -115,15 +114,6 @@ def resolve_session_secret(env_name: str) -> bytes:
     if len(decoded) < MIN_SESSION_SECRET_BYTES:
         raise ConfigError(f"{env_name} must decode to at least {MIN_SESSION_SECRET_BYTES} bytes")
     return decoded
-
-
-@dto
-@dataclass(frozen=True)
-class WorkspaceRepo:
-    """A repository cloned into a basic workspace's shared projects directory."""
-
-    name: str
-    url: str
 
 
 def _parse_autonomy(value: object, path: Path) -> Autonomy:
@@ -601,6 +591,13 @@ class RunnerConfig:
         return self.public_origins.canonical or ""
 
     @property
+    def role_policy(self) -> RolePolicy:
+        """The ``[auth]`` role precedence, as the federation callback resolves a local role by it."""
+        return RolePolicy(
+            superuser=self.auth_superuser, users=self.auth_users, hub_role_default=self.auth_hub_role_default
+        )
+
+    @property
     def redirect_uris(self) -> tuple[str, ...]:
         """The redirect URIs this runner presents to the hub's IdP authorize endpoint — one
         per declared origin, derived from :attr:`public_origins`, never independently
@@ -621,6 +618,32 @@ class RunnerConfig:
         """An absolute root shared by the hosted app and loop, independent of their cwd."""
         path = Path(self.workspace_root) if self.workspace_root else self.root / "workspace"
         return str((path if path.is_absolute() else self.root / path).resolve())
+
+    @property
+    def harness_settings(self) -> HarnessSettings:
+        """The runner-wide values every harness binding is built from."""
+        return HarnessSettings(
+            root=self.root,
+            autonomy=self.autonomy,
+            config_dir=self.harness_config_dir,
+            worker_env=self.worker_env,
+            transcripts_root=self.transcripts_root,
+            sections=self.harness_sections,
+        )
+
+    @property
+    def workspace_settings(self) -> WorkspaceSettings:
+        """The workspace binding's inputs, as the provider factory builds a provider from them."""
+        return WorkspaceSettings(
+            provider=self.workspace_provider,
+            root=self.root,
+            workspace_root=self.workspace_root,
+            effective_workspace_root=self.effective_workspace_root,
+            repos=self.workspace_repos,
+            max_environments=self.max_environments,
+            base_branch=self.base_branch,
+            env_pool=self.workspace_envs,
+        )
 
     @property
     def socket_path(self) -> Path:

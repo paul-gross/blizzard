@@ -11,14 +11,18 @@ from collections.abc import Callable
 import httpx
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
-from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI, ISubscriptionSampler
+from blizzard.runner.subscriptions.subscription_sampler import (
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENAI,
+    ISubscriptionSampler,
+    SubscriptionSource,
+)
 
 
 def select_sampler(
-    declaration: SubscriptionDeclaration,
+    declaration: SubscriptionSource,
     *,
     clock: IClock,
     http_client: Callable[[], httpx.Client],

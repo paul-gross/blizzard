@@ -14,6 +14,15 @@ from blizzard.foundation.roles import dto
 
 @dto
 @dataclass(frozen=True)
+class WorkspaceRepo:
+    """A repository cloned into a basic workspace's shared projects directory."""
+
+    name: str
+    url: str
+
+
+@dto
+@dataclass(frozen=True)
 class AcquiredEnvironment:
     """An acquired environment: its opaque id and its working directory.
 
