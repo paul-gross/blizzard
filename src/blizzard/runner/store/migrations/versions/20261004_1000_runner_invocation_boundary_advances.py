@@ -2,7 +2,7 @@
 
 One guarded table: each advance is its own fact, the marker row is never rewritten.
 Revision ID: 20261004_1000_runner_invocation_boundary_advances
-Revises: 20261003_1000_runner_transcript_segment_spawn_cwd
+Revises: 20261004_1000_binding_release_epoch_floor
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20261004_1000_runner_invocation_boundary_advances"
-down_revision: str | None = "20261003_1000_runner_transcript_segment_spawn_cwd"
+down_revision: str | None = "20261004_1000_binding_release_epoch_floor"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

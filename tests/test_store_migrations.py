@@ -578,7 +578,7 @@ def test_runner_invocation_boundary_advances_table_survives_migration_roundtrip(
 
     assert _shape() == (True, True)
 
-    runner.downgrade("20261003_1000_runner_transcript_segment_spawn_cwd")
+    runner.downgrade("20261004_1000_binding_release_epoch_floor")
     assert _shape() == (False, False)
 
     runner.upgrade("head")
