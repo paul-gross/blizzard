@@ -27,10 +27,11 @@
    a column is content-sized (two rows with differently-long node names
    would size that column differently). `.step`, nested one level inside
    `.step-item`, subgrids a second time so the same alignment
-   carries through the extra level. */
+   carries through the extra level. The first track holds the attempt number or a row kind's
+   mark glyph; the row's own padding and border take 10px of it, so 28px, not a digit's width. */
 .timeline {
   display: grid;
-  grid-template-columns: 16px fit-content(160px) minmax(64px, 1fr) auto;
+  grid-template-columns: 28px fit-content(160px) minmax(64px, 1fr) auto;
   list-style: none;
   margin: 0;
   padding: 0;

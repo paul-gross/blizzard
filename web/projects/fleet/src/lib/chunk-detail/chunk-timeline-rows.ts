@@ -185,10 +185,12 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
   return [...transitions, ...migrations, ...bounces, ...restarts].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 }
 
+// U+FE0E pins the arrows to text presentation: bare, Chromium paints them as colour emoji
+// wider than the mark column, which then overlaps the label.
 const KIND_MARKS: Record<Exclude<HistoryRow['kind'], 'transition'>, { mark: string; choice: string }> = {
   migration: { mark: '⤳', choice: 'migrated' },
-  bounce: { mark: '↩', choice: 'bounced' },
-  restart: { mark: '↻', choice: 'restarted' },
+  bounce: { mark: '\u21A9\uFE0E', choice: 'bounced' },
+  restart: { mark: '\u21BB\uFE0E', choice: 'restarted' },
 };
 
 /** The row's attempt-column text — a transition's own epoch, or its kind's glyph. */

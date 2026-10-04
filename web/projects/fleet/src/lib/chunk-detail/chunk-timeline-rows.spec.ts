@@ -55,7 +55,7 @@ describe('deriveHistoryRows', () => {
   it('reads a bounce as its cause with the raw envelope as its title, routing nowhere', () => {
     const bounce = deriveHistoryRows(BASE).find((r) => r.kind === 'bounce')!;
     expect(bounce).toMatchObject({ verdict: 'schema-mismatch', title: '{"verdict":"???"}', toName: null, epoch: null });
-    expect(rowMark(bounce)).toBe('↩');
+    expect(rowMark(bounce)).toBe('\u21A9\uFE0E');
     expect(rowChoice(bounce)).toBe('bounced');
   });
 
