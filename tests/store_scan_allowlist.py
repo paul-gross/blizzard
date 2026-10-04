@@ -247,9 +247,8 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
         "first — proposals are minted at gardening-routine pace (one per accepted "
         "remediation), a materially smaller volume than the chunk fleet itself.",
     ),
-    # --- deliberate whole-table reads of transcript_event_derivations ------------------
-    # Its key and time-leading index serve every other read; these two are the derivation sweep's own
-    # bookkeeping (event_derivation.sweep()), filtering on extractor_version alone, not a per-request hot path.
+    # transcript_event_derivations: its key and time-leading index serve every other read; these two are the
+    # derivation sweep's own bookkeeping, filtering on extractor_version alone, not a per-request hot path.
     MethodScopedAllowance(
         IReadTranscriptEvents,
         "candidacy",

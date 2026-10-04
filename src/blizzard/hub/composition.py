@@ -13,7 +13,7 @@ import tempfile
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import httpx
@@ -67,6 +67,7 @@ from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.egress.backfill import EgressBackfill
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.egress.reset import EgressReset
 from blizzard.hub.domain.egress.status import EgressStatusReader
 from blizzard.hub.domain.egress.sweep import EgressSweep
@@ -136,6 +137,7 @@ from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEve
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -474,6 +476,14 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
     return writer
 
 
+def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig, FilePathPolicy | None]:
+    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks."""
+    try:
+        return config, FilePathPolicy(config.file_paths, key)
+    except ValueError:
+        return replace(config, datasets=tuple(name for name in config.datasets if name != "events")), None
+
+
 def build_services(
     core: HubCore,
     *,
@@ -502,6 +512,7 @@ def build_services(
     tracing_settings: TracingSettings | None = None,
     platform_tracer: IPlatformTracer | None = None,
     egress: EgressConfig | None = None,
+    egress_path_key: bytes | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -568,7 +579,7 @@ def build_services(
         clock=clock,
         replay_max_window=trace_config.replay_max_window,
     )
-    egress_config = egress or EgressConfig()
+    egress_config, egress_paths = _egress_paths(egress or EgressConfig(), egress_path_key)
     egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
@@ -581,12 +592,14 @@ def build_services(
         else None
     )
     egress_store = EgressStore(store_connections)
+    egress_event_store = EgressEventStore(store_connections)
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     egress_status = EgressStatusReader(
         config=egress_config,
         rejected=egress_unavailable is not None,
         egress=egress_store,
+        event_reads=egress_event_store,
         steps=trace_store,
         clock=clock,
         free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
@@ -595,6 +608,8 @@ def build_services(
         EgressSweep(
             steps=trace_store,
             egress=egress_store,
+            event_reads=egress_event_store,
+            paths=egress_paths,
             writer=egress_writer,
             events=event_log,
             clock=clock,

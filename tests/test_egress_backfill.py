@@ -3,6 +3,7 @@ through the live sweep's own row assembly, with the cursors untouched."""
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -71,7 +72,8 @@ def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: 
     assert len(_rows(live, "invocations")) == 3
 
     written = InMemoryEgressWriter()
-    result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+    two = dataclasses.replace(_SETTLED, datasets=("steps", "invocations"))
+    result = _service(hub, two, written).backfill(since, until, dataset=None, dry_run=False)
 
     assert _without_export_time(_rows(written, "steps")) == _without_export_time(_rows(live, "steps"))
     assert _without_export_time(_rows(written, "invocations")) == _without_export_time(_rows(live, "invocations"))

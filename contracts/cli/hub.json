@@ -1785,7 +1785,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only this dataset: steps or invocations. Default: every configured one.",
+              "help": "Only this dataset: steps, invocations or events. Default: every configured one.",
               "hidden": false,
               "kind": "option",
               "name": "dataset",
@@ -1840,7 +1840,7 @@
           "help": "Move one dataset's cursor to --to. Forward skips the window between and never exports it; back repeats it,\nwriting its rows again to new files. The move is recorded as an egress-cursor-reset event.",
           "params": [
             {
-              "help": "The dataset whose cursor moves: steps or invocations.",
+              "help": "The dataset whose cursor moves: steps, invocations or events.",
               "hidden": false,
               "kind": "option",
               "name": "dataset",

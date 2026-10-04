@@ -371,9 +371,11 @@ class TranscriptCapsConfig:
 
 EGRESS_FORMATS = ("ndjson", "parquet")
 #: The datasets an export can carry, in the order a pass writes them.
-EGRESS_DATASETS = ("steps", "invocations")
+EGRESS_DATASETS = ("steps", "invocations", "events")
 #: What leaves as a ``file_read`` event's subject.
 EGRESS_FILE_PATHS = ("relative", "hashed", "absolute", "omit")
+#: Which extractor versions' derivations the ``events`` dataset writes.
+EGRESS_EXTRACTOR_VERSIONS = ("current", "all")
 
 
 @dataclass(frozen=True)
@@ -396,6 +398,8 @@ class EgressConfig:
     file_paths: Literal["relative", "hashed", "absolute", "omit"] = "relative"
     #: The environment variable holding the HMAC key for hashed paths; the config never holds the secret itself.
     path_key_env: str = "BZ_EGRESS_PATH_KEY"
+    #: Whether the ``events`` dataset writes only the hub's current extractor version's derivations, or every one.
+    extractor_versions: Literal["current", "all"] = "current"
 
     @classmethod
     def of(cls, raw_egress: object) -> EgressConfig:
@@ -416,6 +420,7 @@ class EgressConfig:
             ),
             file_paths=cls._file_paths(raw_egress, defaults.file_paths),
             path_key_env=cls._path_key_env(raw_egress, defaults.path_key_env),
+            extractor_versions=cls._extractor_versions(raw_egress, defaults.extractor_versions),
         )
 
     @staticmethod
@@ -452,6 +457,17 @@ class EgressConfig:
         raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
 
     @staticmethod
+    def _extractor_versions(raw: Mapping[str, object], default: Literal["current", "all"]) -> Literal["current", "all"]:
+        value = raw.get("extractor_versions", default)
+        if value == "current":
+            return "current"
+        if value == "all":
+            return "all"
+        raise ConfigError(
+            f"egress.extractor_versions must be one of {', '.join(EGRESS_EXTRACTOR_VERSIONS)}, got {value!r}"
+        )
+
+    @staticmethod
     def _path_key_env(raw: Mapping[str, object], default: str) -> str:
         value = raw.get("path_key_env", default)
         if not isinstance(value, str) or not value.strip():
@@ -483,12 +499,13 @@ class EgressConfig:
         commented out at its default, live once overridden."""
         defaults = EgressConfig()
         lines = [
-            "\n# Fact egress: write closed steps and usage as immutable files an analytics tool can load.\n"
-            "# Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
-            "# blizzard[egress] extra); datasets draws from steps and invocations. Seconds, except\n"
+            "\n# Fact egress: write closed steps, usage and transcript events as immutable files an analytics\n"
+            "# tool can load. Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
+            "# blizzard[egress] extra); datasets draws from steps, invocations and events. Seconds, except\n"
             "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n"
             "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n"
-            "# environment variable holding the key for hashed paths. Uncomment to override.\n",
+            "# environment variable holding the key for hashed paths. extractor_versions is current or\n"
+            "# all: which extractor versions' events are written. Uncomment to override.\n",
             "[egress]\n",
             '# directory = "/var/lib/blizzard/egress"\n'
             if self.directory is None
@@ -512,6 +529,7 @@ _EGRESS_KEYS = (
     "backfill_max_window",
     "file_paths",
     "path_key_env",
+    "extractor_versions",
 )
 
 

@@ -14,8 +14,9 @@ from typing import Literal
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress
-from blizzard.hub.domain.egress.schema import STEPS_SCHEMA
+from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, IReadEgressEvents
+from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.tracing.window import oldest_unsent
 
@@ -66,6 +67,7 @@ class EgressStatusReader:
         config: EgressConfig,
         rejected: bool,
         egress: IReadEgress,
+        event_reads: IReadEgressEvents,
         steps: IReadTraceSteps,
         clock: IClock,
         free_space: FreeSpaceProbe,
@@ -73,6 +75,7 @@ class EgressStatusReader:
         self._config = config
         self._rejected = rejected
         self._egress = egress
+        self._event_reads = event_reads
         self._steps = steps
         self._clock = clock
         self._free_space = free_space
@@ -132,16 +135,32 @@ class EgressStatusReader:
     def _dataset(self, name: str, cursor: EgressCursorRecord | None) -> DatasetStatus:
         if cursor is None:
             return DatasetStatus(name, None, None)
-        at = cursor.step.at if name == STEPS_SCHEMA.name and cursor.step is not None else cursor.usage.recorded_at
-        return DatasetStatus(name, at, self._lag(name, cursor))
-
-    def _lag(self, name: str, cursor: EgressCursorRecord) -> float | None:
         now = self._clock.now()
-        if name == STEPS_SCHEMA.name and cursor.step is not None:
-            oldest = oldest_unsent(self._steps, cursor.step, now)
-            return max((now - oldest.key.at).total_seconds(), 0.0) if oldest is not None else None
-        waiting = self._egress.usage_after(cursor.usage, now, 1)
-        return max((now - waiting[0].fact.recorded_at).total_seconds(), 0.0) if waiting else None
+        if name == STEPS_SCHEMA.name:
+            assert cursor.step is not None  # a steps cursor always carries its step position
+            oldest_step = oldest_unsent(self._steps, cursor.step, now)
+            return DatasetStatus(name, cursor.step.at, _lag(now, oldest_step.key.at if oldest_step else None))
+        if name == INVOCATIONS_SCHEMA.name:
+            waiting = self._egress.usage_after(cursor.usage, now, 1)
+            return DatasetStatus(
+                name, cursor.usage.recorded_at, _lag(now, waiting[0].fact.recorded_at if waiting else None)
+            )
+        if name == EVENTS_SCHEMA.name:
+            assert cursor.events is not None  # an events cursor always carries its events position
+            return DatasetStatus(name, cursor.events.at, _lag(now, self._oldest_event(cursor, now)))
+        raise ValueError(f"no egress status for dataset {name!r}")
+
+    def _oldest_event(self, cursor: EgressCursorRecord, now: datetime) -> datetime | None:
+        assert cursor.events is not None
+        version = EXTRACTOR_VERSION if self._config.extractor_versions == "current" else None
+        markers = self._event_reads.markers_after(cursor.events, now, 1, extractor_version=version)
+        drops = self._event_reads.drops_after(cursor.events, now, 1)
+        times = [*(m.derived_at for m in markers), *(d.dropped_at for d in drops)]
+        return min(times, default=None)
+
+
+def _lag(now: datetime, oldest: datetime | None) -> float | None:
+    return max((now - oldest).total_seconds(), 0.0) if oldest is not None else None
 
 
 def _last_data_file(record: EgressCursorRecord | None) -> str | None:

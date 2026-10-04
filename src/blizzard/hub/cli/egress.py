@@ -62,7 +62,7 @@ def egress_status(cli: CliContext) -> None:
 
 
 @egress_group.command("reset", cls=FleetCommand)
-@click.option("--dataset", required=True, help="The dataset whose cursor moves: steps or invocations.")
+@click.option("--dataset", required=True, help="The dataset whose cursor moves: steps, invocations or events.")
 @click.option(
     "--to",
     "to",
@@ -87,7 +87,9 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
 @egress_group.command("backfill", cls=FleetCommand)
 @since_option(required=True)
 @until_option(required=True)
-@click.option("--dataset", default=None, help="Only this dataset: steps or invocations. Default: every configured one.")
+@click.option(
+    "--dataset", default=None, help="Only this dataset: steps, invocations or events. Default: every configured one."
+)
 @click.option("--dry-run", is_flag=True, default=False, help="Count what would be written; write nothing.")
 def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: str | None, dry_run: bool) -> None:
     """Write the rows of [since, until) again, as the live export would have, without moving a cursor. The files

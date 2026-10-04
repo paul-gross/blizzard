@@ -1,9 +1,9 @@
-"""The egress export sweep: writes closed steps and usage, in cursor order, as immutable files.
+"""The egress export sweep: writes closed steps, usage, and event derivations and drops, in cursor order, as files.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §What a pass does, §Late usage and
-§Delivery semantics. Every collaborator is injected, so :meth:`EgressSweep.sweep` is one complete,
-directly-callable pass (``bzh:steppable-loop``). A dataset's cursor moves only after its files and its manifest are
-placed, so a crash anywhere before the cursor row re-writes the same rows on the next pass."""
+Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §What a pass does, §Late usage and §Delivery
+semantics, and ``blizzard-product:/plans/fact-egress/events/spec/export.md``. Every collaborator is injected, so
+:meth:`EgressSweep.sweep` is one complete, directly-callable pass (``bzh:steppable-loop``). A dataset's cursor moves
+only after its files and manifest are placed, so a crash before the cursor row re-writes the same rows next pass."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -19,9 +20,20 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.analytics.events import DropFact
+from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, runner_step, step_partition
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IWriteEgressCursor, UsagePosition
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.egress.events_window import events_rows, position_of, take
+from blizzard.hub.domain.egress.repository import (
+    EgressCursorRecord,
+    EventsPosition,
+    IReadEgressEvents,
+    IWriteEgressCursor,
+    UsagePosition,
+)
 from blizzard.hub.domain.egress.schema import (
+    EVENTS_SCHEMA,
     INVOCATIONS_SCHEMA,
     STEPS_SCHEMA,
 )
@@ -68,14 +80,21 @@ class EgressSweep:
         *,
         steps: IReadTraceSteps,
         egress: IWriteEgressCursor,
+        event_reads: IReadEgressEvents,
+        paths: FilePathPolicy | None,
         writer: IEgressWriter,
         events: EventLogService,
         clock: IClock,
         config: EgressConfig,
         pass_lock: threading.Lock | None = None,
     ) -> None:
+        if EVENTS_SCHEMA.name in config.datasets and paths is None:
+            raise ValueError("the events dataset needs a file path policy")
         self._steps = steps
         self._egress = egress
+        self._event_reads = event_reads
+        self._paths = paths
+        self._extractor_version = EXTRACTOR_VERSION if config.extractor_versions == "current" else None
         self._writer = writer
         self._events = events
         self._clock = clock
@@ -111,11 +130,7 @@ class EgressSweep:
         for dataset in self._datasets:
             cursor = cursors[dataset]
             assert cursor is not None  # every dataset was anchored before this point
-            outcome = (
-                self._steps_pass(cursor, egress_pass, until)
-                if dataset == STEPS_SCHEMA.name
-                else self._invocations_pass(cursor, egress_pass, until)
-            )
+            outcome = self._dataset_pass(dataset, cursor, egress_pass, until)
             if isinstance(outcome, EgressFailure):
                 self._failed(now, dataset, outcome)
                 return
@@ -123,6 +138,17 @@ class EgressSweep:
         # A pass that placed nothing proves nothing about the directory.
         if wrote:
             self._recovered()
+
+    def _dataset_pass(
+        self, dataset: str, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime
+    ) -> bool | EgressFailure:
+        if dataset == STEPS_SCHEMA.name:
+            return self._steps_pass(cursor, egress_pass, until)
+        if dataset == INVOCATIONS_SCHEMA.name:
+            return self._invocations_pass(cursor, egress_pass, until)
+        if dataset == EVENTS_SCHEMA.name:
+            return self._events_pass(cursor, egress_pass, until)
+        raise ValueError(f"no egress pass for dataset {dataset!r}")
 
     # --- the first pass -----------------------------------------------------------------
 
@@ -133,7 +159,8 @@ class EgressSweep:
             if cursor is not None:
                 continue
             step = CursorKey.opening(at) if dataset == STEPS_SCHEMA.name else None
-            self._egress.append_cursor(EgressCursorRecord(dataset, step, UsagePosition(at), 0, (), now))
+            events = EventsPosition(at) if dataset == EVENTS_SCHEMA.name else None
+            self._egress.append_cursor(EgressCursorRecord(dataset, step, UsagePosition(at), 0, (), now, events))
 
     # --- steps --------------------------------------------------------------------------
 
@@ -211,6 +238,39 @@ class EgressSweep:
         self._egress.append_cursor(advanced)
         return False
 
+    # --- events -------------------------------------------------------------------------
+
+    def _events_pass(
+        self, cursor: EgressCursorRecord, egress_pass: EgressPass, until: datetime
+    ) -> bool | EgressFailure:
+        assert cursor.events is not None  # an events cursor always carries its events position
+        assert self._paths is not None  # checked at construction
+        limit = self._batch_limit
+        markers = self._event_reads.markers_after(
+            cursor.events, until, limit, extractor_version=self._extractor_version
+        )
+        drops = self._event_reads.drops_after(cursor.events, until, limit)
+        items = take(markers, drops, limit, read_limit=limit)
+        if not items:
+            return False
+        derivations = {
+            (held.marker.segment_id, held.marker.extractor_version): held
+            for held in self._event_reads.derivations([item for item in items if not isinstance(item, DropFact)])
+        }
+        chunk_ids = sorted(
+            {held.chunk_id for held in derivations.values()}
+            | {item.chunk_id for item in items if isinstance(item, DropFact)}
+        )
+        facts = self._steps.step_facts_for(chunk_ids)
+        rows = events_rows(items, derivations, facts, self._paths, egress_pass.started_at)
+        advanced = EgressCursorRecord(
+            EVENTS_SCHEMA.name, None, cursor.usage, len(rows), (), egress_pass.started_at, position_of(items[-1])
+        )
+        if rows:
+            return self._write(EVENTS_SCHEMA, rows, replace(egress_pass, extractor_version=EXTRACTOR_VERSION), advanced)
+        self._egress.append_cursor(advanced)
+        return False
+
     # --- placing ------------------------------------------------------------------------
 
     def _write(
@@ -236,9 +296,7 @@ class EgressSweep:
             return committed
         _CP_EGRESS_AFTER_COMMIT_BEFORE_CURSOR.reached()
         files = (*(file.path for file in placed), committed.path)
-        self._egress.append_cursor(
-            EgressCursorRecord(advanced.dataset, advanced.step, advanced.usage, len(rows), files, self._clock.now())
-        )
+        self._egress.append_cursor(replace(advanced, row_count=len(rows), files=files, recorded_at=self._clock.now()))
         _log.info("egress pass completed", dataset=schema.name, rows=len(rows), files=len(placed))
         return True
 

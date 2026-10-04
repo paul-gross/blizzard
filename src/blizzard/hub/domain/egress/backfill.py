@@ -123,10 +123,17 @@ class EgressBackfill:
             if dataset is not None and name != dataset:
                 continue
             run.tallies[name] = _Tally()
-            failure = self._steps_window(run) if name == STEPS_SCHEMA.name else self._invocations_window(run)
+            failure = self._window(name, run)
             if failure is not None:
                 return run.result(failure)
         return run.result()
+
+    def _window(self, dataset: str, run: _Run) -> EgressFailure | None:
+        if dataset == STEPS_SCHEMA.name:
+            return self._steps_window(run)
+        if dataset == INVOCATIONS_SCHEMA.name:
+            return self._invocations_window(run)
+        raise BackfillWindowRefused(f"dataset {dataset!r} cannot be backfilled")
 
     # --- steps --------------------------------------------------------------------------
 

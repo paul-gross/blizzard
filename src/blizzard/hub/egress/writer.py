@@ -74,10 +74,12 @@ class DatasetSchema:
 
 @dataclass(frozen=True)
 class EgressPass:
-    """One export pass's identity: the caller's start instant (UTC) and whether it is a backfill."""
+    """One export pass's identity: the caller's start instant (UTC), whether it is a backfill, and the hub's extractor
+    version when the pass writes ``events``."""
 
     started_at: datetime
     backfill: bool = False
+    extractor_version: str | None = None
 
 
 @dataclass(frozen=True)
