@@ -104,12 +104,69 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
   artifacts: [],
 };
 
+const FORENSICS_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01forensics000000000000000000',
+  graph_id: 'gr_1',
+  status: 'done',
+  current_node_id: 'nd_done',
+  latest_epoch: 2,
+  work_refs: [],
+  artifacts: [],
+  history: [
+    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
+  ],
+  bounces: [{ cause: 'malformed-result', envelope: '{"raw":true}', recorded_at: '2026-07-13T00:00:02Z' }],
+  restarts: [
+    {
+      epoch: 2,
+      graph_id: 'gr_1',
+      from_node_id: 'nd_review',
+      from_node_name: 'review',
+      to_node_id: 'nd_build',
+      to_node_name: 'build',
+      restarted_by: 'ops@example.test',
+      recorded_at: '2026-07-13T00:00:03Z',
+    },
+  ],
+};
+
 describe('ChunkTimelineSelection', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkTimelineSelection],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
+  });
+
+  it('renders a bounce and a restart in time order, keyless and inert', async () => {
+    const fixture = TestBed.createComponent(ChunkTimelineSelection);
+    fixture.componentRef.setInput('detail', FORENSICS_DETAIL);
+    
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const picks: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((k) => picks.push(k));
+
+    const ids = [...el.querySelectorAll('[data-testid^="selection-"][data-testid$="step"]')].map((n) => n.getAttribute('data-testid'));
+    expect(ids).toEqual(['selection-step', 'selection-bounce-step', 'selection-restart-step']);
+
+    const bounce = el.querySelector<HTMLElement>('[data-testid="selection-bounce-step"]')!;
+    expect(bounce.getAttribute('title')).toBe('{"raw":true}');
+    expect(bounce.getAttribute('data-choice')).toBe('bounced');
+    expect(bounce.querySelector('[data-testid="selection-choice"]')?.textContent).toContain('malformed-result');
+    expect(bounce.querySelector('.jg-to')).toBeNull();
+
+    const restart = el.querySelector<HTMLElement>('[data-testid="selection-restart-step"]')!;
+    expect(restart.querySelector('.nd')?.textContent).toContain('review');
+    expect(restart.querySelector('.jg-to')?.textContent).toContain('build');
+    expect(restart.querySelector('[data-testid="selection-actor"]')?.textContent).toContain('ops@example.test');
+
+    for (const row of [bounce, restart]) {
+      expect(row.getAttribute('role')).toBeNull();
+      expect(row.getAttribute('tabindex')).toBeNull();
+      row.click();
+    }
+    expect(picks).toEqual([]);
   });
 
   it('renders the three-line row layout: identity, verdict/routing/when, then usage', async () => {
@@ -214,7 +271,7 @@ describe('ChunkTimelineSelection', () => {
     expect(el.querySelector('[data-testid="selection-active"]')?.getAttribute('role')).toBe('button');
   });
 
-  it.each(['restart', 'intent', 'follow-latest', null])('leaves %s migrations inert even with an origin node', async (source) => {
+  it.each(['intent', 'follow-latest', null])('leaves %s migrations inert even with an origin node', async (source) => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', {
       ...TWO_GRAPH_DETAIL,
@@ -255,7 +312,7 @@ describe('ChunkTimelineSelection', () => {
     expect(emitted.at(-1)).toBeNull();
   });
 
-  it.each(['intent', 'follow-latest', 'restart', 'authored-edge'])('keeps a null-origin %s migration unkeyed', async (source) => {
+  it.each(['intent', 'follow-latest', 'authored-edge'])('keeps a null-origin %s migration unkeyed', async (source) => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', {
       ...TWO_GRAPH_DETAIL,

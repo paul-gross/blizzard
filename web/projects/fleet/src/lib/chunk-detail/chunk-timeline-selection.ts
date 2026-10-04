@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
 import { KitAsyncState } from '../kit/kit-async-state';
-import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, usageForStep as sumStepUsage } from './chunk-timeline-rows';
+import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, rowChoice, rowMark, usageForStep as sumStepUsage } from './chunk-timeline-rows';
 
 /**
  * The node history tab's own Selection list — the interactive,
@@ -52,9 +52,11 @@ export class ChunkTimelineSelection {
   /** Emitted with an activated row's join key, or `null` when the already-selected row
    * is re-activated — the only way to clear a step selection from this component, since
    * re-navigating to an identical URL is a no-op the router drops. Never emitted for a
-   * `null`-keyed row (a migration, or an active row with no epoch yet). */
+   * `null`-keyed row (a migration, bounce, or restart, or an active row with no epoch yet). */
   readonly pickStep = output<string | null>();
 
+  protected readonly rowMark = rowMark;
+  protected readonly rowChoice = rowChoice;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
 

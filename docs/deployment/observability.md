@@ -65,7 +65,12 @@ swept the next time the runner starts.
 
 `GET /api/events` returns the log newest first, filterable by severity, runner_id, chunk_id, and since, with a bounded
 default page — the cap keeps the newest rows, whatever their severity. The board's Events tab renders the feed live over
-the SSE spine (`/api/events/stream`), each row linking to its chunk.
+the SSE spine (`/api/events/stream`), each row linking to its chunk. A chunk's page links to its own events, and
+`/events?chunk=<id>` deep-links the Events tab filtered to that chunk server-side. `blizzard hub events` reads the same
+feed from the command line, with `--severity`, `--runner`, `--chunk`, `--since`, and `--limit` mapping onto the route's
+filters and `--json` printing the raw rows, `detail` included. A chunk's timeline interleaves its bounces, with their
+cause, and its restarts, with who restarted it and from where to where, among its transitions and migrations in time
+order.
 
 `GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging durable chunk
 occurrences (including distinct claims and node transitions), questions and decisions, event-log rows, and runner

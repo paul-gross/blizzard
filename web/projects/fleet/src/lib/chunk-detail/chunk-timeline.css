@@ -27,10 +27,11 @@
    a column is content-sized (two rows with differently-long node names
    would size that column differently). `.step`, nested one level inside
    `.step-item`, subgrids a second time so the same alignment
-   carries through the extra level. */
+   carries through the extra level. The first track holds the attempt number or a row kind's
+   mark glyph; the row's own padding and border take 10px of it, so 28px, not a digit's width. */
 .timeline {
   display: grid;
-  grid-template-columns: 16px fit-content(160px) minmax(64px, 1fr) auto;
+  grid-template-columns: 28px fit-content(160px) minmax(64px, 1fr) auto;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -248,4 +249,28 @@ a.gr:focus-visible {
      `pointer-events: none`; opt this one descendant back in the same way
      `.jg-to` does, so this badge's own `[title]` and `cursor: help` stay live. */
   pointer-events: auto;
+}
+/* A bounce is a refused result — alarm red; a restart is an operator's deliberate
+   move — amber-hi, the same tone a parked operator verb reads. */
+.step[data-choice='bounced'] .verdict {
+  color: var(--red);
+}
+.step[data-choice='restarted'] .verdict {
+  color: var(--amber-hi);
+}
+/* Who restarted the chunk — attribution, so it reads dim like the routed-to column. */
+.step .jg-by {
+  color: var(--label-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: var(--fs-label);
+}
+/* A bounce's cause is free text, not a short graph choice name — it ellipsizes (the
+   row's own title carries the envelope) rather than widening the row past the panel. */
+.step[data-choice='bounced'] .verdict {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }

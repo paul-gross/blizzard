@@ -37,6 +37,9 @@ export interface ChunkPageActions {
   readonly actionOutcome: Signal<string | null>;
   /** The graphs view's own path segments a graph badge links to. */
   readonly graphLinkBase: readonly string[];
+  /** The events view's own path segments the chunk page links its own events to, as
+   * `<base>?chunk=<id>` — a daemon serving no events feed provides no port, so no link. */
+  readonly eventsLinkBase: readonly string[];
   answer(event: AnswerQuestionEvent): void;
   resolve(event: ResolveDecisionEvent): void;
   editGraph(event: EditGraphEvent): void;

@@ -9,6 +9,10 @@ import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
  * graph badge to. */
 const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
 
+/** The events view's own path segments — the chunk page links a chunk's own events
+ * there, filtered by `?chunk=`. */
+const EVENTS_LINK_BASE: readonly string[] = ['/events'];
+
 /**
  * The hub's operator-action port for the shared chunk page — its `/api/me` permissions
  * and the three human-loop mutations (answer, resolve, set graph) the desktop dock writes
@@ -47,6 +51,7 @@ export function injectHubChunkActions(): ChunkPageActions {
     actionError: actionError.asReadonly(),
     actionOutcome: actionOutcome.asReadonly(),
     graphLinkBase: GRAPH_LINK_BASE,
+    eventsLinkBase: EVENTS_LINK_BASE,
     answer(event: AnswerQuestionEvent): void {
       beginAction();
       answerMutation.mutate(

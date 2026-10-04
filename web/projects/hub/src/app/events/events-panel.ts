@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
 
 import { type KitAsyncStateValue, asyncState } from 'fleet';
+import { injectQueryFilters } from '../route-state';
 import { EventsView } from './events-view';
 import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
@@ -13,8 +14,9 @@ import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from '.
  * deduped by fact identity — no filters, no independent query
  * of its own here.
  *
- * Owns the severity/runner/chunk filter state as signals and the reactive query
- * over them, and renders the presentational {@link EventsView}. Follows
+ * Owns the severity/runner filter state as signals, the chunk filter in the URL's
+ * `?chunk=` (so a chunk's own page can deep-link its events, and the filtered view
+ * survives a reload), and the reactive query over them, and renders the presentational {@link EventsView}. Follows
  * `questions-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
  * generated hub client (bzh:generated-client) via TanStack Query. The live-update
  * service re-reads this on `event-logged` and on an escalation-bearing
@@ -42,8 +44,11 @@ export class EventsPanel {
   protected readonly severity = signal<EventSeverity | null>(null);
   /** The active runner filter, or `null` for "every runner". */
   protected readonly runnerId = signal<string | null>(null);
-  /** The active chunk filter, or `null` for "every chunk". */
-  protected readonly chunkId = signal<string | null>(null);
+  private readonly filters = injectQueryFilters();
+
+  /** The active chunk filter, or `null` for "every chunk" — read from `?chunk=` and
+   * sent to the hub as `chunk_id`, never applied client-side. */
+  protected readonly chunkId = computed(() => this.filters.read('chunk'));
 
   protected readonly query = injectHubEventsQuery(() => ({
     severity: this.severity(),
@@ -104,6 +109,6 @@ export class EventsPanel {
   }
 
   protected onChunkFilterChange(chunkId: string): void {
-    this.chunkId.set(chunkId === '' ? null : chunkId);
+    this.filters.patch({ chunk: chunkId === '' ? null : chunkId });
   }
 }

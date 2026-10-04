@@ -1853,6 +1853,97 @@
       "path": "hub egress",
       "short_help": "Operator verbs over the fact-egress export."
     },
+    "events": {
+      "help": "Read the operational event feed \u2014 the event log unified with open escalations,\nnewest first. ``--json`` prints the raw response, ``detail`` included.",
+      "params": [
+        {
+          "help": "Only this severity.",
+          "hidden": false,
+          "kind": "option",
+          "name": "severity",
+          "opts": [
+            "--severity"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "choice"
+        },
+        {
+          "help": "Only events from this runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner_id",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Only events about this chunk.",
+          "hidden": false,
+          "kind": "option",
+          "name": "chunk_id",
+          "opts": [
+            "--chunk"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Only records at/after this instant, read in the caller's own local time.",
+          "hidden": false,
+          "kind": "option",
+          "name": "since",
+          "opts": [
+            "--since"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "datetime"
+        },
+        {
+          "help": "Max rows (1-200, default 200).",
+          "hidden": false,
+          "kind": "option",
+          "name": "limit",
+          "opts": [
+            "--limit"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "integer range"
+        },
+        {
+          "help": "Print the raw response body as JSON.",
+          "hidden": false,
+          "kind": "option",
+          "name": "as_json",
+          "opts": [
+            "--json"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
+        },
+        {
+          "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+          "hidden": false,
+          "kind": "option",
+          "name": "hub_url",
+          "opts": [
+            "--hub-url"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        }
+      ],
+      "path": "hub events",
+      "short_help": "Read the operational event feed \u2014 the event log unified with open escalations, newest first."
+    },
     "finding": {
       "commands": {
         "confirm-gone": {

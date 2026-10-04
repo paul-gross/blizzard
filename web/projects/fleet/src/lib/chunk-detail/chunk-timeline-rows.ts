@@ -13,11 +13,19 @@ import { formatAbsolute, formatWhen } from '../when';
  *
  * {@link key} is this step's join key ({@link nodeStepKey} of its `(nodeId, epoch)`) —
  * `null` for migrations without a worker step (non-authored sources or no origin node).
- * Authored-edge migrations join the producing step at their real epoch. */
+ * Authored-edge migrations join the producing step at their real epoch.
+ *
+ * A `bounce` row is a worker result the hub refused: `verdict` carries its cause and
+ * {@link title} its raw envelope, with no node, epoch, or destination of its own. A
+ * `restart` row is an operator's move of the chunk: `nodeName → toName`, by
+ * {@link actor}, its graph crossing (when it left another graph) read off `toName`'s
+ * `graph/node` form the way a migration's is. Neither is a node-step, so both are
+ * keyless. */
 export interface HistoryRow {
-  readonly kind: 'transition' | 'migration';
+  readonly kind: 'transition' | 'migration' | 'bounce' | 'restart';
   readonly key: string | null;
-  readonly epoch: number;
+  /** The row's epoch — `null` for a bounce, which records none. */
+  readonly epoch: number | null;
   readonly nodeId: string | null;
   readonly nodeName: string;
   readonly graphName: string | null;
@@ -26,8 +34,16 @@ export interface HistoryRow {
    * carries none. */
   readonly graphId: string | null;
   readonly verdict: string | null;
-  readonly toId: string;
-  readonly toName: string;
+  /** Where the row routed the chunk — `null` for a bounce, which routed nowhere. */
+  readonly toId: string | null;
+  readonly toName: string | null;
+  /** Who drove the row — a restart's `restarted_by`; `null` on every other kind. */
+  readonly actor: string | null;
+  /** The whole row's tooltip — a bounce's raw envelope; `null` on every other kind. */
+  readonly title: string | null;
+  /** Whether the row hops graphs — a migration always, a restart when it left another
+   * graph. */
+  readonly crossesGraph: boolean;
   readonly when: string;
   readonly whenTitle: string;
   readonly sortKey: string;
@@ -74,9 +90,11 @@ export interface StepUsageTotal {
 }
 
 /**
- * The chunk's node-history rows, oldest-first: every judged transition plus
- * every cross-graph migration, woven into one chronological list by
- * `recorded_at`. The single owner of this derivation (`canon:one-owner`, the same
+ * The chunk's node-history rows, oldest-first: every judged transition, every
+ * cross-graph migration, every bounce, and every restart, woven into one
+ * chronological list by `recorded_at`. A cross-graph restart also records a
+ * migration (`source: 'restart'`); that migration is folded into the restart's own
+ * row rather than rendered as a second step for the one operator move. The single owner of this derivation (`canon:one-owner`, the same
  * precedent `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
  * {@link ChunkTimeline} reads it rather than re-deriving it inline.
  */
@@ -97,13 +115,16 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
       verdict: t.choice_name,
       toId: t.to_node_id,
       toName: t.to_node_name ?? t.to_node_id,
+      actor: null,
+      title: null,
+      crossesGraph: false,
       when: formatWhen(t.recorded_at),
       whenTitle: formatAbsolute(t.recorded_at),
       sortKey: t.recorded_at,
     }));
   // Cross-graph migration steps — the chunk left `from_graph/from_node`
   // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
-  const migrations: HistoryRow[] = (detail.migrations ?? []).map((m) => ({
+  const migrations: HistoryRow[] = (detail.migrations ?? []).filter((m) => m.source !== 'restart').map((m) => ({
     kind: 'migration' as const,
     key: m.source === 'authored-edge' && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
     epoch: m.epoch,
@@ -114,17 +135,80 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     verdict: m.choice_name ?? null,
     toId: m.landed_node_id ?? m.to_graph_id,
     toName: `${m.to_graph_name ?? m.to_graph_id}/${m.landed_node_name ?? m.landed_node_id ?? 'entry'}`,
+    actor: null,
+    title: null,
+    crossesGraph: true,
     when: formatWhen(m.recorded_at),
     whenTitle: formatAbsolute(m.recorded_at),
     sortKey: m.recorded_at,
   }));
-  return [...transitions, ...migrations].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const bounces: HistoryRow[] = (detail.bounces ?? []).map((b) => ({
+    kind: 'bounce' as const,
+    key: null,
+    epoch: null,
+    nodeId: null,
+    nodeName: 'bounce',
+    graphName: null,
+    graphId: null,
+    verdict: b.cause,
+    toId: null,
+    toName: null,
+    actor: null,
+    title: b.envelope,
+    crossesGraph: false,
+    when: formatWhen(b.recorded_at),
+    whenTitle: formatAbsolute(b.recorded_at),
+    sortKey: b.recorded_at,
+  }));
+  const restarts: HistoryRow[] = (detail.restarts ?? []).map((r) => {
+    const toNode = r.to_node_name ?? r.to_node_id;
+    const crossesGraph = r.from_graph_id != null;
+    return {
+      kind: 'restart' as const,
+      key: null,
+      epoch: r.epoch,
+      nodeId: r.from_node_id ?? null,
+      nodeName: r.from_node_name ?? r.from_node_id ?? '·',
+      graphName: crossesGraph ? (r.from_graph_name ?? r.from_graph_id ?? null) : (r.graph_name ?? null),
+      graphId: crossesGraph ? (r.from_graph_id ?? null) : r.graph_id,
+      verdict: 'restart',
+      toId: r.to_node_id,
+      toName: crossesGraph ? `${r.graph_name ?? r.graph_id}/${toNode}` : toNode,
+      actor: r.restarted_by,
+      title: null,
+      crossesGraph,
+      when: formatWhen(r.recorded_at),
+      whenTitle: formatAbsolute(r.recorded_at),
+      sortKey: r.recorded_at,
+    };
+  });
+  return [...transitions, ...migrations, ...bounces, ...restarts].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 }
 
-/** Whether `rows` spans more than one graph — a chunk that migrated. A migration inherently crosses two graphs
- * (its target may not yet have its own row), so its presence alone qualifies. */
+// U+FE0E pins the arrows to text presentation: bare, Chromium paints them as colour emoji
+// wider than the mark column, which then overlaps the label.
+const KIND_MARKS: Record<Exclude<HistoryRow['kind'], 'transition'>, { mark: string; choice: string }> = {
+  migration: { mark: '⤳', choice: 'migrated' },
+  bounce: { mark: '\u21A9\uFE0E', choice: 'bounced' },
+  restart: { mark: '\u21BB\uFE0E', choice: 'restarted' },
+};
+
+/** The row's attempt-column text — a transition's own epoch, or its kind's glyph. */
+export function rowMark(row: HistoryRow): string {
+  return row.kind === 'transition' ? String(row.epoch ?? '·') : KIND_MARKS[row.kind].mark;
+}
+
+/** The row's `data-choice` key into the verdict color table — a transition's own
+ * verdict, or its kind's fixed key. */
+export function rowChoice(row: HistoryRow): string | null {
+  return row.kind === 'transition' ? row.verdict : KIND_MARKS[row.kind].choice;
+}
+
+/** Whether `rows` spans more than one graph — a chunk that migrated. A migration or a
+ * graph-crossing restart inherently crosses two graphs (its target may not yet have its
+ * own row), so its presence alone qualifies. */
 export function deriveMultiGraph(rows: readonly HistoryRow[]): boolean {
-  if (rows.some((r) => r.kind === 'migration')) return true;
+  if (rows.some((r) => r.crossesGraph)) return true;
   const names = new Set(rows.map((r) => r.graphName ?? ''));
   names.delete('');
   return names.size > 1;
@@ -167,7 +251,9 @@ export function deriveActiveRow(detail: ChunkDetail): ActiveRow | null {
  * recorded there. Multiple invocations at one step (spawn/resume/judge) fold into
  * one figure so the timeline reads one lap's cost per line. */
 export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTotal | null {
-  if (!row.nodeId) return null;
+  // A restart's origin node is not a step of its own — its usage belongs to that
+  // node's own transition row.
+  if (!row.nodeId || row.kind === 'restart') return null;
   const rows = (detail.usage ?? []).filter((u) => u.node_id === row.nodeId && u.epoch === row.epoch);
   if (rows.length === 0) return null;
   // Newest-first: `detail.usage` arrives oldest-first (the hub's own `_usage_history`),

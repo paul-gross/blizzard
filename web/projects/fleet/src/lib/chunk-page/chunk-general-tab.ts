@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import {
@@ -12,7 +14,7 @@ import {
   type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
-import { KitPanel } from '../kit/kit-panel';
+import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 
 /**
@@ -41,7 +43,7 @@ import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
@@ -76,6 +78,11 @@ export class ChunkGeneralTab {
    * {@link ChunkTimeline} — `null` (the default) withholds
    * the link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
+
+  /** The events view's own path segments, before the `?chunk=` filter — set, the tab
+   * links this chunk's own events beside its node history; `null` (the default)
+   * withholds the link, since only a daemon serving an events feed has one to reach. */
+  readonly eventsLinkBase = input<readonly string[] | null>(null);
 
   /** The issue pane's placement — `'center'` (the default) or `'inline'` for a
    * narrow host. */

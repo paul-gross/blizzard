@@ -34,6 +34,7 @@ _COMMANDS = {
     "decision": f"{_CLI}.decision:decision_group",
     "question": f"{_CLI}.question:question_group",
     "analytics": f"{_CLI}.analytics:analytics_group",
+    "events": f"{_CLI}.events:events",
     "traces": f"{_CLI}.traces:traces_group",
     "egress": f"{_CLI}.egress:egress_group",
 }
