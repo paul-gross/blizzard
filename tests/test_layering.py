@@ -865,3 +865,42 @@ def test_only_the_composition_root_builds_an_egress_writer() -> None:
     seam = (str((_HUB_DIR / "domain" / "egress").relative_to(_REPO_ROOT)), *homes)
     callers = [v for v in _violations(_SRC_DIR, ("blizzard.hub.egress",)) if not v.startswith(seam)]
     assert not callers, callers
+
+
+_SECRET_PLAINTEXT_NAMES = frozenset({"SecretValue", "ISecretReader", "ISealedSecretRepository"})
+_REQUEST_PLANE_DIRS = (_HUB_DIR / "api", _HUB_DIR / "cli", _WIRE_DIR)
+
+
+def _secret_plaintext_imports(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            found.extend(a.name for a in node.names if a.name in _SECRET_PLAINTEXT_NAMES)
+        elif isinstance(node, ast.Import):
+            found.extend(a.name for a in node.names if a.name.rsplit(".", 1)[-1] in _SECRET_PLAINTEXT_NAMES)
+    return found
+
+
+def test_no_request_plane_module_imports_the_secret_plaintext_seams() -> None:
+    """``bzh:secret-write-only``: a stored value is revealed only through ``ISecretReader``
+    into the objects that call external systems — never on a route, a CLI verb, or a wire model."""
+    violations = {
+        str(path.relative_to(_REPO_ROOT)): names
+        for directory in _REQUEST_PLANE_DIRS
+        for path in sorted(directory.rglob("*.py"))
+        if (names := _secret_plaintext_imports(path))
+    }
+    assert not violations, f"api/, cli/, and wire/ must not import the secret plaintext seams: {violations}"
+
+
+def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> None:
+    for statement in (
+        "from blizzard.hub.domain.secrets import SecretValue",
+        "from blizzard.hub.domain.secrets import ISecretReader as Reader",
+        "from blizzard.hub.domain.secrets import ISealedSecretRepository",
+        "import blizzard.hub.domain.secrets.SecretValue",
+    ):
+        module = tmp_path / "m.py"
+        module.write_text(statement + "\n")
+        assert _secret_plaintext_imports(module), statement

@@ -30,6 +30,7 @@ from tests.runner_fakes import runner_migration_prototype
 from tests.store_read_census import (
     HUB_CENSUS,
     HUB_EXEMPTIONS,
+    HUB_NAMED_READ_SEAMS,
     RUNNER_CENSUS,
     RUNNER_EXEMPTIONS,
     HubWorld,
@@ -68,6 +69,15 @@ def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]
                     continue
                 keys.add((obj, member_name))
     return keys
+
+
+def _declared_methods(protocols: tuple[type, ...]) -> set[tuple[type, str]]:
+    return {
+        (protocol, name)
+        for protocol in protocols
+        for name, member in vars(protocol).items()
+        if not name.startswith("_") and callable(member)
+    }
 
 
 def _offending_scans_by_method(
@@ -215,7 +225,7 @@ def test_runner_read_methods_never_scan_an_unallowed_table(runner_world: RunnerW
 
 
 def test_hub_census_is_exhaustive() -> None:
-    reflected = _reflect_read_protocol_methods(hub_pkg)
+    reflected = _reflect_read_protocol_methods(hub_pkg) | _declared_methods(HUB_NAMED_READ_SEAMS)
     declared = set(HUB_CENSUS.keys()) | set(HUB_EXEMPTIONS.keys())
     assert reflected == declared, (
         "the reflected hub IRead* Protocol methods no longer match "

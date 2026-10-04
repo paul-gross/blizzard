@@ -33,6 +33,7 @@ owns what that assumption still costs.
 | [`deployment/install.md`](./deployment/install.md)         | You are installing the wheel, seeding each daemon's runtime directory, and dropping the units — plus the config renames and migration notes an upgrade owes |
 | [`deployment/runner-auth.md`](./deployment/runner-auth.md) | You are enrolling a runner and rolling the fleet from `warn` to `enforce` — machine identity, not human login                                               |
 | [`deployment/human-auth.md`](./deployment/human-auth.md)   | You are putting operators behind SSO: the `[auth]` table, the superuser bootstrap, roles, runner-side federation, and what a TLS-terminating proxy changes  |
+| [`deployment/secrets.md`](./deployment/secrets.md)         | You are storing a credential in the hub, choosing where its encryption key lives, or rotating that key                                                      |
 
 ### Configuring what workers do
 

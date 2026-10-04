@@ -72,6 +72,7 @@ from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.secrets import ISecretCatalog, SecretAuthoring, SecretLifecycle, SecretName
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCursorRecord
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
@@ -83,6 +84,7 @@ from blizzard.hub.domain.work import (
     WorkItemAuthor,
     WorkRef,
 )
+from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -91,6 +93,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -917,6 +920,7 @@ class HubWorld:
     garden_sweeps: IReadGardenSweepsRepository
     garden_trend: IReadGardenTrendRepository
     work_items: IReadWorkItemRepository
+    secrets: ISecretCatalog
     default_graph: Graph
     graph: Graph
     retired_graph: Graph
@@ -1083,6 +1087,15 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     scope_b = hub.services.scope_registry.ensure(ScopeSlug.parse("runner-scope"), description="runner side")
     scope_c = hub.services.scope_registry.ensure(ScopeSlug.parse("legacy"), description="retired")
     hub.services.scope_lifecycle.retire(scope_c, by="operator")
+
+    # --- secrets ----------------------------------------------------------------------------
+    secret_store = SecretStore(store_connections)
+    secret_authoring = SecretAuthoring(
+        secrets=secret_store, cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")), clock=clock
+    )
+    secret_authoring.create(SecretName.parse("gh-token"), "tok-a", by="operator")
+    retired_secret = secret_authoring.create(SecretName.parse("old-token"), "tok-b", by="operator")
+    SecretLifecycle(secrets=secret_store, clock=clock).retire(retired_secret, by="operator")
 
     routine = hub.services.routine_authoring.create(
         name="gardening",
@@ -1685,6 +1698,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         garden_sweeps=garden_sweeps_store,
         garden_trend=garden_trend_store,
         work_items=work_items,
+        secrets=secret_store,
         default_graph=default_graph,
         graph=graph,
         retired_graph=retired_graph,
@@ -1731,6 +1745,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 HubRecipe = Callable[[HubWorld], object]
 
 #: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
+#: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
+HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog,)
+
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
@@ -1994,6 +2011,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
     (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines("blizzard"),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
+    (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
+    (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
+    (ISecretCatalog, "list_all"): lambda w: w.secrets.list_all(),
+    (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
+    (ISecretCatalog, "retired_names"): lambda w: w.secrets.retired_names(),
+    (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
     (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.scope_a),
     (IReadScopeRepository, "list_all"): lambda w: w.hub.services.scopes.list_all(),
     (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.scope_c),

@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import Engine
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
@@ -109,6 +109,7 @@ from blizzard.hub.domain.routines import (
 )
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.secrets import IHubKeyProvider, ISecretCatalog, SecretAuthoring, SecretLifecycle
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.tracing.replay import TraceReplay
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
@@ -125,6 +126,7 @@ from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.secrets import secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -144,6 +146,7 @@ from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -276,6 +279,12 @@ class HubServices:
     scope_registry: ScopeRegistry
     #: The scope retire/enable brake.
     scope_lifecycle: ScopeLifecycle
+    #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
+    secret_catalog: ISecretCatalog
+    #: Create and replace a secret's value.
+    secret_authoring: SecretAuthoring
+    #: The secret retire/enable brake.
+    secret_lifecycle: SecretLifecycle
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -355,7 +364,15 @@ class HubCore:
     garden_proposal_closure_store: GardenProposalClosureStore
     work_item_edits: WorkItemEditService
     garden_proposal_resolution: GardenProposalDeliveryResolution
+    #: Sealed secret rows — composition-only, never a ``HubServices`` field.
+    secrets: SecretStore
     clock: IClock
+
+
+def build_process_core(engine: Engine) -> HubCore:
+    """:func:`build_hub_core` on the one process clock — the hosted app and the offline
+    verbs build their core through here."""
+    return build_hub_core(engine, clock=SystemClock())
 
 
 def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
@@ -391,6 +408,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         finding_exit=finding_exit,
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
+        secrets=SecretStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -450,6 +468,7 @@ def build_services(
     oauth_http_client: httpx.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
+    secret_keys: IHubKeyProvider,
     trusted_proxies: TrustedProxies | None = None,
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
@@ -803,6 +822,9 @@ def build_services(
         scopes=scope_store,
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
+        secret_catalog=core.secrets,
+        secret_authoring=SecretAuthoring(secrets=core.secrets, cipher=secret_cipher(secret_keys), clock=clock),
+        secret_lifecycle=SecretLifecycle(secrets=core.secrets, clock=clock),
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store),

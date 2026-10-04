@@ -20,11 +20,17 @@ board reads; always back it up. It is the whole `postgres-data` volume by defaul
 Losing the signing keys invalidates every live session and forces a fleet-wide re-login: a runner's JWKS cache
 re-fetches on an unknown `kid`, but the key itself never comes back.
 
+**Secret keys.** `data/auth/secret-keys/` on the `hub-data` volume holds the key that seals every stored secret, plus
+`meta.json` ([`docs/deployment/secrets.md`](./deployment/secrets.md)). Back it up together with the store: the stored
+ciphertext is useless without it, and a lost key means every secret must be set again. It is absent when
+`BZ_HUB_SECRET_KEY` supplies the key, which then belongs in your own secret management.
+
 **Hub workdirs.** `data/hub_workdirs/` — scratch git clones a hub command node uses mid-delivery
 (`config.data_dir / "hub_workdirs"`) — is reclaimable: re-cloned from the delivery forge on next use, carrying no state
 the store lacks, so skip it.
 
-Signing keys and hub workdirs live on the `blizzard_hub-data` volume regardless of which store backend runs.
+Signing keys, secret keys, and hub workdirs live on the `blizzard_hub-data` volume regardless of which store backend
+runs.
 
 **Caddy state.** The `caddy-data` and `caddy-config` volumes hold the minted TLS certificate and Caddy's own state;
 backing them up is optional — losing them costs one re-issuance from Let's Encrypt on next boot, not data.
@@ -67,10 +73,11 @@ docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine tar czf /to/hu
 docker compose start hub
 ```
 
-To snapshot only the signing keys, skipping the reclaimable workdirs — with the hub stopped, as for any hub-data tar:
+To snapshot only the signing and secret keys, skipping the reclaimable workdirs — with the hub stopped, as for any
+hub-data tar:
 
 ```bash
-docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine tar czf /to/signing-keys-backup.tgz -C /from data/auth/signing-keys
+docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine tar czf /to/keys-backup.tgz -C /from data/auth
 ```
 
 Restore into a fresh volume. The hub container is removed first, not merely stopped — Docker refuses to remove a volume

@@ -12,16 +12,17 @@ import contextlib
 import os
 import random
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
 import httpx
 from fastapi import Depends, FastAPI, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from blizzard import __version__
-from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -59,6 +60,8 @@ from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.scopes import router as scopes_router
+from blizzard.hub.api.secrets import router as secrets_router
+from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
@@ -66,7 +69,7 @@ from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
-from blizzard.hub.composition import HubServices, build_hub_core, build_services
+from blizzard.hub.composition import HubServices, build_process_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
 from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.tracing.attributes import (
@@ -79,6 +82,8 @@ from blizzard.hub.domain.tracing.attributes import (
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.secrets import KeyCoverage, hub_key_provider
+from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -242,6 +247,21 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
+    """The offline ``rotate-key`` wiring: the store and key source opened directly, no app."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return rotate_keys(build_process_core(engine).secrets, environ, data_dir=config.data_dir)
+    finally:
+        engine.dispose()
+
+
+async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
+    """The framework's 422, except on the secret routes, which never echo request input."""
+    assert isinstance(exc, RequestValidationError)
+    return sanitized_validation_response(request, exc) or await request_validation_exception_handler(request, exc)
+
+
 def _annotate_chunk(request: Request) -> None:
     """Stamp ``blizzard.chunk.id`` on the request's span from a ``chunk_id`` path parameter."""
     chunk_id = request.path_params.get("chunk_id")
@@ -296,6 +316,7 @@ def create_app(
     app.state.shutdown = asyncio.Event()
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
+    app.add_exception_handler(RequestValidationError, _validation_error)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -306,6 +327,7 @@ def create_app(
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(scopes_router)
+    app.include_router(secrets_router)
     app.include_router(routines_router)
     app.include_router(findings_router)
     app.include_router(garden_proposals_router)
@@ -373,7 +395,7 @@ def build_hosted_app(
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
     # The one process-scoped clock and the stores and leaf services built once over it —
     # the work-source registry and `build_services` below both take the same core.
-    core = build_hub_core(engine, clock=SystemClock())
+    core = build_process_core(engine)
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
         users=core.users,
@@ -392,6 +414,8 @@ def build_hosted_app(
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
+    # Minted here on first start when no key source exists yet.
+    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
     oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
     forge_client = httpx.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
@@ -412,6 +436,7 @@ def build_hosted_app(
         oauth_providers=oauth_providers,
         oauth_http_client=oauth_client,
         signing_keys_dir=signing_keys_dir,
+        secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
         # No exporter is built unless OpenTelemetry's own variables enable tracing.
@@ -433,6 +458,7 @@ def build_hosted_app(
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
+        KeyCoverage.of(core.secrets, secret_keys).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)

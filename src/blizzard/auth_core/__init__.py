@@ -53,6 +53,8 @@ TRANSCRIPT_READ = Permission("transcript:read")
 #: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
 #: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
 ANALYTICS_ADMIN = Permission("analytics:admin")
+#: Write a configured record — today the secret store. Held by ``admin``+.
+CONFIG_EDIT = Permission("config:edit")
 
 #: ``guest`` — read everything, mutate nothing.
 _GUEST_PERMISSIONS: frozenset[Permission] = frozenset({FLEET_VIEW})
@@ -72,7 +74,7 @@ _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset
 #: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
 #: administration (the admin page, ``user:manage``) on top of ``contributor``.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
-    {RUNNER_PAUSE, RUNNER_RETIRE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN}
+    {RUNNER_PAUSE, RUNNER_RETIRE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN, CONFIG_EDIT}
 )
 
 #: ``superuser`` holds every permission that exists — in #91 that is exactly the

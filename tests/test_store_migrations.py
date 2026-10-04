@@ -1394,3 +1394,28 @@ def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_pat
     values = _spawn_cwd_round_trip(config, hub_runtime.migration_runner(config), "20261003_1200_event_drops", row)
 
     assert values == [None]
+
+
+_SECRETS_PARENT = "20261003_1400_escalation_cause"
+
+
+def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """``secrets``/``secret_lifecycle_facts`` — downgraded to the revision's own parent by id."""
+    config = hub_runtime.init_environment(tmp_path)
+    runner = hub_runtime.migration_runner(config)
+    tables = {"secrets", "secret_lifecycle_facts"}
+
+    def _table_names() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return set(sa.inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+    assert tables <= _table_names()
+
+    runner.downgrade(_SECRETS_PARENT)
+    assert not tables & _table_names()
+
+    runner.upgrade("head")
+    assert tables <= _table_names()

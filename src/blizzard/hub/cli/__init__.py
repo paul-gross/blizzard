@@ -26,6 +26,7 @@ _COMMANDS = {
     "runner": f"{_CLI}.runner:runner_group",
     "graph": f"{_CLI}.graph:graph_group",
     "scope": f"{_CLI}.scope:scope_group",
+    "secret": f"{_CLI}.secret:secret_group",
     "routine": f"{_CLI}.routine:routine_group",
     "run": f"{_CLI}.garden_run:run_group",
     "finding": f"{_CLI}.finding:finding_group",

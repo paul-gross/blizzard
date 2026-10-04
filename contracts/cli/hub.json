@@ -5548,6 +5548,244 @@
       "path": "hub scope",
       "short_help": "Operator verbs over scopes: create, list, edit, retire, re-enable."
     },
+    "secret": {
+      "commands": {
+        "enable": {
+          "help": "Re-enable a retired NAME.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret enable",
+          "short_help": "Re-enable a retired NAME."
+        },
+        "list": {
+          "help": "List secrets \u2014 name, revision, retired. Never a value.",
+          "params": [
+            {
+              "help": "Also list retired secrets.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret list",
+          "short_help": "List secrets \u2014 name, revision, retired."
+        },
+        "retire": {
+          "help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret retire",
+          "short_help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced."
+        },
+        "rotate-key": {
+          "help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host.\n\nDirectory mode mints and promotes a new generation; env mode re-seals under\n$BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race\nwith a replace changes nothing and exits non-zero \u2014 re-run it.",
+          "params": [
+            {
+              "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret rotate-key",
+          "short_help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host."
+        },
+        "set": {
+          "help": "Store NAME's value, read from stdin \u2014 never an argument. Replaces an existing secret.\n\nTrailing CR/LF is stripped; an empty value is refused.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret set",
+          "short_help": "Store NAME's value, read from stdin \u2014 never an argument."
+        },
+        "show": {
+          "help": "Show NAME's metadata \u2014 revision, who replaced it and when. Never its value.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret show",
+          "short_help": "Show NAME's metadata \u2014 revision, who replaced it and when."
+        }
+      },
+      "help": "Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key.",
+      "params": [],
+      "path": "hub secret",
+      "short_help": "Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key."
+    },
     "status": {
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
       "params": [

@@ -6,12 +6,14 @@ to "only a daemon opens its own store". Everything here is deterministic and sto
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard hub migrate"
@@ -45,7 +47,7 @@ class Runtime:
         return HubConfig.load(root, allow_external_db=self.allow_external_db)
 
     def init(self) -> HubConfig:
-        """Scaffold config + data dir + a migrated store. Idempotent.
+        """Scaffold config + data dir + a migrated store + the secret key. Idempotent.
 
         Re-running leaves an existing config untouched and migrates the store to head. A
         config whose db_url points outside the root is refused, not reconciled.
@@ -69,6 +71,7 @@ class Runtime:
         except MigrationConnectionError as exc:
             raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
+        hub_key_provider(os.environ, data_dir=config.data_dir)
         return config
 
     def migrate(self, *, down: str | None = None) -> None:
