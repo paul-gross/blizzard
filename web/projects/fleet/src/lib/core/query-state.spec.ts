@@ -1,4 +1,4 @@
-import { asyncState, asyncStateOf, type AsyncStateQuery } from './query-state';
+import { asyncState, asyncStateOf, restingAsyncState, type AsyncStateQuery } from './query-state';
 
 function query(overrides: Partial<{ pending: boolean; error: boolean }> = {}): AsyncStateQuery {
   const pending = overrides.pending ?? false;
@@ -45,5 +45,19 @@ describe('asyncStateOf', () => {
   it('falls back to empty/ready when every query has settled', () => {
     expect(asyncStateOf([query(), query()], true)).toBe('empty');
     expect(asyncStateOf([query(), query()], false)).toBe('ready');
+  });
+});
+
+describe('restingAsyncState', () => {
+  it('is empty while resting, even over a disabled (forever-pending) query', () => {
+    expect(restingAsyncState(true, query({ pending: true }), false)).toBe('empty');
+    expect(restingAsyncState(true, query({ error: true }), false)).toBe('empty');
+  });
+
+  it('defers to asyncState once no longer resting', () => {
+    expect(restingAsyncState(false, query({ pending: true }), false)).toBe('loading');
+    expect(restingAsyncState(false, query({ error: true }), false)).toBe('error');
+    expect(restingAsyncState(false, query(), true)).toBe('empty');
+    expect(restingAsyncState(false, query(), false)).toBe('ready');
   });
 });
