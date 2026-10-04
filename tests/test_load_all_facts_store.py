@@ -21,11 +21,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.chunks import FleetPulse
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     BounceFact,
     Chunk,
     ChunkFacts,
@@ -37,6 +33,10 @@ from blizzard.hub.domain.work import (
     RouteTokenMintedFact,
     UsageFact,
 )
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore

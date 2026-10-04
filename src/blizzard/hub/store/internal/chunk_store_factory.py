@@ -6,7 +6,7 @@ re-deriving it."""
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore

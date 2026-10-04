@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.chunks.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph, seed_lease
 
 pytestmark = pytest.mark.component

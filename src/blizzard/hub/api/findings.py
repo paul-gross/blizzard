@@ -20,8 +20,8 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.findings import Finding, FindingFact, FindingNoteRequiredError
-from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.garden.findings.model import Finding, FindingFact, FindingNoteRequiredError
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.wire.finding import (
     FindingDetailView,
     FindingExitRequest,

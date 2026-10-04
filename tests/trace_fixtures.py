@@ -7,10 +7,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.egress.assembly import runner_step
-from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, invocation_row
-from blizzard.hub.domain.graph import Graph, Node
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.observability.egress.assembly import runner_step
+from blizzard.hub.domain.observability.egress.rows import AttributedUsage, ExportedInvocation, invocation_row
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedBounce,
     TracedChunkCompletion,
@@ -32,8 +33,7 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.steps import identify_steps
-from blizzard.hub.domain.work import UsageFact
+from blizzard.hub.domain.observability.tracing.steps import identify_steps
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

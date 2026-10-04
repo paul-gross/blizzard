@@ -24,9 +24,9 @@ from blizzard.foundation.trace_ids import (
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import Sweep
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import TraceCheckpoint
-from blizzard.hub.domain.tracing.sweep import TraceExportSweep
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (

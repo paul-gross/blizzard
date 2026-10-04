@@ -13,11 +13,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.routine_run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
-from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
-from blizzard.hub.domain.scopes import Scope, ScopeSlug
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support import HubHarness, build_hub, hub_store_connections

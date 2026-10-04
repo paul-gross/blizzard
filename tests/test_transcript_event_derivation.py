@@ -18,11 +18,15 @@ from sqlalchemy import delete, select, update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService, GraphPins
-from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.transcripts import TranscriptSlice
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.observability.analytics.derivation import (
+    EventDerivationReconciler,
+    EventDerivationService,
+    GraphPins,
+)
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore

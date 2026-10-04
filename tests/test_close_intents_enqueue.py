@@ -10,10 +10,10 @@ from typing import cast
 import pytest
 from sqlalchemy import select
 
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.work import WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, ingest
 

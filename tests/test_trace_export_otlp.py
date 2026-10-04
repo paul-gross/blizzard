@@ -13,7 +13,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, lifetime_context
 from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink, SpanStatus
-from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
+from blizzard.hub.domain.observability.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.trace_hub import trace_hub, transitioned_and_stopped
 

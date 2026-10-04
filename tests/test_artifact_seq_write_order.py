@@ -11,10 +11,10 @@ import pytest
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
-from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.delivery_read import DeliveryRead
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
+from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import build_hub, ingest
 
 pytestmark = pytest.mark.component

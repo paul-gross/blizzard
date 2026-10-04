@@ -22,16 +22,16 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
-from blizzard.hub.domain.findings import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure
-from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import (
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure
+from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
     GardenProposalCounts,
     GardenProposalPage,
     RoutineProposalState,
 )
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 
 pytestmark = pytest.mark.unit
 

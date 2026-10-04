@@ -15,17 +15,17 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.garden_delivery import ValidatedDelivery
-from blizzard.hub.domain.garden_delivery_materialize import (
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
     GardenDelivery,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.domain.graph import Node
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery
+from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.graph.model import Node
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 from blizzard.wire.garden_proposal import GardenProposalCandidate
 

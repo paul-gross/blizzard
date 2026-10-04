@@ -16,10 +16,10 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.delivery_read import DeliverySources
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

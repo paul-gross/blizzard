@@ -12,10 +12,10 @@ from blizzard.foundation.trace_export.cursor import (
     first_pass_jump,
     lag_cap_jump,
 )
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import StepFacts, TracedChunkStop, TracedEpochOwner, TracedLease
-from blizzard.hub.domain.tracing.steps import identify_steps
-from blizzard.hub.domain.tracing.window import select_window
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedChunkStop, TracedEpochOwner, TracedLease
+from blizzard.hub.domain.observability.tracing.steps import identify_steps
+from blizzard.hub.domain.observability.tracing.window import select_window
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

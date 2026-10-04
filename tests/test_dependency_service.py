@@ -18,16 +18,16 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.dependencies import (
+from blizzard.hub.domain.chunk.dependencies import (
     DependencyService,
     DependencyWouldCloseCycle,
     DependentNotEditable,
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
 )
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 
 pytestmark = pytest.mark.unit
 

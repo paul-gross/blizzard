@@ -11,11 +11,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
-from blizzard.hub.domain.transcripts import TranscriptSlice
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
+from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch

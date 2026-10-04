@@ -240,7 +240,7 @@ def test_hub_acquires_no_connection_outside_the_store_seam() -> None:
     assert not violations, f"E — hub/ must route every connection through HubStoreConnections: {violations}"
 
 
-_EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "event_log.py"
+_EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "chunk" / "event_log.py"
 _CHUNK_EVENTS_STORE_FILE = _HUB_DIR / "store" / "internal" / "chunk_events_store.py"
 
 
@@ -795,13 +795,13 @@ def test_trace_ids_load_no_driver_or_hub_store() -> None:
 
 
 def test_trace_step_rules_load_no_http_driver_or_hub_store() -> None:
-    loaded = _loaded_after_importing("blizzard.hub.domain.tracing.steps")
+    loaded = _loaded_after_importing("blizzard.hub.domain.observability.tracing.steps")
     heavy = {m for m in loaded if m.split(".")[0] == "httpx" or m.startswith("blizzard.hub.store")}
     assert not heavy, heavy
 
 
 def test_trace_assembly_loads_no_http_driver_opentelemetry_or_hub_store() -> None:
-    loaded = _loaded_after_importing("blizzard.hub.domain.tracing.assembly")
+    loaded = _loaded_after_importing("blizzard.hub.domain.observability.tracing.assembly")
     heavy = {m for m in loaded if m.split(".")[0] in ("httpx", "opentelemetry") or m.startswith("blizzard.hub.store")}
     assert not heavy, heavy
 
@@ -831,7 +831,7 @@ def test_importing_the_egress_package_or_the_hub_loads_no_pyarrow(module: str) -
 
 
 def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
-    tracing = _HUB_DIR / "domain" / "tracing"
+    tracing = _HUB_DIR / "domain" / "observability" / "tracing"
     runner_tracing = _RUNNER_DOMAIN_DIR / "tracing"
     shared_cursor = _FOUNDATION_DIR / "trace_export" / "cursor.py"
     paths = (tracing / "sweep.py", tracing / "cursor.py", shared_cursor, *sorted(runner_tracing.glob("*.py")))
@@ -846,7 +846,7 @@ def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
 
 
 def test_the_egress_sweep_imports_no_store_filesystem_or_format_library() -> None:
-    domain = _HUB_DIR / "domain" / "egress"
+    domain = _HUB_DIR / "domain" / "observability" / "egress"
     violations = [
         f"{path.relative_to(_REPO_ROOT)} imports {module}"
         for path in sorted(domain.glob("*.py"))
@@ -870,7 +870,7 @@ def test_only_the_composition_root_builds_an_egress_writer() -> None:
         if not v.startswith(homes)
     ]
     assert not violations, violations
-    seam = (str((_HUB_DIR / "domain" / "egress").relative_to(_REPO_ROOT)), *homes)
+    seam = (str((_HUB_DIR / "domain" / "observability" / "egress").relative_to(_REPO_ROOT)), *homes)
     callers = [v for v in _violations(_SRC_DIR, ("blizzard.hub.egress",)) if not v.startswith(seam)]
     assert not callers, callers
 
@@ -904,10 +904,10 @@ def test_no_request_plane_module_imports_the_secret_plaintext_seams() -> None:
 
 def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> None:
     for statement in (
-        "from blizzard.hub.domain.secrets import SecretValue",
-        "from blizzard.hub.domain.secrets import ISecretReader as Reader",
-        "from blizzard.hub.domain.secrets import ISealedSecretRepository",
-        "import blizzard.hub.domain.secrets.SecretValue",
+        "from blizzard.hub.domain.config.secrets import SecretValue",
+        "from blizzard.hub.domain.config.secrets import ISecretReader as Reader",
+        "from blizzard.hub.domain.config.secrets import ISealedSecretRepository",
+        "import blizzard.hub.domain.config.secrets.SecretValue",
     ):
         module = tmp_path / "m.py"
         module.write_text(statement + "\n")
@@ -922,7 +922,7 @@ _CONFIGURED_WRITE_HOMES = frozenset(
         _HUB_DIR / "domain" / "config" / "authoring.py",
         _HUB_DIR / "domain" / "config" / "work_sources.py",
         _HUB_DIR / "domain" / "config" / "repositories.py",
-        _HUB_DIR / "domain" / "secrets.py",
+        _HUB_DIR / "domain" / "config" / "secrets.py",
         _HUB_DIR / "composition.py",
     }
 )
@@ -959,7 +959,7 @@ def test_configured_write_guard_catches_a_second_holder(tmp_path: Path) -> None:
     for statement in (
         "from blizzard.hub.domain.config.work_sources import IWriteWorkSourceRepository",
         "from blizzard.hub.domain.config.repositories import IWriteRepositoryRecordRepository",
-        "from blizzard.hub.domain.secrets import IWriteSecretRepository as Writer",
+        "from blizzard.hub.domain.config.secrets import IWriteSecretRepository as Writer",
     ):
         module = tmp_path / "rogue.py"
         module.write_text(statement + "\n")

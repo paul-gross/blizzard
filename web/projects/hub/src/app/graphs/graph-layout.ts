@@ -29,7 +29,7 @@ export { type EdgeKind, type EdgeTarget };
  *
  * A choice's `to:` also names a **third** kind of target beyond a node or the
  * `done` terminal: `graph:<name>`, a cross-graph migration (`bzh:migration-not-transition`,
- * `src/blizzard/hub/domain/graph.py`'s `GRAPH_TARGET_PREFIX`) that re-pins the chunk to
+ * `src/blizzard/hub/domain/graph/model.py`'s `GRAPH_TARGET_PREFIX`) that re-pins the chunk to
  * another graph entirely rather than transitioning it within this one. Each distinct
  * target graph name gets its own synthetic dagre sink, laid out alongside `done` —
  * {@link LaidOutGraph.migrations}.

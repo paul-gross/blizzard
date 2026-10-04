@@ -14,8 +14,8 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.enrollment import RunnerEnrollmentService
-from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration
 
 pytestmark = pytest.mark.unit
 
@@ -75,7 +75,7 @@ def test_enroll_mints_a_different_token_each_call() -> None:
 
 def test_re_enroll_rotates_the_stored_hash() -> None:
     """Two enrolls for the same runner append two writes; the second is what the store
-    ends up holding (an overwrite, not an append-only fact — see `hub/domain/registry.py`)."""
+    ends up holding (an overwrite, not an append-only fact — see `hub/domain/runners/registration.py`)."""
     clock = FixedClock(instant=_T0)
     registry = _FakeRegistry()
     service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)

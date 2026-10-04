@@ -15,9 +15,14 @@ from typing import Any
 from sqlalchemy import Select, and_, or_, select
 
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact, SegmentProvenance, TranscriptEvent
-from blizzard.hub.domain.egress.event_rows import EventDerivation
-from blizzard.hub.domain.egress.repository import EpochKey, EventsPosition, IReadEgressEvents
+from blizzard.hub.domain.observability.analytics.events import (
+    DerivationMarker,
+    DropFact,
+    SegmentProvenance,
+    TranscriptEvent,
+)
+from blizzard.hub.domain.observability.egress.event_rows import EventDerivation
+from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition, IReadEgressEvents
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

@@ -16,14 +16,14 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.dependencies import (
+from blizzard.hub.domain.chunk.dependencies import (
     DependencyWouldCloseCycle,
     DependentNotEditable,
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
 )
-from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.work import Chunk, DependencyEdge
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
 from blizzard.wire.chunk import (
     ChunkDependencyDeclareRequest,
     ChunkDependencyEdgeView,

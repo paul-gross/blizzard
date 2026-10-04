@@ -19,8 +19,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     BounceFact,
     ChunkFacts,
     DecisionFact,
@@ -40,6 +39,7 @@ from blizzard.hub.domain.work import (
     TransitionFact,
     UsageFact,
 )
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
@@ -94,8 +94,8 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
 
 
 #: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`_STATUS_FAMILIES`
-#: plus ``usage`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.usage_total`) and
-#: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.latest_epoch`), the
+#: plus ``usage`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.usage_total`) and
+#: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_epoch`), the
 #: reaches ``status()`` itself doesn't make. :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
 _TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
@@ -132,7 +132,7 @@ class ChunkFactsStore:
         return self._load(conn, chunk_ids)
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
-        """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.load_all_facts` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.load_all_facts` —
         one bounded query per fact table across the whole store, grouped by
         chunk id in Python, rather than :meth:`load_facts`'s per-chunk fan-out.
         ``activity_facts_since`` is this shape's precedent. Every family reproduces
@@ -152,7 +152,7 @@ class ChunkFactsStore:
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
         by chunk id, reading only :attr:`_STATUS_FAMILIES` plus ``usage`` — the families
-        behind :meth:`~blizzard.hub.domain.work.ChunkFacts.status`, ``open_pause``,
+        behind :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status`, ``open_pause``,
         ``latest_epoch``, ``restarts``, and ``usage_total`` — rather than every family
         :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as :meth:`load_facts_for`."""
@@ -167,13 +167,13 @@ class ChunkFactsStore:
         query (:func:`maybe_live`), so the facts read and the per-chunk derivation track the
         live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
-        itself stays in ``domain/work.py``; this only narrows which rows get read."""
+        itself stays in ``domain/chunk/model.py``; this only narrows which rows get read."""
         with self._store.read("load_live_statuses") as conn:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
     def status_counts(self) -> dict[ChunkStatus, int]:
-        """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.status_counts` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.status_counts` —
         the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
         :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
         candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""

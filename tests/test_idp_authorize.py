@@ -14,7 +14,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
-from blizzard.hub.domain.registry import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from tests.support import HubHarness, build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component

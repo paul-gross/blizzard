@@ -16,11 +16,11 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
-from blizzard.hub.domain.promote import PromoteService
-from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.operations.promote import PromoteService
 
 pytestmark = pytest.mark.unit
 

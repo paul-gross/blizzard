@@ -64,7 +64,7 @@ def secret_rotate_key(directory: str) -> None:
     with a replace changes nothing and exits non-zero — re-run it."""
     from blizzard.hub.app import rotate_secret_keys
     from blizzard.hub.config import ConfigError, HubConfig
-    from blizzard.hub.domain.secrets import SecretRotationConflict
+    from blizzard.hub.domain.config.secrets import SecretRotationConflict
 
     try:
         result = rotate_secret_keys(HubConfig.load(Path(directory)), os.environ)

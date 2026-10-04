@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import HubHarness, build_hub, hub_store_connections, mint_graph, seed_work_item

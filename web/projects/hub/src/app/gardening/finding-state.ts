@@ -8,7 +8,7 @@ import type { Tone } from 'fleet';
  * re-deriving them.
  *
  * `FindingView.live` is **not** this classification — it is a wire boolean set by
- * `derive_liveness` (`src/blizzard/hub/domain/findings.py:102-126`) as
+ * `derive_liveness` (`src/blizzard/hub/domain/garden/findings/model.py:102-126`) as
  * `live = (state == "live")`, so a `gone`-flagged finding reads `live: false` on the
  * wire even though it has not exited (a `gone` row stays open, tinted, and
  * actionable until a person confirms it). Every helper below classifies off `state`
@@ -16,7 +16,7 @@ import type { Tone } from 'fleet';
  */
 
 /** The states the ground itself changed under — `EXIT_KINDS`'s outflow half
- * (`src/blizzard/hub/domain/findings.py:25-29`). */
+ * (`src/blizzard/hub/domain/garden/findings/model.py:25-29`). */
 export const FINDING_OUTFLOW_STATES: readonly string[] = ['resolved', 'gone-confirmed'];
 
 /** The states a human judgment call withdrew — `EXIT_KINDS`'s withdrawn half,
@@ -24,13 +24,13 @@ export const FINDING_OUTFLOW_STATES: readonly string[] = ['resolved', 'gone-conf
  * standing regardless. */
 export const FINDING_WITHDRAWN_STATES: readonly string[] = ['wont-fix', 'not-a-finding', 'superseded'];
 
-/** Every state `EXIT_KINDS` names (`src/blizzard/hub/domain/findings.py:23`) — the
+/** Every state `EXIT_KINDS` names (`src/blizzard/hub/domain/garden/findings/model.py:23`) — the
  * outflow and withdrawn sets combined. A finding in one of these states has exited:
  * it renders dimmed but present, never removed from the list. */
 export const FINDING_EXIT_STATES: readonly string[] = [...FINDING_OUTFLOW_STATES, ...FINDING_WITHDRAWN_STATES];
 
 /** `FindingView.state`'s own closed set — `"live"`, `"gone"`, `"delivered"`, or one of
- * `EXIT_KINDS` (`src/blizzard/hub/domain/findings.py`'s own doc comment on the field).
+ * `EXIT_KINDS` (`src/blizzard/hub/domain/garden/findings/model.py`'s own doc comment on the field).
  * `'live'`, `'gone'`, and `'delivered'` (all still open — `delivered`
  * joins no `EXIT_KINDS` set) plus every exit state, derived from the same constants
  * above rather than a second hand-typed list, so this file stays the one place the

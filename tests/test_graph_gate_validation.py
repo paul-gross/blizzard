@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from blizzard.hub.domain.graph import GraphDoc
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.validation import Validator
 
 pytestmark = pytest.mark.unit
 

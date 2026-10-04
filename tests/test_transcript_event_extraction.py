@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.analytics.extraction import (
+from blizzard.hub.domain.observability.analytics.extraction import (
     KIND_AGENT_SPAWN,
     KIND_FILE_READ,
     KIND_SKILL_INVOCATION,

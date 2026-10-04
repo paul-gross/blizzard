@@ -20,7 +20,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalOrigin,
 )
 from blizzard.foundation.store import batching as batching_module
-from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.model import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore

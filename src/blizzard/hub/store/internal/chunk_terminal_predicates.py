@@ -10,14 +10,14 @@ from datetime import datetime
 
 from sqlalchemy import ColumnElement, and_, exists, or_
 
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 
 
 def _done_by_transition(*, finished_before: datetime | None = None) -> ColumnElement[bool]:
     """A transition into the reserved terminal that is strictly the newest movement across
     transitions, migrations, and restarts — a tie keeps it unsettled, since
-    :meth:`~blizzard.hub.domain.work.ChunkFacts.latest_movement` breaks a tie by kind rank.
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_movement` breaks a tie by kind rank.
     ``finished_before`` further requires that transition to be recorded before the instant."""
     chunk_id = s.chunks.c.chunk_id
     terminal = s.transitions.alias("terminal_transition")
@@ -46,7 +46,7 @@ def _done_by_transition(*, finished_before: datetime | None = None) -> ColumnEle
 
 def maybe_live() -> ColumnElement[bool]:
     """Drops every chunk a terminal fact already settles, and never one
-    :meth:`~blizzard.hub.domain.work.ChunkFacts.status` would derive non-terminal. A stop and
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` would derive non-terminal. A stop and
     a completion are unconditional — none can be undone — so any chunk carrying either is
     settled by :func:`settled_stopped` or :func:`settled_done`; a terminal transition settles
     only while strictly the newest movement, so a tie keeps the chunk in."""
@@ -61,7 +61,7 @@ def maybe_live() -> ColumnElement[bool]:
 def settled_stopped() -> ColumnElement[bool]:
     """The chunks that derive ``stopped``: a stop no operator completion at or after it
     outranks — the ``>=`` tie going to the completion, as
-    :meth:`~blizzard.hub.domain.work.ChunkFacts.status` settles it. Exact."""
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` settles it. Exact."""
     chunk_id = s.chunks.c.chunk_id
     stop = s.chunk_stopped.alias("settling_stop")
     return exists().where(
@@ -77,7 +77,7 @@ def settled_done(*, finished_before: datetime | None = None) -> ColumnElement[bo
     """The chunks that derive ``done`` — by an operator completion that outranks every stop,
     or, with neither fact present, by an unsuperseded terminal transition. With
     ``finished_before``, only those whose
-    :meth:`~blizzard.hub.domain.work.ChunkFacts.completed_at` falls before that instant.
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.completed_at` falls before that instant.
     Exact for the completion branch; the transition branch leaves a tie unsettled."""
     chunk_id = s.chunks.c.chunk_id
     completion = s.chunk_completed.alias("settling_completion")

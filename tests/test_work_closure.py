@@ -18,17 +18,17 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
-from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
-from blizzard.hub.domain.work_closure import (
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
     CLOSE_DRAIN_PASS_LIMIT,
     CloseIntentDrainer,
@@ -63,7 +63,7 @@ def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker —
-    the current landing truth :func:`~blizzard.hub.domain.work.has_landed_repos` reads
+    the current landing truth :func:`~blizzard.hub.domain.chunk.model.has_landed_repos` reads
     independent of any real graph/node machinery. Enqueues a pending close
     intent as a side effect of the same write."""
     cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
@@ -421,7 +421,7 @@ def test_sweep_records_the_closed_and_failed_events_with_their_exact_message_and
 
 def test_sweep_builds_each_traces_board_url_through_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "blizzard.hub.domain.work_closure.board_chunk_url",
+        "blizzard.hub.domain.work_items.closure.board_chunk_url",
         lambda public_url, chunk_id: f"via-helper:{public_url}:{chunk_id}",
     )
     chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))])

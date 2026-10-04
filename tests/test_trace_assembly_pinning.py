@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.hub.domain.tracing import assembly
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import assemble_completion, assemble_lifetime, assemble_work
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.observability.tracing import assembly
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.chunk_spans import assemble_completion, assemble_lifetime, assemble_work
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedChunkCompletion,
     TracedChunkStop,
@@ -24,9 +24,9 @@ from blizzard.hub.domain.tracing.facts import (
     TracedPromotion,
     TracedRouteCreation,
 )
-from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
-from blizzard.hub.domain.tracing.summary import StepSummary, summarize_step
-from blizzard.hub.domain.tracing.window import (
+from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import StepSummary, summarize_step
+from blizzard.hub.domain.observability.tracing.window import (
     ClosedStep,
     FinishedChunk,
     TraceWindow,

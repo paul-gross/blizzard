@@ -1,0 +1,85 @@
+"""Capability-matched acquisition (``bzh:domain-core``, ``bzh:domain-takes-objects``).
+A statically-reachable **runner-owned session lineage** is every :class:`EffectiveSession`
+a runner node along the graph from a given node could resolve to. A snapshot is eligible
+for a chunk iff every such lineage is satisfied by one of its reported bindings; one
+unsatisfied lineage anywhere makes the whole snapshot ineligible — this module answers
+only that yes/no, never what to do with a ``False``."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.execution.envelope import EffectiveSession
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
+from blizzard.hub.domain.runners.registration import RunnerCapability
+from blizzard.wire.envelope import TIER_PREFIX
+
+
+@domain_model
+@dataclass(frozen=True)
+class EligibilityCheck:
+    """Whether ``capabilities`` can execute every runner-owned session lineage statically
+    reachable from ``node`` — a pure predicate. ``node`` is
+    already resolved by the caller; this walks forward from whatever it is handed."""
+
+    chunk: Chunk
+    graph: Graph
+    node: Node
+    capabilities: Sequence[RunnerCapability]
+
+    @property
+    def eligible(self) -> bool:
+        return all(self._lineage_satisfied(runner_node) for runner_node in self._reachable_runner_nodes())
+
+    @property
+    def _available_capabilities(self) -> list[RunnerCapability]:  # ast-grep-ignore: bzh:property-delegates
+        """Capabilities health has withdrawn from selection satisfy no
+        lineage."""
+        return [capability for capability in self.capabilities if capability.available]
+
+    def _reachable_runner_nodes(self) -> list[Node]:
+        """Every runner-owned node reached from :attr:`node`, DFS over the graph's edges,
+        visiting each node id at most once (cycle-safe). A hub node is traversed through but
+        contributes nothing itself; a cross-graph or terminal edge ends its path there,
+        evaluating nothing past it."""
+        seen: set[str] = set()
+        runner_nodes: list[Node] = []
+        stack = [self.node]
+        while stack:
+            current = stack.pop()
+            if current.node_id in seen:
+                continue
+            seen.add(current.node_id)
+            if current.executor is Executor.RUNNER:
+                runner_nodes.append(current)
+            for edge in self.graph.edges_from(current.node_id):
+                if edge.target_graph is not None or edge.to_node_name == RESERVED_TERMINAL:
+                    continue
+                target = self.graph.node_by_name(edge.to_node_name)
+                if target is not None:
+                    stack.append(target)
+        return runner_nodes
+
+    def _lineage_satisfied(self, node: Node) -> bool:
+        """Whether some reported capability could serve ``node``'s effective session,
+        mirroring :class:`~blizzard.runner.loop.session.HarnessSelector`'s gate against a
+        static snapshot rather than a live adapter."""
+        session = EffectiveSession.of(self.chunk, self.graph, node)
+        available = self._available_capabilities
+        if not session.harnesses:
+            return any(capability.default for capability in available)
+        strict = bool(session.model) and (
+            len(session.harnesses) > 1 or any(tier.startswith(TIER_PREFIX) for tier in session.model)
+        )
+        for harness_id in session.harnesses:
+            capability = next((c for c in available if c.harness_id == harness_id), None)
+            if capability is None:
+                continue
+            if strict and not any(tier in capability.tiers for tier in session.model):
+                continue
+            return True
+        return False

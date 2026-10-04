@@ -20,12 +20,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import WorkSourceConfig
-from blizzard.hub.domain.delete import DeleteService
-from blizzard.hub.domain.delivery_read import DeliveryTrace, TraceLanding
-from blizzard.hub.domain.findings import FindingExitService
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.work import WorkRef
-from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.garden.findings.model import FindingExitService
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore

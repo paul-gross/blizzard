@@ -32,17 +32,18 @@ from blizzard.foundation.trace_ids import (
     trace_id,
 )
 from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing import platform as hub_platform
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import (
+from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing import platform as hub_platform
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.chunk_spans import (
     assemble_completion,
     assemble_lifetime,
     assemble_work,
     chunk_end,
     completion_instant,
 )
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedBounce,
     TracedChunkCompletion,
@@ -63,8 +64,7 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteCreation,
     TracedRouteRelease,
 )
-from blizzard.hub.domain.tracing.steps import identify_steps
-from blizzard.hub.domain.work import UsageFact
+from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.runner.domain.tracing import attributes as runner_attr
 from blizzard.runner.domain.tracing import platform as runner_platform
 from blizzard.runner.domain.tracing.assembly import assemble_lease

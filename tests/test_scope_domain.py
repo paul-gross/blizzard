@@ -12,7 +12,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.scopes import (
+from blizzard.hub.domain.garden.scopes import (
     IWriteScopeRepository,
     Scope,
     ScopeLifecycle,

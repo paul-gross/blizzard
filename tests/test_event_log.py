@@ -15,10 +15,10 @@ from sqlalchemy import Engine, insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import EscalationOpen, EventFeed, OperationalEvent
+from blizzard.hub.domain.chunk.model import EscalationOpen, EventFeed, OperationalEvent
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph, seed_lease
 

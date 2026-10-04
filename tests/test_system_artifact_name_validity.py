@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.artifacts import is_valid_system_artifact_name
+from blizzard.hub.domain.artifact.model import is_valid_system_artifact_name
 
 pytestmark = pytest.mark.unit
 

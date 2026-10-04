@@ -20,13 +20,13 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.domain.tracing.attributes import (
+from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE as HUB_SCOPE,
 )
-from blizzard.hub.domain.tracing.attributes import (
+from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as HUB_SCOPE_VERSION,
 )
-from blizzard.hub.domain.tracing.attributes import resource_attributes
+from blizzard.hub.domain.observability.tracing.attributes import resource_attributes
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease

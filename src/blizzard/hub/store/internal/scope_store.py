@@ -12,7 +12,7 @@ from datetime import datetime
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.hub.domain.scopes import IWriteScopeRepository, Scope
+from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
 

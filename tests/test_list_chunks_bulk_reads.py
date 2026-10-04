@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.pagination import MAX_LIMIT
-from blizzard.hub.domain.work import ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore

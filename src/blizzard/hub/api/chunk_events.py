@@ -8,9 +8,9 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import dto
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, ChunkChange, ChunkFacts
+from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.events.broker import ChunkChangeCause
 
 

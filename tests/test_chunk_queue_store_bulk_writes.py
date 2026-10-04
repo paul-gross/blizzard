@@ -14,8 +14,8 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component

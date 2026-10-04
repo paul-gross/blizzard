@@ -18,9 +18,7 @@ from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     HubWorkItem,
     IWriteWorkItemRepository,
@@ -29,6 +27,8 @@ from blizzard.hub.domain.work import (
     WorkItemMaterializationOutcome,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
@@ -43,8 +43,8 @@ from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 
 
 class WorkItemStore:
-    """The only implementation of :class:`~blizzard.hub.domain.work.IReadWorkItemRepository`
-    / :class:`~blizzard.hub.domain.work.IWriteWorkItemRepository`, confined to
+    """The only implementation of :class:`~blizzard.hub.domain.chunk.model.IReadWorkItemRepository`
+    / :class:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository`, confined to
     ``store/internal/`` (``bzh:repository-split``)."""
 
     def __init__(self, store: HubStoreConnections) -> None:
@@ -103,7 +103,7 @@ class WorkItemStore:
     ) -> HubWorkItem:
         """Insert the item row and ``chunk``'s own rows on one ``engine.begin()``
         connection — the mechanism behind
-        :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.create_with_chunk`'s
+        :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.create_with_chunk`'s
         atomicity contract."""
         with self._store.write("create_with_chunk") as conn:
             work_item_id = self._insert_item(

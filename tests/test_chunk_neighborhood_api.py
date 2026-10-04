@@ -13,8 +13,8 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from tests.support import HubHarness, build_hub, chunk_stores, count_queries, hub_store_connections, ingest

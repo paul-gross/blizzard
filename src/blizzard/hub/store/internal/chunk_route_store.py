@@ -15,11 +15,11 @@ from sqlalchemy import Connection, select
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import Claimant, EpochOwner, FenceRefusal
-from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
+from blizzard.hub.domain.chunk.model import RouteCreatedFact, RouteHistory, RouteReleasedFact
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
+from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -48,17 +48,17 @@ class ChunkRouteStore:
             return route_of_conn(conn, chunk_id)
 
     def load_all_routes(self) -> dict[str, Route]:
-        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.load_all_routes` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.load_all_routes` —
         one bounded query per route table, grouped by chunk id in Python the
         way the facts seam's ``load_all_facts`` is, deferring liveness to the same
-        :class:`~blizzard.hub.domain.work.RouteHistory.newest` tie-break :func:`route_of_conn`
+        :class:`~blizzard.hub.domain.chunk.model.RouteHistory.newest` tie-break :func:`route_of_conn`
         uses. Row construction and grouping are shared with :meth:`routes_for` via
         :meth:`_routes`."""
         with self._store.read("load_all_routes") as conn:
             return self._routes(conn, None)
 
     def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
-        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.routes_for` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.routes_for` —
         :meth:`load_all_routes`'s own shape, scoped to ``ids`` via
         :meth:`_routes`'s ``chunk_id.in_(ids)`` filters rather than a fleet-wide read."""
         ids = list(chunk_ids)
@@ -68,7 +68,7 @@ class ChunkRouteStore:
             return self._routes(conn, ids)
 
     def live_routes_of_runner(self, runner_id: str) -> list[Route]:
-        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.live_routes_of_runner` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.live_routes_of_runner` —
         the chunks this runner ever routed, resolved through :meth:`_routes`, kept where the
         live route is still this runner's. Not a hot-path read, so it narrows by the runner's
         route history rather than a live-set prefilter."""

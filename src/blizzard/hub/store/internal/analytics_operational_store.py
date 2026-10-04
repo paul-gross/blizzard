@@ -14,7 +14,9 @@ from sqlalchemy import CompoundSelect, Select, func, select, tuple_, union
 
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.analytics.operational import (
+from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.observability.analytics.operational import (
     ChunkSpendPage,
     DurationStats,
     IReadOperationalAnalytics,
@@ -33,8 +35,6 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
-from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns

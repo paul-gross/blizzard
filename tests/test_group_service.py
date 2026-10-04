@@ -18,11 +18,11 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
-from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, FoldWouldCloseCycle, GroupService
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact, WorkRef
+from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.operations.queue import ChunkNotFound, ChunkNotGroupable, FoldWouldCloseCycle, GroupService
 
 pytestmark = pytest.mark.unit
 

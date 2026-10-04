@@ -23,10 +23,11 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.dependencies import derive_blocked_prerequisites
-from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.queue import (
+from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
     FoldWouldCloseCycle,
     MatchedEntry,
@@ -35,8 +36,7 @@ from blizzard.hub.domain.queue import (
     QueuePage,
     select_matched_entry,
 )
-from blizzard.hub.domain.registry import RunnerCapability
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
     BacklogPageView,

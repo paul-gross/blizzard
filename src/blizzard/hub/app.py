@@ -74,16 +74,16 @@ from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_process_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
-from blizzard.hub.domain.egress.event_rows import missing_key_reason
-from blizzard.hub.domain.registry import RunnerRetired
-from blizzard.hub.domain.tracing.attributes import (
+from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
+from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from blizzard.hub.domain.transcripts import TranscriptCaps
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider

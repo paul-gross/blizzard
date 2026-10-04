@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from blizzard.hub.domain.dependencies import NoStandingDependencyToRelease, PrerequisiteIsEphemeral
-from blizzard.hub.domain.queue import ChunkNotFound
+from blizzard.hub.domain.chunk.dependencies import NoStandingDependencyToRelease, PrerequisiteIsEphemeral
+from blizzard.hub.domain.operations.queue import ChunkNotFound
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, ingest
 

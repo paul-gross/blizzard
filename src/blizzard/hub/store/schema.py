@@ -455,7 +455,7 @@ finding_facts = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("finding_id", String, ForeignKey("findings.finding_id"), nullable=False),
-    Column("kind", String, nullable=False),  # FACT_KINDS, domain/findings.py
+    Column("kind", String, nullable=False),  # FACT_KINDS, domain/garden/findings/model.py
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("note", Text, nullable=True),  # gone's/delivered's/an exit's/reopened's note; null for add/observed
     # Who recorded a human-driven fact — null for a run-driven add/observed/gone.

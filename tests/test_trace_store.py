@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedChunkStop,
     TracedEpochOwner,
@@ -18,9 +18,9 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.repository import TraceCheckpoint
-from blizzard.hub.domain.tracing.steps import StepOutcome, identify_steps
-from blizzard.hub.domain.tracing.window import read_window
+from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import HubHarness, count_queries, hub_store_connections
 from tests.trace_hub import label, stop, trace_hub, transitioned_and_stopped

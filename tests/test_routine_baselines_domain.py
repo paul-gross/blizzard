@@ -10,10 +10,10 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.ids import Id
-from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository
-from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
-from blizzard.hub.domain.routine_baselines import MalformedFindingSetIdError, RepoLandings, RoutineBaselineService
-from blizzard.hub.domain.routines import Routine
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
+from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.runs.baselines import MalformedFindingSetIdError, RepoLandings, RoutineBaselineService
 
 pytestmark = pytest.mark.unit
 

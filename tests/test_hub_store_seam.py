@@ -28,11 +28,11 @@ from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.events import DerivationMarker
-from blizzard.hub.domain.analytics.operational import OperationalCriteria
-from blizzard.hub.domain.analytics.queries import EventQueryCriteria
-from blizzard.hub.domain.egress.repository import EpochKey, EventsPosition
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.observability.analytics.events import DerivationMarker
+from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore

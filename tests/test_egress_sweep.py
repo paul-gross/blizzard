@@ -20,12 +20,12 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.egress.event_rows import FilePathPolicy
-from blizzard.hub.domain.egress.repository import EventsPosition, UsagePosition
-from blizzard.hub.domain.egress.rows import ExportedInvocation, ExportedStep
-from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.hub.domain.egress.sweep import EgressSweep
-from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.observability.egress.repository import EventsPosition, UsagePosition
+from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
+from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
 from blizzard.hub.egress.writer import (

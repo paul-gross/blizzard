@@ -9,7 +9,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.analytics.operational import (
+from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.observability.analytics.operational import (
     JudgedChoiceCount,
     LeaseEpoch,
     MigrationMovement,
@@ -26,9 +28,7 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
-from blizzard.hub.domain.analytics.queries import KeyedCount, fold_counts_by_name
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import UsageTotal
+from blizzard.hub.domain.observability.analytics.queries import KeyedCount, fold_counts_by_name
 
 pytestmark = pytest.mark.unit
 

@@ -12,9 +12,14 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
-from blizzard.hub.domain.egress.repository import EgressCheckpoint, EpochKey, EventsPosition, UsagePosition
-from blizzard.hub.domain.transcripts import TranscriptSlice
+from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
+from blizzard.hub.domain.observability.egress.repository import (
+    EgressCheckpoint,
+    EpochKey,
+    EventsPosition,
+    UsagePosition,
+)
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -249,9 +254,7 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     invocations = store.newest_cursor("invocations")
     assert invocations is not None
     assert (invocations.events, invocations.step) == (None, None)
-    store.append_cursor(
-        EgressCheckpoint("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1)))
-    )
+    store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1))))
     reset = store.newest_cursor("events")
     assert reset is not None
     assert reset.events == EventsPosition(_at(1), "", "")

@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy import Engine, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph

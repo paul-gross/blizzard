@@ -32,6 +32,15 @@ from blizzard.hub.domain.config.repositories import diff as repository_diff
 from blizzard.hub.domain.config.repositories import merge as repository_merge
 from blizzard.hub.domain.config.repositories import validate_fields as validate_repository_fields
 from blizzard.hub.domain.config.repositories import validate_name as validate_repository_name
+from blizzard.hub.domain.config.secrets import (
+    ISecretCipher,
+    IWriteSecretRepository,
+    SecretMetadata,
+    SecretName,
+    SecretRetired,
+    SecretRevisionConflict,
+    SecretValue,
+)
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     ConfiguredWorkSource,
@@ -42,15 +51,6 @@ from blizzard.hub.domain.config.work_sources import (
     merge,
     validate_fields,
     validate_name,
-)
-from blizzard.hub.domain.secrets import (
-    ISecretCipher,
-    IWriteSecretRepository,
-    SecretMetadata,
-    SecretName,
-    SecretRetired,
-    SecretRevisionConflict,
-    SecretValue,
 )
 
 _RETIRED = "retired"

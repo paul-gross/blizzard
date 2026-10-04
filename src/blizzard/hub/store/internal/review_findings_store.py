@@ -11,8 +11,8 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.review_findings_materialize import (
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.review.materialize import (
     IWriteReviewFindingsRepository,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,

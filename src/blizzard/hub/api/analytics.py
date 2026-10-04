@@ -23,9 +23,9 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.analytics import MalformedCursor
-from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.analytics.operational import (
+from blizzard.hub.domain.observability.analytics import MalformedCursor
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.operational import (
     DurationStats,
     IReadOperationalAnalytics,
     OperationalCriteria,
@@ -33,7 +33,7 @@ from blizzard.hub.domain.analytics.operational import (
     SpendStats,
     fold_spend_by_name,
 )
-from blizzard.hub.domain.analytics.queries import (
+from blizzard.hub.domain.observability.analytics.queries import (
     EventPage,
     EventQueryCriteria,
     IReadAnalyticsEventQueries,

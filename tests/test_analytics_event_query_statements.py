@@ -15,8 +15,8 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
-from blizzard.hub.domain.analytics.queries import EventQueryCriteria
-from blizzard.hub.domain.pagination import encode_cursor
+from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_event_query_store as store_module
 

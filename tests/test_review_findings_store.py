@@ -13,8 +13,8 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.review_findings_materialize import (
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.review.materialize import (
     NewReviewFinding,
     NewReviewFindingFact,
     ReviewFindingsOutcome,

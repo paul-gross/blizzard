@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.hub.domain.graph import Mint, Mints, SessionRef
+from blizzard.hub.domain.graph.model import Mint, Mints, SessionRef
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -71,7 +71,7 @@ def test_mints_effective_is_independent_per_name() -> None:
 
 def test_mints_effective_ties_on_created_at_break_by_graph_id_descending() -> None:
     """Same ``created_at``: the higher ``graph_id`` (lexically newest ULID) wins —
-    the same tie order :meth:`~blizzard.hub.domain.graph.IReadGraphRepository.get_enabled_by_name`
+    the same tie order :meth:`~blizzard.hub.domain.graph.model.IReadGraphRepository.get_enabled_by_name`
     applies via its ``ORDER BY created_at DESC, graph_id DESC``."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     lower_id = make_graph("gr_a", "tied", created_at=t0)

@@ -18,8 +18,8 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
-from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.garden_proposal_closure import (
+from blizzard.hub.domain.garden.findings.model import Finding
+from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalClosure,
     GardenProposalClosureService,
     GardenProposalCountBucket,
@@ -28,8 +28,8 @@ from blizzard.hub.domain.garden_proposal_closure import (
     _compose_minted_body,
     classify_proposal_count_bucket,
 )
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed
-from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
 pytestmark = pytest.mark.unit
 

@@ -133,7 +133,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * here — the triage dialog that actually fires them (`gardening-finding-triage-
    * dialog.ts`) is a sibling surface this list never mounts.
    *
-   * `derive_liveness` (`src/blizzard/hub/domain/findings.py`) folds a finding's facts
+   * `derive_liveness` (`src/blizzard/hub/domain/garden/findings/model.py`) folds a finding's facts
    * newest-wins, and every one of these six verbs' own fact `kind` is exactly its
    * resulting `state` (`reopened` folds to `"live"`, same as `add`/`observed`) — so
    * each verb's resulting state is fixed and known ahead of the call settling, the

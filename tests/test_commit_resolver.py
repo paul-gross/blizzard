@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from blizzard.hub.domain.garden_delivery import CommitResolution
+from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 
 pytestmark = pytest.mark.unit

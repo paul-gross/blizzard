@@ -15,7 +15,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.domain.secrets import SecretName
+from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.secrets import (
     ENV_SECRET_KEY,
     ENV_SECRET_KEY_PREVIOUS,

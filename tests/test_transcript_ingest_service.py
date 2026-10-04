@@ -10,9 +10,8 @@ from typing import cast
 import pytest
 from sqlalchemy import text
 
-from blizzard.hub.domain import transcripts as transcripts_domain
-from blizzard.hub.domain.registry import IReadRunnerRegistry, RetiredRunnerGuard
-from blizzard.hub.domain.transcripts import (
+from blizzard.hub.domain.observability import transcripts as transcripts_domain
+from blizzard.hub.domain.observability.transcripts import (
     RECORD_MAX_BYTES,
     REJECTED_CHUNK_BUDGET_EXCEEDED,
     REJECTED_RECORD_TOO_LARGE,
@@ -24,6 +23,7 @@ from blizzard.hub.domain.transcripts import (
     TranscriptIngestService,
     TranscriptSlice,
 )
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
 

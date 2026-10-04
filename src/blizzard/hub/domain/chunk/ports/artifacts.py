@@ -1,0 +1,65 @@
+"""The chunk-artifacts repository seam — a chunk's produced artifact rows,
+including the hub-node marker/log artifacts written outside a transition."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Protocol
+
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+
+
+class IReadChunkArtifactsRepository(Protocol):
+    """Read-only chunk-artifacts access."""
+
+    def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
+        """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
+        ...
+
+    def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
+        """Narrowed plural: only merged/PR/external-merge markers and historical
+        per-repo landing hashes and PR closures, batched by caller-supplied ids."""
+        ...
+
+    def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
+        """The chunk's newest artifact row named ``name`` — highest epoch, then latest
+        ``produced_at``. ``None`` when no artifact of that name exists."""
+        ...
+
+    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, StoredArtifact]:
+        """`latest_artifact`'s batched sibling (`bzh:bulk-reconstitution`) — each name's
+        newest row, keyed by name, the same row `latest_artifact` picks. A name with no
+        artifact is dropped."""
+        ...
+
+    def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
+        """True iff a marker/log artifact named ``name`` is already recorded for this
+        exact (chunk, node, epoch) — the ``produces:`` re-run skip probe (#65)."""
+        ...
+
+
+class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
+    """Read-write chunk-artifacts access."""
+
+    def record_hub_artifact(
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
+    ) -> bool:
+        """Append one hub-node progress artifact OUTSIDE a transition (#65).
+
+        Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
+        recorded this artifact writes nothing a second time. Also behind the write fence
+        (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
+        worker-produced one. Returns True iff it wrote."""
+        ...

@@ -20,7 +20,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import DocketEntry, GateDecision
+from blizzard.hub.domain.chunk.model import DocketEntry, GateDecision
 from blizzard.wire.completion import CreateWorkItemProposal, UpdateWorkItemProposal
 from blizzard.wire.decision import (
     DecisionChoiceModel,

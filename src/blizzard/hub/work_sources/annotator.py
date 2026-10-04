@@ -11,7 +11,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
 
 
 class WorkStatusMarker(StrEnum):

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.artifacts import is_valid_system_artifact_name
+from blizzard.hub.domain.artifact.model import is_valid_system_artifact_name
 
 #: Every packaged document's own extension — stripped to form the artifact's name.
 _SUFFIX = ".md"

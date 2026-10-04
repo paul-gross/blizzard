@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy import Insert, Select, Update, func, insert, select
 
-from blizzard.hub.domain.transcripts import (
+from blizzard.hub.domain.observability.transcripts import (
     IWriteTranscriptSegments,
     NaturalKeyState,
     SegmentRecordContent,

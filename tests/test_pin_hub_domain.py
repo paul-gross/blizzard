@@ -11,9 +11,9 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.envelope import Envelope
-from blizzard.hub.domain.graph import FollowLatest, Node
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.execution.envelope import Envelope
+from blizzard.hub.domain.graph.model import FollowLatest, Node
 
 pytestmark = pytest.mark.unit
 

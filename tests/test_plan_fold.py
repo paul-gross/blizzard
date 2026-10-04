@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.chunks.dependencies import FoldMint
-from blizzard.hub.domain.dependencies import plan_fold
-from blizzard.hub.domain.work import DependencyEdge
+from blizzard.hub.domain.chunk.dependencies import plan_fold
+from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import FoldMint
 
 pytestmark = pytest.mark.unit
 

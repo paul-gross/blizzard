@@ -40,7 +40,7 @@ from blizzard.foundation.trace_ids import (
     lifetime_context,
     span_id,
 )
-from blizzard.hub.domain.tracing import attributes as hub_attr
+from blizzard.hub.domain.observability.tracing import attributes as hub_attr
 from blizzard.runner.composition import RunnerProcess, build_runner_platform_tracing, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.tracing import attributes as runner_attr

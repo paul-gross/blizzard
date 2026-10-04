@@ -19,14 +19,13 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.edit import UNSET
-from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.garden_proposal_closure import (
+from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.garden.findings.model import Finding
+from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
 )
-from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import (
+from blizzard.hub.domain.garden.proposals.model import (
     DuplicateProposalFindingError,
     GardenProposal,
     GardenProposalAlreadyClosed,
@@ -37,9 +36,10 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
 )
-from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
-from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.operations.edit import UNSET
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,

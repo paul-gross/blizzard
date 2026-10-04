@@ -18,10 +18,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.record import ChunkPage, IWriteChunkRecordRepository
-from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.domain.work import Chunk, IntendedMigration, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

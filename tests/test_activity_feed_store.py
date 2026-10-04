@@ -15,12 +15,12 @@ import sqlalchemy as sa
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import ActivityEntry, DecisionChoice, MigrationSource
+from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, MigrationSource
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore

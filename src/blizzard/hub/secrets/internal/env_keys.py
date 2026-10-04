@@ -7,7 +7,7 @@ import binascii
 from collections.abc import Mapping
 
 from blizzard.hub.config import ConfigError
-from blizzard.hub.domain.secrets import IHubKeyProvider, KeyGeneration
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, KeyGeneration
 from blizzard.hub.secrets.internal.key_material import KEY_BYTES, generation_of
 
 ENV_SECRET_KEY = "BZ_HUB_SECRET_KEY"

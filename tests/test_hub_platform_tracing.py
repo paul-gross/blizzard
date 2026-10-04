@@ -28,7 +28,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 from blizzard.hub.config import AUTH_MODE_OAUTH, RUNNER_AUTH_ENFORCE, AuthConfig, HubConfig
-from blizzard.hub.domain.tracing.attributes import (
+from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
@@ -292,7 +292,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     from sqlalchemy import select
 
     from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
-    from blizzard.hub.domain.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
+    from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
     from blizzard.hub.store import schema as s
 
     exporter = InMemorySpanExporter()

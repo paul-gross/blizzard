@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.facts import FactIngestResult
+from blizzard.hub.domain.execution.facts import FactIngestResult
 from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,

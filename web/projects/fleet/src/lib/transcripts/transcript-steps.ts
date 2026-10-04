@@ -2,7 +2,7 @@ import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 import { nodeStepKey } from '../node-step';
 
 /** The reserved terminal node id — the domain's `RESERVED_TERMINAL`
- * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
+ * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here (not a backend import) since
  * the wire model carries `current_node_id` as a plain string, not a discriminated
  * value. A completed chunk's `current_node_id()` is this terminal — never a step that
  * actually ran, so it names no in-flight step to append. */

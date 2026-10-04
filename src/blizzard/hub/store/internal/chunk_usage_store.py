@@ -12,8 +12,8 @@ from typing import Any
 from sqlalchemy import Select, select
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
-from blizzard.hub.domain.work import UsageTotal
+from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns

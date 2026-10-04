@@ -20,7 +20,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import entity
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.graph import (
+from blizzard.hub.domain.graph.model import (
     Choice,
     ChoiceTarget,
     Edge,

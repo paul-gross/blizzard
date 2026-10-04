@@ -15,8 +15,8 @@ from click.testing import CliRunner
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.egress.repository import UsagePosition
-from blizzard.hub.domain.egress.reset import EgressReset
+from blizzard.hub.domain.observability.egress.repository import UsagePosition
+from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.store import schema
 from tests.support import HubHarness, InMemoryEgressWriter
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _rows, _store, _sweep

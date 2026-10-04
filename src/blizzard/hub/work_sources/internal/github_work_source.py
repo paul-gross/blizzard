@@ -15,8 +15,8 @@ import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
-from blizzard.hub.domain.delivery_read import DeliveryTrace
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
+from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError

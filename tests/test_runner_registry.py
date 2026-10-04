@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.registry import STALE_AFTER
+from blizzard.hub.domain.runners.registration import STALE_AFTER
 from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, count_queries, emitted_events
 
 pytestmark = pytest.mark.component

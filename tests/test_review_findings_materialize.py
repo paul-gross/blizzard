@@ -14,16 +14,16 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import FINDING_PREFIX
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.graph import Node
-from blizzard.hub.domain.review_findings import ValidatedReviewFindings
-from blizzard.hub.domain.review_findings_materialize import (
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.review.materialize import (
     IWriteReviewFindingsRepository,
     ReviewFindingsMaterialize,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
+from blizzard.hub.domain.graph.model import Node
 from blizzard.wire.finding import DeferredReviewFindingEntry
 
 pytestmark = pytest.mark.unit

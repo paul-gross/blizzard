@@ -22,7 +22,7 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Matches a public method taking a `*_id: str` parameter whose body calls a `get_`/`load_`-prefixed method on `self.*`
     with that same parameter, by exact textual identity — a body that rebinds the identifier to a new name before
     passing it on slips past. `ast-grep` has no taint mode; this rule is a floor, not a proof.
-  - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/claim.py`), reasoned at the site with
+  - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site with
     `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
 - **`bzh:config-codec`** (`rules/config-codec.yml`) — PyYAML is imported only by the strict YAML binding of the config

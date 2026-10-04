@@ -13,7 +13,7 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from tests.support import build_hub, ingest
 
 pytestmark = pytest.mark.component

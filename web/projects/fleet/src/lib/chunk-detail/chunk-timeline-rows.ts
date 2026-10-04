@@ -75,7 +75,7 @@ const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string 
 /** One history step's summed usage — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
  * figure so the timeline reads one lap's cost per line. `costPartial` folds by the hub's
- * own rule: `src/blizzard/hub/domain/work.py`'s `UsageTotal`. */
+ * own rule: `src/blizzard/hub/domain/chunk/model.py`'s `UsageTotal`. */
 export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.garden_sweeps import SweepFact, compute_sweeps
+from blizzard.hub.domain.garden.runs.sweeps import SweepFact, compute_sweeps
 
 pytestmark = pytest.mark.unit
 

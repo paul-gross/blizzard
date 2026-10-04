@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from blizzard.foundation.roles import dto
 from blizzard.hub.domain.config.changes import ConfigChange, FieldChange
 from blizzard.hub.domain.config.work_sources import ConfigFieldError
-from blizzard.hub.domain.edit import UNSET, UnsetType
+from blizzard.hub.domain.operations.edit import UNSET, UnsetType
 
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("forge_api_url", "owner", "repo", "base_branch", "secret_name")

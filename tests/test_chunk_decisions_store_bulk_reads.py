@@ -15,10 +15,10 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import Chunk, DecisionChoice, WorkItemMaterializationOutcome
+from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, WorkItemMaterializationOutcome
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store.internal.chunk_rows import insert_materialization_row
 from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
 

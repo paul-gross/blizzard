@@ -35,59 +35,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.cli.sessions import IReadSessionStore
-from blizzard.hub.domain.analytics.events import IReadTranscriptEvents
-from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
-from blizzard.hub.domain.analytics.queries import EventQueryCriteria, IReadAnalyticsEventQueries
-from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunks.decisions import IReadChunkDecisionsRepository
-from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository
-from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
-from blizzard.hub.domain.chunks.escalations import IReadChunkEscalationsRepository
-from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission
-from blizzard.hub.domain.chunks.hub_exec import IReadChunkHubExecRepository
-from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
-from blizzard.hub.domain.chunks.movement import IReadChunkMovementRepository
-from blizzard.hub.domain.chunks.questions import IReadChunkQuestionsRepository
-from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
-from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
-from blizzard.hub.domain.chunks.stores import ChunkReadStores, ChunkStores
-from blizzard.hub.domain.chunks.usage import IReadChunkUsageRepository
-from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
-from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
-from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
-from blizzard.hub.domain.egress.repository import (
-    EgressCheckpoint,
-    EpochKey,
-    EventsPosition,
-    IReadEgress,
-    IReadEgressEvents,
-    UsagePosition,
-)
-from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
-from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
-from blizzard.hub.domain.garden_run import IReadGardenRunRepository
-from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository
-from blizzard.hub.domain.garden_trend import IReadGardenTrendRepository
-from blizzard.hub.domain.graph import Graph, IReadGraphRepository, IReadManyGraphs
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
-from blizzard.hub.domain.run_context import IReadRunContextRepository
-from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.secrets import ISecretCatalog, SecretName
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCheckpoint
-from blizzard.hub.domain.transcripts import IReadTranscriptSegments
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     DecisionChoice,
     IReadWorkItemRepository,
@@ -95,6 +43,58 @@ from blizzard.hub.domain.work import (
     WorkItemAuthor,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
+from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
+from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
+from blizzard.hub.domain.config.secrets import ISecretCatalog, SecretName
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
+from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
+from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
+from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
+from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
+from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
+from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, IReadManyGraphs
+from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria, IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.repository import (
+    EgressCheckpoint,
+    EpochKey,
+    EventsPosition,
+    IReadEgress,
+    IReadEgressEvents,
+    UsagePosition,
+)
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCheckpoint
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
@@ -113,7 +113,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
-from blizzard.runner.domain.artifacts import PinnedGraphArtifact, IReadGraphArtifactRepository
+from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.domain.asks import IReadAskRepository
 from blizzard.runner.domain.attachments import IReadAttachmentRepository
 from blizzard.runner.domain.checks import ExecutedCheck, IReadCheckRepository

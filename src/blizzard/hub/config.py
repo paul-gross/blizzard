@@ -21,7 +21,7 @@ from sqlalchemy.engine import make_url
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.domain.transcripts import TranscriptCaps
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
 CONFIG_FILENAME = "blizzard-hub.toml"
 DATA_DIRNAME = "data"

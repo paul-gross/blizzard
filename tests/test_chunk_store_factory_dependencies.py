@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from tests.support import build_hub, chunk_stores, migrate_to
 

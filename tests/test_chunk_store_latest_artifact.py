@@ -10,8 +10,8 @@ from typing import cast
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
 from tests.support import HubHarness, build_hub, ingest
 

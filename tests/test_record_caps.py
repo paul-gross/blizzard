@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.config import HubConfig, default_db_url
-from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
+from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
 from tests.repo_files import repo_root

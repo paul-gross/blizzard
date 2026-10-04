@@ -9,13 +9,13 @@ import type { GraphView } from 'fleet';
 
 /** A node's declaration in `graph.nodes` names the terminal a choice can point at
  * instead of a node — the domain's `RESERVED_TERMINAL`
- * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
+ * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here (not a backend import) since
  * the wire model carries it as a plain string, not a discriminated value. */
 export const DONE_TERMINAL = 'done';
 
 /** The cross-graph migration prefix a choice's `to:` may carry instead of a node
  * name or the reserved terminal — the domain's `GRAPH_TARGET_PREFIX`
- * (`src/blizzard/hub/domain/graph.py`). Duplicated here for the same reason as
+ * (`src/blizzard/hub/domain/graph/model.py`). Duplicated here for the same reason as
  * {@link DONE_TERMINAL}: the wire model carries `to_node_name` as a plain string,
  * not a discriminated value. */
 export const GRAPH_TARGET_PREFIX = 'graph:';
@@ -29,7 +29,7 @@ export const GRAPH_TARGET_PREFIX = 'graph:';
 export type EdgeKind = 'advance' | 'retry';
 
 /** What a resolved edge (or the current selection) targets — the three things a
- * choice's `to:` can name (`ChoiceTarget` in `src/blizzard/hub/domain/graph.py`):
+ * choice's `to:` can name (`ChoiceTarget` in `src/blizzard/hub/domain/graph/model.py`):
  * a node in this graph, the reserved `done` terminal, or a migration to another
  * graph entirely. Replaces the old `toNodeId: string | null` encoding, which had
  * no room for the third case. */

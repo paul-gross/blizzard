@@ -11,10 +11,10 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.work import EscalationOpen
+from blizzard.hub.domain.chunk.model import EscalationOpen
+from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

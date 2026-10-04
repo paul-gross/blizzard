@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore

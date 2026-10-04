@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
+from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
 from tests.service.support import (
     mint_fixture,

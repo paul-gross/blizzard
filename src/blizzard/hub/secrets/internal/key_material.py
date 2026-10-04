@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from blizzard.hub.domain.secrets import KeyGeneration
+from blizzard.hub.domain.config.secrets import KeyGeneration
 
 KEY_BYTES = 32
 _KEY_ID_DOMAIN = b"blizzard.hub.secret-key-id/v1\x00"

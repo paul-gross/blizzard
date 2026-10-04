@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.findings import EXIT_KINDS
-from blizzard.hub.domain.garden_trend import TrendFact, compute_trend
+from blizzard.hub.domain.garden.findings.model import EXIT_KINDS
+from blizzard.hub.domain.garden.findings.trend import TrendFact, compute_trend
 
 pytestmark = pytest.mark.unit
 

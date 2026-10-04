@@ -1,7 +1,7 @@
 """SQLAlchemy adapter for the routine repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness
-is enforced by :class:`~blizzard.hub.domain.routines.RoutineAuthoring` before ``create``
+is enforced by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring` before ``create``
 runs; ``uq_routines_name`` is a backstop only — a raised ``IntegrityError`` here propagates
 rather than being swallowed as an idempotent CAS, unlike other stores' patterns."""
 
@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import insert, select, update
 
 from blizzard.foundation.roles import entity
-from blizzard.hub.domain.routines import IWriteRoutineRepository, Routine
+from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import routine_lifecycle_facts, routines
 

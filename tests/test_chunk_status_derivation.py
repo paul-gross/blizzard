@@ -12,8 +12,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     BounceFact,
     ChunkFacts,
     DecisionFact,
@@ -29,6 +28,7 @@ from blizzard.hub.domain.work import (
     RouteTokenMintedFact,
     TransitionFact,
 )
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 
 pytestmark = pytest.mark.unit
 

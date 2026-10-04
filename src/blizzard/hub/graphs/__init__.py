@@ -12,7 +12,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.documents.codec import YAML_CODEC, accepted_extensions, codec_for_path
-from blizzard.hub.domain.graph import GraphDoc
+from blizzard.hub.domain.graph.model import GraphDoc
 
 # The prompt-carrying fields whose file references are inlined at load.
 _PROMPT_KEYS = ("prompt", "prompt_addendum")

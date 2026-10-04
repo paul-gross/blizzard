@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from blizzard.hub.domain.delivery_read import DeliveryTrace
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
+from blizzard.hub.domain.chunk.model import WorkRef
 
 
 class WorkCloseError(Exception):

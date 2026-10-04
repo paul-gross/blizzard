@@ -18,7 +18,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.garden_run import (
+from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetDelta,
     RunDelta,

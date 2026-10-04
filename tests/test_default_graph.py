@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support import build_hub, hub_store_connections, ingest

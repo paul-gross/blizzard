@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 from sqlalchemy import func, select
 
-from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
 

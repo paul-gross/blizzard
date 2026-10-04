@@ -17,8 +17,8 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalEdit, RoutineProposalState
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts, GardenProposalEdit, RoutineProposalState
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row

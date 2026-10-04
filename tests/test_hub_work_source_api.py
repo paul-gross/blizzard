@@ -16,7 +16,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.work import ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore

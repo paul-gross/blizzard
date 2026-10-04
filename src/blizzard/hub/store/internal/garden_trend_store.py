@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the window
 itself is bound in SQL, but period bucketing is left to
-`src/blizzard/hub/domain/garden_trend.py`'s `compute_trend` (``bzh:sql-portable``)."""
+`src/blizzard/hub/domain/garden/findings/trend.py`'s `compute_trend` (``bzh:sql-portable``)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from blizzard.hub.domain.garden_trend import TREND_FACT_KINDS, IReadGardenTrendRepository, TrendFact
+from blizzard.hub.domain.garden.findings.trend import TREND_FACT_KINDS, IReadGardenTrendRepository, TrendFact
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, findings
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.work import FleetSummary
+from blizzard.hub.domain.chunk.model import FleetSummary
 
 pytestmark = pytest.mark.unit
 

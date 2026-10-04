@@ -15,9 +15,9 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,

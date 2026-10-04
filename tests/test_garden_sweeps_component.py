@@ -14,8 +14,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import insert
 
-from blizzard.hub.domain.garden_sweeps import GardenSweepsService
-from blizzard.hub.domain.routines import Routine
+from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore

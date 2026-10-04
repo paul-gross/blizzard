@@ -34,20 +34,20 @@ from blizzard.hub.delivery.hub_node import (
     PrintedChoice,
     UnconvergedDeliveryError,
 )
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
-from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, GraphDoc
-from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.graph_validation import Validator
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     HubNodePollFact,
     TransitionFact,
 )
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc
+from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points

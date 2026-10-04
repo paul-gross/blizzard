@@ -10,12 +10,12 @@ import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
-from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
-from blizzard.hub.domain.work import Movement, MovementKind
+from blizzard.hub.domain.chunk.model import Movement, MovementKind
+from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.tools.invariants import HubInvariants
 from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
 

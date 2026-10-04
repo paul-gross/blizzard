@@ -22,7 +22,7 @@ import sqlalchemy as sa
 import blizzard.hub as hub_pkg
 import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
 from tests import support

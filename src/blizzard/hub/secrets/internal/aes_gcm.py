@@ -8,7 +8,7 @@ import secrets
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from blizzard.hub.domain.secrets import (
+from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
     ISecretCipher,
     SealedSecret,

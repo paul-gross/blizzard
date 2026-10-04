@@ -15,7 +15,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
 from blizzard.tools.invariants import HubInvariants
 from tests.support import build_hub, ingest, report_lease

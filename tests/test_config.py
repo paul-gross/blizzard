@@ -1642,7 +1642,7 @@ def test_hub_transcript_caps_parse_and_round_trip_through_to_toml(tmp_path: Path
 @pytest.mark.unit
 def test_the_hub_template_shows_each_ingest_ceiling_at_its_domain_default(tmp_path: Path) -> None:
     from blizzard.hub.config import HubConfig
-    from blizzard.hub.domain.transcripts import TranscriptCaps
+    from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
     rendered = HubConfig(root=tmp_path, db_url=hub_default_db_url(tmp_path)).to_toml()
     defaults = TranscriptCaps()
@@ -1672,7 +1672,7 @@ def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) 
     service, and an unconfigured one must fall back to the domain default rather than None."""
     from blizzard.hub.app import _transcript_caps
     from blizzard.hub.config import HubConfig, TranscriptCapsConfig
-    from blizzard.hub.domain.transcripts import TranscriptCaps
+    from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
     resolved = _transcript_caps(
         HubConfig(
@@ -2067,8 +2067,8 @@ def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_reserved_service_names_cover_each_daemons_own_name() -> None:
     from blizzard.foundation.trace_export.config import RESERVED_SERVICE_NAMES
-    from blizzard.hub.domain.tracing.attributes import CHUNK_SERVICE_NAME as CHUNK
-    from blizzard.hub.domain.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
+    from blizzard.hub.domain.observability.tracing.attributes import CHUNK_SERVICE_NAME as CHUNK
+    from blizzard.hub.domain.observability.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
     from blizzard.runner.domain.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
 
     assert {HUB, RUNNER, CHUNK} <= RESERVED_SERVICE_NAMES

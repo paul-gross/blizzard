@@ -22,7 +22,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.tracing.attributes import (
+from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,

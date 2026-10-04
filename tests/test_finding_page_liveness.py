@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.findings import FACT_KINDS, FindingFact, derive_liveness
+from blizzard.hub.domain.garden.findings.model import FACT_KINDS, FindingFact, derive_liveness
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore

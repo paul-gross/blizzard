@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     DecisionFact,
     EscalationFact,

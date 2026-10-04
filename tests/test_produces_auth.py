@@ -12,8 +12,8 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.config import PRODUCES_ENFORCE, PRODUCES_WARN
-from blizzard.hub.domain.graph import Node, ProducesSpec
-from blizzard.hub.domain.produces_auth import Produces
+from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.graph.model import Node, ProducesSpec
 from blizzard.wire.completion import SubmittedArtifact
 
 pytestmark = pytest.mark.unit

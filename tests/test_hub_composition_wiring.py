@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.finding_bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from tests.support import build_hub
 
 pytestmark = pytest.mark.component

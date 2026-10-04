@@ -1,7 +1,7 @@
 """SQLAlchemy adapter for the garden-sweeps read seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the window
-itself is applied in `src/blizzard/hub/domain/garden_sweeps.py`'s `compute_sweeps`
+itself is applied in `src/blizzard/hub/domain/garden/runs/sweeps.py`'s `compute_sweeps`
 (``bzh:sql-portable``)."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 
 from sqlalchemy import select
 
-from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository, SweepFact
+from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository, SweepFact
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import artifacts, finding_sets
 

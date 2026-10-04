@@ -23,14 +23,11 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts
-from blizzard.hub.domain.garden_sweeps import GardenSweeps
-from blizzard.hub.domain.garden_trend import Trend
-from blizzard.hub.domain.harnesses import InvalidHarnesses
-from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.routine_baselines import RoutineBaseline
-from blizzard.hub.domain.routine_run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
-from blizzard.hub.domain.routines import (
+from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.findings.trend import Trend
+from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
+from blizzard.hub.domain.garden.routines import (
     Routine,
     RoutineDefaultScopeUnlinkError,
     RoutineGraphUnresolvedError,
@@ -38,8 +35,11 @@ from blizzard.hub.domain.routines import (
     RoutineNameTakenError,
     RunMode,
 )
-from blizzard.hub.domain.scopes import Scope, ScopeSlug, ScopeSlugError
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps
+from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView

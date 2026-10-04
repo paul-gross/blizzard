@@ -9,12 +9,23 @@ from decimal import Decimal
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, money, step_row
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.facts import StepFacts, TracedDecision, TracedDecisionResolution, TracedQuestion
-from blizzard.hub.domain.tracing.steps import StepKind, StepOutcome, identify_steps
-from blizzard.hub.domain.tracing.summary import StepSummary, summarize_step
+from blizzard.hub.domain.observability.egress.rows import (
+    AttributedUsage,
+    ExportedInvocation,
+    ExportedStep,
+    money,
+    step_row,
+)
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.facts import (
+    StepFacts,
+    TracedDecision,
+    TracedDecisionResolution,
+    TracedQuestion,
+)
+from blizzard.hub.domain.observability.tracing.steps import StepKind, StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import StepSummary, summarize_step
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

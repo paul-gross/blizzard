@@ -24,7 +24,7 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  *
  * Detach is deliberately **not** requeue — it supersedes no escalation and
  * bumps no epoch, so a `needs_human` chunk detached this way still derives
- * `needs_human` afterward (`src/blizzard/hub/domain/detach.py`); this header
+ * `needs_human` afterward (`src/blizzard/hub/domain/execution/detach.py`); this header
  * never claims otherwise. Pause/Resume switches on the pause **fact**
  * (`ChunkDetail.pause`), never on `status` — a chunk both paused and parked
  * on a question derives `waiting_on_human`, so a status-keyed switch would

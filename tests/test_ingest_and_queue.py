@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
 from tests.support import FakeWorkSource, build_hub, ingest, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
