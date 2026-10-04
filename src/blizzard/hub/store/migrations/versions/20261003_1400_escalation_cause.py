@@ -1,8 +1,8 @@
 """escalation cause and detail (hub store tree)
 
 Adds nullable ``escalations.cause``/``detail``, idempotently, with no backfill.
-Revision ID: 20261003_1300_escalation_cause
-Revises: 20261003_1200_event_drops
+Revision ID: 20261003_1400_escalation_cause
+Revises: 20261003_1300_hub_transcript_segment_spawn_cwd
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20261003_1300_escalation_cause"
-down_revision: str | None = "20261003_1200_event_drops"
+revision: str = "20261003_1400_escalation_cause"
+down_revision: str | None = "20261003_1300_hub_transcript_segment_spawn_cwd"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

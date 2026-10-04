@@ -285,7 +285,7 @@ def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) ->
 
     assert _columns() == {"cause", "detail"}
 
-    runner.downgrade("20261003_1200_event_drops")
+    runner.downgrade("20261003_1300_hub_transcript_segment_spawn_cwd")
     assert _columns() == set()
     engine = create_engine_from_url(config.db_url)
     try:
@@ -1252,7 +1252,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260914_1000_hub_harness_provenance", "routines", ("default_harnesses",)),
     ("hub", "20260916_1000_hub_authored_harnesses", "runner_registrations", ("capabilities",)),
     ("hub", "20260930_1000_artifact_seq", "lease_facts", ("lease_id",)),
-    ("hub", "20261003_1200_event_drops", "escalations", ("cause", "detail")),
+    ("hub", "20261003_1300_hub_transcript_segment_spawn_cwd", "escalations", ("cause", "detail")),
     # runner tree — instance 6
     (
         "runner",
