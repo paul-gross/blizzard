@@ -41,6 +41,11 @@ def test_a_duplicate_key_is_refused_with_its_position() -> None:
     assert (raised.value.line, raised.value.column) == (2, 1)
 
 
+def test_a_duplicate_key_after_a_merge_key_is_refused() -> None:
+    with pytest.raises(ConfigDecodeError, match=r"duplicate key 'a' \(line 5, column 3\)"):
+        YAML_CODEC.decode(b"base: &base {z: 0}\nmerged:\n  <<: *base\n  a: 1\n  a: 2\n")
+
+
 def test_malformed_syntax_carries_the_parser_position() -> None:
     with pytest.raises(ConfigDecodeError) as raised:
         YAML_CODEC.decode(b"a: [1, 2\nb: 3\n")

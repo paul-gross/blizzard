@@ -646,14 +646,15 @@ def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tm
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     segments = TranscriptSegmentStore(hub_store_connections(engine))
+    # The later turn range is stored first, so insertion order disagrees with the order the fact is read in.
     segments.insert_accepted(
-        _segment_record(final=False, turn_range_start=0, turn_range_end=0, epoch=2, spawn_generation=3),
+        _segment_record(turn_range_start=1, turn_range_end=1, epoch=9, spawn_generation=9),
         byte_count=10,
         codec="zlib",
         at=_NOW,
     )
     segments.insert_accepted(
-        _segment_record(turn_range_start=1, turn_range_end=1, epoch=9, spawn_generation=9),
+        _segment_record(final=False, turn_range_start=0, turn_range_end=0, epoch=2, spawn_generation=3),
         byte_count=10,
         codec="zlib",
         at=_NOW,

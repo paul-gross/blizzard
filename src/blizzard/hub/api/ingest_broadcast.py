@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState
 from blizzard.hub.composition import HubServices
@@ -18,6 +19,7 @@ from blizzard.wire.facts import (
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
+    USAGE_RECORDED,
     RunnerFact,
     RunnerFactBatch,
 )
@@ -29,6 +31,30 @@ _CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {
     ESCALATION_RECORDED: "escalated",
     LEASE_MINTED: "claimed",
 }
+
+
+class _RunnerArm(StrEnum):
+    """How ``_publish_one`` publishes a runner-scoped fact kind."""
+
+    PAUSE = "pause"
+    EXTERNAL_USAGE = "external-usage"
+    LOGGED = "logged"
+
+
+#: The runner-scoped fact kinds — carrying no ``chunk_id`` — and the arm each dispatches to. The
+#: chunk arm drops every kind named here, so a kind lands in exactly one place.
+_RUNNER_ARM_BY_FACT_KIND: dict[str, _RunnerArm] = {
+    RUNNER_LOCALLY_PAUSED: _RunnerArm.PAUSE,
+    RUNNER_LOCALLY_RESUMED: _RunnerArm.PAUSE,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED: _RunnerArm.EXTERNAL_USAGE,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED: _RunnerArm.EXTERNAL_USAGE,
+    EVENT_RECORDED: _RunnerArm.LOGGED,
+}
+
+#: The chunk-scoped fact kinds — each routed through the chunk arm on its payload's ``chunk_id``.
+_CHUNK_SCOPED_FACT_KINDS = frozenset(
+    {LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED, ANSWER_DELIVERED, USAGE_RECORDED}
+)
 
 
 @dataclass(frozen=True)
@@ -62,24 +88,19 @@ class IngestBroadcast:
     def _chunk_arm_id(fact: RunnerFact) -> str | None:
         """The chunk id ``_publish_one``'s chunk arm dispatches ``fact`` to, or ``None`` for
         a runner-scoped kind or a chunk-scoped payload missing its id."""
-        if fact.kind in (
-            RUNNER_LOCALLY_PAUSED,
-            RUNNER_LOCALLY_RESUMED,
-            EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-            EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-            EVENT_RECORDED,
-        ):
+        if fact.kind in _RUNNER_ARM_BY_FACT_KIND:
             return None
         chunk_id = fact.payload.get("chunk_id")
         return chunk_id if isinstance(chunk_id, str) else None
 
     def _publish_one(self, fact: RunnerFact, row_id: int | None, states: dict[str, ChunkFrameState]) -> None:
         """The runner-scoped kinds dispatch first: carrying no ``chunk_id``, the chunk arm drops them."""
-        if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
+        arm = _RUNNER_ARM_BY_FACT_KIND.get(fact.kind)
+        if arm is _RunnerArm.PAUSE:
             self._runner_pause(fact, row_id)
-        elif fact.kind in (EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, EXTERNAL_SUBSCRIPTION_USAGE_MISSED):
+        elif arm is _RunnerArm.EXTERNAL_USAGE:
             self.services.events.publish_runner_changed(self.batch.runner_id, kind="external-usage")
-        elif fact.kind == EVENT_RECORDED:
+        elif arm is _RunnerArm.LOGGED:
             pass  # already published by EventLogService.record
         else:
             chunk_id = self._chunk_arm_id(fact)

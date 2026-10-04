@@ -10,6 +10,11 @@ from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.work import ChunkFacts
 
 
+def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
+    """The board's page for ``chunk_id`` under the hub's public URL, or ``None`` with no public URL configured."""
+    return f"{public_url.rstrip('/')}/board/chunk/{chunk_id}" if public_url else None
+
+
 @dataclass(frozen=True)
 class DeliverySources:
     """The narrowed, page-keyed delivery read (not the chunk's whole artifact history).

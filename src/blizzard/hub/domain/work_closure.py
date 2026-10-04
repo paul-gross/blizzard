@@ -15,7 +15,7 @@ from blizzard.foundation.lane_retry import backoff_delay
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
+from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.work import WorkItemCloseOutcome
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -82,12 +82,11 @@ class CloseIntentDrainer:
         if not chunk_ids:
             return {}
         sources = self._artifacts.delivery_sources_for(sorted(chunk_ids))
-        base = self._public_url.rstrip("/") if self._public_url else None
         return {
             chunk_id: DeliveryTrace.of(
                 chunk_id,
                 sources.get(chunk_id, DeliverySources()),
-                board_url=f"{base}/board/chunk/{chunk_id}" if base else None,
+                board_url=board_chunk_url(self._public_url, chunk_id),
             )
             for chunk_id in chunk_ids
         }

@@ -32,6 +32,7 @@ from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsReposit
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.delivery_read import board_chunk_url
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import (
     DEFAULT_BOUNCE_CAP,
@@ -218,8 +219,8 @@ class HubEnv:
             ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
             ENV_WORK_ITEMS: json.dumps(list(self.work_items)),
         }
-        if self.public_url:
-            env[ENV_CHUNK_URL] = f"{self.public_url.rstrip('/')}/board/chunk/{self.chunk.chunk_id}"
+        if chunk_url := board_chunk_url(self.public_url, self.chunk.chunk_id):
+            env[ENV_CHUNK_URL] = chunk_url
         if self.garden_delivery_url:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.review_findings_url:
