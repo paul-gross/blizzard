@@ -16,13 +16,13 @@ from sqlalchemy import select
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.attempt import Attempt
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema

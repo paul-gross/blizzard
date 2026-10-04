@@ -12,7 +12,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.git_commit_declaration import (
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationRejected,
     GitCommitDeclarationUnknownRepo,
 )

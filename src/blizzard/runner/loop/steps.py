@@ -21,32 +21,32 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import Lease, Liveness, as_utc
-from blizzard.runner.domain.leases.closure import REAPED
-from blizzard.runner.domain.overload import backing_off_facts
-from blizzard.runner.domain.pause import PauseService
-from blizzard.runner.domain.usage import ContextSampleState
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
+from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
+from blizzard.runner.leases import Lease, Liveness, as_utc
+from blizzard.runner.leases.closure import REAPED
+from blizzard.runner.leases.overload import backing_off_facts
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.drain import OutboundDrain
+from blizzard.runner.lifecycle.held_chunk import HeldChunk
+from blizzard.runner.lifecycle.judgement.judgement import Judgement, elicitation_still_pending
+from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
-from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.drain import OutboundDrain
-from blizzard.runner.loop.held_chunk import HeldChunk
-from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
-from blizzard.runner.loop.overload import (
-    classify_worker_overload,
-    record_worker_overload,
-    reset_if_streak_open,
-)
-from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss
+from blizzard.runner.throttle.overload import (
+    classify_worker_overload,
+    record_worker_overload,
+    reset_if_streak_open,
+)
+from blizzard.runner.throttle.pause import PauseService
+from blizzard.runner.usage.repository import ContextSampleState
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
@@ -95,7 +95,7 @@ _CP_PULL_BEFORE = crashpoint(
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
 
 # The crossing rides `event.recorded`, not a fact kind of its own — both hubs already ingest that
-# lane. `(severity, kind)` as `attempt.py` classifies; the kind is the EVENT's, never a fact's.
+# lane. `(severity, kind)` as `lifecycle/attempt.py` classifies; the kind is the EVENT's, never a fact's.
 _CONTEXT_WARNED: EventLogKind = "worker-context-warned"
 
 

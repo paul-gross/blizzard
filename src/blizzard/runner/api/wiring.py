@@ -24,25 +24,25 @@ from blizzard.foundation.platform_tracing.received_export import (
 )
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.asks import AskService
-from blizzard.runner.domain.attachments import AttachmentService
-from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
-from blizzard.runner.domain.leases import Lease, LocalLeaseService
-from blizzard.runner.domain.leases.liveness import LeaseLivenessService
-from blizzard.runner.domain.leases.session import LeaseSessionService
-from blizzard.runner.domain.pause import PauseService
-from blizzard.runner.domain.requeue import RequeueService
-from blizzard.runner.domain.status import RunnerStatusService
-from blizzard.runner.domain.takeover import TakeoverService
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
-from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
-from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.leases import Lease, LocalLeaseService
+from blizzard.runner.leases.asks import AskService
+from blizzard.runner.leases.liveness import LeaseLivenessService
+from blizzard.runner.leases.session import LeaseSessionService
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
+from blizzard.runner.lifecycle.takeover import TakeoverService
+from blizzard.runner.operator.attachments import AttachmentService
+from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerReadStores
+from blizzard.runner.throttle.pause import PauseService
+from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
+from blizzard.runner.tracing.replay import LeaseTraceReplay
+from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.transcripts.service import TranscriptService
 
 _STORE = "runner store"

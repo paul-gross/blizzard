@@ -14,17 +14,17 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.requeue import (
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases import NewLease
+from blizzard.runner.loop.steps import Fill
+from blizzard.runner.operator.requeue import (
     ChunkNotRequeueable,
     RequeueBlockedByOpenTakeover,
     RequeueScope,
     RequeueService,
 )
-from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.steps import Fill
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 

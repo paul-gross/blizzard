@@ -14,10 +14,10 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.environments.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED

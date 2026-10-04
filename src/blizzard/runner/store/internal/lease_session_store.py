@@ -9,10 +9,10 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import IWriteLeaseSessionRepository, Lease, PoolHead
-from blizzard.runner.domain.leases.closure import RELEASED
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases import IWriteLeaseSessionRepository, Lease, PoolHead
+from blizzard.runner.leases.closure import RELEASED
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import lease_select, row_to_lease
 from blizzard.runner.store.schema import (

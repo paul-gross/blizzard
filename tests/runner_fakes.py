@@ -23,7 +23,6 @@ from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.usage import derive_invocation_cost
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -31,6 +30,7 @@ from blizzard.runner.environments.provider import (
     RepoBinding,
     WorkspaceAcquisitionError,
 )
+from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import (
     IHarnessAdapter,
@@ -40,26 +40,24 @@ from blizzard.runner.harness.adapter import (
     WorkerIdentityError,
     WorkerPreamble,
 )
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
-from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
-from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
+from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
+from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.lifecycle.env_release import EnvironmentRelease
+from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
+from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
-from blizzard.runner.loop.elicitation_files import ElicitationFiles
-from blizzard.runner.loop.env_release import EnvironmentRelease
-from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
-from blizzard.runner.loop.session import HarnessSelector, SessionResolver
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.process.probe import IProcessProbe
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -103,6 +101,8 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 )
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
+from blizzard.runner.usage.recorder import UsageRecorder
+from blizzard.runner.usage.repository import derive_invocation_cost
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
@@ -1147,7 +1147,7 @@ class FakeProbe:
         self.killed_groups: list[int] = []
         self.interrupted_groups: list[int] = []
         # Every call, counted — a test proving a caller never re-probes a launcher's
-        # own already-recorded start time (e.g. `dormant.py::_wake`) reads this directly.
+        # own already-recorded start time (e.g. `lifecycle/dormant.py::_wake`) reads this directly.
         self.start_time_calls: list[int] = []
 
     def start_time(self, pid: int) -> str | None:
@@ -1193,7 +1193,7 @@ class FakeWorktreeGit:
 
 
 class FakeCheckRunner:
-    """A scriptable :class:`~blizzard.runner.loop.checks.ICheckRunner`: canned outcomes
+    """A scriptable :class:`~blizzard.runner.lifecycle.judgement.check_runner.ICheckRunner`: canned outcomes
     per command, records every call.
 
     ``outcomes`` maps a command to its :class:`CheckOutcome`; unlisted returns ``default``."""

@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
-from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.environments.internal.subprocess_worktree_git import SubprocessWorktreeGit
+from blizzard.runner.environments.worktree import IWorktreeGit
 
 
 def _git(cwd: Path, *args: str) -> str:

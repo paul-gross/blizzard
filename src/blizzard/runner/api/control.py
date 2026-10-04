@@ -12,8 +12,8 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.pause import IReadPauseRepository
-from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.throttle.pause import IReadPauseRepository
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 
 router = APIRouter(prefix="/api", tags=["runner"])

@@ -10,7 +10,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.chunk_scope import resolved_requeue_scope
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover
+from blizzard.runner.operator.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover
 from blizzard.wire.requeue import RequeueResponse
 
 router = APIRouter(prefix="/api", tags=["runner"])

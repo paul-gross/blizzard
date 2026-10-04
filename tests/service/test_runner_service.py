@@ -31,8 +31,8 @@ from sqlalchemy import select
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
-from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.runner.store.schema import escalation_closures, outbound_buffer

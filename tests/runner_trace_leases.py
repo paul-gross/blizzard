@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases import NewLease
 from tests.runner_fakes import SqlAlchemyRunnerStore
 
 NODE_ID = "g1-build"

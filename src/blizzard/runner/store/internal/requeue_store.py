@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.requeue import IWriteRequeueRepository
+from blizzard.runner.operator.requeue import IWriteRequeueRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import Unsuperseded
 from blizzard.runner.store.schema import leases, requeues

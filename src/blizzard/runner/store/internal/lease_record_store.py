@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import ClosedLease, IWriteLeaseRecordRepository, Lease, NewLease, closure
+from blizzard.runner.leases import ClosedLease, IWriteLeaseRecordRepository, Lease, NewLease, closure
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     Unclosed,

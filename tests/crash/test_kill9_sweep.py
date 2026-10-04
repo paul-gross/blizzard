@@ -28,9 +28,9 @@ from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.leases import NewLease
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
@@ -1699,7 +1699,7 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
 
-    # Every named point here fires in the RUNNER's loop (spawn.py/judgement.py) — never the hub.
+    # Every named point here fires in the RUNNER's loop (lifecycle/spawn.py/judgement.py) — never the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)

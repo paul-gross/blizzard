@@ -8,7 +8,7 @@ project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump m
 | Surface         | A release breaks it when it…                                                                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HTTP API        | removes a route, adds a required field to a request, or removes a response field or changes its meaning                                                         |
-| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/loop/hub.py`) depends on |
+| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on |
 | Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                               |
 | Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                              |
 | Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                  |

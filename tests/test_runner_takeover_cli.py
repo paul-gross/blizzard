@@ -21,9 +21,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.takeover import TakeoverCommand
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
 

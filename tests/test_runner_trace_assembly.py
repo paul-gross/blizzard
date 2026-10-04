@@ -10,11 +10,11 @@ import pytest
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
 from blizzard.foundation.trace_spans import FinishedSpan, SpanKind, SpanStatus
-from blizzard.runner.domain.leases import closure
-from blizzard.runner.domain.tracing import attributes as attr
-from blizzard.runner.domain.tracing import facts as facts_module
-from blizzard.runner.domain.tracing.assembly import assemble_lease
-from blizzard.runner.domain.tracing.facts import (
+from blizzard.runner.leases import closure
+from blizzard.runner.tracing import attributes as attr
+from blizzard.runner.tracing import facts as facts_module
+from blizzard.runner.tracing.assembly import assemble_lease
+from blizzard.runner.tracing.facts import (
     CheckResultFact,
     ChecksRanFact,
     ContextSampleFact,

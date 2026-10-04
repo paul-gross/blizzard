@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.git_commit_declaration import (
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclaration,
     IWriteGitCommitDeclarationRepository,
 )

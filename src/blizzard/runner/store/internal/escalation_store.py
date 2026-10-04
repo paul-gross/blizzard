@@ -8,8 +8,8 @@ from sqlalchemy import select
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.escalations import IWriteEscalationRepository, ParkedEscalation
-from blizzard.runner.domain.leases.closure import ESCALATION_MINT, ESCALATION_REASONS, NO_ACCEPTABLE_HARNESS_MINT
+from blizzard.runner.leases.closure import ESCALATION_MINT, ESCALATION_REASONS, NO_ACCEPTABLE_HARNESS_MINT
+from blizzard.runner.leases.escalations import IWriteEscalationRepository, ParkedEscalation
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases

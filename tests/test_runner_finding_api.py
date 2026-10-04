@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.leases import NewLease
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)

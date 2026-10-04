@@ -16,12 +16,12 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.leases.closure import REAPED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.attempt import Attempt
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.closure import REAPED
+from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.steps import Advance
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, RUNNER_LOCALLY_PAUSED

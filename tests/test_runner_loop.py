@@ -27,9 +27,10 @@ from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
@@ -46,18 +47,17 @@ from blizzard.runner.harness.preamble import (
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
-from blizzard.runner.loop.claim import InterruptedClaims
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.claim import InterruptedClaims
+from blizzard.runner.lifecycle.judgement.judgement import Judgement
+from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
+from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.judgement import Judgement
-from blizzard.runner.loop.produces import ProducesReconciler
-from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
-from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
-from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
@@ -1121,7 +1121,7 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
 
 @pytest.mark.unit
 def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-untyped-def]
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimConflict
 
     store = _store(tmp_path)
@@ -1144,7 +1144,7 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
     """A 403 is distinct from a 409 conflict: the claim was refused outright,
     so FILL releases the binding and stops trying further slots this tick rather than
     keep racing claims that will be refused the same way."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimPausedDenial
 
     store = _store(tmp_path)
@@ -1169,7 +1169,7 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ign
     """The must-fix-1 claim guard: the chunk was stopped between this
     runner's peek and its claim POST — not a fleet-wide brake, so FILL releases the
     binding and keeps trying its remaining slots, same as a race-loss conflict."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimTerminalDenial
 
     store = _store(tmp_path)
@@ -1194,7 +1194,7 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
     """A distinct refusal: the chunk stands on a prerequisite that has
     not reached ``done`` — not a race loss, so FILL releases the binding and keeps
     trying its remaining slots, same as a terminal denial or a race-loss conflict."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimDependencyDenial
 
     store = _store(tmp_path)
@@ -1221,7 +1221,7 @@ def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  # type:
     """The runner's stored capabilities no longer cover the chunk — not a race loss or a
     dependency block, so FILL releases the binding, mints no lease, and keeps filling its
     remaining slots, as the terminal/dependency denials do."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimIncompatibleDenial
 
     store = _store(tmp_path)
@@ -1250,7 +1250,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
     statically-known one — must still hold strict mode at that head. With two open slots and
     a second, unmarked entry behind it, the whole run must stop at the first claim rather
     than falling through to attempt the second."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimDependencyDenial
 
     store = _store(tmp_path)
@@ -1458,7 +1458,7 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_le
     """Hoist, preserved for the legacy (non-capability-asserting)
     path only: one ``Fill.run()`` peeks the hub ONCE, filling every open
     slot off that one cached snapshot — the reverse of the matched path's own discipline."""
-    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.runner.hub.client import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimConflict
 
     store = _store(tmp_path)

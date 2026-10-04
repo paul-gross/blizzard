@@ -10,7 +10,7 @@ import hashlib
 
 import pytest
 
-from blizzard.runner.domain.lease_auth import LeaseToken
+from blizzard.runner.leases.lease_auth import LeaseToken
 
 pytestmark = pytest.mark.unit
 

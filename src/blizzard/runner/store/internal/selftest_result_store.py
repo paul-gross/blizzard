@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
+from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import selftest_results
 

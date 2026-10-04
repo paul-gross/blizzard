@@ -1,5 +1,5 @@
 """The per-tick chunk-status cache — ``tick()``'s own read hoist onto
-``IHubClient.chunk_statuses``, proven at the seam :mod:`blizzard.runner.loop.chunk_status_cache`
+``IHubClient.chunk_statuses``, proven at the seam :mod:`blizzard.runner.hub.chunk_status_cache`
 adds: one hub round-trip per distinct chunk id per tick, a write this same tick invalidates,
 and an unknown id raising ``ChunkNotFoundError`` at every reader without a repeat read.
 """
@@ -13,11 +13,11 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.outbound import COMPLETION_KIND
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission

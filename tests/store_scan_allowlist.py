@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
-from blizzard.runner.domain.outbound import IReadOutboundRepository
+from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
 #: The ceiling an allow-list entry's declared row bound must never exceed.

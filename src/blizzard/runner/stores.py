@@ -12,21 +12,14 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.runner.auth.tokens import IReadTokenRepository, IWriteTokenRepository
-from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
-from blizzard.runner.domain.asks import IReadAskRepository, IWriteAskRepository
-from blizzard.runner.domain.attachments import IReadAttachmentRepository, IWriteAttachmentRepository
-from blizzard.runner.domain.checks import IReadCheckRepository, IWriteCheckRepository
-from blizzard.runner.domain.elicitation import IReadElicitationRepository, IWriteElicitationRepository
-from blizzard.runner.domain.escalations import IReadEscalationRepository, IWriteEscalationRepository
-from blizzard.runner.domain.git_commit_declaration import (
-    IReadGitCommitDeclarationRepository,
-    IWriteGitCommitDeclarationRepository,
+from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
+from blizzard.runner.harness.selftest_result import (
+    IReadSelfTestResultRepository,
+    IWriteSelfTestResultRepository,
 )
-from blizzard.runner.domain.invocation_boundaries import (
-    IReadInvocationBoundaryRepository,
-    IWriteInvocationBoundaryRepository,
-)
-from blizzard.runner.domain.leases import (
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.leases import (
     IReadLeaseLivenessRepository,
     IReadLeaseRecordRepository,
     IReadLeaseResumeIntentRepository,
@@ -36,20 +29,27 @@ from blizzard.runner.domain.leases import (
     IWriteLeaseResumeIntentRepository,
     IWriteLeaseSessionRepository,
 )
-from blizzard.runner.domain.outbound import IReadOutboundRepository, IWriteOutboundRepository
-from blizzard.runner.domain.overload import IReadOverloadRepository, IWriteOverloadRepository
-from blizzard.runner.domain.pause import IReadPauseRepository, IWritePauseRepository
-from blizzard.runner.domain.requeue import IReadRequeueRepository, IWriteRequeueRepository
-from blizzard.runner.domain.selftest_result import (
-    IReadSelfTestResultRepository,
-    IWriteSelfTestResultRepository,
+from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
+from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
+from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverloadRepository
+from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
+from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
+    IReadGitCommitDeclarationRepository,
+    IWriteGitCommitDeclarationRepository,
 )
-from blizzard.runner.domain.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
-from blizzard.runner.domain.tracing.repository import IReadLeaseTraces, IWriteLeaseTraces
-from blizzard.runner.domain.usage import IReadUsageRepository, IWriteUsageRepository
-from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
-from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
+from blizzard.runner.operator.attachments import IReadAttachmentRepository, IWriteAttachmentRepository
+from blizzard.runner.operator.requeue import IReadRequeueRepository, IWriteRequeueRepository
+from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
+from blizzard.runner.tracing.repository import IReadLeaseTraces, IWriteLeaseTraces
+from blizzard.runner.transcripts.invocation_boundaries import (
+    IReadInvocationBoundaryRepository,
+    IWriteInvocationBoundaryRepository,
+)
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
+from blizzard.runner.usage.repository import IReadUsageRepository, IWriteUsageRepository
 
 __all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerReadStores", "RunnerStores"]
 

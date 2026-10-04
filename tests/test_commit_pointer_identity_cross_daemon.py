@@ -17,9 +17,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.git_commits import DeclaredCommits
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.wire.completion import SubmittedArtifact
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, report_lease

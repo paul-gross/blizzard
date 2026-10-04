@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from blizzard.foundation.roles import dto
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource, inspect_bundle, publish_bundle
@@ -25,6 +24,7 @@ from blizzard.runner.harness.declaration import (
     IHarnessSectionKind,
     SharedHarnessInputs,
 )
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher

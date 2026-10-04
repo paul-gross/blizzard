@@ -11,9 +11,9 @@ import json
 import httpx
 import pytest
 
-from blizzard.runner.loop.hub import HubClientError
-from blizzard.runner.loop.internal import http_hub as http_hub_module
-from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.client import HubClientError
+from blizzard.runner.hub.internal import http_hub as http_hub_module
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.queue import QueuePeekRequest
 from blizzard.wire.route import RouteClaim

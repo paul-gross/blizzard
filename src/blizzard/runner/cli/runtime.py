@@ -26,16 +26,16 @@ from blizzard.runner.composition import (
     build_runner_received_telemetry,
 )
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.domain.tracing.sweep import announce_rejected_tracing
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
-from blizzard.runner.loop.trace_driver import TraceSweepDriver
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
+from blizzard.runner.tracing.sweep import announce_rejected_tracing
+from blizzard.runner.tracing.trace_driver import TraceSweepDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0

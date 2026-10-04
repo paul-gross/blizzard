@@ -18,7 +18,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -33,6 +32,7 @@ from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -424,7 +424,7 @@ class ClaudeCodeAdapter:
         # the token plaintext is never persisted, so the caller re-mints it.
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
-        # Deferred like spawn/judge — `dormant.py::_wake` confirms after `record_spawn` lands.
+        # Deferred like spawn/judge — `lifecycle/dormant.py::_wake` confirms after `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True

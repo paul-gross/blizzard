@@ -43,8 +43,8 @@ from blizzard.foundation.trace_ids import (
 from blizzard.hub.domain.observability.tracing import attributes as hub_attr
 from blizzard.runner.composition import RunnerProcess, build_runner_platform_tracing, build_runner_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.tracing import attributes as runner_attr
 from blizzard.runner.store.schema import route_tokens
+from blizzard.runner.tracing import attributes as runner_attr
 from tests.repo_files import repo_root
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name, scope_of_role

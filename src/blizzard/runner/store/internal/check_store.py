@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.checks import ExecutedCheck, IWriteCheckRepository
+from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import check_results, checks_ran, nudge_facts
 

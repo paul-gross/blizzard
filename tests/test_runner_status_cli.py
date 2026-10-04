@@ -24,8 +24,8 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
 from blizzard.runner.listeners import Listeners, Uds
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 

@@ -15,12 +15,12 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
+from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason

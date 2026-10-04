@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
-from blizzard.runner.domain.tracing.facts import (
+from blizzard.runner.tracing.facts import (
     BoundaryFact,
     CheckResultFact,
     ChecksRanFact,
@@ -25,6 +24,7 @@ from blizzard.runner.domain.tracing.facts import (
     TakeoverFact,
     TokenUsageFact,
 )
+from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 LEASE_ID = "lease_1"

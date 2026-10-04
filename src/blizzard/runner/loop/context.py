@@ -15,32 +15,32 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import dto
 from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.capability_snapshot import (
+    HarnessVersionCache,
+    TickCapabilities,
+    capability_snapshot,
+)
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.loop.capability_snapshot import (
-    HarnessVersionCache,
-    TickCapabilities,
-    capability_snapshot,
-)
-from blizzard.runner.loop.checks import ICheckRunner
-from blizzard.runner.loop.chunk_status_cache import IChunkViews
-from blizzard.runner.loop.elicitation_files import ElicitationFiles
-from blizzard.runner.loop.env_release import EnvironmentRelease
-from blizzard.runner.loop.hub import IHubClient
+from blizzard.runner.hub.chunk_status_cache import IChunkViews
+from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.lifecycle.env_release import EnvironmentRelease
+from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
+from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.retention_floor import RetentionPasses
-from blizzard.runner.loop.session import HarnessSelector, SessionResolver
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.process.probe import IProcessProbe
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
+from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.runner import RunnerCapability
 
 _log = get_logger("blizzard.runner.loop")
@@ -162,7 +162,7 @@ class LoopContext:
     clock: IClock
     hub: IHubClient
     #: This tick's (or, standalone, this step's own) chunk-status read seam —
-    #: see :mod:`blizzard.runner.loop.chunk_status_cache`.
+    #: see :mod:`blizzard.runner.hub.chunk_status_cache`.
     chunk_views: IChunkViews
     provider: IWorkspaceProvider
     process: IProcessProbe
@@ -241,20 +241,20 @@ class LoopContext:
 
 
 if TYPE_CHECKING:
-    from blizzard.runner.loop.attempt import AttemptContext
-    from blizzard.runner.loop.claim import ClaimContext
-    from blizzard.runner.loop.dormant import DormantContext
-    from blizzard.runner.loop.drain import DrainContext
-    from blizzard.runner.loop.git_commits import GitCommitsContext
-    from blizzard.runner.loop.held_chunk import HeldChunkContext
-    from blizzard.runner.loop.judgement import JudgementContext
-    from blizzard.runner.loop.outbound import OutboundContext
-    from blizzard.runner.loop.overload import OverloadContext
-    from blizzard.runner.loop.spawn import SpawnContext
-    from blizzard.runner.loop.transcript_backfill import TranscriptBackfillContext
-    from blizzard.runner.loop.transcript_drain import TranscriptDrainContext
-    from blizzard.runner.loop.transcript_pump import TranscriptPumpContext
-    from blizzard.runner.loop.usage_limit import UsageLimitContext
+    from blizzard.runner.hub.outbound import OutboundContext
+    from blizzard.runner.lifecycle.attempt import AttemptContext
+    from blizzard.runner.lifecycle.claim import ClaimContext
+    from blizzard.runner.lifecycle.dormant import DormantContext
+    from blizzard.runner.lifecycle.drain import DrainContext
+    from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
+    from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
+    from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
+    from blizzard.runner.lifecycle.spawn import SpawnContext
+    from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
+    from blizzard.runner.throttle.overload import OverloadContext
+    from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfillContext
+    from blizzard.runner.transcripts.transcript_drain import TranscriptDrainContext
+    from blizzard.runner.transcripts.transcript_pump import TranscriptPumpContext
 
     def _conforms_to_outbound(ctx: LoopContext) -> OutboundContext:
         return ctx

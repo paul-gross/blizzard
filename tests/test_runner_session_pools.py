@@ -18,8 +18,6 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.runner.domain.leases import NewLease, WorkRefStamp
-from blizzard.runner.domain.leases.closure import FAILED
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
@@ -27,9 +25,11 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.session import SessionResolver
-from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.leases import NewLease, WorkRefStamp
+from blizzard.runner.leases.closure import FAILED
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.session import SessionResolver
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.schema import leases
 from blizzard.wire.chunk import ChunkStatusView

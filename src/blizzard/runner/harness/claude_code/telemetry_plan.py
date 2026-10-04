@@ -2,7 +2,7 @@
 ``service.name`` its telemetry leaves the runner with, and the per-signal plan for pointing a worker's exporters
 at the runner.
 
-The plan type and the names live in ``domain/tracing/harness_telemetry_plan.py``. The plan is derived once, at the
+The plan type and the names live in ``harness/harness_telemetry_plan.py``. The plan is derived once, at the
 composition root; Claude Code's name rules live in ``claude_code/telemetry.py``."""
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.wiring import section_of
 

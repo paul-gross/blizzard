@@ -29,11 +29,11 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 from blizzard.hub.domain.observability.tracing.attributes import resource_attributes
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.tracing.platform import (
+from blizzard.runner.leases import NewLease
+from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE as RUNNER_SCOPE,
 )
-from blizzard.runner.domain.tracing.platform import (
+from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
 from tests.runner_fakes import make_store, make_stores, no_retry_clock

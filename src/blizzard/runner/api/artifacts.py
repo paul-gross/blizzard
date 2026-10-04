@@ -18,7 +18,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository
+from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope, WorkerArtifact
 
 router = APIRouter(prefix="/api", tags=["runner"])

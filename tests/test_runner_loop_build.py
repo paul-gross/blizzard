@@ -30,7 +30,6 @@ from blizzard.runner.config import (
     SubscriptionDeclaration,
     WorkspaceRepo,
 )
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
@@ -42,6 +41,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler

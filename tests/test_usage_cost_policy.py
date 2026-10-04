@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from blizzard.runner.domain.usage import InvocationCost, derive_invocation_cost
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
+from blizzard.runner.usage.repository import InvocationCost, derive_invocation_cost
 
 pytestmark = pytest.mark.unit
 

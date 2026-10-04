@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import insert, select
 
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases import NewLease
 from blizzard.runner.store import schema as runner
 from tests.runner_fakes import make_store
 

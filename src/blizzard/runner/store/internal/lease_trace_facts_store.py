@@ -1,6 +1,6 @@
 """SQLAlchemy adapter for the lease trace seam (package-private).
 
-Hydrates :class:`~blizzard.runner.domain.tracing.facts.LeaseTraceFacts` for closed leases only,
+Hydrates :class:`~blizzard.runner.tracing.facts.LeaseTraceFacts` for closed leases only,
 selecting the columns the bundle declares and never a content column. The plural read issues a
 fixed set of statements per :func:`~blizzard.foundation.store.batching.id_batches` slice — one
 lease/context/closure read, then one read per fact table — however many leases the slice holds."""
@@ -18,30 +18,6 @@ from sqlalchemy import Connection, Row, and_, func, insert, or_, select
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import entity
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
-from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.facts import (
-    BoundaryFact,
-    CheckResultFact,
-    ChecksRanFact,
-    ContextSampleFact,
-    LeaseClosureFact,
-    LeaseContextFact,
-    LeaseGrantFact,
-    LeaseTraceFacts,
-    NudgeFact,
-    OverloadFact,
-    ParkFact,
-    ParkResumeFact,
-    PauseParkFact,
-    PauseResumeFact,
-    SessionEndFact,
-    SpawnFact,
-    TakeoverEndFact,
-    TakeoverFact,
-    TokenUsageFact,
-)
-from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint, LeaseTraceExportFailure
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs
 from blizzard.runner.store.schema import (
@@ -67,6 +43,30 @@ from blizzard.runner.store.schema import (
     trace_export_latch,
     usage_facts,
 )
+from blizzard.runner.tracing.cursor import LeaseCursorKey
+from blizzard.runner.tracing.facts import (
+    BoundaryFact,
+    CheckResultFact,
+    ChecksRanFact,
+    ContextSampleFact,
+    LeaseClosureFact,
+    LeaseContextFact,
+    LeaseGrantFact,
+    LeaseTraceFacts,
+    NudgeFact,
+    OverloadFact,
+    ParkFact,
+    ParkResumeFact,
+    PauseParkFact,
+    PauseResumeFact,
+    SessionEndFact,
+    SpawnFact,
+    TakeoverEndFact,
+    TakeoverFact,
+    TokenUsageFact,
+)
+from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint, LeaseTraceExportFailure
+from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 
 @entity

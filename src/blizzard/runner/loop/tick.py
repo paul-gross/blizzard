@@ -11,9 +11,8 @@ import dataclasses
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.tracing.platform import TICK_STEP
-from blizzard.runner.loop.capability_snapshot import TickCapabilities
-from blizzard.runner.loop.chunk_status_cache import MemoizingChunkViewCache
+from blizzard.runner.harness.capability_snapshot import TickCapabilities
+from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
@@ -26,7 +25,8 @@ from blizzard.runner.loop.steps import (
     Retention,
     SpendCeiling,
 )
-from blizzard.runner.loop.transcript_drain import TranscriptDrain
+from blizzard.runner.tracing.platform import TICK_STEP
+from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -78,7 +78,7 @@ def _tick(ctx: LoopContext) -> None:
     _traced(ctx, Fill)
     _traced(ctx, Advance)
     # After every fact-lane-draining step — bounded (the real bound
-    # is `transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
+    # is `transcripts/transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
     _traced(ctx, TranscriptDrain)
     # Not load-bearing: each prune preserves what this tick's other readers see
     # — placed here only so a fact just enqueued isn't pruned the same tick it lands.

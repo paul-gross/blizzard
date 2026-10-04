@@ -17,12 +17,12 @@ from sqlalchemy import Connection
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.runner.domain.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
-from blizzard.runner.loop.dormant import DormantSession
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories

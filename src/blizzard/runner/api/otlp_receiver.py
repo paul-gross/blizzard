@@ -2,7 +2,7 @@
 ``[tracing] harness_telemetry``.
 
 Lease-token authenticated; everything received is untrusted, and
-:mod:`~blizzard.runner.domain.tracing.receiver` decides what is kept. Contract:
+:mod:`~blizzard.runner.tracing.receiver` decides what is kept. Contract:
 ``blizzard-product:/delivered/tracing/platform-spans/spec/nesting.md`` §Out of the worker."""
 
 from __future__ import annotations
@@ -30,15 +30,15 @@ from blizzard.foundation.platform_tracing.received import (
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.tracing.harness_telemetry_plan import (
+from blizzard.runner.harness.harness_telemetry_plan import (
     CLAUDE_CODE_LOGS_SCOPE,
     CLAUDE_CODE_METRICS_SCOPE,
     CLAUDE_CODE_SCOPES,
     CLAUDE_CODE_SERVICE_NAME,
     CLAUDE_CODE_TRACING_SCOPE,
 )
-from blizzard.runner.domain.tracing.receiver import (
+from blizzard.runner.leases import Lease
+from blizzard.runner.tracing.receiver import (
     MAX_BODY_BYTES,
     Admission,
     Allowlist,
@@ -46,7 +46,7 @@ from blizzard.runner.domain.tracing.receiver import (
     admit_data_points,
     admit_log_records,
 )
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds
+from blizzard.runner.tracing.receiver_limits import ReceiverBounds
 
 router = APIRouter(include_in_schema=False)
 

@@ -14,12 +14,12 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.overload import BACKOFF_LIMIT, backoff_delay
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
-from blizzard.runner.loop.dormant import DormantSession
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.overload import BACKOFF_LIMIT, backoff_delay
+from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 
 
 @pytest.mark.unit

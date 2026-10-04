@@ -39,7 +39,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
 )
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
+from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
@@ -773,7 +773,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(
     resumed = adapter.resume_with_message(
         str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
     )
-    resumed.confirm_durable()  # real component tests stand in for `dormant.py::_wake`'s own call
+    resumed.confirm_durable()  # real component tests stand in for `lifecycle/dormant.py::_wake`'s own call
     os.waitpid(resumed.pid, 0)
     assert (workdir / "nudge.out").exists()
 

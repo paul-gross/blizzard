@@ -25,7 +25,7 @@ from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.subscriptions import _subscription_list
 from blizzard.runner.api.takeovers import _open_takeover_list
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.asks import IReadAskRepository
+from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.runner_status import DashboardView
 

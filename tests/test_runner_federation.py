@@ -21,12 +21,12 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import create_app
-from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, runner_store_errors
 

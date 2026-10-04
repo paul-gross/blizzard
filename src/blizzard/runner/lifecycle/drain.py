@@ -1,0 +1,235 @@
+"""Draining the outbound buffer: contiguous runs of generic-kind facts batched into one
+``push_facts`` call each, completions and decisions still delivered one at a time — in
+order, until one will not deliver."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Protocol
+
+from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.runner.hub.client import HubClientError
+from blizzard.runner.hub.outbound import COMPLETION_KIND, DECISION_KIND
+from blizzard.runner.hub.outbound_buffer import BufferedFact
+from blizzard.runner.leases import Lease
+from blizzard.runner.leases.closure import FAILED, PARKED, TRANSITIONED
+from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
+from blizzard.runner.lifecycle.held_chunk import HeldChunk, HeldChunkContext
+from blizzard.runner.lifecycle.spawn import SpawnConfig
+from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.facts import RunnerFact, RunnerFactBatch
+
+_log = get_logger("blizzard.runner.loop")
+
+#: This drain's own per-``run()`` slice bound — a large backlog drains over
+#: several ticks rather than one run holding the whole buffer's payload set in memory.
+_DRAIN_LIMIT = 100
+
+# Submit -> ack -> apply-response. The after-submit.before-ack window is the lost-ack replay
+# the hub's idempotency must absorb.
+_CP_BEFORE_SUBMIT = crashpoint("flush.before-submit", "completion at head of buffer; not submitted")
+_CP_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the completion; ack not recorded")
+_CP_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
+_CP_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
+
+# The between-attempts boundary the per-chunk spend cap checks at: a crash here
+# leaves no active lease and no escalation, recovered by FILL's interrupted-claim reconcile.
+_CP_AFTER_CLOSURE = crashpoint(
+    "advance.after-closure.before-cost-cap-check", "attempt closed; cap check and next-step decision not yet made"
+)
+
+
+class DrainConfig(SpawnConfig, Protocol):
+    @property
+    def chunk_cap_usd(self) -> float | None: ...
+
+
+class DrainContext(AttemptContext, HeldChunkContext, Protocol):
+    @property
+    def config(self) -> DrainConfig: ...
+
+
+@dataclass(frozen=True)
+class OutboundDrain:
+    """The single flusher for this runner's store-and-forward buffer."""
+
+    ctx: DrainContext
+
+    def run(self) -> None:
+        # An uncaught raise would escape through `Pull` and skip Fill and Advance.
+        try:
+            self._run_unsafe()
+        except Exception:
+            _log.exception("outbound drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
+
+    def _run_unsafe(self) -> None:
+        """Walk this tick's own bounded slice in seq order, batching every contiguous
+        run of generic-kind facts into one ``push_facts`` call; a completion or decision
+        fact first flushes the run collected so far, then routes to its own arm unchanged."""
+        run: list[BufferedFact] = []
+        for fact in self.ctx.stores.outbound.pending_outbound(limit=_DRAIN_LIMIT):
+            if fact.kind not in (COMPLETION_KIND, DECISION_KIND):
+                run.append(fact)
+                continue
+            if run:
+                if not self._flush_run(run):
+                    return  # transport failure — stop; retry the backlog next tick
+                run = []
+            handler = self._completion if fact.kind == COMPLETION_KIND else self._decision
+            if not handler(fact):
+                return  # transport failure — stop; retry the backlog next tick
+        if run:
+            self._flush_run(run)
+
+    def _flush_run(self, run: list[BufferedFact]) -> bool:
+        """Push one contiguous run of generic-kind facts to POST /events in a single
+        request, then ack every seq the run carried."""
+        batch = RunnerFactBatch(
+            runner_id=self.ctx.config.runner_id,
+            facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run],
+        )
+        try:
+            ack = self.ctx.hub.push_facts(batch)
+        except HubClientError:
+            return False  # hub unreachable — the whole run stays buffered, retried next tick
+        # Every chunk this run named a fact for, so a later get() this tick sees the push.
+        for chunk_id in {fact.chunk_id for fact in run if fact.chunk_id}:
+            self.ctx.chunk_views.invalidate(chunk_id)
+        for fact in run:
+            if fact.seq in ack.rejected:
+                # A contract rejection is not idempotency — surface it, but do not wedge the
+                # FIFO drain on a fact the hub will never accept: ack and move on.
+                _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
+        self._ack_run(run)
+        return True
+
+    def _completion(self, fact: BufferedFact) -> bool:
+        """Submit a buffered completion and drive its apply-response.
+
+        Idempotent by construction: the apply is epoch-idempotent, and the response is acted on
+        only while the lease is still active, so a re-flush past a lost ack just clears the
+        buffer."""
+        submission = CompletionSubmission.model_validate(json.loads(fact.payload)["submission"])
+        _CP_BEFORE_SUBMIT.reached()
+        try:
+            with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
+                response = self.ctx.hub.submit_completion(fact.chunk_id or "", submission)
+        except HubClientError:
+            return False  # stays durable in the buffer; the mid-node worker is unaffected
+        _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
+        if fact.chunk_id:
+            self.ctx.chunk_views.invalidate(fact.chunk_id)  # a later get() this tick sees the apply
+        self._ack(fact)
+        _CP_AFTER_ACK.reached()
+        lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
+        if lease is None:
+            return True  # already advanced on an earlier flush whose ack was lost
+        self._consume(lease, response)
+        _CP_AFTER_APPLY.reached()
+        return True
+
+    def _decision(self, fact: BufferedFact) -> bool:
+        """Submit a buffered runner-config gate decision and park the chunk.
+
+        There is no next envelope to continue into, so the flush closes the lease and holds the
+        environments. The apply is natural-key idempotent, so a re-flush just clears the buffer."""
+        submission = DecisionSubmission.model_validate(json.loads(fact.payload)["submission"])
+        try:
+            with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
+                response = self.ctx.hub.submit_decision(fact.chunk_id or "", submission)
+        except HubClientError:
+            return False  # decision stays durable in the buffer; retried next tick
+        if fact.chunk_id:
+            self.ctx.chunk_views.invalidate(fact.chunk_id)  # a later get() this tick sees the apply
+        self._ack(fact)
+        lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
+        if lease is None:
+            return True  # already parked on an earlier flush whose ack was lost
+        if response.outcome == ApplyOutcome.FAILURE:
+            _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
+            Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
+            return True
+        Attempt(self.ctx, lease).close(PARKED, self.ctx.clock.now())
+        _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
+        return True
+
+    def _consume(self, lease: Lease, response: ApplyResponse) -> None:
+        """Record the closure and continue in place per the hub's apply-response.
+
+        Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap
+        checks at: the attempt just closed is genuinely done, so parking here kills nothing live."""
+        if response.outcome == ApplyOutcome.FAILURE:
+            # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
+            # requeue or escalate. The chunk never advanced.
+            _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
+            Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
+            return
+        Attempt(self.ctx, lease).close(TRANSITIONED, self.ctx.clock.now())
+        _CP_AFTER_CLOSURE.reached()
+        if response.outcome == ApplyOutcome.NEXT and self._capped(lease):
+            return  # capped — needs_human; the next attempt is not spawned
+        HeldChunk(self.ctx, lease.chunk_id).apply(
+            response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        )
+
+    def _capped(self, lease: Lease) -> bool:
+        """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
+
+        Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is
+        a LOWER BOUND — a row with no billed cost contributes $0, estimate or not — so the cap
+        trips conservatively, and its PARTIAL is the total's ``billed_partial``."""
+        cap = self.ctx.config.chunk_cap_usd
+        if cap is None:
+            return False
+        try:
+            view = self.ctx.chunk_views.get(lease.chunk_id)
+        except HubClientError:
+            # Covers ChunkNotFoundError too — re-checked at the next step boundary either way.
+            return False
+        cost = view.cost
+        if cost.cost_usd < cap:
+            return False
+        partial_note = " (PARTIAL — true spend may be higher)" if cost.billed_partial else ""
+        _log.warning(
+            f"chunk parked — spend cap exceeded{partial_note}",
+            chunk_id=lease.chunk_id,
+            cap_usd=cap,
+            spend_usd=cost.cost_usd,
+            cost_partial=cost.billed_partial,
+        )
+        Attempt(self.ctx, lease).escalate(
+            cause=EscalationCause.SPEND_CAP,
+            detail=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})",
+        )
+        return True
+
+    def _ack(self, fact: BufferedFact) -> None:
+        self.ctx.stores.outbound.ack_outbound(fact.seq, acked_at=self.ctx.clock.now())
+        if self.ctx.events is not None:
+            # Re-announces the enqueue's own seq — the fact log's `acked_at` marker
+            # otherwise stays stale until the next backstop poll; the published event carries no acked state.
+            self.ctx.events.publish_fact_changed(
+                seq=fact.seq,
+                kind=fact.kind,
+                chunk_id=fact.chunk_id,
+                lease_id=fact.lease_id,
+            )
+
+    def _ack_run(self, run: list[BufferedFact]) -> None:
+        """One store transaction acks every seq the delivered run carried."""
+        acked_at = self.ctx.clock.now()
+        self.ctx.stores.outbound.ack_outbound_batch([fact.seq for fact in run], acked_at=acked_at)
+        if self.ctx.events is not None:
+            for fact in run:
+                self.ctx.events.publish_fact_changed(
+                    seq=fact.seq,
+                    kind=fact.kind,
+                    chunk_id=fact.chunk_id,
+                    lease_id=fact.lease_id,
+                )

@@ -86,7 +86,7 @@ _MOVED_HOMES = {
     "TranscriptProvenance": "blizzard.foundation.transcripts",
     # ``IProcessProbe`` is left out: the leases domain declares its own narrower protocol by that name.
     "LinuxProcessProbe": "blizzard.runner.process.probe",
-    "HarnessTelemetryPlan": "blizzard.runner.domain.tracing.harness_telemetry_plan",
+    "HarnessTelemetryPlan": "blizzard.runner.harness.harness_telemetry_plan",
     "HEARTBEAT_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
     "SESSION_END_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
 }
@@ -343,7 +343,7 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     _RUNNER_APP_FILE: ("Engine",),
     # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
-    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
+    _RUNNER_DIR / "store" / "internal" / "jti_cache_store.py": ("IntegrityError",),
 }
 
 
@@ -1023,7 +1023,7 @@ _STEP_PROTOCOL = "from typing import Protocol\nclass StepContext(Protocol): ...\
     "body",
     [
         "def step(ctx: LoopContext) -> None: ...",
-        "from blizzard.runner.loop.spawn import SpawnContext\ndef step(ctx: SpawnContext) -> None: ...",
+        "from blizzard.runner.lifecycle.spawn import SpawnContext\ndef step(ctx: SpawnContext) -> None: ...",
         "@dataclass\nclass Step:\n    ctx: LoopContext",
     ],
 )
@@ -1383,7 +1383,7 @@ def test_importing_the_egress_package_or_the_hub_loads_no_pyarrow(module: str) -
 
 def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
     tracing = _HUB_DIR / "domain" / "observability" / "tracing"
-    runner_tracing = _RUNNER_DOMAIN_DIR / "tracing"
+    runner_tracing = _RUNNER_DIR / "tracing"
     shared_cursor = _FOUNDATION_DIR / "trace_export" / "cursor.py"
     paths = (tracing / "sweep.py", tracing / "cursor.py", shared_cursor, *sorted(runner_tracing.glob("*.py")))
     violations = [

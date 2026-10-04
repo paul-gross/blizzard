@@ -478,7 +478,7 @@ class OpenCodeAdapter:
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
         self._check_plugins(session_cwd, env)
         env = self._deny_unanswerable_asks(session_cwd, env)
-        # Deferred: a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
+        # Deferred: a resume gets the same ownership spawn/judge get — `lifecycle/dormant.py::_wake`
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(

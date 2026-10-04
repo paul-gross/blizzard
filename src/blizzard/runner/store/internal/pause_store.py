@@ -7,7 +7,6 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.pause import IWritePauseRepository, PausePark
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import OPEN_PAUSE_PARK, PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import (
@@ -18,6 +17,7 @@ from blizzard.runner.store.schema import (
     pause_park_resumes,
     pause_parks,
 )
+from blizzard.runner.throttle.pause import IWritePauseRepository, PausePark
 
 _log = get_logger("blizzard.runner.store")
 

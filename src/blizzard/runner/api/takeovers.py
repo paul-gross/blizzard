@@ -12,14 +12,14 @@ from fastapi.exceptions import HTTPException
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.chunk_scope import resolved_takeover_close_scope, resolved_takeover_open_scope
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.status import RunnerStatusService
-from blizzard.runner.domain.takeover import (
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.lifecycle.takeover import (
     ChunkNotTakeable,
     LiveWorkerConflict,
     SubmissionPending,
     TakeoverEndedElsewhere,
 )
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import OpenTakeoverListResponse
 from blizzard.wire.runner_status import OpenTakeoverView as OpenTakeoverViewWire
 from blizzard.wire.takeover import TakeoverEndResponse, TakeoverOpenResponse, TakeoverRequest

@@ -15,12 +15,12 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry, UnknownHarnessError
-from blizzard.runner.loop.judgement_prompt import JudgementPrompt
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
+from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
@@ -101,7 +101,7 @@ def _swap_registry(ctx, registry: HarnessRegistry):  # type: ignore[no-untyped-d
 
 
 # --------------------------------------------------------------------------- #
-# RESUME (dormant.py) — the restart-resume re-attach.
+# RESUME (lifecycle/dormant.py) — the restart-resume re-attach.
 
 
 def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_siblings(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -199,7 +199,7 @@ def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path
 
 
 # --------------------------------------------------------------------------- #
-# JUDGEMENT (judgement.py:484 `_resolve_harness`) — launch (`_elicit`) then collect.
+# JUDGEMENT (lifecycle/judgement/judgement.py:484 `_resolve_harness`) — launch (`_elicit`) then collect.
 
 
 def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):  # type: ignore[no-untyped-def]

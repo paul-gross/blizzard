@@ -13,8 +13,8 @@ import httpx
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate

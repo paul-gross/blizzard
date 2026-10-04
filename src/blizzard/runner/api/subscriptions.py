@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.usage import IReadUsageRepository
+from blizzard.runner.usage.repository import IReadUsageRepository
 from blizzard.wire.runner_status import SubscriptionListResponse
 from blizzard.wire.runner_status import SubscriptionView as SubscriptionViewWire
 

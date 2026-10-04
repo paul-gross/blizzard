@@ -2,7 +2,7 @@
 counterpart ``GET /api/leases/{id}/attachments``.
 
 Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
-and the round-trip it delegates to :class:`~blizzard.runner.domain.attachments.AttachmentService`.
+and the round-trip it delegates to :class:`~blizzard.runner.operator.attachments.AttachmentService`.
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.attachments import AttachmentService
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
+from blizzard.runner.operator.attachments import AttachmentService
 from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)

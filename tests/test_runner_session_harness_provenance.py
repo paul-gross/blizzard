@@ -10,10 +10,10 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.leases import NewLease
 from blizzard.runner.store import MIGRATIONS_DIR
 from tests.runner_fakes import make_store, record_usage
 

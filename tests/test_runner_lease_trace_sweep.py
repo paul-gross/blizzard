@@ -14,9 +14,9 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKey
-from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import LeaseTraceCheckpoint
-from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
+from blizzard.runner.tracing.cursor import LeaseCursorKey
+from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
+from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from blizzard.wire.facts import EVENT_RECORDED
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store

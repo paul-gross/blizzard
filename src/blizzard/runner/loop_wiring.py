@@ -20,35 +20,35 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPla
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.loop.capability_snapshot import HarnessVersionCache, default_harness_id
-from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.lifecycle.env_release import EnvironmentRelease
+from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
+from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
+from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
-from blizzard.runner.loop.elicitation_files import ElicitationFiles
-from blizzard.runner.loop.env_release import EnvironmentRelease
-from blizzard.runner.loop.hub import IHubClient
-from blizzard.runner.loop.internal.http_hub import HttpHubClient
-from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
-from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.retention_floor import RetentionPasses
-from blizzard.runner.loop.session import HarnessSelector, SessionResolver
-from blizzard.runner.loop.shutdown_drain import ShutdownDrain
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.loop.transcript_backfill import (
-    TranscriptBackfill,
-    TranscriptBackfillReport,
-    TranscriptReshipReport,
-)
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.process.probe import IProcessProbe
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
+from blizzard.runner.transcripts.transcript_backfill import (
+    TranscriptBackfill,
+    TranscriptBackfillReport,
+    TranscriptReshipReport,
+)
+from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -200,7 +200,7 @@ class LoopWiring:
             usage_http_client=usage_http_client,
             process=graph.process,
             worktree_git=SubprocessWorktreeGit(),
-            # The check-runner seam — see `runner/loop/checks.py`.
+            # The check-runner seam — see `runner/lifecycle/judgement/check_runner.py`.
             check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
             config=loop_config,
             worker_files=_worker_files,
