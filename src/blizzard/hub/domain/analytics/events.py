@@ -209,9 +209,9 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         extractor versions are untouched."""
         ...
 
-    def drop_segments(self, segment_ids: frozenset[str]) -> None:
+    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> None:
         """One transaction: delete every row and marker every one of ``segment_ids`` ever
-        produced, at every extractor version — set-scoped rather than one transaction per
-        segment, since segments leave the visible set in batches. A no-op
-        for an empty set."""
+        produced, at every extractor version, and write each segment's drop fact stamped
+        ``at`` — set-scoped rather than one transaction per segment, since segments leave
+        the visible set in batches. A no-op for an empty set."""
         ...

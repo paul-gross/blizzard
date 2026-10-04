@@ -9,6 +9,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -133,6 +134,10 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_markers_stmt": m._markers_stmt(_EXTRACTOR_VERSION),
         "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(["sg_1"]),
         "_segment_contexts_stmt": m._segment_contexts_stmt(["sg_1"]),
+        "_drop_identities_stmt": m._drop_identities_stmt(["sg_1"]),
+        "_insert_drops_stmt": m._insert_drops_stmt(
+            [{"segment_id": "sg_1", "chunk_id": "ch_1", "epoch": 1, "spawn_generation": 1, "dropped_at": _NOW}]
+        ),
     }
 
 
@@ -150,6 +155,14 @@ def test_transcript_event_derivations_ddl_compiles_under_both_dialects() -> None
     for dialect in (postgresql.dialect(), sqlite.dialect()):
         sql = str(CreateTable(s.transcript_event_derivations).compile(dialect=dialect))
         assert "transcript_event_derivations" in sql
+
+
+def test_transcript_event_drops_ddl_compiles_under_both_dialects() -> None:
+    from sqlalchemy.schema import CreateTable
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(CreateTable(s.transcript_event_drops).compile(dialect=dialect))
+        assert "transcript_event_drops" in sql
 
 
 def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
@@ -604,12 +617,115 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
         provenance=_PROVENANCE,
     )
 
-    store.drop_segments(frozenset({"sg_1"}))
+    store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 
     with engine.connect() as conn:
         assert conn.execute(select(s.transcript_events)).all() == []
         assert conn.execute(select(s.transcript_event_derivations)).all() == []
     assert store.derived_segment_ids() == frozenset()
+
+
+def _derive(store: TranscriptEventStore, segment_id: str) -> None:
+    store.replace_segment_events(
+        segment_id,
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint="fp",
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+
+
+def _drop_rows(engine) -> list[Any]:  # type: ignore[no-untyped-def]
+    with engine.connect() as conn:
+        return list(conn.execute(select(s.transcript_event_drops).order_by(s.transcript_event_drops.c.id)).all())
+
+
+def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(
+        _segment_record(final=False, turn_range_start=0, turn_range_end=0, epoch=2, spawn_generation=3),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+    segments.insert_accepted(
+        _segment_record(turn_range_start=1, turn_range_end=1, epoch=9, spawn_generation=9),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+    _derive(store, "sg_1")
+    dropped_at = datetime(2026, 8, 13, tzinfo=UTC)
+
+    store.drop_segments(frozenset({"sg_1"}), at=dropped_at)
+
+    rows = _drop_rows(engine)
+    assert [(r.segment_id, r.chunk_id, r.epoch, r.spawn_generation, r.dropped_at) for r in rows] == [
+        ("sg_1", "ch_1", 2, 3, dropped_at)
+    ]
+
+
+def test_drop_segments_appends_a_new_fact_when_a_segment_is_dropped_again(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    )
+    for _ in range(2):
+        _derive(store, "sg_1")
+        store.drop_segments(frozenset({"sg_1"}), at=_NOW)
+
+    assert len(_drop_rows(engine)) == 2
+
+
+def test_drop_segments_without_a_stored_record_deletes_and_writes_no_fact(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    _derive(store, "sg_1")
+
+    store.drop_segments(frozenset({"sg_1"}), at=_NOW)
+
+    assert store.derived_segment_ids() == frozenset()
+    assert _drop_rows(engine) == []
+
+
+def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    )
+    _derive(store, "sg_1")
+
+    def _boom(rows: list[dict[str, Any]]) -> Any:
+        raise RuntimeError("injected")
+
+    monkeypatch.setattr(store_module, "_insert_drops_stmt", _boom)
+    with pytest.raises(RuntimeError):
+        store.drop_segments(frozenset({"sg_1"}), at=_NOW)
+
+    assert store.derived_segment_ids() == frozenset({"sg_1"})
+    with engine.connect() as conn:
+        assert len(conn.execute(select(s.transcript_events)).all()) == 1
+    assert _drop_rows(engine) == []
+
+
+def test_replace_segment_events_writes_no_drop_fact(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    )
+    _derive(store, "sg_1")
+    _derive(store, "sg_1")
+
+    assert _drop_rows(engine) == []
 
 
 def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) -> None:
@@ -625,7 +741,7 @@ def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) ->
         provenance=_PROVENANCE,
     )
 
-    store.drop_segments(frozenset())
+    store.drop_segments(frozenset(), at=_NOW)
 
     assert store.derived_segment_ids() == frozenset({"sg_1"})
 
@@ -651,7 +767,7 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
             provenance=_PROVENANCE,
         )
 
-    store.drop_segments(frozenset(segment_ids))
+    store.drop_segments(frozenset(segment_ids), at=_NOW)
 
     with engine.connect() as conn:
         assert conn.execute(select(s.transcript_events)).all() == []

@@ -168,6 +168,25 @@ def _delete_marker_stmt(segment_id: str, extractor_version: str) -> Delete:
     )
 
 
+def _drop_identities_stmt(segment_ids: Sequence[str]) -> Select[Any]:
+    """The chunk, epoch, and spawn generation a drop fact records — ordered so the first
+    row per segment is the one :func:`_segment_contexts_stmt` takes its context from."""
+    return (
+        select(
+            s.transcript_segments.c.segment_id,
+            s.transcript_segments.c.chunk_id,
+            s.transcript_segments.c.epoch,
+            s.transcript_segments.c.spawn_generation,
+        )
+        .where(s.transcript_segments.c.segment_id.in_(segment_ids))
+        .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
+    )
+
+
+def _insert_drops_stmt(rows: list[dict[str, Any]]) -> Insert:
+    return insert(s.transcript_event_drops).values(rows)
+
+
 def _insert_events_stmt(
     segment_id: str, extractor_version: str, events: list[TranscriptEvent], provenance: SegmentProvenance
 ) -> Insert:
@@ -448,11 +467,30 @@ class TranscriptEventStore:
                 )
             )
 
-    def drop_segments(self, segment_ids: frozenset[str]) -> None:
+    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> None:
         if not segment_ids:
             return
         with self._store.write("drop_segments") as conn:
             for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
+                # A segment with no stored record writes no drop fact: nothing to record it against.
+                first_by_segment = {}
+                for row in conn.execute(_drop_identities_stmt(batch)).all():
+                    first_by_segment.setdefault(row.segment_id, row)
+                if first_by_segment:
+                    conn.execute(
+                        _insert_drops_stmt(
+                            [
+                                {
+                                    "segment_id": segment_id,
+                                    "chunk_id": row.chunk_id,
+                                    "epoch": row.epoch,
+                                    "spawn_generation": row.spawn_generation,
+                                    "dropped_at": at,
+                                }
+                                for segment_id, row in first_by_segment.items()
+                            ]
+                        )
+                    )
                 conn.execute(_delete_all_events_for_segments_stmt(batch))
                 conn.execute(_delete_all_markers_for_segments_stmt(batch))
 
