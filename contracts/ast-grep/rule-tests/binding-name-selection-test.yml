@@ -1,0 +1,43 @@
+id: bzh:binding-name-selection
+valid:
+  # The selection point's shape: a name→builder registry looked up by key, never compared.
+  - |
+    _BUILDERS = {"winter": _build_winter, "basic": _build_basic}
+
+    def build_workspace_provider(config):
+        return _BUILDERS[config.workspace_provider](config)
+  # Asking the provider for its fact instead of naming the binding.
+  - |
+    env_capacity = provider.capacity()
+    workspace_root = provider.spawn_root()
+  # A harness id read from a declaration, not compared as a literal.
+  - |
+    versions = tuple(declaration.normalizer_version for declaration in HARNESS_CATALOG)
+  # A harness-id literal that is not compared.
+  - |
+    sections = {"claude_code": claude, "opencode": opencode}
+invalid:
+  # The loop's capacity and spawn root, decided by the provider's config name.
+  - |
+    env_capacity = (
+        config.max_environments if config.workspace_provider == "basic" else len(config.workspace_envs)
+    )
+  - |
+    workspace_root = "" if config.workspace_provider == "basic" else config.workspace_root
+  # A bare name, and a membership test.
+  - |
+    if workspace_provider != "winter":
+        pass
+  - |
+    if config.workspace_provider in ("basic",):
+        pass
+  # A harness-id literal compared on either side.
+  - |
+    if harness_id == "claude_code":
+        pass
+  - |
+    if "opencode" != owner.harness_id:
+        pass
+  - |
+    if owner in {'claude_code', 'opencode'}:
+        pass

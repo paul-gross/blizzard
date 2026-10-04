@@ -13,8 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.analytics.dialects import DIALECTS
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION as _CLAUDE_CODE_VERSION
-from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERSION as _OPENCODE_VERSION
+from blizzard.runner.harness.catalog import declared_normalizer_versions
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -75,11 +74,15 @@ def test_every_corpus_backed_dialect_is_registered() -> None:
     assert set(_CORPUS_DIRS) <= set(DIALECTS)
 
 
-def test_every_runner_normalizer_version_is_registered() -> None:
+@pytest.mark.parametrize("normalizer_version", declared_normalizer_versions())
+def test_every_runner_normalizer_version_is_registered(normalizer_version: str) -> None:
     """The hub's `DIALECTS` keys are string literals, deliberately not imported from
-    `blizzard.runner` — this test is the one place that still ties them to the
-    runner's own normalizer stamps, so the two can drift apart only silently past here."""
-    assert {_CLAUDE_CODE_VERSION, _OPENCODE_VERSION} <= set(DIALECTS)
+    `blizzard.runner` — this test is the one place that ties them to every normalizer
+    stamp the runner's harness catalog declares, so a newly declared harness with no
+    dialect entry fails here rather than drifting silently."""
+    assert normalizer_version in DIALECTS, (
+        f"the harness catalog declares normalizer version {normalizer_version!r}, which has no DIALECTS entry"
+    )
 
 
 @pytest.mark.parametrize("normalizer_version", sorted(_CORPUS_DIRS))

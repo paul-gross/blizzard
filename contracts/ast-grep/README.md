@@ -29,12 +29,13 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
   none of that prose, only what the rule mechanically checks.
   - Scoped to `src/blizzard/**`.
-  - Matches a function decorated with `@property`, `@cached_property`, `@functools.cached_property`, or
-    `@<name>.setter` / `@<name>.deleter` — alone or stacked — whose body holds, at any depth, an `if`, conditional
-    expression, `match`, comprehension `if`, `and`/`or`/`not`, or comparison. A plain method and a lone
-    `@staticmethod`/`@classmethod` are unmatched.
-  - Every site that predates the rule is recorded debt, allowlisted by a trailing `# ast-grep-ignore: bzh:property-delegates`
-    on its `def` line. Under `--error=unused-suppression` the list only shrinks.
+  - Matches a function decorated with `@property`, `@cached_property`, `@functools.cached_property`, or `@<name>.setter`
+    / `@<name>.deleter` — alone or stacked — whose body holds, at any depth, an `if`, conditional expression, `match`,
+    comprehension `if`, `and`/`or`/`not`, or comparison. A plain method and a lone `@staticmethod`/`@classmethod` are
+    unmatched.
+  - Every site that predates the rule is recorded debt, allowlisted by a trailing
+    `# ast-grep-ignore: bzh:property-delegates` on its `def` line. Under `--error=unused-suppression` the list only
+    shrinks.
 
 - **`bzh:subscriptions-no-write`** (`rules/subscriptions-no-write.yml`) — blizzard never opens a subscription credential
   file for writing: the vendor CLI owns its own lock, atomic write, and refresh-token rotation, and a second writer
@@ -43,8 +44,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Matches `.write_text(`, `.write_bytes(`, `open($PATH, $MODE, ...)` and `$PATH.open($MODE, ...)` (further arguments
     allowed) whose mode string contains `w`, `a`, `x`, or `+`, any `os.open` carrying a write flag (`O_WRONLY`,
     `O_RDWR`, `O_CREAT`, `O_APPEND`, `O_TRUNC`), and any `os.replace` or `os.rename`. A read (`open(path)`,
-    `open(path, "r")`, `path.read_text()`, `os.open(path, os.O_RDONLY)`) is unmatched. A keyword `mode=` and `os.fdopen` are not matched — a floor,
-    not a proof.
+    `open(path, "r")`, `path.read_text()`, `os.open(path, os.O_RDONLY)`) is unmatched. A keyword `mode=` and `os.fdopen`
+    are not matched — a floor, not a proof.
   - No exemption stands; nothing in `runner/subscriptions/` opens a credential file for writing today.
 
 - **`bzh:store-exclusive-write`** (`rules/store-exclusive-write.yml`) — an in-process lock in `hub/` cannot enforce an
@@ -55,6 +56,19 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Matches a bare `import threading` — an injected lock arrives constructed elsewhere, but every holder still imports
     the module to type its own field, so the import is the one textual signal common to both shapes.
   - Every current holder — `app.py`, `composition.py`, and the domain's `dependencies.py`, `queue.py`, and `delete.py`,
-    each for the one residual fleet-wide cycle-check lock a row lock cannot close — carries an `ast-grep-ignore`
-    comment at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated
-    fully onto the row lock and import `threading` no longer.
+    each for the one residual fleet-wide cycle-check lock a row lock cannot close — carries an `ast-grep-ignore` comment
+    at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated fully onto
+    the row lock and import `threading` no longer.
+
+- **`bzh:binding-name-selection`** (`rules/binding-name-selection.yml`) — a binding's config name is compared only at
+  its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the harness
+  catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file
+  states none of that prose, only what the rule mechanically checks:
+  - Scoped to `src/blizzard/**`, excluding the selection points (`runner/environments/factory.py`,
+    `runner/harness/catalog.py`), the bindings' own modules (`runner/harness/internal/**`, `runner/harness/identity.py`,
+    `runner/environments/internal/**`) and every `migrations/` tree.
+  - Matches a comparison (`==`, `!=`, `in`, `not in`, …) with a `workspace_provider` name or attribute as an operand, or
+    with a harness-id string literal (`"claude_code"`, `"opencode"`) as an operand, directly or inside a literal set,
+    tuple or list. A registry lookup keyed by the name is unmatched. A name rebound to another variable before the
+    comparison slips past — a floor, not a proof.
+  - No exemption stands.

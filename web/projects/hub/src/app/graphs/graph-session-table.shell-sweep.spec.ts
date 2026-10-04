@@ -29,7 +29,7 @@ const SESSIONS: readonly GraphSessionView[] = [
   {
     name: 'planning',
     model: ['blizzard:advanced'],
-    harnesses: ['claude'],
+    harnesses: ['claude_code'],
     effort: 'high',
   },
   {

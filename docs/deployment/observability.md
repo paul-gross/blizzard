@@ -15,14 +15,14 @@ missing edge then requeuing, not retrying. The work-item closure events are also
 [work-sources.md](./work-sources.md) owns them.
 
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
-right now. This runner binds only `claude_code` ([worker-spawn.md](./worker-spawn.md) owns that binding). **Unknown**
-means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to run a runner
-version that binds that id, on the runner holding the chunk, never to substitute another harness. **Unavailable** means
-a bound harness is missing the specific capability being asked of it; the production registry always binds `claude_code`
-with every capability, so this can't happen today. The chunk escalates in place with no takeover command, since no other
-runner can dispatch to that exact session either — but once the recorded harness is resolvable again (that runner
-build), the operator can take the session over by hand ([chunk-operations/takeover.md](./chunk-operations/takeover.md))
-alongside that remedy; either way, clearing the escalation still takes one of the supersessions below.
+right now. The runner binds every enabled declared harness ([worker-spawn.md](./worker-spawn.md) owns that binding).
+**Unknown** means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to
+run a runner version that binds that id, on the runner holding the chunk, never to substitute another harness.
+**Unavailable** means a bound harness is missing the specific capability being asked of it. The chunk escalates in place
+with no takeover command, since no other runner can dispatch to that exact session either — but once the recorded
+harness is resolvable again (that runner build), the operator can take the session over by hand
+([chunk-operations/takeover.md](./chunk-operations/takeover.md)) alongside that remedy; either way, clearing the
+escalation still takes one of the supersessions below.
 
 `no-acceptable-harness` (critical): distinct from `owner-unresolvable` above in reaching only a fresh mint, with no
 existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md) owns
