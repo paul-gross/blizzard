@@ -201,7 +201,7 @@ class EventDerivationReconciler:
                 _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
 
         stale = self._events.derived_segment_ids() - read.visible_segment_ids
-        self._events.drop_segments(stale)
+        self._events.drop_segments(stale, at=self._clock.now())
 
         self._last_signature = signature
         self._last_full_pass_at = now

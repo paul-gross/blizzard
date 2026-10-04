@@ -1433,6 +1433,28 @@ transcript_event_derivations = Table(
     Column("complete", Boolean, nullable=False),
 )
 
+# --- Transcript segment drops — append-only: one row per time a segment's derived events and
+# markers were deleted. A segment dropped, derived again, and dropped again leaves two rows,
+# so ``segment_id`` is not unique. ``chunk_id`` carries no foreign key: a segment leaves the
+# visible set precisely when its chunk row is missing, and the row records the segment's
+# identity at the moment of a past event.
+
+transcript_event_drops = Table(
+    "transcript_event_drops",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("segment_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("spawn_generation", Integer, nullable=False),
+    Column("dropped_at", UtcDateTime, nullable=False),
+)
+Index(
+    "ix_transcript_event_drops_dropped_at_segment_id",
+    transcript_event_drops.c.dropped_at,
+    transcript_event_drops.c.segment_id,
+)
+
 # --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and
 # closure is recorded on the row itself (nullable ``closed_at`` + ``closure``) rather

@@ -446,6 +446,24 @@ def test_a_segment_that_outlives_its_chunk_row_has_its_derived_rows_dropped(fixt
     assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is None
 
 
+def test_a_dropped_segment_leaves_one_drop_fact_stamped_by_the_clock_with_no_egress_configured(
+    fixture: _Fixture,
+) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+    fixture.drop_chunk_row("ch_1")
+    fixture.clock.advance(timedelta(minutes=5))
+    later = fixture.clock.now()
+
+    fixture.reconciler.sweep()
+
+    with fixture.engine.connect() as conn:
+        rows = conn.execute(select(s.transcript_event_drops)).all()
+    assert [(r.segment_id, r.chunk_id, r.epoch, r.spawn_generation, r.dropped_at) for r in rows] == [
+        ("sg_1", "ch_1", 1, 1, later)
+    ]
+
+
 def test_forcing_a_segment_whose_chunk_does_not_resolve_is_a_no_op_rather_than_a_crash(fixture: _Fixture) -> None:
     """The segment-scoped re-derive route forces a segment regardless of candidacy, so it
     reaches one the visible set excludes and must decline it rather than raise."""
