@@ -18,7 +18,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import create_app
 from blizzard.runner.cli.traces import harness_telemetry_lines, traces_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCount, ReceiverCounter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
@@ -373,3 +373,15 @@ def test_the_verb_names_each_signals_outcome(tmp_path: Path) -> None:
     )
     assert off == ["harness telemetry: off"]
     assert harness_telemetry_lines(None) == []
+
+
+def test_the_status_reports_the_receivers_tally_when_a_counter_is_wired(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    counter = ReceiverCounter()
+    counter.record(accepted=3, dropped=2)
+    wired = LeaseTraceStatusReader(settings=runner.settings, leases=runner.store, clock=runner.clock, receiver=counter)
+
+    assert wired.read().receiver == ReceiverCount(3, 2)
+    assert runner.status.read().receiver is None
+    counter.record(accepted=1, dropped=0)
+    assert wired.read().receiver == ReceiverCount(4, 2)

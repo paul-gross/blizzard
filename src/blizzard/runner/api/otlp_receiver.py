@@ -82,15 +82,18 @@ async def receive_traces(request: Request) -> Response:
     claude = [span for span in spans if harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE]
     rest = [span for span in spans if not (harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE)]
     claude_admission = admit(claude, lease, _CLAUDE_CODE_ALLOWLIST)
-    admission = admit(rest, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
-    cli = [span for span in admission.kept if span.scope_name == CLI_SCOPE]
-    others: list[ReceivedSpan] = []
-    if programs:
-        # The CLI's spans keep their declared attributes; only a third-party program's attributes pass wholesale.
-        cli = admit(cli, lease, _CLI_ALLOWLIST).kept
-        others = [span for span in admission.kept if span.scope_name != CLI_SCOPE]
-    kept = len(claude_admission.kept) + len(admission.kept)
-    dropped = claude_admission.dropped + admission.dropped
+    # Each span is admitted once, against its own allowlist: a CLI span's declared attributes must not be cut by
+    # the wildcard's cap before the CLI allowlist sees them.
+    cli_spans = [span for span in rest if programs and span.scope_name == CLI_SCOPE]
+    program_spans = [span for span in rest if not (programs and span.scope_name == CLI_SCOPE)]
+    admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
+    # The CLI's spans keep their declared attributes; only a third-party program's attributes pass wholesale.
+    cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST)
+    cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == CLI_SCOPE)]
+    others = [span for span in admission.kept if programs]
+    accepted = len(admission.kept) + len(cli_admission.kept)
+    dropped = claude_admission.dropped + admission.dropped + cli_admission.dropped
+    kept = len(claude_admission.kept) + accepted
     counter = wiring.receiver_counter()
     claude_counter = wiring.claude_trace_counter()
     if kept and not wiring.span_limiter().take(lease.lease_id, kept):
@@ -100,7 +103,7 @@ async def receive_traces(request: Request) -> Response:
         await run_in_threadpool(platform_tracing.forward, group, service_name)
     await run_in_threadpool(platform_tracing.forward, cli, CLI_SERVICE_NAME)
     claude_counter.record(accepted=len(claude_admission.kept), dropped=claude_admission.dropped)
-    counter.record(accepted=len(admission.kept), dropped=admission.dropped)
+    counter.record(accepted=accepted, dropped=admission.dropped + cli_admission.dropped)
     return Response(content=encode_export_response(dropped, content_type), media_type=content_type)
 
 

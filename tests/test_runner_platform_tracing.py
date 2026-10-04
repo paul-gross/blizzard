@@ -485,6 +485,50 @@ def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_ano
     assert dict(span.attributes or {})["blizzard.lease.id"] == "lease_1"
 
 
+def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_attributes_late_in_a_wide_span(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blizzard.runner.api import otlp_receiver
+
+    admitted: list[list[str]] = []
+    real_admit = otlp_receiver.admit
+
+    def spy(spans, lease, allowlist):  # type: ignore[no-untyped-def]
+        admitted.append([span.scope_name for span in spans])
+        return real_admit(spans, lease, allowlist)
+
+    monkeypatch.setattr(otlp_receiver, "admit", spy)
+    filler = [{"key": f"filler.{i:03d}", "value": {"stringValue": "x"}} for i in range(70)]
+    declared = [
+        {"key": "blizzard.cli.command", "value": {"stringValue": "artifact create"}},
+        {"key": "process.exit.code", "value": {"intValue": "0"}},
+    ]
+    document = _export(_own_trace(), scope="blizzard.cli", extra={"attributes": filler + declared})
+    document["resourceSpans"][0]["scopeSpans"].append(  # type: ignore[index]
+        _export(_own_trace(), scope="some.library", extra={"attributes": filler + declared})["resourceSpans"][0][  # type: ignore[index]
+            "scopeSpans"
+        ][0]
+    )
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+        assert "partialSuccess" not in _post_json(client, document).json()
+    by_scope = {
+        (span.instrumentation_scope.name if span.instrumentation_scope else ""): dict(span.attributes or {})
+        for span in _finished(handle, exporter)
+    }
+    assert by_scope["blizzard.cli"] == {
+        "blizzard.cli.command": "artifact create",
+        "process.exit.code": 0,
+        _CALLER: "worker",
+        "blizzard.chunk.id": "ch_1",
+        "blizzard.lease.id": "lease_1",
+    }
+    assert len(by_scope["some.library"]) == 64 + 3
+    assert "blizzard.cli.command" not in by_scope["some.library"]
+    assert sorted(admitted) == [["blizzard.cli"], ["some.library"]]
+
+
 def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
