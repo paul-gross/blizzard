@@ -6,6 +6,7 @@ import {
   SHOW_ALL,
   classChipValue,
   filterProposals,
+  isGardenProposalWaiting,
   pendingClosureIds,
   proposalClassChips,
   proposalListRows,
@@ -40,6 +41,17 @@ const PASSED = {
 } as const;
 
 const NO_FILTERS: ProposalFilters = { waitingOnly: false, cls: null, routine: null, closing: new Set() };
+
+describe('isGardenProposalWaiting', () => {
+  it('is waiting when the proposal carries no closure', () => {
+    expect(isGardenProposalWaiting({ closure: null } as never)).toBe(true);
+    expect(isGardenProposalWaiting({} as never)).toBe(true);
+  });
+
+  it('is not waiting once a closure is recorded', () => {
+    expect(isGardenProposalWaiting({ closure: { closure: 'passed' } } as never)).toBe(false);
+  });
+});
 
 describe('pendingClosureIds', () => {
   it('collects the proposal ids of every pending pass and accept', () => {

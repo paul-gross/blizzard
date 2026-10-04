@@ -7,7 +7,7 @@ import { MachineDetail } from './chunk-dock/chunk-detail';
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { LocalAsks } from '../asks/app-asks';
 import { LocalInfo } from '../machine/app-info';
-import type { MachineChunkRow } from './app-panel';
+import type { MachineChunkRow } from './app-panel.model';
 import { LocalSubscriptions } from '../status/app-subscriptions';
 
 /**

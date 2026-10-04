@@ -6,7 +6,7 @@ import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { LocalPanelMobile } from './app-panel-mobile';
-import type { MachineChunkRow } from './app-panel';
+import type { MachineChunkRow } from './app-panel.model';
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',

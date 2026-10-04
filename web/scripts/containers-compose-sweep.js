@@ -11,16 +11,16 @@
  *
  * - **Query-bearing helpers** are a fixed point, read from the source on every run: a top-level
  *   `function inject*` or `const inject* = <arrow | function>` is query-bearing when its body calls,
- *   by bare identifier, one of `TANSTACK_INJECTORS` or another query-bearing helper. A new wrapper is
- *   recognized the day it is written, whatever its name.
+ *   by bare identifier, one of `TANSTACK_INJECTORS` or another query-bearing helper. A new `inject*`
+ *   wrapper is recognized the day it is written; a wrapper named otherwise is not one.
  * - **A container** is a class carrying a `@Component(...)` decorator whose members call a
  *   query-bearing helper by bare identifier.
  * - **A `computed()` call** is a call, inside a container class, of the identifier `@angular/core`'s
  *   `computed` is imported as (alias-aware); a local function named `computed` is not one.
- * - **Deriving** is any of `DERIVING_SYNTAX` or a `.<name>(…)` call named in `TRANSFORMS` (optional
- *   chain included) anywhere in the callback's subtree, nested arrows included, and in the body of
- *   every same-class method, getter, or function-valued property the callback reaches through
- *   `this.<member>`, followed transitively. `&&`, `||`, `??`, `?.`, comparisons, template literals,
+ * - **Deriving** is any of `DERIVING_SYNTAX`, a `.<name>(…)` call named in `TRANSFORMS` (optional
+ *   chain included), or a `<Global>.<name>(…)` call named in `STATIC_TRANSFORMS`, anywhere in the
+ *   callback's subtree, nested arrows included, and in the body of every same-class method, getter,
+ *   or function-valued property the callback reaches through `this.<member>`, followed transitively. `&&`, `||`, `??`, `?.`, comparisons, template literals,
  *   and calls of imported functions are composition and pass.
  *
  * Run through `npm run structural-gate`; this module only exports.
@@ -58,11 +58,13 @@ const DERIVING_SYNTAX = new Map([
   [ts.SyntaxKind.DoStatement, 'do-while'],
 ]);
 
-/** Collection-transform method names: a `.<name>(…)` call of one derives. */
+/** Collection-transform method names: a `.<name>(…)` call of one derives. Reordering, slicing, and
+ * flattening reshape a collection as much as filtering does, so they count. */
 const TRANSFORMS = new Set([
   'filter',
   'map',
   'flatMap',
+  'flat',
   'reduce',
   'reduceRight',
   'sort',
@@ -74,7 +76,15 @@ const TRANSFORMS = new Set([
   'some',
   'every',
   'forEach',
+  'reverse',
+  'toReversed',
+  'slice',
+  'splice',
+  'toSpliced',
 ]);
+
+/** Static collection transforms, `<Global>.<name>`: a call of one derives. */
+const STATIC_TRANSFORMS = new Set(['Array.from', 'Object.entries', 'Object.keys', 'Object.values', 'Object.fromEntries']);
 
 const HEADER = 'deriving computed() callbacks in containers (bzh:frontend-containers-compose)';
 
@@ -251,6 +261,10 @@ function derivingKinds(fn, bodies, seen, via, kinds) {
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
       const method = n.expression.name.text;
       if (TRANSFORMS.has(method)) add(`.${method}()`);
+      const receiver = n.expression.expression;
+      if (ts.isIdentifier(receiver) && STATIC_TRANSFORMS.has(`${receiver.text}.${method}`)) {
+        add(`${receiver.text}.${method}()`);
+      }
     }
     if (ts.isPropertyAccessExpression(n) && n.expression.kind === ts.SyntaxKind.ThisKeyword) {
       const member = n.name.text;
@@ -366,6 +380,7 @@ export class Kinds {
   readonly k = computed(() => [1].map((x) => [x].find((y) => (y ? y : 0))));
   readonly l = computed<number>(() => (this.query.isPending() ? 1 : 2));
   readonly m = computed(() => { const xs = this.query.data()!.items; return [xs.filter(f), xs.map(f), xs.flatMap(f), xs.reduce(f), xs.reduceRight(f), xs.sort(f), xs.toSorted(f), xs.find(f), xs.findIndex(f), xs.findLast(f), xs.findLastIndex(f), xs.some(f), xs.every(f), xs.forEach(f)]; });
+  readonly n = computed(() => { const xs = this.query.data()!.items; return [xs.flat(), xs.reverse(), xs.toReversed(), xs.slice(1), xs.splice(1), xs.toSpliced(1), Array.from(xs, f), Object.entries(xs), Object.keys(xs), Object.values(xs), Object.fromEntries(xs)]; });
 }
 `,
   'app/src/composing.ts': `
@@ -484,6 +499,7 @@ const SEEDED_EXPECTED = [
   '  projects/app/src/kinds.ts:16 computed k: .map(), .find(), ternary',
   '  projects/app/src/kinds.ts:17 computed l: ternary',
   '  projects/app/src/kinds.ts:18 computed m: .filter(), .map(), .flatMap(), .reduce(), .reduceRight(), .sort(), .toSorted(), .find(), .findIndex(), .findLast(), .findLastIndex(), .some(), .every(), .forEach()',
+  '  projects/app/src/kinds.ts:19 computed n: .flat(), .reverse(), .toReversed(), .slice(), .splice(), .toSpliced(), Array.from(), Object.entries(), Object.keys(), Object.values(), Object.fromEntries()',
   '  projects/app/src/wrapped.ts:6 computed first: .find()',
 ];
 
