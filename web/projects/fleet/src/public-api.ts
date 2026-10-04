@@ -81,7 +81,6 @@ export {
 } from './lib/query-keys';
 export * from './lib/query-state';
 export { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/polling';
-export { NOT_PAUSABLE } from './lib/chunk-pausable';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';

@@ -202,8 +202,7 @@ export class BoardPage {
    * in — fed to `BoardShell` in {@link readyOrder}'s place. A pending promote's chunk
    * id is deliberately left out of this order rather than injected at some predicted
    * rank: the hub always assigns a freshly-promoted chunk a **tail** position
-   * (`promote.py::tail_position` — it appends after every currently-ready chunk, never
-   * the head), so the card's real landing spot is the *bottom* of READY, which is
+   * (it appends after every currently-ready chunk, never the head), so the card's real landing spot is the *bottom* of READY, which is
    * exactly what `BoardShell.cards()`'s own "unranked id" fallback (`rankOf`, which
    * sorts an id absent from `readyOrder` to the bottom of the lane) already yields for
    * free — {@link boardChunks}' status override alone is what moves the card into the

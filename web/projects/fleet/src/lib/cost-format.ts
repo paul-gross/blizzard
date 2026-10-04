@@ -2,7 +2,7 @@
  * A derived spend total as one figure, to the cent: `costUsd + (estimatedCostUsd ?? 0)`,
  * with a leading `~` when `estimatedCostUsd` is present (even `0`) and a trailing `+` when
  * `costPartial` is true. The markers' meaning is owned by docs/deployment/spend.md and the
- * hub's `UsageTotal` (`src/blizzard/hub/domain/chunk/model.py`).
+ * wire's usage totals (`estimated_cost_usd`, `cost_partial`).
  */
 export function formatCost(costUsd: number, estimatedCostUsd: number | null | undefined, costPartial: boolean): string {
   const amount = costUsd + (estimatedCostUsd ?? 0);

@@ -14,8 +14,9 @@ from datetime import datetime
 from sqlalchemy import Column, Connection, Table, and_, func, insert, not_, select
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunk.model import MigrationSource, UsageFact, WorkRef, WorkRefLabel
+from blizzard.hub.domain.chunk.model import UsageFact, WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, IReadManyGraphs
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import (

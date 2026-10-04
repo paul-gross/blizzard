@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { hubClient } from 'fleet';
 import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
-import { injectAssignRoleMutation } from './assign-role.mutation';
+import { injectAssignRoleMutation } from './assign-role.mutations';
 
 describe('injectAssignRoleMutation', () => {
   let stub: RequestClientStub;

@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import (
@@ -28,7 +29,6 @@ from blizzard.hub.domain.chunk.model import (
     HubNodePollFact,
     LeaseFact,
     MigrationFact,
-    MigrationSource,
     PauseFact,
     QuestionFact,
     RequeueFact,

@@ -23,9 +23,8 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
 /** What each verb actually does to the finding, stated before the operator writes
  * the note that justifies it — these are exit verbs and most of them are one-way, so
  * the dialog says which bucket the finding lands in rather than leaving the
- * distinction to the verb's name alone. Wording follows the hub CLI's own help for
- * the matching verb (`src/blizzard/hub/cli/finding.py`) and
- * `finding-state.ts`'s outflow/withdrawn split: an *outflow* exit means the ground
+ * distinction to the verb's name alone. Wording follows the `hub finding` CLI's own
+ * help for the matching verb and the wire's `FindingExit` outflow/withdrawn split: an *outflow* exit means the ground
  * itself moved, a *withdrawn* one means it didn't and a person decided the finding
  * doesn't merit standing regardless. */
 const VERB_BLURBS: Record<FindingTriageVerb, string> = {

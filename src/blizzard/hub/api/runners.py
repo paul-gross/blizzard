@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import FLEET_VIEW, RUNNER_PAUSE, RUNNER_RETIRE
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -117,7 +118,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                     for w in view.windows
                 ],
                 condition=view.condition,
-                miss_reason=view.miss_reason,
+                miss_reason=SampleMissReason(view.miss_reason) if view.miss_reason is not None else None,
                 missed_at=iso_utc(view.missed_at) if view.missed_at is not None else None,
             )
             for view in PerSubscriptionUsageView.every(r, now=now)

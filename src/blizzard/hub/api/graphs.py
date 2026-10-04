@@ -19,7 +19,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
-from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphParseError, Mints, Node
+from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph.validation import GraphValidationError
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
@@ -103,6 +103,8 @@ def _graph_view(
                 choice_id=e.choice_id,
                 to_node_name=e.to_node_name,
                 prompt_addendum=e.prompt_addendum,
+                target_kind=(target := ChoiceTarget.of(e.to_node_name)).kind(),
+                target_graph=target.graph,
             )
             for e in graph.edges
         ],

@@ -51,6 +51,7 @@ export class ChunkTranscriptsContainer {
   readonly currentNodeId = input<string | null>(null);
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
+  readonly currentNodeTerminal = input(false);
   readonly segmentId = input<string | null>(null);
   readonly sidechainPath = input<string | null>(null);
   /** Opts a caller into the phone's list-or-detail presentation; defaults to

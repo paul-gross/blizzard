@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
+import {
+  type hubApi,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitPanel,
+} from 'fleet';
 
 /** One origin/class pair's garden-proposal counts over the panel's window,
  * already scoped to the one selected routine by the query's own
@@ -11,7 +16,7 @@ import { KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
  * wire's `class`, `FindingListRowVm`'s own `findingClass` rename, so a template never
  * confuses it with the DOM `class` attribute. */
 export interface ProposalCountsRowVm {
-  readonly origin: 'routine-run' | 'operator';
+  readonly origin: hubApi.GardenProposalOrigin;
   readonly proposalClass: string;
   readonly created: number;
   readonly open: number;

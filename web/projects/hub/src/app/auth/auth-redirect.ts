@@ -27,7 +27,7 @@ export function redirectToLogin(router: Router): void {
 
 /** The stashed pre-login route, or `/` when none was recorded (a direct hit on
  * `/login`, or the very first unauthenticated load). Only a same-origin relative
- * path is ever honored server-side (`hub/api/auth_login.py`'s `_safe_return_to`); this
+ * path is ever honored server-side (the login route's `return_to` check); this
  * reads back exactly what {@link redirectToLogin} wrote, which is always
  * `router.url` — already such a path. */
 export function consumeReturnUrl(): string {

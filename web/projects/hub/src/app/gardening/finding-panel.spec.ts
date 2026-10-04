@@ -10,6 +10,7 @@ const LIVE_VM: FindingPanelVm = {
   findingClass: 'stale-docstring',
   locus: 'src/a.py:1',
   state: 'live',
+  exit: null,
   observedCount: 3,
   introducedRev: '4ba7ef06d',
   introducedAt: null,
@@ -38,6 +39,7 @@ const RESOLVED_VM: FindingPanelVm = {
   ...LIVE_VM,
   findingId: 'fin_2',
   state: 'resolved',
+  exit: 'outflow',
   note: 'fixed in the same pass',
 };
 

@@ -76,6 +76,7 @@ def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Pa
     assert len(entries) == 1
     entry = entries[0]
     assert entry["source"] == "hub"
+    assert entry["hub_source"] is True
     assert entry["ref"] == created["ref"]
     assert entry["label"] == f"hub:{created['ref']}"
     assert entry["title"] == "widget is broken"

@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.chunk.model import MigrationSource
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedDecision
 from blizzard.hub.domain.observability.tracing.position import (
     Position,

@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 
 
@@ -68,6 +69,10 @@ class GraphEdgeView(BaseModel):
     choice_id: str
     to_node_name: str
     prompt_addendum: str | None = None
+    #: What ``to_node_name`` points at.
+    target_kind: ChoiceTargetKind = ChoiceTargetKind.NODE
+    #: The cross-graph target's graph name; ``None`` unless ``target_kind`` is ``graph``.
+    target_graph: str | None = None
 
 
 class RotatePolicyView(BaseModel):

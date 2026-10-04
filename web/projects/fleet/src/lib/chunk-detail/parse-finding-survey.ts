@@ -1,47 +1,24 @@
+import type { FindingCandidate, FindingSurvey } from '../api/hub';
+
 /**
- * A hand-written TypeScript mirror of the **survey** asset a garden routine's survey
- * node publishes — a JSON object carrying `scope`, `revisions`, `measurement`, and
- * `candidates`, each candidate a `FindingCandidate` from `src/blizzard/wire/finding.py`.
+ * Runtime validation of the **survey** asset a garden routine's survey node
+ * publishes against the generated `FindingSurvey` — a JSON object carrying `scope`,
+ * `revisions`, `measurement`, and `candidates`, each candidate a `FindingCandidate`.
  *
  * Unlike {@link parseFindingDelta}'s subject, this shape has **no server-side parse at
- * all**: the delta is validated at delivery (`garden/delivery/validation.py`'s `parse_delta`), but
- * the survey is an intra-run handoff — the survey node writes it so the reconcile
- * session, which enters cold, can read what that session saw. Its declaration is the
- * survey prompt itself (`src/blizzard/hub/graphs/garden-routine/prompts/survey.md`)
- * plus the `FindingCandidate` model, and nothing regenerates this file when either
- * changes.
+ * all**: the delta is validated at delivery, but the survey is an intra-run handoff —
+ * the survey node writes it so the reconcile session, which enters cold, can read
+ * what that session saw.
  *
- * So the same drift discipline {@link parseFindingDelta} follows applies harder here:
- * every field below is what the prompt actually asks for and no more, and an unknown
- * key — top level or on a candidate — is ignored rather than rejected, so a field the
- * shape grows later does not turn every already-published survey into a
- * fallback-to-raw.
+ * So an unknown key — top level or on a candidate — is ignored rather than rejected,
+ * so a field the shape grows later does not turn every already-published survey into
+ * a fallback-to-raw.
  *
  * `candidates` is the key that discriminates a survey from the delta it is published
  * alongside: the two share `scope`/`revisions`/`measurement` exactly, and differ only
  * in that a delta carries `findings` (op-tagged) and a survey carries `candidates`
  * (identity-less, since the hub mints the `fin_` id at delivery, never the run).
  */
-
-/** Mirrors `FindingCandidate` — a survey entry, which carries no `fin_` id because
- * identity is minted at delivery. `ref` is stable only within its own submission, so
- * a later node in the same run can name it. */
-export interface FindingSurveyCandidate {
-  readonly ref: string | null;
-  readonly class: string;
-  readonly locus: string;
-  readonly summary: string;
-  readonly introduced: string | null;
-}
-
-/** The survey asset itself — the same head as a delta, with `candidates` in place of
- * the delta's op-tagged `findings`. */
-export interface FindingSurvey {
-  readonly scope: string;
-  readonly revisions: Readonly<Record<string, string>>;
-  readonly measurement: string | null;
-  readonly candidates: readonly FindingSurveyCandidate[];
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -51,10 +28,10 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-/** One `candidates` entry. `class`, `locus`, and `summary` are the three the prompt
+/** One `candidates` entry. `class`, `locus`, and `summary` are the three the survey prompt
  * requires of every candidate; `ref` and `introduced` are best-effort there ("omit
  * rather than guess"), so both default to `null` when absent. */
-function parseCandidate(value: unknown): FindingSurveyCandidate | null {
+function parseCandidate(value: unknown): FindingCandidate | null {
   if (!isRecord(value)) return null;
   if (typeof value['class'] !== 'string') return null;
   if (typeof value['locus'] !== 'string') return null;
@@ -96,7 +73,7 @@ export function parseFindingSurvey(raw: string): FindingSurvey | null {
   const scope = parsed['scope'];
 
   if (!Array.isArray(parsed['candidates'])) return null;
-  const candidates: FindingSurveyCandidate[] = [];
+  const candidates: FindingCandidate[] = [];
   for (const entry of parsed['candidates']) {
     const candidate = parseCandidate(entry);
     if (candidate === null) return null;

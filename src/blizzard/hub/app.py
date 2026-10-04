@@ -39,7 +39,7 @@ from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.foundation.web import Frontend
+from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
@@ -89,6 +89,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
+from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -356,6 +357,7 @@ def create_app(
     app.include_router(fleet_router)
 
     Frontend.embedded("hub", app_name="blizzard-hub").mount(app)
+    install_schema_components(app, HUB_SCHEMA_COMPONENTS.models, HUB_SCHEMA_COMPONENTS.enums)
 
     log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
     return app

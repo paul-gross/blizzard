@@ -16,6 +16,7 @@ const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.Chunk
   current_node_id: 'nd_build',
   latest_epoch: 2,
   status: 'running',
+  pausable: true,
   work_refs: [{ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' }],
   pause: null,
   ...overrides,
@@ -41,6 +42,7 @@ const NEWEST = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVi
   state: 'running',
   closed_at: null,
   closure_reason: null,
+  stale_after_seconds: 3600,
   ...overrides,
 });
 
@@ -253,7 +255,7 @@ describe('MachineDetail header', () => {
   });
 
   it('offers neither Pause nor Resume for a chunk in a non-pausable state', async () => {
-    const rendered = await render([NEWEST()], HEADER({ status: 'done', pause: null }));
+    const rendered = await render([NEWEST()], HEADER({ status: 'done', pausable: false, pause: null }));
     stub = rendered.stub;
     const { el } = rendered;
 

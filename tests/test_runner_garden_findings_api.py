@@ -45,6 +45,7 @@ _BUCKET = [
         "source": "routine",
         "severity": None,
         "raised_by_chunk_id": None,
+        "exit": None,
     }
 ]
 

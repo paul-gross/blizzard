@@ -11,8 +11,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
@@ -120,6 +122,8 @@ class ChunkUsageView(BaseModel):
     cache_read_tokens: int
     cache_create_tokens: int
     cost_usd: float | None
+    #: Whether this invocation carries neither a billed nor an estimated cost.
+    cost_partial: bool = False
     #: The invocation's own recorded harness identity — ``None`` recorded
     #: and un-backfilled, never a guess from ``model``.
     harness_id: str | None = None
@@ -257,7 +261,7 @@ class MigrationView(BaseModel):
     landed_node_name: str | None = None
     choice_name: str | None = None
     model: str | None = None
-    source: str | None = None
+    source: MigrationSource | None = None
     epoch: int
     recorded_at: str
 
@@ -311,7 +315,7 @@ class ArtifactView(BaseModel):
     the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp."""
 
     key: str
-    kind: str
+    kind: ArtifactKind
     name: str
     node_id: str
     node_name: str
@@ -521,6 +525,16 @@ class ChunkDetail(BaseModel):
     pause: PauseView | None = None
     # The chunk's blocked marking — non-None only when it both waits on an
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
+    #: The chunk's status admits an operator pause.
+    pausable: bool = False
+    #: The chunk's status admits a completion (it is not already ``done``).
+    completable: bool = False
+    #: The chunk's status admits deletion (it has never been claimed).
+    deletable: bool = False
+    #: The chunk's status is terminal.
+    terminal: bool = False
+    #: The chunk's current node is the graph's reserved terminal.
+    current_node_terminal: bool = False
     blocked: BlockedView | None = None
     # The chunk's standing dependency edges one hop each way — always present,
     # unlike ``blocked``; see ChunkNeighborhoodView.
@@ -600,6 +614,8 @@ class WorkItemEntry(BaseModel):
     ref: str
     label: str | None = None
     web_url: str | None = None
+    #: Whether ``source`` names the hub's own reserved work source rather than a configured one.
+    hub_source: bool = False
     fetched_at: str
     title: str | None = None
     body: str | None = None

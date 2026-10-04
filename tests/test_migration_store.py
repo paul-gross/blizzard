@@ -18,15 +18,10 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import (
-    ChunkFacts,
-    IntendedMigration,
-    MigrationFact,
-    MigrationSource,
-    TransitionFact,
-)
+from blizzard.hub.domain.chunk.model import ChunkFacts, IntendedMigration, MigrationFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository

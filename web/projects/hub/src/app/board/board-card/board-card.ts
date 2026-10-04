@@ -18,7 +18,7 @@ export interface BoardCard {
   /** The chunk's derived spend total, from `ChunkSummary.cost`. */
   readonly costUsd: number;
   /** Whether {@link costUsd} is a lower bound, never presented as exact — `UsageTotal`'s
-   * `cost_partial` (`src/blizzard/hub/domain/chunk/model.py`). */
+   * `cost_partial`. */
   readonly costPartial: boolean;
   /** The chunk's derived spend estimate, from `ChunkSummary.cost.estimated_cost_usd` —
    * `null` iff no summed row reported one. Already included in {@link costUsd}. */

@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState } from 'fleet';
+import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { type SubscriptionRow, LocalSubscriptionsView } from './app-subscriptions-view';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
-const MISS_REASON_TEXT: Readonly<Record<string, string>> = {
+const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, string>> = {
   credential_lapsed: 'credential lapsed: log in again',
   credential_unreadable: 'credential unreadable',
   endpoint_unreachable: 'endpoint unreachable',
@@ -50,12 +50,11 @@ export class LocalSubscriptions {
   }
 
   /** "ok", "never sampled", or "miss: <operator text>" — the operator-facing distinguishable
-   * condition. The strings are a hand-kept copy of the runner CLI's `MISS_REASON_TEXT`; nothing
-   * keeps the two in sync, so change both together. */
-  private conditionLabel(ok: boolean | null, missReason: string | null): string {
+   * condition, one string per wire `SampleMissReason`. */
+  private conditionLabel(ok: boolean | null, missReason: runnerApi.SampleMissReason | null): string {
     if (ok === null) return 'never sampled';
     if (ok) return 'ok';
-    return `miss: ${missReason === null ? 'unknown' : (MISS_REASON_TEXT[missReason] ?? missReason)}`;
+    return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT[missReason]}`;
   }
 
   protected readonly rows = computed<readonly SubscriptionRow[]>(() =>

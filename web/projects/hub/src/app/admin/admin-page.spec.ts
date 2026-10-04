@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { AdminPage } from './admin-page';
 
@@ -12,6 +12,7 @@ const ME_ADMIN = {
   display_name: 'Ada',
   role: 'admin',
   permissions: ['user:manage'],
+  assignable_roles: OPERATOR_ME_RESPONSE.assignable_roles,
 };
 
 const ME_SUPERUSER = { ...ME_ADMIN, user_id: 'usr_root', username: 'root', role: 'superuser' };

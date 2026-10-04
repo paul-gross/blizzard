@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
+import type { FindingSurvey } from '../api/hub';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';
 import { ChunkFindingEntry } from './chunk-finding-entry';
-import type { FindingSurvey } from './parse-finding-survey';
 import { shortSha } from './short-sha';
 
 /**

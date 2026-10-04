@@ -10,6 +10,8 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
+from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
+
 
 def _require_text(value: str) -> str:
     if not value.strip():
@@ -27,9 +29,9 @@ class FindingCandidate(BaseModel):
     `ref` is stable only within its own submission, so a later node in the same run can
     name it."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, json_schema_serialization_defaults_required=True)
 
-    ref: str
+    ref: str | None = None
     class_: NonBlankText = Field(alias="class")
     locus: NonBlankText
     summary: NonBlankText
@@ -42,7 +44,7 @@ class AddFindingOp(BaseModel):
     — the hub mints the `fin_` id, never the run. Optional `ref` names this addition
     within its own submission, for a proposal in the same delivery to cite."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, json_schema_serialization_defaults_required=True)
 
     op: Literal["add"] = "add"
     class_: NonBlankText = Field(alias="class")
@@ -56,6 +58,8 @@ class ObservedFindingOp(BaseModel):
     """The finding named by `id` still reproduces — no payload, since it was true when
     recorded and is true now."""
 
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     op: Literal["observed"] = "observed"
     id: str
 
@@ -65,6 +69,8 @@ class GoneFindingOp(BaseModel):
     not close the finding — it flags it for a person — except against a `delivered`
     finding, which it settles to `resolved` outright: a delivery
     already carries a person's own claim that the ground moved."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     op: Literal["gone"] = "gone"
     id: str
@@ -79,10 +85,24 @@ class FindingDelta(BaseModel):
     routine's measurement, properties of the artifact rather than of any one finding (see
     [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))."""
 
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     scope: str
     revisions: dict[str, str] = {}
     measurement: str | None = None
     findings: list[FindingOp] = []
+
+
+class FindingSurvey(BaseModel):
+    """A run's survey artifact — the scope, the revision read per repository, the
+    routine's measurement, and every `FindingCandidate` the run saw."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    scope: str
+    revisions: dict[str, str] = {}
+    measurement: str | None = None
+    candidates: list[FindingCandidate]
 
 
 class DeferredReviewFindingEntry(BaseModel):
@@ -94,7 +114,7 @@ class DeferredReviewFindingEntry(BaseModel):
 
     ref: str
     disposition: Literal["deferred"] = "deferred"
-    severity: Literal["blocking", "should-fix"]
+    severity: FindingSeverity
     scope: str
     class_: NonBlankText = Field(alias="class")
     locus: NonBlankText
@@ -154,13 +174,15 @@ class FindingView(BaseModel):
     introduced_at: str | None = None
     first_observed_at: str | None = None
     live: bool
-    state: str
+    state: FindingState
     note: str | None = None
     last_seen_at: str | None
     observed_count: int
-    source: str = "routine"
-    severity: str | None = None
+    source: FindingSource = FindingSource.ROUTINE
+    severity: FindingSeverity | None = None
     raised_by_chunk_id: str | None = None
+    #: How an exited finding left; `None` while it has not exited.
+    exit: FindingExit | None = None
 
 
 class FindingsPageView(BaseModel):
@@ -174,7 +196,7 @@ class FindingsPageView(BaseModel):
 class FindingFactView(BaseModel):
     """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire."""
 
-    kind: str
+    kind: FindingFactKind
     recorded_at: str
     note: str | None = None
     actor: str | None = None

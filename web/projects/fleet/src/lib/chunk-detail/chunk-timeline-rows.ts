@@ -1,4 +1,4 @@
-import type { ChunkDetail, ChunkStatus } from '../api/hub';
+import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../api/hub';
 import { nodeStepKey } from '../node-step';
 import { formatAbsolute, formatWhen } from '../when';
 
@@ -74,8 +74,8 @@ const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string 
 
 /** One history step's summed usage — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
- * figure so the timeline reads one lap's cost per line. `costPartial` folds by the hub's
- * own rule: `src/blizzard/hub/domain/chunk/model.py`'s `UsageTotal`. */
+ * figure so the timeline reads one lap's cost per line. `costPartial` is true iff any
+ * summed row's own wire `cost_partial` is. */
 export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;
@@ -124,9 +124,9 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     }));
   // Cross-graph migration steps — the chunk left `from_graph/from_node`
   // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
-  const migrations: HistoryRow[] = (detail.migrations ?? []).filter((m) => m.source !== 'restart').map((m) => ({
+  const migrations: HistoryRow[] = (detail.migrations ?? []).filter((m) => m.source !== MigrationSource.RESTART).map((m) => ({
     kind: 'migration' as const,
-    key: m.source === 'authored-edge' && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
+    key: m.source === MigrationSource.AUTHORED_EDGE && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
     epoch: m.epoch,
     nodeId: m.from_node_id,
     nodeName: m.from_node_name ?? m.from_node_id ?? '·',
@@ -256,16 +256,13 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
   if (!row.nodeId || row.kind === 'restart') return null;
   const rows = (detail.usage ?? []).filter((u) => u.node_id === row.nodeId && u.epoch === row.epoch);
   if (rows.length === 0) return null;
-  // Newest-first: `detail.usage` arrives oldest-first (the hub's own `_usage_history`),
-  // so the step's own most recent invocation is the step's own current identity.
+  // Newest-first: `detail.usage` arrives oldest-first, so the step's own most recent invocation is the step's own current identity.
   const stamped = [...rows].reverse().find((u) => u.harness_id != null);
   const estimatedRows = rows.flatMap((u) => (u.estimated_cost_usd == null ? [] : [u.estimated_cost_usd]));
   return {
     tokens: rows.reduce((sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_create_tokens, 0),
     costUsd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
-    // A row carrying only an estimate does not mark this step partial — mirrors the
-    // hub's own `UsageTotal.of`.
-    costPartial: rows.some((u) => u.cost_usd === null && u.estimated_cost_usd == null),
+    costPartial: rows.some((u) => u.cost_partial === true),
     estimatedCostUsd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
     harnessId: stamped?.harness_id ?? null,
   };

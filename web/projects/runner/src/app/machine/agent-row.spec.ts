@@ -25,6 +25,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     state: 'running',
     closed_at: null,
     closure_reason: null,
+    stale_after_seconds: 3600,
     ...overrides,
   };
 }

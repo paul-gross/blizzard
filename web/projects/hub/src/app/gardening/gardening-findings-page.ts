@@ -24,7 +24,7 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
  * desktop — `kit-fact-list.css`'s own fixed-label-column shape — and two per row on
  * mobile, each trigger carrying its own label. Each carries a leading "All"
  * option: class and state's come from the fetched bucket's own `class` values (never
- * a hardcoded vocabulary) and the fixed seven-value state vocabulary respectively;
+ * a hardcoded vocabulary) and the generated `FindingState` vocabulary respectively;
  * routine and scope's each name every fetched routine/scope.
  */
 @Component({
@@ -66,6 +66,7 @@ export class GardeningFindingsPage {
       locus: f.locus,
       summary: f.summary,
       state: f.state,
+      exit: f.exit ?? null,
       lastSeenAt: f.last_seen_at,
       routineName: this.filters.selectedRoutine() === null ? (f.routine_name ?? null) : null,
       scopeSlug: this.filters.selectedScope() === null ? f.scope_slug : null,

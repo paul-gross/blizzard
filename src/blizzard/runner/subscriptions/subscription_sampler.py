@@ -9,13 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
-from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
+from blizzard.foundation.subscription_miss import SampleMissReason
 
 __all__ = [
     "ANTHROPIC_DEFAULT_CREDENTIALS_PATH",
@@ -72,18 +71,6 @@ class ExternalSubscriptionUsageSnapshot:
 
     sampled_at: datetime
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
-
-
-class SampleMissReason(StrEnum):
-    """The closed set of reasons one sampling attempt produced nothing:
-    ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
-    missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
-    non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows."""
-
-    CREDENTIAL_LAPSED = CREDENTIAL_LAPSED_MISS_REASON
-    CREDENTIAL_UNREADABLE = "credential_unreadable"
-    ENDPOINT_UNREACHABLE = "endpoint_unreachable"
-    RESPONSE_UNPARSEABLE = "response_unparseable"
 
 
 # Operator-facing text per closed-set miss reason — what to do about it, not the machine word.

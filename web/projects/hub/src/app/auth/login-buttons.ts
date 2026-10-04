@@ -34,7 +34,7 @@ export class LoginButtons {
   readonly lastUsed = input<string | null>(null);
 
   /** The same-origin path to return to once the dance completes — appended to each
-   * authorize link as `return_to` (`hub/api/auth_login.py`'s `_safe_return_to`). */
+   * authorize link as `return_to`, which the hub honors only as a same-origin path. */
   readonly returnTo = input<string>('/');
 
   /** Fired (with the provider's name) the instant a button is clicked, before the

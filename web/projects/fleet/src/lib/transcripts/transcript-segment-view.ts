@@ -7,10 +7,9 @@ import type { SidechainOpenEvent } from './transcript-viewer';
 import { TranscriptViewer } from './transcript-viewer';
 import type { TranscriptTurn } from './transcript-turn';
 
-/** Keep only the most recent this-many turns rendered for one segment — mirrors the
- * runner panel's own `MAX_TURNS` cap (`projected_transcript_repository.py`), so no
- * consumer renders an unbounded DOM for one large segment. A sidechain's
- * own turns are uncapped, same as the runner side. */
+/** Keep only the most recent this-many turns rendered for one segment — a frontend
+ * render bound, so no consumer renders an unbounded DOM for one large segment. A
+ * sidechain's own turns are uncapped. */
 const MAX_RENDERED_TURNS = 1000;
 
 /**
@@ -62,9 +61,8 @@ export class TranscriptSegmentView {
    * {@link TranscriptViewer} always renders a sidechain inline too. */
   readonly openStandalone = output<SidechainOpenEvent>();
 
-  /** {@link turns}, tail-capped at {@link MAX_RENDERED_TURNS} the same way the runner
-   * panel caps its own list. A sidechain's own turns pass through
-   * {@link TranscriptViewer} uncapped, same as the runner side. */
+  /** {@link turns}, tail-capped at {@link MAX_RENDERED_TURNS}. A sidechain's own turns
+   * pass through {@link TranscriptViewer} uncapped. */
   protected readonly cappedTurns = computed(() => {
     const turns = this.turns();
     return turns.length > MAX_RENDERED_TURNS ? turns.slice(-MAX_RENDERED_TURNS) : turns;

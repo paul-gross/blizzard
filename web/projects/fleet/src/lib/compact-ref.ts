@@ -2,7 +2,7 @@
  * Compact refs — the human-readable display name for a prefixed-ULID id
  * (`ch_01KX…3YJ9` → `C-3YJ9`, `lease_01KX…ZPRR` → `L-ZPRR`).
  *
- * A raw id is `{prefix}_{body}` (`foundation/ids.py`): a type prefix, an
+ * A raw id is `{prefix}_{body}`: an {@link IdPrefix} type prefix, an
  * underscore, and a 26-char ULID body. A compact ref is `{sigil}-{tail}` — the
  * entity kind's sigil joined to the tail of the ULID body. The ULID's timestamp
  * is at the front, so its entropy is in the tail: the last few characters
@@ -14,6 +14,8 @@
  * runner's local panel — resolves through {@link compactRef} so they all agree.
  */
 
+import { IdPrefix } from './api/hub';
+
 /** How one entity kind displays: its sigil and how much of the ULID body's tail to keep. */
 export interface EntityDisplay {
   /** The one-or-few-character emblem for the entity kind (`ch` → `C`, `lease` → `L`). */
@@ -23,13 +25,14 @@ export interface EntityDisplay {
 }
 
 /**
- * The display registry, keyed by id prefix (`foundation/ids.py`'s vocabulary).
- * A prefix absent here falls back to its first letter, uppercased, with a
- * 4-char tail — so a new entity kind renders sanely before anyone registers it.
+ * The display registry, keyed by the wire's {@link IdPrefix} vocabulary. A prefix
+ * absent here (or outside that vocabulary) falls back to its first letter,
+ * uppercased, with a 4-char tail — so a new entity kind renders sanely before
+ * anyone registers it.
  * Register a prefix when the default collides (`ch`/`cho` both default to `C`)
  * or the kind deserves a distincter mark.
  */
-export const ENTITY_DISPLAY: Readonly<Record<string, EntityDisplay>> = {
+export const ENTITY_DISPLAY: Readonly<Partial<Record<IdPrefix, EntityDisplay>>> = {
   ch: { sigil: 'C', tailLength: 4 },
   lease: { sigil: 'L', tailLength: 4 },
   qn: { sigil: 'Q', tailLength: 4 },
@@ -51,6 +54,12 @@ export const ENTITY_DISPLAY: Readonly<Record<string, EntityDisplay>> = {
 
 const DEFAULT_TAIL_LENGTH = 4;
 
+const ID_PREFIXES: ReadonlySet<string> = new Set<string>(Object.values(IdPrefix));
+
+function isIdPrefix(prefix: string): prefix is IdPrefix {
+  return ID_PREFIXES.has(prefix);
+}
+
 /**
  * `ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9` → `C-3YJ9`. An id with no underscore (env
  * pool names like `e1`, `runner-local`) is not a prefixed ULID and passes
@@ -62,7 +71,7 @@ export function compactRef(id: string): string {
   const prefix = id.slice(0, sep);
   const body = id.slice(sep + 1);
   if (body.length === 0) return id;
-  const display = ENTITY_DISPLAY[prefix] ?? {
+  const display = (isIdPrefix(prefix) ? ENTITY_DISPLAY[prefix] : undefined) ?? {
     sigil: prefix[0].toUpperCase(),
     tailLength: DEFAULT_TAIL_LENGTH,
   };

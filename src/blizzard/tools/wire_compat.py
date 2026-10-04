@@ -166,6 +166,18 @@ def _union_ref_names(schema: dict) -> set[str] | None:
     return {_ref_name(m["$ref"]) for m in members if "$ref" in m}
 
 
+def _narrows_string_to_enum(base: dict, head: dict, head_schemas: dict) -> bool:
+    """A plain ``string`` retyped onto a ``$ref`` to a string-enum component: every value the
+    head can send is a string an older ``str`` parse accepts, so a response may narrow this way."""
+    if _type_signature(base) != ("string",):
+        return False
+    head_sig = _type_signature(head)
+    if head_sig is None or head_sig[0] != "$ref":
+        return False
+    target = head_schemas.get(_ref_name(head_sig[1]), {})
+    return target.get("type") == "string" and bool(target.get("enum"))
+
+
 def _diff_enum_and_union(
     label: str, base: dict, head: dict, is_request: bool, is_response: bool, violations: list[Violation]
 ) -> None:
@@ -186,7 +198,13 @@ def _diff_enum_and_union(
 
 
 def _diff_schema(
-    name: str, base: dict, head: dict, is_request: bool, is_response: bool, violations: list[Violation]
+    name: str,
+    base: dict,
+    head: dict,
+    is_request: bool,
+    is_response: bool,
+    violations: list[Violation],
+    head_schemas: dict | None = None,
 ) -> None:
     _diff_enum_and_union(name, base, head, is_request, is_response, violations)
 
@@ -211,6 +229,12 @@ def _diff_schema(
     for prop in sorted(set(base_props) & set(head_props)):
         bp, hp = base_props[prop], head_props[prop]
         label = f"{name}.{prop}"
+
+        if not is_request and _narrows_string_to_enum(bp, hp, head_schemas or {}):
+            # A response-only narrowing: still held to the nullability rule, nothing else.
+            if not _is_nullable(bp) and _is_nullable(hp):
+                violations.append(Violation(label, "response property newly became nullable"))
+            continue
 
         b_sig, h_sig = _type_signature(bp), _type_signature(hp)
         if b_sig is not None and h_sig is not None and b_sig != h_sig:
@@ -277,6 +301,7 @@ def classify_spec_diff(base: dict, head: dict) -> list[Violation]:
             is_request="request" in role,
             is_response="response" in role,
             violations=violations,
+            head_schemas=head_schemas,
         )
     return violations
 

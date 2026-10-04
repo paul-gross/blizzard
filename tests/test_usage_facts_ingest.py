@@ -194,6 +194,7 @@ def test_cost_absent_usage_row_sums_tokens_and_flags_the_total_partial(tmp_path:
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["usage"][0]["cost_usd"] is None
+    assert detail["usage"][0]["cost_partial"] is True
     assert detail["cost"]["input_tokens"] == 100  # tokens still summed
     assert detail["cost"]["cost_usd"] == 0.0  # nothing to sum — the lower bound
     assert detail["cost"]["cost_partial"] is True
@@ -211,6 +212,7 @@ def test_estimate_only_row_is_shown_and_does_not_flag_the_total_partial(tmp_path
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["usage"][0]["cost_usd"] is None
     assert detail["usage"][0]["estimated_cost_usd"] == pytest.approx(0.03)
+    assert detail["usage"][0]["cost_partial"] is False
     assert detail["cost"]["cost_usd"] == 0.0
     assert detail["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
     assert detail["cost"]["cost_partial"] is False

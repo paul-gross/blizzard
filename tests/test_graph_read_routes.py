@@ -190,6 +190,18 @@ def test_get_graph_returns_full_view(tmp_path: Path) -> None:
     assert set(edge.keys()) >= {"from_node_id", "choice_id", "to_node_name", "prompt_addendum"}
 
 
+def test_get_graph_classifies_each_edge_target(tmp_path: Path) -> None:
+    """Each edge carries its target's kind — ``done`` for the reserved terminal, ``node`` for a
+    same-graph node — and no target graph for either."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_A)
+
+    body = hub.client.get(f"/api/graphs/{graph_id}").json()
+    kinds = {e["to_node_name"]: (e["target_kind"], e["target_graph"]) for e in body["edges"]}
+
+    assert kinds == {"done": ("done", None), "build": ("node", None)}
+
+
 def test_get_graph_round_trips_session_source(tmp_path: Path) -> None:
     """A node's targeted ``session: resume:<name>`` form survives store persistence
     and the API node view; a bare ``resume``/``fresh`` node round-trips

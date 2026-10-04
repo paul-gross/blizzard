@@ -68,6 +68,7 @@ export class GardeningFindingDetail {
       findingClass: finding.class,
       locus: finding.locus,
       state: finding.state,
+      exit: finding.exit ?? null,
       observedCount: finding.observed_count,
       introducedRev: finding.introduced ?? null,
       introducedAt: finding.introduced_at ?? null,

@@ -14,6 +14,7 @@ from enum import StrEnum
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -23,7 +24,6 @@ from blizzard.hub.domain.chunk.model import (
     DecisionChoice,
     GateDecision,
     MigrationFact,
-    MigrationSource,
 )
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.produces import Produces

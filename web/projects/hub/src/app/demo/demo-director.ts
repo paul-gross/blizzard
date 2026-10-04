@@ -212,7 +212,7 @@ function pickAnother(artifacts: readonly ArtifactView[], current: string | null)
  * screen holds still). Each half is pinned on the producing side so a rename
  * fails where it is made:
  *
- * - `chunk-detail` / `detail-id` — by the browser tier, `tests/e2e/test_board_browser_e2e.py`;
+ * - `chunk-detail` / `detail-id` — by the board's browser e2e tier;
  * - `artifacts-tab-artifact` / `artifacts-tab-artifact-key` — by
  *   `fleet`'s `chunk-page/chunk-page-artifacts-tab.spec.ts`, which exists partly for this.
  *

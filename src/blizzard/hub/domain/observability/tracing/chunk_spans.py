@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import (
     ChunkRole,
@@ -19,7 +20,7 @@ from blizzard.foundation.trace_ids import (
     step_root,
 )
 from blizzard.foundation.trace_spans import AttributeValue, FinishedSpan, SpanLink, SpanStatus
-from blizzard.hub.domain.chunk.model import MigrationSource, UsageTotal
+from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.observability.tracing import attributes as attr
 from blizzard.hub.domain.observability.tracing.assembly import step_dimensions, step_usage, step_waits

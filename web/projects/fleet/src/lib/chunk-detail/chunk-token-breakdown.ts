@@ -5,7 +5,7 @@ import { formatCost, formatTokens } from '../cost-format';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 
 /** The all-zero, non-partial total — this component's default before `detail().cost`
- * carries a real read (mirrors the hub's own `_zero_usage_total`, `wire/chunk.py`). */
+ * carries a real read. */
 const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
   input_tokens: 0,
   output_tokens: 0,
@@ -27,7 +27,7 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
  * chunk's token counts render one labelled row per class — Input, Output, Cache Read,
  * and Cache Creation, the human-readable names for the wire's own
  * `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_create_tokens`
- * (`ChunkUsageTotalView`, `wire/chunk.py`) — always visible inline, no expand
+ * (`ChunkUsageTotalView`) — always visible inline, no expand
  * toggle standing between the operator and any of the five figures.
  *
  * Content-projected into {@link ChunkFacts}'s `[token-breakdown]` slot as a block
@@ -56,7 +56,7 @@ export class ChunkTokenBreakdown {
   /** The chunk's derived usage/cost total — never absent: the hub API always
    * populates `cost`, and {@link ZERO_USAGE_TOTAL} covers a construction-site
    * fixture that predates it. Every field here is a required, never-null integer
-   * (`ChunkUsageTotalView`, `wire/chunk.py`) — a usage fact's cost can be absent
+   * (`ChunkUsageTotalView`) — a usage fact's cost can be absent
    * (`cost_partial`), but its token counts cannot, so the four rows below never need
    * their own null handling. */
   protected readonly cost = computed<ChunkUsageTotalView>(() => this.detail().cost ?? ZERO_USAGE_TOTAL);

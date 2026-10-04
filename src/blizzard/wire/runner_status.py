@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.wire.fleet import FleetSummaryView
 
 
@@ -192,7 +193,7 @@ class SubscriptionView(BaseModel):
     provider: str
     sampled_at: str | None = None
     ok: bool | None = None
-    miss_reason: str | None = None
+    miss_reason: SampleMissReason | None = None
     renewal: str | None = None
 
 

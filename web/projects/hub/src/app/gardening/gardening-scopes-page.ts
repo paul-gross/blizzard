@@ -42,7 +42,7 @@ export class GardeningScopesPage {
 
   /** The `scopeSlug` the active detail child names — the selection lives on that
    * child's route, not this one's (`route-state.ts`). A scope has no id of its own;
-   * its slug *is* the id (`foundation/ids.py`). */
+   * its slug *is* the id. */
   protected readonly scopeSlugParam = injectChildRouteParam('scopeSlug');
 
   /** The effective selection: the route param if it still names a scope the loaded

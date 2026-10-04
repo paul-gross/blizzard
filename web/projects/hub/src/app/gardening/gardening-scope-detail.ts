@@ -31,7 +31,7 @@ import { map } from 'rxjs';
  * list — do not "clean up" what looks like an unused query.
  *
  * Scopes are editable in place and retire/enable-able, gated on `graph:edit` (the
- * same permission `src/blizzard/hub/api/scopes.py` requires) — `graph-detail.ts`'s
+ * same permission the hub's scope routes require) — `graph-detail.ts`'s
  * own `canEdit`/`actionError` shape, transliterated to scopes.
  */
 @Component({

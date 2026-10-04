@@ -31,7 +31,7 @@
                   [disabled]="user.role === 'admin' && !isSuperuser()"
                   (change)="onRoleChange(user.user_id, $event)"
                 >
-                  @for (role of assignableRoles; track role) {
+                  @for (role of assignableRoles(); track role) {
                     <option [value]="role" [selected]="role === user.role" [disabled]="role === 'admin' && !isSuperuser()">
                       {{ role }}
                     </option>

@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { KitAsyncState, type KitAsyncStateValue, KitSelectRow } from 'fleet';
 
 /** One row of the scope list — slug and retired state; a scope has no id at all, the
- * slug *is* the id (`foundation/ids.py`). */
+ * slug *is* the id. */
 export interface ScopeRowVm {
   readonly slug: string;
   readonly description: string;

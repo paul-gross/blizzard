@@ -44,6 +44,9 @@ class RoleAssignmentRefused(Exception):
     which is bootstrap-only and not assignable through the API."""
 
 
+#: Every role the role-assignment API may grant — ``superuser`` is bootstrap-only.
+ASSIGNABLE_ROLES: tuple[Role, ...] = tuple(r for r in Role if r is not Role.SUPERUSER)
+
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
 #: generous working-day window.
 IDLE_TTL = timedelta(hours=24)
@@ -319,7 +322,7 @@ class AuthService:
         revokes ``admin``. A no-op request returns ``subject`` unchanged, recording no fact."""
         if actor.user_id == subject.user_id:
             raise RoleAssignmentRefused("cannot change your own role")
-        if subject.role is Role.SUPERUSER or to_role is Role.SUPERUSER:
+        if subject.role is Role.SUPERUSER or to_role not in ASSIGNABLE_ROLES:
             raise RoleAssignmentRefused("superuser is not assignable through the API (bootstrap-only)")
         touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
         if touches_admin and actor.role is not Role.SUPERUSER:

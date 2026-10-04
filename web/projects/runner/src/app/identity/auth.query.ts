@@ -35,11 +35,21 @@ export function injectRunnerSessionQuery() {
   return injectQuery(() => ({
     queryKey: runnerSessionKey,
     queryFn: async (): Promise<runnerApi.RunnerAuthSessionView> => {
-      const { data, error } = await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
+      const { data, error } = await readRunnerSession();
       if (error) throw error;
       return data!;
     },
   }));
+}
+
+/**
+ * One raw, uncached read of the runner's auth session — the wire call behind
+ * {@link injectRunnerSessionQuery}, exported for the one caller that must classify
+ * a fresh answer outside the query cache (`session-recovery.ts`'s seam). `data` is
+ * `undefined` when the read itself failed.
+ */
+export function readRunnerSession() {
+  return runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
 }
 
 /**

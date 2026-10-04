@@ -9,6 +9,8 @@ const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [
@@ -22,6 +24,8 @@ const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -69,7 +73,7 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('running');
   });
 
-  it('surfaces who paused a chunk in the header (issue #46)', async () => {
+  it('surfaces who paused a chunk in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     const detail = pausedDetail('paused');
     fixture.componentRef.setInput('detail', detail);
@@ -160,7 +164,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no Pause for a chunk the hub would refuse to pause (done/stopped/delivering)', async () => {
     for (const status of ['done', 'stopped', 'delivering'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
+      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status, pausable: false });
       fixture.componentRef.setInput('renderedStatus', status);
       fixture.componentRef.setInput('canControl', true);
       await fixture.whenStable();
@@ -196,7 +200,7 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
   });
 
-  it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
+  it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     const detail = pausedDetail('waiting_on_human');
     fixture.componentRef.setInput('detail', detail);

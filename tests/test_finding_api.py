@@ -527,11 +527,13 @@ def test_resolve_exits_many_findings_in_one_call_and_reads_back(tmp_path: Path) 
     assert {row["finding_id"] for row in rows} == {"fin_1", "fin_2"}
     for row in rows:
         assert row["state"] == "resolved"
+        assert row["exit"] == "outflow"
         assert row["live"] is False
         assert row["note"] == "shipped it"
 
     fetched = hub.client.get("/api/findings/fin_1").json()
     assert fetched["state"] == "resolved"
+    assert fetched["exit"] == "outflow"
     assert fetched["note"] == "shipped it"
 
 
@@ -571,6 +573,7 @@ def test_wont_fix_records_wont_fix(tmp_path: Path) -> None:
 
     assert resp.status_code == 200, resp.text
     assert resp.json()[0]["state"] == "wont-fix"
+    assert resp.json()[0]["exit"] == "withdrawn"
 
 
 def test_not_a_finding_records_not_a_finding(tmp_path: Path) -> None:
@@ -649,5 +652,6 @@ def test_reopen_undoes_an_exit_and_restores_liveness(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     body = resp.json()[0]
     assert body["state"] == "live"
+    assert body["exit"] is None
     assert body["live"] is True
     assert body["note"] == "regressed"

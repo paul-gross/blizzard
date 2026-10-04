@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { UserView } from 'fleet';
+import { OPERATOR_ME_RESPONSE } from 'fleet/testing';
 import { UsersTable } from './users-table';
 
 const USERS: readonly UserView[] = [
@@ -55,6 +56,7 @@ describe('UsersTable', () => {
     fixture.componentRef.setInput('users', inputs.users ?? USERS);
     fixture.componentRef.setInput('currentUserId', inputs.currentUserId ?? null);
     fixture.componentRef.setInput('isSuperuser', inputs.isSuperuser ?? false);
+    fixture.componentRef.setInput('assignableRoles', OPERATOR_ME_RESPONSE.assignable_roles ?? []);
     return fixture;
   }
 

@@ -27,6 +27,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
+from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
@@ -751,11 +752,13 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
     entries: list[WorkItemEntry] = []
     for pointer in chunk.work_refs:
         source = services.work_sources.get(pointer.source)
+        hub_source = pointer.source == RESERVED_HUB_SOURCE_NAME
         if source is None:
             entries.append(
                 WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
+                    hub_source=hub_source,
                     label=None,
                     web_url=None,
                     fetched_at=fetched_at,
@@ -773,6 +776,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
                 WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
+                    hub_source=hub_source,
                     label=label,
                     web_url=web_url,
                     fetched_at=fetched_at,
@@ -784,6 +788,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
                 WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
+                    hub_source=hub_source,
                     label=label,
                     web_url=web_url,
                     fetched_at=fetched_at,

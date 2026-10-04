@@ -21,6 +21,7 @@ const LEASE: runnerApi.LeaseView = {
   state: 'running',
   closed_at: null,
   closure_reason: null,
+  stale_after_seconds: 3600,
 };
 
 const STATUS: MachineChunkStatus = { label: 'RUNNING', tone: 'running' };

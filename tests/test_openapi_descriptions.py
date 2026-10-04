@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -94,10 +95,16 @@ def test_wire_models_no_spec_reaches_are_held_to_the_same_bar() -> None:
     assert not offenders, "\n".join(["un-schema'd wire models carrying unresolvable prose:", *offenders])
 
 
-def test_the_unschemaed_scan_is_not_restricted_to_direct_basemodel_subclasses() -> None:
-    """The reach `bzh:comment-locality` claims, pinned rather than trusted. `FactChangedPayload`
-    is documented and subclasses `SseFramePayload`, not `BaseModel` directly; a discovery
-    narrowed to `class X(BaseModel)` — the obvious simplification — would drop it and every
-    model shaped like it, silently."""
+def test_the_unschemaed_scan_is_not_restricted_to_direct_basemodel_subclasses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reach `bzh:comment-locality` claims, pinned rather than trusted. An SSE payload
+    subclasses `SseFramePayload`, not `BaseModel` directly; a discovery narrowed to
+    `class X(BaseModel)` — the obvious simplification — would drop every model shaped like
+    it, silently."""
+    (tmp_path / "frames.py").write_text(
+        'class FramePayload(BaseModel):\n    """Base."""\n\n\nclass ProbeChangedPayload(FramePayload):\n    """Probe."""\n'
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_WIRE", tmp_path)
     found = {(file, name) for file, name, _ in _unschemaed_wire_models()}
-    assert ("sse_runner.py", "FactChangedPayload") in found, sorted(found)
+    assert ("frames.py", "ProbeChangedPayload") in found, sorted(found)

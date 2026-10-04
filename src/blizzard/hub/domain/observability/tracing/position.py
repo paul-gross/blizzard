@@ -10,8 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.model import MigrationFact, MigrationSource
+from blizzard.hub.domain.chunk.model import MigrationFact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedMigration
 

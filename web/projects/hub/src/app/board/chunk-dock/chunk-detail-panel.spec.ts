@@ -9,6 +9,8 @@ const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [
@@ -22,6 +24,8 @@ const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -34,6 +38,8 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
+  pausable: true,
+  completable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -205,7 +211,7 @@ describe('ChunkDetailPanel', () => {
 
   it('emits delete with the chunk id once the operator confirms, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', route: null });
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', deletable: true, route: null });
     fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
@@ -236,7 +242,7 @@ describe('ChunkDetailPanel', () => {
     // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
     // once claimed, so a `not_ready` one stands on no node — and the edit row is gated
     // on both halves of `EditService`'s window, unclaimed and unmoved.
-    const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null, current_node_id: null };
+    const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', deletable: true, route: null, current_node_id: null };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', notReady);
     fixture.componentRef.setInput('renderedStatus', notReady.status);
@@ -313,7 +319,7 @@ describe('ChunkDetailPanel', () => {
 
   it('surfaces a graph/model edit error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', route: null });
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', deletable: true, route: null });
     fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('actionError', 'chunk ch_01ready000000000000000000000 has already left not_ready');
     await fixture.whenStable();

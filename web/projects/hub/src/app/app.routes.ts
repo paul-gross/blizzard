@@ -72,7 +72,7 @@ export const routes: Routes = [
     loadComponent: () => import('./gardening/gardening-page').then((m) => m.GardeningPage),
     children: [
       { path: '', redirectTo: 'scopes', pathMatch: 'full' },
-      // A scope has no id of its own — its slug *is* the id (`foundation/ids.py`).
+      // A scope has no id of its own — its slug *is* the id.
       {
         path: 'scopes',
         loadComponent: () => import('./gardening/gardening-scopes-page').then((m) => m.GardeningScopesPage),
@@ -87,8 +87,7 @@ export const routes: Routes = [
           },
         ],
       },
-      // Routines are keyed by `name` (`hub/store/schema.py`'s `uq_routines_name`),
-      // not id.
+      // Routines are keyed by `name` (unique per routine), not id.
       {
         path: 'routines',
         loadComponent: () => import('./gardening/gardening-routines-page').then((m) => m.GardeningRoutinesPage),
@@ -160,7 +159,6 @@ export const routes: Routes = [
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.
   { path: 'login', loadComponent: () => import('./login/login-page').then((m) => m.LoginPage) },
-  // A deliberate stub — the admin page itself is #94's; this
-  // phase only needs a route the gated nav entry can point at.
+  // The admin surface — the route the permission-gated nav entry points at.
   { path: 'admin', loadComponent: () => import('./admin/admin-page').then((m) => m.AdminPage) },
 ];

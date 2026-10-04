@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
+from blizzard.foundation.findings import FindingFactKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -29,6 +30,7 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingNoteRequiredError,
     FindingSupersedesItself,
     FindingTransitionRefused,
+    finding_exit,
 )
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.wire.finding import (
@@ -66,6 +68,7 @@ def _finding_view_fields(finding: Finding) -> dict[str, object]:
         "source": finding.source,
         "severity": finding.severity,
         "raised_by_chunk_id": finding.raised_by_chunk_id,
+        "exit": finding_exit(finding.state),
     }
 
 
@@ -81,7 +84,7 @@ def _fact_view(fact: FindingFact) -> FindingFactView:
     """The one ``FindingFact`` -> ``FindingFactView`` projection, `finding_view`'s own
     sibling for a chain entry."""
     return FindingFactView(
-        kind=fact.kind,
+        kind=FindingFactKind(fact.kind),
         recorded_at=iso_utc(fact.recorded_at),
         note=fact.note,
         actor=fact.actor,

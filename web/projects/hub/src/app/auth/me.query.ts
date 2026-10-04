@@ -28,10 +28,13 @@ export function injectMeQuery() {
   }));
 }
 
+/** One permission `/api/me` can carry — the generated `Permission` vocabulary. */
+type Permission = MeResponse['permissions'][number];
+
 /** Whether a resolved identity carries `permission` — the single selector every
  * capability-gated control reads (`hasPermission(me(), 'user:manage')`) rather than
  * re-deriving its own role check. `null`/`undefined` (unauthenticated, or not yet
  * resolved) never carries a permission. */
-export function hasPermission(me: MeResponse | null | undefined, permission: string): boolean {
+export function hasPermission(me: MeResponse | null | undefined, permission: Permission): boolean {
   return me !== null && me !== undefined && me.permissions.includes(permission);
 }

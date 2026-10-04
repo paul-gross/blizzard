@@ -73,6 +73,7 @@ def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> 
     assert me.status_code == 200, me.text
     assert me.json()["role"] == "pending"
     assert me.json()["permissions"] == []
+    assert me.json()["assignable_roles"] == [r.value for r in Role if r is not Role.SUPERUSER]
 
     denied = hub.client.get("/api/chunks", headers=_cookie(token))
     assert denied.status_code == 403

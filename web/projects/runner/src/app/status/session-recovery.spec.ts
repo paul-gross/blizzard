@@ -5,7 +5,7 @@ import { runnerApi, runnerClient } from 'fleet';
 import { stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
-import { injectRunnerLogoutMutation } from '../identity/auth.query';
+import { injectRunnerLogoutMutation, readRunnerSession } from '../identity/auth.query';
 import { SessionRecovery } from './session-recovery';
 
 type Restore = () => void;
@@ -142,7 +142,7 @@ describe('SessionRecovery (issue #312)', () => {
     restore = r;
 
     await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
-    await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
+    await readRunnerSession();
 
     expect(navigateSpy).not.toHaveBeenCalled();
   });
@@ -170,7 +170,7 @@ describe('SessionRecovery (issue #312)', () => {
 
     // An ordinary session poll resolving no username along the way must not clear
     // the mark — only a resolved username does.
-    await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
+    await readRunnerSession();
 
     // A further no-session 401: the mark still stands, so this sets `recovering`
     // rather than firing a second navigation.
@@ -192,7 +192,7 @@ describe('SessionRecovery (issue #312)', () => {
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
     sessionBody = { auth_enabled: true, username: 'alice' };
-    await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
+    await readRunnerSession();
     expect(recovery.recovering()).toBe(false);
 
     // The mark itself is now clear too — proven by a fresh no-session 401 firing a

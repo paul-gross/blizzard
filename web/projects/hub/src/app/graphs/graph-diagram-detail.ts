@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type GraphNodeView, type GraphView, KitFactList, type KitFact, KitPanel, KitProseBlock } from 'fleet';
+import { type GraphNodeView, type GraphView, hubApi, KitFactList, type KitFact, KitPanel, KitProseBlock } from 'fleet';
 import {
   type DiagramSelection,
   type ResolvedChoiceSelection,
@@ -26,7 +26,7 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
  * a node's prompt, its inbound addenda, a choice's description, an edge's prompt
  * addendum — is `fleet-kit-prose-block`. A choice's description earns that
  * treatment like the rest: the judgement prompt the agent reads lists each choice
- * by name and description (`src/blizzard/runner/loop/judgement_prompt.py`), so it
+ * by name and description, so it
  * is prose a person wrote for an agent, the same `context` side as a node's prompt.
  */
 @Component({
@@ -59,11 +59,11 @@ export class GraphDiagramDetail {
    * reserved `done` terminal, or the target graph's name for a migration edge. */
   protected targetLabel(target: EdgeTarget): string {
     switch (target.kind) {
-      case 'node':
+      case hubApi.ChoiceTargetKind.NODE:
         return this.nodeName(target.nodeId);
-      case 'done':
+      case hubApi.ChoiceTargetKind.DONE:
         return 'done';
-      case 'graph':
+      case hubApi.ChoiceTargetKind.GRAPH:
         return target.targetGraph;
     }
   }

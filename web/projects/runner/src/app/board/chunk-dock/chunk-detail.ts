@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import {
-  NOT_PAUSABLE,
   ageMs,
   compactRef,
   errorMessage,
@@ -110,14 +109,10 @@ export class MachineDetail {
    * in facts the hub aggregate does not carry (mirrors the hub header's own `pause`). */
   protected readonly pause = computed<runnerApi.PauseView | null>(() => this.detailQuery.data()?.pause ?? null);
 
-  /** Whether an **unpaused** chunk may be paused — mirrors the hub `PauseService`'s
-   * refusal so the header never offers a control the server would answer with a 409.
-   * `undefined` (the read hasn't resolved yet) degrades to not-pausable, so no button
-   * flashes before the fresh state is known. */
-  protected readonly pausable = computed<boolean>(() => {
-    const s = this.detailQuery.data()?.status;
-    return s !== undefined && !NOT_PAUSABLE.has(s);
-  });
+  /** Whether an **unpaused** chunk may be paused — the fresh `ChunkDetail.pausable`, so the
+   * header never offers a control the server would answer with a 409. An unresolved read
+   * degrades to not-pausable, so no button flashes before the fresh state is known. */
+  protected readonly pausable = computed<boolean>(() => this.detailQuery.data()?.pausable ?? false);
 
   /** The header's Pause/Resume mutation — fired from its `pauseChunk`/`resumeChunk`
    * outputs, once the operator has already confirmed. */

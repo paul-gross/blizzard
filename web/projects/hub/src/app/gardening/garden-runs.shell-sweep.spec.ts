@@ -192,6 +192,7 @@ const PANEL_FINDING: FindingPanelVm = {
   findingClass: 'stale-docstring',
   locus: 'src/blizzard/hub/store/internal/a-rather-long-module-path/invoice_ledger_reconciliation.py:142',
   state: 'live',
+  exit: null,
   observedCount: 4,
   introducedRev: '4ba7ef06d9f1c2b3a4e5f60718293a4b5c6d7e8f',
   introducedAt: '2026-01-01T00:00:00Z',

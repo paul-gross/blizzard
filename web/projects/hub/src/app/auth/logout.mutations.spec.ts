@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { hubClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
-import { injectLogoutMutation } from './logout.mutation';
+import { injectLogoutMutation } from './logout.mutations';
 
 describe('injectLogoutMutation', () => {
   let stub: RequestClientStub;

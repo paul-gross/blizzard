@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { compactRef, KitAsyncState, type KitAsyncStateValue, KitSelectRow } from 'fleet';
 
 /** One row of the routine list — just enough to pick a routine. Selection keys on
- * `name` (unique per routine, `src/blizzard/hub/store/schema.py`), not `routineId`.
+ * `name` (unique per routine), not `routineId`.
  * `routineId` renders as its own compact ref. */
 export interface RoutineListRowVm {
   readonly routineId: string;

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
 
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
@@ -17,7 +18,18 @@ from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    PauseFact,
+    UsageTotal,
+    WorkRef,
+    holds_claim,
+    verb_legal_from,
+)
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
@@ -277,14 +289,20 @@ class ChunkView:
         graph_created_at = self.names.created_at(self.chunk.graph_id)
         artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
+        status = self.facts.status()
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
             graph_name=self.names.graph_name(self.chunk.graph_id),
             graph_created_at=iso_utc(graph_created_at) if graph_created_at is not None else None,
-            status=self.facts.status(),
+            status=status,
             current_node_id=node_id,
             current_node_name=node_name,
+            pausable=verb_legal_from(ChunkVerb.PAUSE, status),
+            completable=not is_completion_replay(self.facts),
+            deletable=status in PRE_CLAIM_STATUSES,
+            terminal=status in TERMINAL_STATUSES,
+            current_node_terminal=node_id == RESERVED_TERMINAL,
             latest_epoch=self.facts.latest_epoch(),
             work_refs=self.pointer_views(),
             default_model=list(self.chunk.default_model),
@@ -380,6 +398,7 @@ class ChunkView:
                 harness_id=u.harness_id,
                 harness_version=u.harness_version,
                 estimated_cost_usd=u.estimated_cost_usd,
+                cost_partial=u.cost_partial(),
             )
             for u in sorted(self.facts.usage, key=lambda u: u.recorded_at)
         ]
@@ -506,7 +525,7 @@ class ChunkHistoryView:
                 landed_node_name=self.names.node_name(m.to_graph_id, m.landed_node_id),
                 choice_name=m.choice_name,
                 model=m.model,
-                source=m.source.value if m.source is not None else None,
+                source=m.source,
                 epoch=m.epoch,
                 recorded_at=iso_utc(m.recorded_at),
             )

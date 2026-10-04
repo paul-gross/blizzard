@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.foundation.subscription_miss import SampleMissReason
+
 
 class RunnerCapability(BaseModel):
     """One harness binding this runner can execute — the id, its observed
@@ -96,7 +98,7 @@ class SubscriptionUsageView(BaseModel):
     #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample; ``None`` otherwise.
     condition: str | None = None
     #: The newest reported miss's own reason; ``None`` when there is none.
-    miss_reason: str | None = None
+    miss_reason: SampleMissReason | None = None
     #: The newest reported miss's own instant; ``None`` alongside ``miss_reason``.
     missed_at: str | None = None
 

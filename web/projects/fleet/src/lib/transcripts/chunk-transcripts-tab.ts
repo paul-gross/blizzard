@@ -45,6 +45,9 @@ export class ChunkTranscriptsTab {
   readonly currentNodeId = input<string | null>(null);
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
+  /** `ChunkDetail.current_node_terminal` — the current node is the graph's reserved
+   * terminal, so it names no in-flight step. */
+  readonly currentNodeTerminal = input(false);
 
   /** The `injectChunkTranscriptsQuery` read, resolved: the segment index once {@link indexState} is `'ready'`, `[]` otherwise. */
   readonly segments = input<readonly TranscriptSegmentIndexEntry[]>([]);
@@ -87,6 +90,7 @@ export class ChunkTranscriptsTab {
       nodeId: this.currentNodeId(),
       nodeName: this.currentNodeName(),
       epoch: this.latestEpoch(),
+      terminal: this.currentNodeTerminal(),
     }),
   );
 

@@ -31,6 +31,9 @@ const DETAIL: ChunkDetail = {
   chunk_id: 'ch_01dockwidth0000000000000000',
   graph_id: 'gr_1',
   status: 'ready',
+  pausable: true,
+  completable: true,
+  deletable: true,
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [],
@@ -66,7 +69,7 @@ async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture
   return { root, fixture };
 }
 
-describe('chunk detail header action row shell sweep (web:shell-sweep, issue #461)', () => {
+describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
   for (const width of WIDTHS) {
     it(`keeps every dock control within the header's own edge at width ${width}`, async () => {
       const { root } = await renderHeader(width);

@@ -23,6 +23,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
@@ -712,7 +713,7 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
 
     # A within-node retry mints under the same selected harness — it never re-runs selection.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    Attempt(ctx, lease).fail(reason="reaped", via="test")
+    Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="test")
 
     assert store.active_lease(lease.lease_id) is None  # closed by `fail`, then requeued
     retried = store.active_lease_for_chunk("ch_1")

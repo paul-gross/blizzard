@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.leases import ClosedLeaseActivity, LeaseActivity
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, ClosedLeaseActivity, LeaseActivity
 from blizzard.wire.lease import LeaseListResponse, LeaseView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -29,6 +29,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "harness_id": lease.harness_id,
         "pid": lease.pid,
         "created_at": iso_utc(lease.created_at),
+        "stale_after_seconds": int(HEARTBEAT_STALENESS_THRESHOLD.total_seconds()),
     }
     if isinstance(activity, ClosedLeaseActivity):
         return LeaseView(
