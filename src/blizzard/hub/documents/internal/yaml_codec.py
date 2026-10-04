@@ -18,6 +18,7 @@ from blizzard.hub.documents.errors import ConfigDecodeError
 
 _CORE_RESOLVERS: tuple[tuple[str, re.Pattern[str], list[str]], ...] = (
     ("tag:yaml.org,2002:null", re.compile(r"^(?:~|null|Null|NULL|)$"), ["~", "n", "N", ""]),
+    ("tag:yaml.org,2002:merge", re.compile(r"^(?:<<)$"), ["<"]),
     ("tag:yaml.org,2002:bool", re.compile(r"^(?:true|false)$"), list("tf")),
     ("tag:yaml.org,2002:int", re.compile(r"^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$"), list("-+0123456789")),
     (
@@ -38,6 +39,8 @@ class _StrictLoader(yaml.SafeLoader):
     def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[Hashable, Any]:  # type: ignore[override]
         seen: set[Hashable] = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                continue
             key = self.construct_object(key_node, deep=True)
             if isinstance(key, Hashable):
                 if key in seen:

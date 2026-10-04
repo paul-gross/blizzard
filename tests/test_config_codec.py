@@ -123,3 +123,49 @@ def test_registry_answers_none_for_what_no_binding_declares() -> None:
 
 def test_accepted_extensions_lists_every_declared_extension() -> None:
     assert accepted_extensions() == (".yaml", ".yml", ".json")
+
+
+def test_json_reads_tab_whitespace_and_surrogate_pair_escapes() -> None:
+    assert _JSON_CODEC is not None
+
+    decoded = _JSON_CODEC.decode(b'{\n\t"a": 1,\n\t"b": "\\ud83d\\ude00"\n}')
+
+    assert decoded == {"a": 1, "b": "\U0001f600"}
+    assert isinstance(decoded["b"], str)
+    decoded["b"].encode("utf-8")  # type: ignore[union-attr]
+
+
+def test_json_reports_syntax_errors_with_position_and_refuses_a_non_mapping_root() -> None:
+    assert _JSON_CODEC is not None
+    with pytest.raises(ConfigDecodeError) as raised:
+        _JSON_CODEC.decode(b'{\n "a": }')
+    assert (raised.value.line, raised.value.column) == (2, 7)
+    with pytest.raises(ConfigDecodeError, match="mapping"):
+        _JSON_CODEC.decode(b"[1]")
+
+
+def test_yaml_merge_keys_still_merge() -> None:
+    decoded = YAML_CODEC.decode(b"base: &x {p: 1, q: 2}\nc:\n  <<: *x\n  p: 3\n")
+
+    assert decoded["c"] == {"p": 3, "q": 2}
+
+
+def test_a_literal_merge_word_round_trips() -> None:
+    assert YAML_CODEC.decode(YAML_CODEC.encode({"k": "<<"})) == {"k": "<<"}
+
+
+def test_decode_error_message_and_problem_without_a_full_position() -> None:
+    assert str(ConfigDecodeError("bad")) == "bad"
+    assert str(ConfigDecodeError("bad", line=3)) == "bad"
+    assert str(ConfigDecodeError("bad", column=3)) == "bad"
+    error = ConfigDecodeError("bad", line=3, column=4)
+    assert (error.problem, str(error)) == ("bad", "bad (line 3, column 4)")
+
+
+def test_yaml_special_floats_decode_in_every_case_form() -> None:
+    decoded = YAML_CODEC.decode(b"a: .inf\nb: -.inf\nc: .INF\nd: +.Inf\ne: .nan\nf: .NaN\ng: .NAN\n")
+
+    assert decoded["a"] == float("inf")
+    assert decoded["b"] == float("-inf")
+    assert decoded["c"] == decoded["d"] == float("inf")
+    assert all(decoded[key] != decoded[key] for key in "efg")
