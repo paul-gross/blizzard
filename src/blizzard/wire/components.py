@@ -11,8 +11,10 @@ from pydantic import BaseModel
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.leases import LeaseClosureReason
+from blizzard.foundation.runner_event_types import RunnerEventType
 from blizzard.wire.finding import (
     AddFindingOp,
     FindingCandidate,
@@ -22,12 +24,12 @@ from blizzard.wire.finding import (
     ObservedFindingOp,
 )
 from blizzard.wire.sse import (
+    ActivityChunkChangeCause,
     ChunkChangeCause,
     ChunkChangedPayload,
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
-    HubEventType,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
     QueueChangedPayload,
@@ -44,7 +46,6 @@ from blizzard.wire.sse_runner import (
     FactChangedPayload,
     LeaseChangeCause,
     LeaseChangedPayload,
-    RunnerEventType,
     TakeoverChangeCause,
     TakeoverChangedPayload,
 )
@@ -78,6 +79,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
     enums={
         "HubEventType": HubEventType,
         "ChunkChangeCause": ChunkChangeCause,
+        "ActivityChunkChangeCause": ActivityChunkChangeCause,
         "RunnerChangeKind": RunnerChangeKind,
         "IdPrefix": IdPrefix,
         "FindingState": FindingState,

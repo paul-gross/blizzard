@@ -18,6 +18,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, narr
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionDelivery
@@ -379,7 +380,8 @@ class FactIngestService:
             # Advisory sibling to the sampled fact above — refresh-in-place per
             # (runner_id, slug), in its own table, never touching the sample row.
             identity = subscription_identity(fact)
-            if identity is None:
+            reason = SampleMissReason.recognized(fact.get("reason"))
+            if identity is None or reason is None:
                 return False, None
             slug, name = identity
             self._fleet.record_external_usage_miss(
@@ -387,7 +389,7 @@ class FactIngestService:
                 slug=slug,
                 name=name,
                 missed_at=fact.instant("missed_at", now),
-                reason=fact.string("reason"),
+                reason=reason,
                 at=now,
             )
             return True, None

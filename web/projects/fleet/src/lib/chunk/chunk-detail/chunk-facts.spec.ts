@@ -17,12 +17,13 @@ const ROUTED_DETAIL: ChunkDetail = {
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
-// A not_ready chunk — the one window the graph edit is open.
+// A not_ready chunk the wire calls graph-editable — the one window the graph edit is open.
 const NOT_READY_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',
   status: 'not_ready',
   current_node_id: null,
+  graph_editable: true,
   latest_epoch: null,
   work_refs: [],
   history: [],
@@ -157,7 +158,7 @@ describe('ChunkFacts', () => {
     expect(graphValue?.textContent).not.toContain('#');
   });
 
-  it('offers the graph edit input for a not_ready chunk', async () => {
+  it('offers the graph edit input when the wire calls the graph editable', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -168,22 +169,16 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
   });
 
-  it('offers the graph edit input for a ready, unclaimed chunk (issue #120)', async () => {
+  it('withholds the graph edit input when the wire calls the graph not editable', async () => {
+    // A chunk detached mid-graph derives `ready` again while standing on a node of its old
+    // graph: the hub refuses that re-pin and says so with `graph_editable: false`.
     const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready' });
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
-  });
-
-  it('withholds the graph edit input for a ready chunk that has already moved (issue #271)', async () => {
-    // A chunk detached mid-graph derives `ready` again while standing on a node of its
-    // old graph: `EditService` refuses that re-pin, so the row must not be offered.
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready', current_node_id: 'nd_build' });
+    fixture.componentRef.setInput('detail', {
+      ...NOT_READY_DETAIL,
+      status: 'ready',
+      current_node_id: 'nd_build',
+      graph_editable: false,
+    });
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

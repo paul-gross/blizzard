@@ -16,3 +16,12 @@ class SampleMissReason(StrEnum):
     CREDENTIAL_UNREADABLE = "credential_unreadable"
     ENDPOINT_UNREACHABLE = "endpoint_unreachable"
     RESPONSE_UNPARSEABLE = "response_unparseable"
+
+    @classmethod
+    def recognized(cls, value: object) -> SampleMissReason | None:
+        """The member ``value`` names, or None for an absent or unrecognized one — so a stray
+        stored value reads as no reason instead of failing a projection."""
+        try:
+            return cls(value)
+        except ValueError:
+            return None

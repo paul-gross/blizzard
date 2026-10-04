@@ -116,8 +116,9 @@ def test_response_property_type_changed_is_breaking() -> None:
     assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
-def _enum_narrowing_specs(*, request: bool, nullable: bool) -> tuple[dict, dict]:
-    base_prop: dict = {"anyOf": [{"type": "string"}, {"type": "null"}]} if nullable else {"type": "string"}
+def _enum_narrowing_specs(*, request: bool, nullable: bool, base_enum: list[str] | None = None) -> tuple[dict, dict]:
+    base_member: dict = {"type": "string"} if base_enum is None else {"type": "string", "enum": base_enum}
+    base_prop: dict = {"anyOf": [base_member, {"type": "null"}]} if nullable else base_member
     head_prop: dict = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
     op = (lambda s: _op(request_schema=s)) if request else (lambda s: _op(response_schema=s))
     color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
@@ -136,6 +137,19 @@ def _enum_narrowing_specs(*, request: bool, nullable: bool) -> tuple[dict, dict]
 def test_response_string_narrowed_to_enum_component_is_additive(nullable: bool) -> None:
     base, head = _enum_narrowing_specs(request=False, nullable=nullable)
     assert classify_spec_diff(base, head) == []
+
+
+@pytest.mark.parametrize("nullable", [False, True])
+def test_response_literal_moved_onto_same_enum_component_is_additive(nullable: bool) -> None:
+    base, head = _enum_narrowing_specs(request=False, nullable=nullable, base_enum=["red", "blue"])
+    assert classify_spec_diff(base, head) == []
+
+
+@pytest.mark.parametrize("nullable", [False, True])
+def test_response_literal_moved_onto_enum_component_gaining_a_value_is_breaking(nullable: bool) -> None:
+    # An older runner's closed-`Literal` parse raises on `blue`, whichever schema spells it.
+    base, head = _enum_narrowing_specs(request=False, nullable=nullable, base_enum=["red"])
+    assert any("response enum gained value(s) ['blue']" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
 def test_request_string_narrowed_to_enum_component_is_breaking() -> None:

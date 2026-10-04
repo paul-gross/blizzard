@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.wire.sse import (
     ChunkChangeCause,
     ChunkChangedPayload,
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
-    HubEventType,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
     QueueChangedPayload,
@@ -22,28 +22,8 @@ from blizzard.wire.sse import (
     RunnerChangeKind,
 )
 
-# SSE event-type names — the board's live vocabulary.
-CHUNK_CHANGED = HubEventType.CHUNK_CHANGED
-QUESTION_ASKED = HubEventType.QUESTION_ASKED
-QUESTION_ANSWERED = HubEventType.QUESTION_ANSWERED
-DECISION_OPENED = HubEventType.DECISION_OPENED
-DECISION_RESOLVED = HubEventType.DECISION_RESOLVED
-QUEUE_CHANGED = HubEventType.QUEUE_CHANGED
-RUNNER_CHANGED = HubEventType.RUNNER_CHANGED
-EVENT_LOGGED = HubEventType.EVENT_LOGGED
-
-#: Every event-type name the broker can publish. This tuple, not the bare
-#: constants above, is the broker's declared vocabulary.
-EVENT_TYPES: tuple[str, ...] = (
-    CHUNK_CHANGED,
-    QUESTION_ASKED,
-    QUESTION_ANSWERED,
-    DECISION_OPENED,
-    DECISION_RESOLVED,
-    QUEUE_CHANGED,
-    RUNNER_CHANGED,
-    EVENT_LOGGED,
-)
+#: Every event-type name the broker can publish — its declared vocabulary.
+EVENT_TYPES: tuple[str, ...] = tuple(HubEventType)
 
 
 class EventBroker(_EventBroker):
@@ -83,34 +63,34 @@ class EventBroker(_EventBroker):
             by=by,
             key=key,
         ).to_payload()
-        return self.publish(CHUNK_CHANGED, payload)
+        return self.publish(HubEventType.CHUNK_CHANGED, payload)
 
     def publish_question_asked(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.asked`` landed — the chunk parks ``waiting_on_human``."""
         payload = QuestionAskedPayload(chunk_id=chunk_id, question_id=question_id, key=key).to_payload()
-        return self.publish(QUESTION_ASKED, payload)
+        return self.publish(HubEventType.QUESTION_ASKED, payload)
 
     def publish_question_answered(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.answered`` landed — the chunk leaves ``waiting_on_human``."""
         payload = QuestionAnsweredPayload(chunk_id=chunk_id, question_id=question_id, key=key).to_payload()
-        return self.publish(QUESTION_ANSWERED, payload)
+        return self.publish(HubEventType.QUESTION_ANSWERED, payload)
 
     def publish_decision_opened(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A gate ``decision.submitted`` opened — a human choice is awaited."""
         payload = DecisionOpenedPayload(chunk_id=chunk_id, decision_id=decision_id, key=key).to_payload()
-        return self.publish(DECISION_OPENED, payload)
+        return self.publish(HubEventType.DECISION_OPENED, payload)
 
     def publish_decision_resolved(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A ``decision.resolved`` landed — the holding runner will advance the chunk."""
         payload = DecisionResolvedPayload(chunk_id=chunk_id, decision_id=decision_id, key=key).to_payload()
-        return self.publish(DECISION_RESOLVED, payload)
+        return self.publish(HubEventType.DECISION_RESOLVED, payload)
 
     def publish_queue_changed(self) -> int:
         """The ready queue's membership or order changed — the board re-peeks.
 
         Carries no ``key``: a reorder writes N rows with no per-row news, so
         there is no single durable fact this frame could name."""
-        return self.publish(QUEUE_CHANGED, QueueChangedPayload().to_payload())
+        return self.publish(HubEventType.QUEUE_CHANGED, QueueChangedPayload().to_payload())
 
     def publish_runner_changed(
         self,
@@ -127,7 +107,7 @@ class EventBroker(_EventBroker):
         ``key`` names the pause- or retirement-family fact's identity, absent on
         ``registered``/``heartbeat``, which have no fact table."""
         payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
-        return self.publish(RUNNER_CHANGED, payload)
+        return self.publish(HubEventType.RUNNER_CHANGED, payload)
 
     def publish_event_logged(
         self,
@@ -144,4 +124,4 @@ class EventBroker(_EventBroker):
         payload = EventLoggedPayload(
             severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=key
         ).to_payload()
-        return self.publish(EVENT_LOGGED, payload)
+        return self.publish(HubEventType.EVENT_LOGGED, payload)

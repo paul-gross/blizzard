@@ -217,6 +217,12 @@ def plan_edit(
     )
 
 
+def is_graph_editable(facts: ChunkFacts) -> bool:
+    """Whether :func:`plan_edit` admits a ``graph_id`` edit — the same two checks it makes: the
+    status admits :attr:`ChunkVerb.EDIT_GRAPH_PIN` and the chunk has never moved off its graph's start."""
+    return facts.admits(ChunkVerb.EDIT_GRAPH_PIN) and facts.current_node_id() is None
+
+
 class EditService:
     """Edit a chunk's graph, default model/effort, or intended-migration selection."""
 

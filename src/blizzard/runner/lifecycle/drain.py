@@ -10,12 +10,12 @@ from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound_buffer import BufferedFact
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.closure import ESCALATED, FAILED, PARKED, TRANSITIONED
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.held_chunk import HeldChunk, HeldChunkContext
 from blizzard.runner.lifecycle.model import (
@@ -162,9 +162,9 @@ class OutboundDrain:
             return True  # already parked on an earlier flush whose ack was lost
         if decision_move(response.outcome) is DecisionMove.FAIL:
             _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-            Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
+            Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="pull")
             return True
-        Attempt(self.ctx, lease).close(PARKED, self.ctx.clock.now())
+        Attempt(self.ctx, lease).close(LeaseClosureReason.PARKED, self.ctx.clock.now())
         _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
         return True
 
@@ -180,18 +180,20 @@ class OutboundDrain:
             # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
             # requeue or escalate. The chunk never advanced.
             _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-            Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
+            Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="pull")
             return
         if move is CompletionMove.ESCALATE_SPEND_CAP and breach is not None:
             cost, cap = breach
             # Closed escalated, so the escalation reads open here like any other, and the next node is
             # not entered, so no attempt there is spent.
             attempt = Attempt(self.ctx, lease)
-            attempt.close(ESCALATED, self.ctx.clock.now(), escalation_cause=EscalationCause.SPEND_CAP)
+            attempt.close(
+                LeaseClosureReason.ESCALATED, self.ctx.clock.now(), escalation_cause=EscalationCause.SPEND_CAP
+            )
             _CP_AFTER_CLOSURE.reached()
             attempt.escalate(cause=EscalationCause.SPEND_CAP, detail=spend_cap_detail(cost, cap))
             return
-        Attempt(self.ctx, lease).close(TRANSITIONED, self.ctx.clock.now())
+        Attempt(self.ctx, lease).close(LeaseClosureReason.TRANSITIONED, self.ctx.clock.now())
         _CP_AFTER_CLOSURE.reached()
         HeldChunk(self.ctx, lease.chunk_id).apply(
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)

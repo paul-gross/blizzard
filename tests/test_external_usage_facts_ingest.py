@@ -737,6 +737,75 @@ def test_a_missed_fact_with_an_invalid_slug_is_rejected_without_writing_a_row(
     assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [None, "", "credential_expired", 7],
+    ids=["missing-reason", "empty-reason", "unknown-reason", "non-string-reason"],
+)
+def test_a_missed_fact_with_an_unrecognized_reason_is_rejected_without_writing_a_row(
+    tmp_path: Path, reason: object
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    payload: dict[str, object] = {"slug": "openai", "missed_at": _T0.isoformat()}
+    if reason is not None:
+        payload["reason"] = reason
+
+    response = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [{"seq": 1, "kind": "external_subscription_usage.missed", "payload": payload}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rejected"] == [1]
+    assert _miss_row(hub.engine, "r1") is None
+
+
+def test_a_stored_unrecognized_miss_reason_reads_as_none_instead_of_breaking_runner_reads(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    response = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": _payload(
+                        slug="openai", sampled_at=hub.clock.now() - timedelta(minutes=2), utilization_pct=42.5
+                    ),
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": _miss_payload(
+                        slug="openai", missed_at=hub.clock.now() - timedelta(minutes=1), reason="endpoint_unreachable"
+                    ),
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    with hub.engine.begin() as conn:
+        conn.execute(
+            s.runner_external_usage_misses.update()
+            .where(s.runner_external_usage_misses.c.runner_id == "r1")
+            .values(reason="")
+        )
+
+    listing = hub.client.get("/api/runners")
+
+    assert listing.status_code == 200, listing.text
+    [subscription] = hub.client.get("/api/runners/r1").json()["subscriptions"]
+    assert subscription["miss_reason"] is None
+
+
 def test_posted_missed_fact_publishes_runner_changed_once_and_a_replay_publishes_nothing(tmp_path: Path) -> None:
     """The actual route, mirroring the sampled fact's own broadcast pin — a real-side
     `_publish_one` branch missing would leave this landing but never broadcasting."""

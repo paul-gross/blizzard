@@ -17,6 +17,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
@@ -34,7 +35,6 @@ from blizzard.hub.domain.work_items.closure import (
     CloseIntentDrainer,
     close_intent_is_due,
 )
-from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import (
@@ -58,7 +58,7 @@ def _event_log(hub: HubHarness) -> EventLogService:
 
 
 def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
-    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == EVENT_LOGGED]
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.EVENT_LOGGED]
 
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:

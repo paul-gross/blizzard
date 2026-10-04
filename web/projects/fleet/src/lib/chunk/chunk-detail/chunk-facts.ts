@@ -100,17 +100,12 @@ export class ChunkFacts {
     return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
-  /** Whether the chunk's graph may be edited — mirrors `EditService.edit`'s own two
-   * conditions (widened by #120, narrowed by #271) rather than the status
-   * half alone: unclaimed **and** never moved. A chunk detached mid-graph derives
-   * `ready` again while standing on a node of its old graph, and re-pinning it there is
-   * a migration's job, so the facts column withholds the row rather than offer an edit
-   * that always 409s (`blizzard-context:/domain/work/migration.md` `bzh:migration-not-transition`). */
-  protected readonly editable = computed<boolean>(() => {
-    const detail = this.detail();
-    const unclaimed = detail.status === 'not_ready' || detail.status === 'ready';
-    return unclaimed && !detail.current_node_id;
-  });
+  /** Whether the chunk's graph may be edited — the wire's `graph_editable`: unclaimed **and**
+   * never moved. A chunk detached mid-graph derives `ready` again while standing on a node of
+   * its old graph, and re-pinning it there is a migration's job, so the facts column withholds
+   * the row rather than offer an edit that always 409s
+   * (`blizzard-context:/domain/work/migration.md` `bzh:migration-not-transition`). */
+  protected readonly editable = computed<boolean>(() => this.detail().graph_editable ?? false);
 
   /** The chunk's standing dependency edges, each direction its own fact row. Placement
    * pinned by `chunk-facts-alignment.shell-sweep.spec.ts`'s "keeps a standing-edge row's

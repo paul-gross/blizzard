@@ -8,11 +8,11 @@ from datetime import datetime
 
 from sqlalchemy import func, or_, select
 
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases import IWriteLeaseSessionRepository, Lease, PoolHead
-from blizzard.runner.leases.closure import RELEASED
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import lease_select, row_to_lease
 from blizzard.runner.store.schema import (
@@ -37,7 +37,7 @@ def _after_newest_release(chunk_id: str):  # type: ignore[no-untyped-def]
     newest_release = (
         select(func.max(lease_closures.c.closed_at))
         .where(lease_closures.c.chunk_id == chunk_id)
-        .where(lease_closures.c.reason == RELEASED)
+        .where(lease_closures.c.reason == LeaseClosureReason.RELEASED)
         .scalar_subquery()
     )
     return or_(newest_release.is_(None), leases.c.created_at > newest_release)

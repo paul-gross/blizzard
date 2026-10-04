@@ -15,12 +15,12 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
-from blizzard.runner.leases.closure import REAPED
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.steps import Advance
 from blizzard.wire.chunk import ChunkStatusView
@@ -362,7 +362,7 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
     lease = store.active_lease("lease_blocked")
     assert lease is not None
 
-    Attempt(ctx, lease).fail(reason=REAPED, via="test")  # must not raise
+    Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="test")  # must not raise
 
     assert store.active_lease("lease_blocked") is None  # closed
     escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_blocked"]
@@ -412,7 +412,7 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
     assert lease is not None
     attempts_before = store.attempt_count("ch_blocked", "nd_build")
 
-    Attempt(ctx, lease).fail(reason=REAPED, via="test")  # must not raise
+    Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="test")  # must not raise
 
     assert store.active_lease("lease_blocked") is None  # closed, not reopened by a requeue
     assert harness.spawns == []  # never requeued under the very same unresolvable owner

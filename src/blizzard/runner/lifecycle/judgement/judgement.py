@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
@@ -17,7 +18,6 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.closure import FAILED
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantContext, DormantSession
@@ -298,7 +298,7 @@ class Judgement:
             lease_id=lease.lease_id,
             relaunch_count=elicitation.relaunch_count,
         )
-        Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
+        Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="advance")
 
     def _lost(self, elicitation: PendingElicitation) -> None:
         """The elicitation's process exited without writing anything usable. Relaunch —
@@ -484,7 +484,7 @@ class Judgement:
                 lease_id=lease.lease_id,
                 choice=verdict.choice,
             )
-            Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
+            Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="advance")
             return
         _CP_AFTER_JUDGE.reached()
         _CP_AFTER_USAGE.reached()
@@ -498,7 +498,7 @@ class Judgement:
                 lease_id=lease.lease_id,
                 choice=selected.name,
             )
-            Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
+            Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="advance")
             return
 
         # Harvest asset artifacts for any `produces` name no git commit covers, read from the

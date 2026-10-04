@@ -788,6 +788,11 @@
             ],
             "title": "Graph Created At"
           },
+          "graph_editable": {
+            "default": false,
+            "title": "Graph Editable",
+            "type": "boolean"
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"

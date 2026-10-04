@@ -5,10 +5,10 @@ reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful ser
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import ClassVar, Literal
 
 from blizzard.foundation.leases import LeaseClosureReason
+from blizzard.foundation.runner_event_types import RunnerEventType
 from blizzard.wire.sse import SseFramePayload
 
 #: What caused a ``lease-changed`` frame: ``created``/``spawned`` are not closures, ``dormant`` is
@@ -84,17 +84,6 @@ class FactChangedPayload(SseFramePayload):
     lease_id: str | None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "lease_id"})
-
-
-class RunnerEventType(StrEnum):
-    """Every runner SSE frame kind — the ``event:`` name a frame carries."""
-
-    LEASE_CHANGED = "lease-changed"
-    ASK_CHANGED = "ask-changed"
-    ESCALATION_CHANGED = "escalation-changed"
-    TAKEOVER_CHANGED = "takeover-changed"
-    ENVIRONMENT_CHANGED = "environment-changed"
-    FACT_CHANGED = "fact-changed"
 
 
 #: Mirrors ``blizzard.wire.sse.SSE_FRAME_MODELS``.

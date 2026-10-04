@@ -12,6 +12,7 @@ import pytest
 
 from blizzard.hub.domain.chunk.model import ActivityFeed, OperationalEvent
 from blizzard.hub.domain.runners.activity import ActivityEntry
+from blizzard.wire.sse import ActivityChunkChangeCause
 
 pytestmark = pytest.mark.unit
 
@@ -22,7 +23,9 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _chunk_changed(key: str, *, at: datetime, cause: str = "claimed", chunk_id: str = "ch_1") -> ActivityEntry:
+def _chunk_changed(
+    key: str, *, at: datetime, cause: ActivityChunkChangeCause = "claimed", chunk_id: str = "ch_1"
+) -> ActivityEntry:
     return ActivityEntry(type="chunk-changed", key=key, at=at, chunk_id=chunk_id, cause=cause)
 
 

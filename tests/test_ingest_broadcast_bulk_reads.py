@@ -12,10 +12,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
-from blizzard.hub.events.broker import CHUNK_CHANGED
-from blizzard.hub.events.broker import QUESTION_ASKED as QUESTION_ASKED_EVENT
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from tests.support import build_hub, capture_statements, count_queries, emitted_events, ingest
 
@@ -168,7 +167,7 @@ nodes:
 
 
 def _chunk_changed_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
-    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED]
 
 
 def _all_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
@@ -284,7 +283,13 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
 
     frames = _all_frames(hub, since=since)
     kinds = [f["event"] for f in frames]
-    assert kinds == [CHUNK_CHANGED, CHUNK_CHANGED, QUESTION_ASKED_EVENT, CHUNK_CHANGED, CHUNK_CHANGED]
+    assert kinds == [
+        HubEventType.CHUNK_CHANGED,
+        HubEventType.CHUNK_CHANGED,
+        HubEventType.QUESTION_ASKED,
+        HubEventType.CHUNK_CHANGED,
+        HubEventType.CHUNK_CHANGED,
+    ]
 
     lease_frame, escalate_q_frame, question_asked_frame, question_frame, escalate_m_frame = frames
 

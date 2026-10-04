@@ -7,6 +7,7 @@ from datetime import datetime
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import dto
+from blizzard.wire.sse import ActivityChunkChangeCause
 
 
 @dto
@@ -27,7 +28,7 @@ class ActivityEntry:
     node: str | None = None
     prev_node: str | None = None
     runner_id: str | None = None
-    cause: str | None = None
+    cause: ActivityChunkChangeCause | None = None
     graph_id: str | None = None
     # event-logged
     severity: EventLogSeverity | None = None

@@ -2,8 +2,8 @@ import { DestroyRef, EnvironmentInjector, Injectable, type Signal, inject, signa
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
+  ActivityChunkChangeCause,
   type ActivityView,
-  ChunkChangeCause,
   type ChunkChangedPayload,
   type DecisionOpenedPayload,
   type DecisionResolvedPayload,
@@ -128,31 +128,10 @@ const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>([
   RunnerChangeKind.EXTERNAL_USAGE,
 ]);
 
-/** The causes the hub's activity read backfills from its chunk fact sources — every
- * {@link ChunkChangeCause} but `edited`. A chunk-scoped telemetry fact can repeat the
- * last transition's status and key; neither makes that fact another activity occurrence. */
-const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set<ChunkChangeCause>([
-  ChunkChangeCause.MINTED,
-  ChunkChangeCause.PROMOTED,
-  ChunkChangeCause.GROUPED,
-  ChunkChangeCause.CLAIMED,
-  ChunkChangeCause.NODE_COMPLETED,
-  ChunkChangeCause.HUB_ADVANCED,
-  ChunkChangeCause.MIGRATED,
-  ChunkChangeCause.RESTARTED,
-  ChunkChangeCause.DECISION_SUBMITTED,
-  ChunkChangeCause.DECISION_RESOLVED,
-  ChunkChangeCause.QUESTION_ASKED,
-  ChunkChangeCause.QUESTION_ANSWERED,
-  ChunkChangeCause.ESCALATED,
-  ChunkChangeCause.REQUEUED,
-  ChunkChangeCause.DETACHED,
-  ChunkChangeCause.PAUSED,
-  ChunkChangeCause.RESUMED,
-  ChunkChangeCause.STOPPED,
-  ChunkChangeCause.COMPLETED,
-  ChunkChangeCause.DELETED,
-]);
+/** The causes the hub's activity read backfills from its chunk fact sources — the wire's own
+ * {@link ActivityChunkChangeCause}. A chunk-scoped telemetry fact can repeat the last
+ * transition's status and key; neither makes that fact another activity occurrence. */
+const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set<string>(Object.values(ActivityChunkChangeCause));
 
 /** Whether a frame belongs in the Activity feed — see {@link NO_DURABLE_FACT_TYPES} and
  * {@link MUTED_RUNNER_KINDS}. */

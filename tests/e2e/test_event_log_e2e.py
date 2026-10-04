@@ -16,10 +16,11 @@ from typing import TYPE_CHECKING
 import httpx
 import pytest
 
+from blizzard.foundation.hub_event_types import HubEventType
+
 if TYPE_CHECKING:
     from playwright.sync_api import Page, ViewportSize
 
-from blizzard.hub.events.broker import EVENT_LOGGED
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -153,7 +154,7 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
         assert lost[0]["detail"]["via"] in {"advance", "reap"}
 
         # (b) ...and it fanned out on the SSE spine as an event-logged frame.
-        assert EVENT_LOGGED in _sse_event_types(hub)
+        assert HubEventType.EVENT_LOGGED in _sse_event_types(hub)
 
 
 def _reset_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Path, Path]:

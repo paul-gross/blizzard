@@ -4,6 +4,31 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export const ActivityChunkChangeCause = {
+    MINTED: 'minted',
+    PROMOTED: 'promoted',
+    GROUPED: 'grouped',
+    CLAIMED: 'claimed',
+    NODE_COMPLETED: 'node-completed',
+    MIGRATED: 'migrated',
+    DECISION_SUBMITTED: 'decision-submitted',
+    DECISION_RESOLVED: 'decision-resolved',
+    QUESTION_ASKED: 'question-asked',
+    QUESTION_ANSWERED: 'question-answered',
+    ESCALATED: 'escalated',
+    REQUEUED: 'requeued',
+    RESTARTED: 'restarted',
+    DETACHED: 'detached',
+    PAUSED: 'paused',
+    RESUMED: 'resumed',
+    STOPPED: 'stopped',
+    COMPLETED: 'completed',
+    HUB_ADVANCED: 'hub-advanced',
+    DELETED: 'deleted'
+} as const;
+
+export type ActivityChunkChangeCause = typeof ActivityChunkChangeCause[keyof typeof ActivityChunkChangeCause];
+
 /**
  * ActivityResponse
  *
@@ -1148,6 +1173,10 @@ export type ChunkDetail = {
      * Graph Created At
      */
     graph_created_at?: string | null;
+    /**
+     * Graph Editable
+     */
+    graph_editable?: boolean;
     /**
      * Graph Id
      */
@@ -7084,6 +7113,10 @@ export type UserIdentityView = {
  * One ``users`` row — the listing/assignment response shape.
  */
 export type UserView = {
+    /**
+     * Assignable Roles
+     */
+    assignable_roles?: Array<Role>;
     /**
      * Created At
      */

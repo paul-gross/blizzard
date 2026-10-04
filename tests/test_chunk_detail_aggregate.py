@@ -153,7 +153,7 @@ def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) ->
 
 
 def _actions(detail: dict[str, object]) -> dict[str, object]:
-    keys = ("pausable", "completable", "deletable", "terminal", "current_node_terminal")
+    keys = ("pausable", "completable", "deletable", "graph_editable", "terminal", "current_node_terminal")
     return {k: detail[k] for k in keys}
 
 
@@ -168,6 +168,7 @@ def test_detail_classifies_an_unclaimed_chunk_as_deletable_and_live(tmp_path: Pa
         "pausable": True,
         "completable": True,
         "deletable": True,
+        "graph_editable": True,
         "terminal": False,
         "current_node_terminal": False,
     }
@@ -187,6 +188,7 @@ def test_detail_classifies_a_claimed_chunk_as_no_longer_deletable(tmp_path: Path
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
 
     assert detail["deletable"] is False
+    assert detail["graph_editable"] is False
     assert (detail["pausable"], detail["completable"], detail["terminal"]) == (True, True, False)
 
 
@@ -204,6 +206,7 @@ def test_detail_classifies_an_operator_completed_chunk_as_terminal(tmp_path: Pat
         "pausable": False,
         "completable": False,
         "deletable": False,
+        "graph_editable": False,
         "terminal": True,
         "current_node_terminal": False,
     }

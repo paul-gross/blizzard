@@ -39,9 +39,7 @@ def _subscription_list(config: RunnerConfig, usage: IReadUsageRepository) -> Sub
                 provider=declaration.provider,
                 sampled_at=iso_utc(attempt.sampled_at) if attempt is not None else None,
                 ok=attempt.ok if attempt is not None else None,
-                miss_reason=SampleMissReason(attempt.miss_reason)
-                if attempt is not None and attempt.miss_reason is not None
-                else None,
+                miss_reason=SampleMissReason.recognized(attempt.miss_reason) if attempt is not None else None,
                 renewal=attempt.renewal if attempt is not None else None,
             )
         )

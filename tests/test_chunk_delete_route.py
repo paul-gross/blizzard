@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
+from blizzard.foundation.hub_event_types import HubEventType
 from tests.support import build_hub, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -113,8 +113,8 @@ def test_delete_publishes_both_chunk_changed_and_queue_changed(tmp_path: Path) -
     assert resp.status_code == 202, resp.text
     events = emitted_events(hub, since=since)
     types = [e["event"] for e in events]
-    assert CHUNK_CHANGED in types
-    assert QUEUE_CHANGED in types
+    assert HubEventType.CHUNK_CHANGED in types
+    assert HubEventType.QUEUE_CHANGED in types
 
 
 def test_delete_chunk_changed_frame_carries_cause_deleted_and_by_no_richer_shape(tmp_path: Path) -> None:
@@ -128,7 +128,9 @@ def test_delete_chunk_changed_frame_carries_cause_deleted_and_by_no_richer_shape
     resp = _delete_chunk(hub, chunk_id, by="alice")
     assert resp.status_code == 202, resp.text
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED
+    ]
     assert len(frames) == 1
     frame = frames[0]
     assert frame["chunk_id"] == chunk_id
@@ -151,7 +153,9 @@ def test_delete_chunk_changed_frame_carries_the_chunks_pre_delete_status(tmp_pat
     resp = _delete_chunk(hub, ready_id)
     assert resp.status_code == 202, resp.text
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED
+    ]
     assert len(frames) == 1
     assert frames[0]["status"] == "ready"
 
@@ -161,7 +165,9 @@ def test_delete_chunk_changed_frame_carries_the_chunks_pre_delete_status(tmp_pat
     resp = _delete_chunk(hub, not_ready_id)
     assert resp.status_code == 202, resp.text
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED
+    ]
     assert len(frames) == 1
     assert frames[0]["status"] == "not_ready"
 
@@ -196,7 +202,9 @@ def test_every_other_mutating_chunk_route_frame_is_unchanged_by_the_widened_degr
     resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
     assert resp.status_code == 202, resp.text
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED
+    ]
     assert len(frames) == 1
     frame = frames[0]
     assert frame["cause"] == "stopped"

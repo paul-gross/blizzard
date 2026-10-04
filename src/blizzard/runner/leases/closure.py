@@ -1,7 +1,8 @@
-"""The closure-reason vocabulary (``lease_closures.reason``) — the single home every reader and writer names.
+"""The store-only closure reasons (``lease_closures.reason``) and the reason sets derived from them.
 
-Seven reasons are published; the two mint reasons are store-only, recorded on a zero-budget lease minted only
-to escalate, and read as ``escalated`` wherever an escalation is derived."""
+The published reasons are :class:`blizzard.foundation.leases.LeaseClosureReason`. The two mint reasons here are
+store-only, recorded on a zero-budget lease minted only to escalate, and read as ``escalated`` wherever an escalation
+is derived."""
 
 from __future__ import annotations
 
@@ -11,14 +12,6 @@ from types import MappingProxyType
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.leases import LeaseClosureReason
 
-TRANSITIONED = LeaseClosureReason.TRANSITIONED
-REAPED = LeaseClosureReason.REAPED
-FAILED = LeaseClosureReason.FAILED
-ESCALATED = LeaseClosureReason.ESCALATED
-PARKED = LeaseClosureReason.PARKED
-RELEASED = LeaseClosureReason.RELEASED
-PREEMPTED = LeaseClosureReason.PREEMPTED
-
 #: The owner-unresolvable escalation mint's own closure reason.
 ESCALATION_MINT = "owner-unresolvable-mint"
 #: The no-acceptable-harness escalation mint's own closure reason.
@@ -27,7 +20,7 @@ NO_ACCEPTABLE_HARNESS_MINT = "no-acceptable-harness-mint"
 PUBLISHED_REASONS: frozenset[str] = frozenset(LeaseClosureReason)
 MINT_REASONS: frozenset[str] = frozenset({ESCALATION_MINT, NO_ACCEPTABLE_HARNESS_MINT})
 #: Every reason an open escalation derives from: the ordinary one plus both mints.
-ESCALATION_REASONS: frozenset[str] = frozenset({ESCALATED, *MINT_REASONS})
+ESCALATION_REASONS: frozenset[str] = frozenset({LeaseClosureReason.ESCALATED, *MINT_REASONS})
 
 #: The cause each mint reason implies — a mint closure is its own explanation.
 _MINT_CAUSES: Mapping[str, str] = MappingProxyType(
@@ -45,4 +38,4 @@ def cause_of(reason: str, recorded: str | None = None) -> str | None:
     minted = _MINT_CAUSES.get(reason)
     if minted is not None:
         return minted
-    return recorded if reason == ESCALATED else None
+    return recorded if reason == LeaseClosureReason.ESCALATED else None

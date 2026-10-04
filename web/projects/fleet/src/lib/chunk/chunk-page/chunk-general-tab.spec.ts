@@ -11,6 +11,7 @@ const DETAIL: ChunkDetail = {
   graph_id: 'gr_1',
   status: 'not_ready',
   current_node_id: null,
+  graph_editable: true,
   latest_epoch: null,
   work_refs: [{ source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' }],
   history: [],

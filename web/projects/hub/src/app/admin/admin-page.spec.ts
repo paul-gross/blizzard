@@ -35,8 +35,15 @@ const USERS = [
     role: 'guest',
     created_at: '2026-07-21T00:00:00Z',
     identities: [],
+    assignable_roles: ['pending', 'guest', 'contributor'],
   },
 ];
+
+// The same rows as a superuser actor's listing renders them.
+const USERS_FOR_SUPERUSER = USERS.map((user) => ({
+  ...user,
+  assignable_roles: ['pending', 'guest', 'contributor', 'admin'],
+}));
 
 describe('AdminPage', () => {
   let stub: RequestClientStub;
@@ -75,8 +82,8 @@ describe('AdminPage', () => {
     expect(el.querySelector('[data-testid="admin-page-error"]')).toBeTruthy();
   });
 
-  it("passes the resolved identity's superuser tier through to the table (admin option enabled)", async () => {
-    const fixture = await mount(ME_SUPERUSER, USERS);
+  it("enables the roles the hub's listing offers the actor on each row (admin option enabled)", async () => {
+    const fixture = await mount(ME_SUPERUSER, USERS_FOR_SUPERUSER);
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
@@ -92,7 +99,7 @@ describe('AdminPage', () => {
     expect(ownRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('(you)');
   });
 
-  it('surfaces a refused role change instead of appearing to succeed (issue #209)', async () => {
+  it('surfaces a refused role change instead of appearing to succeed', async () => {
     const fixture = await mount(ME_ADMIN, USERS);
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) =>

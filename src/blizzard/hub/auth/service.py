@@ -47,6 +47,26 @@ class RoleAssignmentRefused(Exception):
 #: Every role the role-assignment API may grant — ``superuser`` is bootstrap-only.
 ASSIGNABLE_ROLES: tuple[Role, ...] = tuple(r for r in Role if r is not Role.SUPERUSER)
 
+
+def role_assignment_refusal(*, actor: ResolvedIdentity, subject: User, to_role: Role) -> str | None:
+    """Why the role-change rules refuse ``actor`` moving ``subject`` to ``to_role``, or None when
+    they admit it: changing your own role, touching ``superuser`` (bootstrap-only), and a
+    non-``superuser`` actor granting or revoking ``admin`` are refused."""
+    if actor.user_id == subject.user_id:
+        return "cannot change your own role"
+    if subject.role is Role.SUPERUSER or to_role not in ASSIGNABLE_ROLES:
+        return "superuser is not assignable through the API (bootstrap-only)"
+    touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
+    if touches_admin and actor.role is not Role.SUPERUSER:
+        return "only superuser may grant or revoke admin"
+    return None
+
+
+def assignable_roles(*, actor: ResolvedIdentity, subject: User) -> list[Role]:
+    """Every role the role-change rules let ``actor`` assign ``subject`` — empty when they admit no change."""
+    return [r for r in ASSIGNABLE_ROLES if role_assignment_refusal(actor=actor, subject=subject, to_role=r) is None]
+
+
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
 #: generous working-day window.
 IDLE_TTL = timedelta(hours=24)
@@ -320,13 +340,9 @@ class AuthService:
         Raises :class:`RoleAssignmentRefused` when the actor is the subject, when either
         role is ``superuser`` (bootstrap-only), or when a non-``superuser`` actor grants or
         revokes ``admin``. A no-op request returns ``subject`` unchanged, recording no fact."""
-        if actor.user_id == subject.user_id:
-            raise RoleAssignmentRefused("cannot change your own role")
-        if subject.role is Role.SUPERUSER or to_role not in ASSIGNABLE_ROLES:
-            raise RoleAssignmentRefused("superuser is not assignable through the API (bootstrap-only)")
-        touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
-        if touches_admin and actor.role is not Role.SUPERUSER:
-            raise RoleAssignmentRefused("only superuser may grant or revoke admin")
+        refusal = role_assignment_refusal(actor=actor, subject=subject, to_role=to_role)
+        if refusal is not None:
+            raise RoleAssignmentRefused(refusal)
         if subject.role is to_role:
             return subject
         return self._apply_role_change(subject, to_role, actor_username=actor.username)

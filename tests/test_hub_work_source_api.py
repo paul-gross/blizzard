@@ -15,9 +15,9 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
-from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
@@ -251,7 +251,7 @@ def test_create_publishes_a_minted_chunk_changed_frame(tmp_path: Path) -> None:
 
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == CHUNK_CHANGED]
+    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == HubEventType.CHUNK_CHANGED]
     assert len(frames) == 1
     assert frames[0]["chunk_id"] == created["chunk_id"]
     assert frames[0]["cause"] == "minted"
@@ -266,7 +266,7 @@ def test_create_also_publishes_queue_changed_since_the_mint_joins_the_backlog_li
 
     hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
 
-    assert [e["event"] for e in emitted_events(hub)] == [CHUNK_CHANGED, QUEUE_CHANGED]
+    assert [e["event"] for e in emitted_events(hub)] == [HubEventType.CHUNK_CHANGED, HubEventType.QUEUE_CHANGED]
 
 
 def test_a_second_post_chunks_against_the_minted_pointer_is_409(tmp_path: Path) -> None:
@@ -425,9 +425,9 @@ def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> 
 
     events = emitted_events(hub, since=since)
     types = [e["event"] for e in events]
-    assert CHUNK_CHANGED in types
-    assert QUEUE_CHANGED in types
-    frames = [json.loads(e["data"]) for e in events if e["event"] == CHUNK_CHANGED]
+    assert HubEventType.CHUNK_CHANGED in types
+    assert HubEventType.QUEUE_CHANGED in types
+    frames = [json.loads(e["data"]) for e in events if e["event"] == HubEventType.CHUNK_CHANGED]
     assert len(frames) == 1
     frame = frames[0]
     assert frame["chunk_id"] == chunk_id

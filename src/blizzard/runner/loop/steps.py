@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
@@ -23,7 +24,6 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.leases import Lease, Liveness, as_utc
-from blizzard.runner.leases.closure import REAPED
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
@@ -195,12 +195,12 @@ class Reap(Step):
                     # failing the attempt, so REAP doesn't leave the generation ambiguously open.
                     ctx.stores.liveness.record_identity_failed(lease.lease_id, at=now)
                 _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
-                Attempt(ctx, lease).fail(reason=REAPED, via="reap")
+                Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="reap")
             elif move is ReapMove.DEFER:
                 deferred += 1
             elif move is ReapMove.REAP_STALLED:
                 _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
-                Attempt(ctx, lease).fail(reason=REAPED, via="reap")
+                Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="reap")
         if deferred:
             _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
         _CP_REAP_AFTER.reached()

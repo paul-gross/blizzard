@@ -6,7 +6,7 @@ component tier (``tests/test_edit_claim_race.py``), not here."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -41,6 +41,7 @@ from blizzard.hub.domain.operations.edit import (
     EditService,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
+    is_graph_editable,
 )
 from tests.support import make_graph
 
@@ -735,3 +736,20 @@ def test_edit_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> None:
         service.edit(_CHUNK, ChunkEdit(default_effort="high"))
 
     assert repo.defaults_set == []
+
+
+@pytest.mark.parametrize(
+    ("facts_factory", "editable"),
+    [
+        (_not_ready_facts, True),
+        (_ready_facts, True),
+        (_detached_after_running_facts, False),
+        (_running_facts, False),
+        (_done_facts, False),
+    ],
+    ids=["not-ready", "ready", "ready-but-moved", "claimed", "done"],
+)
+def test_is_graph_editable_matches_the_graph_edit_admission(
+    facts_factory: Callable[[], ChunkFacts], editable: bool
+) -> None:
+    assert is_graph_editable(facts_factory()) is editable

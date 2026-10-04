@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.events.broker import CHUNK_CHANGED, EVENT_LOGGED, QUEUE_CHANGED, RUNNER_CHANGED
+from blizzard.foundation.hub_event_types import HubEventType
 from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
@@ -53,7 +53,7 @@ nodes:
 
 
 def _chunk_changed_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
-    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED]
 
 
 def _frames_of(hub, event_type: str, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
@@ -481,7 +481,7 @@ def test_event_logged_carries_event_log_key(tmp_path: Path) -> None:
         },
     )
     assert resp.status_code == 200, resp.text
-    frames = _frames_of(hub, EVENT_LOGGED, since=before)
+    frames = _frames_of(hub, HubEventType.EVENT_LOGGED, since=before)
     assert len(frames) == 1
     assert frames[0]["key"].startswith("event_log:")
 
@@ -492,7 +492,7 @@ def test_registered_and_heartbeat_runner_changed_carry_no_key(tmp_path: Path) ->
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
     assert hub.client.post("/api/fleet/runners/r1/heartbeats").status_code == 204
-    frames = _frames_of(hub, RUNNER_CHANGED)
+    frames = _frames_of(hub, HubEventType.RUNNER_CHANGED)
     assert [f["kind"] for f in frames] == ["registered", "heartbeat"]
     for frame in frames:
         assert "key" not in frame
@@ -507,7 +507,7 @@ def test_queue_changed_frame_carries_no_key(tmp_path: Path) -> None:
     before = _latest_event_id(hub)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert resp.status_code == 202, resp.text
-    frames = _frames_of(hub, QUEUE_CHANGED, since=before)
+    frames = _frames_of(hub, HubEventType.QUEUE_CHANGED, since=before)
     assert len(frames) == 1
     assert "key" not in frames[0]
 
