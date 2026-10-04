@@ -7,6 +7,7 @@ import { GraphDetailHeader } from './graph-detail-header';
 import { GraphDetailLifecycle } from './graph-detail-lifecycle';
 import { GraphDiagramView } from './graph-diagram-view';
 import { type GraphLifecycleVars, injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
+import { entryNodeName, graphOverrideRetired } from './graph-detail.model';
 import { GraphNodeTable } from './graph-node-table';
 import { GraphSessionTable } from './graph-session-table';
 import { injectHubGraphQuery } from './graphs.query';
@@ -110,10 +111,9 @@ export class GraphDetail {
    * mutation's own pending variables, never a cache write, so a rejected retire/enable
    * reverts to the real `graph().retired` for free the instant it settles.
    */
-  protected readonly overrideRetired = computed<boolean | null>(() => {
-    const graphId = this.graphId();
-    return this.pendingGraphLifecycles().find((vars) => vars.graphId === graphId)?.retired ?? null;
-  });
+  protected readonly overrideRetired = computed<boolean | null>(() =>
+    graphOverrideRetired(this.graphId(), this.pendingGraphLifecycles()),
+  );
 
   /** The lifecycle badge's rendered value — {@link overrideRetired} while it names
    * one for the given graph, else the real `graph.retired` (`bzh:frontend-pending-
@@ -129,11 +129,7 @@ export class GraphDetail {
    * #144, which is what makes the session table render nothing at all there. */
   protected readonly sessions = computed<readonly GraphSessionView[]>(() => this.graph()?.sessions ?? []);
 
-  protected readonly entryNodeName = computed<string>(() => {
-    const g = this.graph();
-    if (!g) return '';
-    return this.nodes().find((n) => n.node_id === g.entry_node_id)?.name ?? g.entry_node_id;
-  });
+  protected readonly entryNodeName = computed<string>(() => entryNodeName(this.graph(), this.nodes()));
 
   /** Fires the retire mutation once {@link GraphDetailHeader} has already confirmed. */
   protected onRetire(graphId: string): void {

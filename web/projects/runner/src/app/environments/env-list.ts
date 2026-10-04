@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState } from 'fleet';
+import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type EnvRow, EnvListView } from './env-list-view';
+import { envRows } from './env-list.model';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
@@ -33,23 +34,5 @@ export class EnvList {
    * sitting frozen at whatever age the last read carried. */
   private readonly now = injectNowSignal(1000);
 
-  /**
-   * `42m` since the binding fact — browser-clock decoration only
-   * (`bzh:utc-instants` via `ageMs`): a skew-broken timestamp renders `—`, and an
-   * unheld environment (no `held_since`) renders blank rather than `—`.
-   */
-  private heldFor(heldSince: string | null | undefined): string {
-    if (heldSince == null) return '';
-    const age = ageMs(heldSince, this.now());
-    return age === null ? '—' : formatHeldFor(age);
-  }
-
-  protected readonly rows = computed<readonly EnvRow[]>(() =>
-    this.envs().map((env) => ({
-      environmentId: env.environment_id,
-      isHeld: env.chunk_id != null,
-      chunkRef: env.chunk_id == null ? '' : compactRef(env.chunk_id),
-      heldFor: this.heldFor(env.held_since),
-    })),
-  );
+  protected readonly rows = computed<readonly EnvRow[]>(() => envRows(this.envs(), this.now()));
 }

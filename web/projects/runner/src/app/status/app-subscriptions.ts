@@ -1,16 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
+import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type SubscriptionRow, LocalSubscriptionsView } from './app-subscriptions-view';
+import { subscriptionRows } from './app-subscriptions.model';
 import { injectRunnerDashboardQuery } from '../core/status.query';
-
-/** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
-const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, string>> = {
-  credential_lapsed: 'credential lapsed: log in again',
-  credential_unreadable: 'credential unreadable',
-  endpoint_unreachable: 'endpoint unreachable',
-  response_unparseable: 'response unparseable',
-};
 
 /**
  * The subscriptions panel **container** — every declared provider subscription's own
@@ -44,28 +37,7 @@ export class LocalSubscriptions {
    * sitting frozen at whatever age the last read carried. */
   private readonly now = injectNowSignal(1000);
 
-  private sampledAgo(sampledAt: string | null): string {
-    const age = ageMs(sampledAt, this.now());
-    return age === null ? 'never' : `${formatAge(age)} ago`;
-  }
-
-  /** "ok", "never sampled", or "miss: <operator text>" — the operator-facing distinguishable
-   * condition, one string per wire `SampleMissReason`. */
-  private conditionLabel(ok: boolean | null, missReason: runnerApi.SampleMissReason | null): string {
-    if (ok === null) return 'never sampled';
-    if (ok) return 'ok';
-    return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT[missReason]}`;
-  }
-
   protected readonly rows = computed<readonly SubscriptionRow[]>(() =>
-    this.subscriptions().map((sub) => ({
-      slug: sub.slug,
-      name: sub.name,
-      provider: sub.provider,
-      conditionLabel: this.conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
-      sampledAgo: this.sampledAgo(sub.sampled_at ?? null),
-      renewalLabel: sub.renewal ?? null,
-      ok: sub.ok ?? null,
-    })),
+    subscriptionRows(this.subscriptions(), this.now()),
   );
 }

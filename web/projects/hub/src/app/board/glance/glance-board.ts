@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { FleetLiveUpdates, STATUS_TONE, ageMs, asyncState, asyncStateOf, compactRef, injectNowSignal, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { FleetLiveUpdates, asyncState, asyncStateOf, injectNowSignal, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectHubChunkCountsQuery } from '../chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../fleet-spend/fleet-spend.query';
@@ -10,6 +10,7 @@ import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../runners/runners.query';
 
 import { startOfLocalDayIso } from '../../core/local-day';
+import { doneTodayRows, doneTodayTotal, glanceVitals, inMotionRows, liveRunners, needsYouRows, terminalTotal, upNextRows } from './glance-board.model';
 import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNextRow, type Vitals } from './glance-view';
 
 /**
@@ -68,7 +69,7 @@ export class GlanceBoard {
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);
   private readonly decisions = computed(() => this.decisionsQuery.data() ?? []);
-  private readonly runners = computed(() => (this.runnersQuery.data() ?? []).filter((runner) => !runner.retired));
+  private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
   private readonly now = injectNowSignal(60_000);
 
   /**
@@ -78,108 +79,25 @@ export class GlanceBoard {
    * list (the mock's "Needs you"), deduped by chunk id so a parked chunk with an
    * open ask or gate shows once, not twice.
    */
-  protected readonly needsYou = computed<readonly AttentionRow[]>(() => {
-    const rows = new Map<string, AttentionRow>();
-    for (const question of this.questions()) {
-      rows.set(question.chunk_id, {
-        chunkId: question.chunk_id,
-        shortId: compactRef(question.chunk_id),
-        runnerId: question.runner_id,
-        tone: 'waiting',
-        pillLabel: 'ask',
-        sub: question.question,
-      });
-    }
-    const runnerOf = new Map(this.chunks().map((chunk) => [chunk.chunk_id, chunk.runner_id ?? null]));
-    for (const decision of this.decisions()) {
-      if (rows.has(decision.chunk_id)) continue;
-      rows.set(decision.chunk_id, {
-        chunkId: decision.chunk_id,
-        shortId: compactRef(decision.chunk_id),
-        runnerId: runnerOf.get(decision.chunk_id) ?? null,
-        tone: 'waiting',
-        pillLabel: 'gate',
-        sub: decision.node_name,
-      });
-    }
-    for (const chunk of this.chunks()) {
-      if (rows.has(chunk.chunk_id)) continue;
-      const tone = STATUS_TONE[chunk.status];
-      if (tone !== 'needs' && tone !== 'waiting') continue;
-      rows.set(chunk.chunk_id, {
-        chunkId: chunk.chunk_id,
-        shortId: compactRef(chunk.chunk_id),
-        runnerId: chunk.runner_id ?? null,
-        tone,
-        pillLabel: tone === 'needs' ? 'needs human' : 'waiting',
-        sub: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-      });
-    }
-    return [...rows.values()];
-  });
+  protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks()));
 
   /** Chunks whose tone is `running` (`STATUS_TONE`'s running lane: `running` +
    * `delivering`) — the mock's "In motion". */
-  protected readonly inMotion = computed<readonly MotionRow[]>(() =>
-    this.chunks()
-      .filter((chunk) => STATUS_TONE[chunk.status] === 'running')
-      .map((chunk) => ({
-        chunkId: chunk.chunk_id,
-        shortId: compactRef(chunk.chunk_id),
-        runnerId: chunk.runner_id ?? null,
-        node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-        pillLabel: chunk.status === 'delivering' ? ('deliver' as const) : ('run' as const),
-        costUsd: chunk.cost?.cost_usd ?? 0,
-        costPartial: chunk.cost?.cost_partial ?? false,
-        estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
-      })),
-  );
+  protected readonly inMotion = computed<readonly MotionRow[]>(() => inMotionRows(this.chunks()));
 
   /** READY chunks in the hub's dispatch order. The queue is the ordering fact;
    * the chunk list confirms each entry is still currently ready. */
-  protected readonly upNext = computed<readonly UpNextRow[]>(() => {
-    const chunksById = new Map(this.chunks().map((chunk) => [chunk.chunk_id, chunk]));
-    return (this.queueQuery.data() ?? [])
-      .map((entry) => chunksById.get(entry.chunk_id))
-      .filter((chunk): chunk is ChunkSummary => chunk?.status === 'ready')
-      .map((chunk) => ({
-        chunkId: chunk.chunk_id,
-        shortId: compactRef(chunk.chunk_id),
-        node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-      }));
-  });
+  protected readonly upNext = computed<readonly UpNextRow[]>(() => upNextRows(this.queueQuery.data() ?? [], this.chunks()));
 
   /** Terminal chunks completed in the rolling previous 24 hours, newest first.
    * `ageMs` rejects missing, malformed, and meaningfully future instants; the
    * injected clock makes the cutoff advance without a fresh fleet-list read. */
-  protected readonly doneToday = computed<readonly DoneRow[]>(() =>
-    this.chunks()
-      .flatMap((chunk) => {
-        const age = ageMs(chunk.completed_at, this.now());
-        if (STATUS_TONE[chunk.status] !== 'done' || age === null || age > 24 * 60 * 60 * 1000) return [];
-        return [{
-          age,
-          row: {
-            chunkId: chunk.chunk_id,
-            shortId: compactRef(chunk.chunk_id),
-            // Only labeled pointers show. This row's own `DoneRow` type keeps its labels
-            // space-joined into one line: the "done today" glance is a denser, read-only
-            // summary.
-            pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
-          },
-        }];
-      })
-      .sort((left, right) => left.age - right.age)
-      .map(({ row }) => row),
-  );
+  protected readonly doneToday = computed<readonly DoneRow[]>(() => doneTodayRows(this.chunks(), this.now()));
 
   /** Every terminal chunk the fleet has ever held — the board list omits old `done`
    * rows, so the all-time total comes from the counts read. Used as Done today's
    * visible/total header count, so an empty fleet still states `0/0`. */
-  protected readonly terminalCount = computed(() => {
-    const counts = this.countsQuery.data();
-    return counts === undefined ? 0 : counts.done + counts.stopped;
-  });
+  protected readonly terminalCount = computed(() => terminalTotal(this.countsQuery.data()));
 
   /** Each panel's async state, derived independently (AC 4) — a panel withholds
    * its empty copy on its own reads' loading/error, regardless of the other
@@ -206,7 +124,7 @@ export class GlanceBoard {
   /** The terminal denominator is meaningful only once the counts read succeeded:
    * before then its empty fallback would falsely advertise `0/0`. */
   protected readonly doneTodayTotal = computed<number | null>(() =>
-    this.countsQuery.isPending() || this.countsQuery.isError() ? null : this.terminalCount(),
+    doneTodayTotal(this.countsQuery.isPending(), this.countsQuery.isError(), this.terminalCount()),
   );
 
   /** Never `'empty'`: the spend endpoint returns a zeroed aggregate rather than
@@ -218,24 +136,7 @@ export class GlanceBoard {
   /** The vitals strip's four numbers: the two attention/motion counts above,
    * the fleet registry's online fraction, and the live spine's connection —
    * the same connection-state fold `App`'s titlebar reads (`app.ts`). */
-  protected readonly vitals = computed<Vitals>(() => {
-    const runners = this.runners();
-    const online = runners.filter((runner) => runner.online).length;
-    const streamState = this.live.status();
-    const liveLabel =
-      streamState === 'open'
-        ? 'live'
-        : streamState === 'reconnecting'
-          ? 'reconnecting'
-          : this.health.isError()
-            ? 'offline'
-            : 'connecting';
-    return {
-      needsYou: this.needsYou().length,
-      running: this.inMotion().length,
-      runnersUpLabel: `${online}/${runners.length}`,
-      live: streamState === 'open',
-      liveLabel,
-    };
-  });
+  protected readonly vitals = computed<Vitals>(() =>
+    glanceVitals(this.runners(), this.live.status(), this.health.isError(), this.needsYou().length, this.inMotion().length),
+  );
 }

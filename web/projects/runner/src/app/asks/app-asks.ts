@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState } from 'fleet';
+import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type AskRow, LocalAsksView } from './app-asks-view';
+import { askRows } from './app-asks.model';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
@@ -33,17 +34,5 @@ export class LocalAsks {
    * sitting frozen at whatever age the last read carried. */
   private readonly now = injectNowSignal(1000);
 
-  private askedFor(askedAt: string): string {
-    const age = ageMs(askedAt, this.now());
-    return age === null ? '—' : formatHeldFor(age);
-  }
-
-  protected readonly rows = computed<readonly AskRow[]>(() =>
-    this.asks().map((ask) => ({
-      questionId: ask.question_id,
-      chunkRef: compactRef(ask.chunk_id),
-      askedFor: this.askedFor(ask.asked_at),
-      question: ask.question,
-    })),
-  );
+  protected readonly rows = computed<readonly AskRow[]>(() => askRows(this.asks(), this.now()));
 }

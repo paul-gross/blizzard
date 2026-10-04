@@ -1,18 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
 import type { ChunkDetail, TranscriptSegmentIndexEntry } from '../../api/hub';
-import { filterArtifactsByStep } from '../chunk-detail/filter-artifacts-by-step';
-import { sortArtifacts } from '../chunk-detail/sort-artifacts';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
-import { parseNodeStepKey } from '../../core/node-step';
-import { asyncState } from '../../core/query-state';
+import { asyncState, restingAsyncState } from '../../core/query-state';
 import {
   injectChunkTranscriptSegmentQuery,
   injectChunkTranscriptsQuery,
   TranscriptFetchError,
 } from '../../transcripts/transcript-segments.query';
+import { effectiveSegmentId, segmentFinal, stepSegments } from '../../transcripts/transcript-selection.model';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from '../../transcripts/transcript-steps';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
+import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
 /**
@@ -66,16 +65,11 @@ export class ChunkNodeHistoryContainer {
     () => this.chunkId(),
   );
 
-  private readonly parsedSelection = computed(() => {
-    const key = this.selectedKey();
-    return key === null ? null : parseNodeStepKey(key);
-  });
+  private readonly parsedSelection = computed(() => parseSelectedKey(this.selectedKey()));
 
-  protected readonly stepArtifacts = computed(() => {
-    const selection = this.parsedSelection();
-    if (selection === null) return [];
-    return sortArtifacts(filterArtifactsByStep(this.detail().artifacts ?? [], selection.nodeId, selection.epoch));
-  });
+  protected readonly stepArtifacts = computed(() =>
+    stepArtifacts(this.detail().artifacts ?? [], this.parsedSelection()),
+  );
 
   /** Every transcript step, the same derivation the Transcripts tab
    * reads over the same index — {@link selectedStepSegments} and the seam resolution
@@ -91,10 +85,9 @@ export class ChunkNodeHistoryContainer {
   });
 
   /** The selected step's own segments, in `spawn_generation` order. */
-  private readonly selectedStepSegments = computed<readonly TranscriptSegmentIndexEntry[]>(() => {
-    if (this.parsedSelection() === null) return [];
-    return this.steps().find((s) => s.key === this.selectedKey())?.segments ?? [];
-  });
+  private readonly selectedStepSegments = computed<readonly TranscriptSegmentIndexEntry[]>(() =>
+    stepSegments(this.steps(), this.parsedSelection(), this.selectedKey()),
+  );
 
   /** The operator's own segment pick within the selected step — reset implicitly by a
    * step change, never explicitly (see {@link effectiveSegmentId}). */
@@ -104,18 +97,14 @@ export class ChunkNodeHistoryContainer {
    * {@link selectedStepSegments}, else that step's first (its original recording). A
    * pick surviving a step change can never match the new step's own segment ids, so
    * this falls back on its own without an explicit reset. */
-  protected readonly effectiveSegmentId = computed<string | null>(() => {
-    const segments = this.selectedStepSegments();
-    const picked = this.pickedSegmentId();
-    if (picked !== null && segments.some((s) => s.segment_id === picked)) return picked;
-    return segments[0]?.segment_id ?? null;
-  });
+  protected readonly effectiveSegmentId = computed<string | null>(() =>
+    effectiveSegmentId(this.selectedStepSegments(), this.pickedSegmentId()),
+  );
 
   /** See {@link ChunkTranscriptsContainer.selectedSegmentFinal} — same trap, same fix. */
-  private readonly effectiveSegmentFinal = computed<boolean | null>(() => {
-    if (this.indexQuery.isPending()) return null;
-    return this.selectedStepSegments().find((s) => s.segment_id === this.effectiveSegmentId())?.final ?? false;
-  });
+  private readonly effectiveSegmentFinal = computed<boolean | null>(() =>
+    segmentFinal(this.indexQuery.isPending(), this.selectedStepSegments(), this.effectiveSegmentId()),
+  );
 
   protected readonly segmentQuery = injectChunkTranscriptSegmentQuery(
     () => this.daemon.client,
@@ -151,8 +140,7 @@ export class ChunkNodeHistoryContainer {
    * {@link ChunkTranscriptsContainer.segmentState} branches it: no step selected, or a
    * selected step with no segments at all, is this component's own rest state, resolved
    * before the query's own loading/error/ready fold. */
-  protected readonly segmentState = computed<KitAsyncStateValue>(() => {
-    if (this.selectedKey() === null || this.effectiveSegmentId() === null) return 'empty';
-    return asyncState(this.segmentQuery, false);
-  });
+  protected readonly segmentState = computed<KitAsyncStateValue>(() =>
+    restingAsyncState(this.selectedKey() === null || this.effectiveSegmentId() === null, this.segmentQuery, false),
+  );
 }

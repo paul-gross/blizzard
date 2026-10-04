@@ -918,6 +918,16 @@
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
           },
+          "status_if_paused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "terminal": {
             "default": false,
             "title": "Terminal",
@@ -1202,6 +1212,11 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "terminal": {
+            "default": false,
+            "title": "Terminal",
+            "type": "boolean"
           },
           "work_refs": {
             "default": [],

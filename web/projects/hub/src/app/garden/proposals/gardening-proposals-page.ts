@@ -4,29 +4,22 @@ import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '
 import { asyncState, injectPendingMutationVariables, KitBackBar, KitChips, KitSelect, type GardenProposalView, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
-import { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './garden-proposals.query';
+import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import {
+  ALL_CLASSES,
+  ALL_ROUTINES,
+  CLASS_VALUE_PREFIX,
+  SHOW_ALL,
+  classChipValue,
+  filterProposals,
+  pendingClosureIds,
+  proposalClassChips,
+  proposalListRows,
+  proposalRoutineChips,
+  waitingChipValue,
+} from './gardening-proposals-page.model';
 
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
-
-const ALL_CLASSES = 'all';
-
-/** Every real class chip's value carries this prefix, so it can never collide with
- * {@link ALL_CLASSES} no matter what a deployment names a class (`class` is opaque,
- * deployment-chosen vocabulary) — a class literally named `all` is a
- * real possibility, not a contrived one, and `KitChips` tracks and selects by
- * `value` alone. The class chip's `testid` carries its own `-item-` guard against the
- * same collision, one prefix protecting each of the two identifiers `KitChips` reads
- * off an option. */
-const CLASS_VALUE_PREFIX = 'class:';
-
-/** The docket's waiting filter as it rides the URL: absent is the default (only
- * proposals not yet closed), and this one value widens it to every proposal. */
-const SHOW_ALL = 'all';
-
-/** The routine chip row's "All routines" value. Unlike `class`, `routine_name` is
- * not opaque deployment vocabulary — it names one of blizzard's own gardening
- * routines — so it needs no `CLASS_VALUE_PREFIX`-style collision guard. */
-const ALL_ROUTINES = 'all';
 
 /**
  * The `/gardening/proposals` sub-tab
@@ -92,8 +85,8 @@ export class GardeningProposalsPage {
   private readonly pendingProposalAccepts = injectPendingMutationVariables<GardenProposalAcceptVars>(
     acceptGardenProposalMutationKey,
   );
-  private readonly pendingProposalClosures = computed<ReadonlySet<string>>(
-    () => new Set([...this.pendingProposalPasses(), ...this.pendingProposalAccepts()].map((v) => v.proposalId)),
+  private readonly pendingProposalClosures = computed<ReadonlySet<string>>(() =>
+    pendingClosureIds(this.pendingProposalPasses(), this.pendingProposalAccepts()),
   );
 
   /** `null` means every class — the docket's own "All classes" chip drops the param
@@ -102,22 +95,9 @@ export class GardeningProposalsPage {
 
   /** Every class present in the fetched data, alphabetized, each with an "All
    * classes" chip ahead of them — never a hardcoded vocabulary. */
-  protected readonly classChips = computed<readonly KitChipOption[]>(() => {
-    const classes = Array.from(new Set(this.proposals().map((p) => p.class))).sort((a, b) => a.localeCompare(b));
-    return [
-      { value: ALL_CLASSES, label: 'All classes', testid: 'gardening-proposal-class-all' },
-      ...classes.map((c) => ({
-        value: CLASS_VALUE_PREFIX + c,
-        label: c,
-        testid: `gardening-proposal-class-item-${c}`,
-      })),
-    ];
-  });
+  protected readonly classChips = computed<readonly KitChipOption[]>(() => proposalClassChips(this.proposals()));
 
-  protected readonly classChipValue = computed<string>(() => {
-    const cls = this.classFilter();
-    return cls === null ? ALL_CLASSES : CLASS_VALUE_PREFIX + cls;
-  });
+  protected readonly classChipValue = computed<string>(() => classChipValue(this.classFilter()));
 
   protected onClassChoose(value: string): void {
     this.url.patch({ class: value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length) });
@@ -139,20 +119,7 @@ export class GardeningProposalsPage {
    * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
    * {@link classChips}. A routine-less operator-authored proposal
    * contributes no chip of its own: `null` names no routine to filter by. */
-  protected readonly routineChips = computed<readonly KitChipOption[]>(() => {
-    const names = this.proposals()
-      .map((p) => p.routine_name)
-      .filter((name) => name !== null);
-    const routines = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
-    return [
-      { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
-      ...routines.map((r) => ({
-        value: r,
-        label: r,
-        testid: `gardening-proposal-routine-item-${r}`,
-      })),
-    ];
-  });
+  protected readonly routineChips = computed<readonly KitChipOption[]>(() => proposalRoutineChips(this.proposals()));
 
   protected readonly routineChipValue = computed<string>(() => this.routineFilter() ?? ALL_ROUTINES);
 
@@ -160,40 +127,25 @@ export class GardeningProposalsPage {
     this.url.patch({ routine: value === ALL_ROUTINES ? null : value });
   }
 
-  protected readonly waitingChipValue = computed<string>(() => (this.waitingOnly() ? 'waiting' : SHOW_ALL));
+  protected readonly waitingChipValue = computed<string>(() => waitingChipValue(this.waitingOnly()));
 
   protected onWaitingChoose(value: string): void {
     this.url.patch({ show: value === SHOW_ALL ? SHOW_ALL : null });
   }
 
-  /** The filtered set every other view model derives from (AC: a passed proposal
-   * leaves the waiting set and stays reachable under `all`). Under `waitingOnly`, a
-   * proposal with a pending Pass/Accept ({@link pendingProposalClosures}) drops out
-   * too (`bzh:frontend-pending-override`) — purely computed off the mutations' own
-   * variables, never a cache write, so a rejected call reverts the row for free the
-   * instant its `isPending()` clears. Only matters in this branch: under `all` the
-   * proposal stays visible regardless of its closure, pending or not. */
-  private readonly filteredProposals = computed<readonly GardenProposalView[]>(() => {
-    const waitingOnly = this.waitingOnly();
-    const cls = this.classFilter();
-    const routine = this.routineFilter();
-    const closing = this.pendingProposalClosures();
-    return this.proposals().filter(
-      (p) =>
-        (!waitingOnly || (isGardenProposalWaiting(p) && !closing.has(p.proposal_id))) &&
-        (cls === null || p.class === cls) &&
-        (routine === null || p.routine_name === routine),
-    );
-  });
+  /** The filtered set every other view model derives from; a proposal with a
+   * pending Pass/Accept drops out of the waiting set (`bzh:frontend-pending-override`). */
+  private readonly filteredProposals = computed<readonly GardenProposalView[]>(() =>
+    filterProposals(this.proposals(), {
+      waitingOnly: this.waitingOnly(),
+      cls: this.classFilter(),
+      routine: this.routineFilter(),
+      closing: this.pendingProposalClosures(),
+    }),
+  );
 
   protected readonly listRows = computed<readonly ProposalListRowVm[]>(() =>
-    this.filteredProposals().map((p) => ({
-      proposalId: p.proposal_id,
-      title: p.title,
-      proposalClass: p.class,
-      waiting: isGardenProposalWaiting(p),
-      createdAt: p.created_at,
-    })),
+    proposalListRows(this.filteredProposals()),
   );
 
   protected readonly listState = computed<KitAsyncStateValue>(() =>

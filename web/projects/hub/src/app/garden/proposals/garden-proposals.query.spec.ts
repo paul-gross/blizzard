@@ -4,7 +4,8 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { hubClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
-import { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './garden-proposals.query';
+import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { isGardenProposalWaiting } from './gardening-proposals-page.model';
 
 describe('isGardenProposalWaiting', () => {
   it('is waiting when the proposal carries no closure', () => {

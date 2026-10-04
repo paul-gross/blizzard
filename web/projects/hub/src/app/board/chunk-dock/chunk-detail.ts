@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, deriveWorkItemsState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
@@ -16,25 +16,8 @@ import {
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
 import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../../core/mutation-keys';
+import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
-
-/** Whether a pending Pause's predicted `paused` outcome is total over each status —
- * exhaustive so a status added to the wire forces a decision here rather than falling
- * through an inline inequality (mirrors `chunk-lanes.ts`'s `STATUS_LANE` idiom).
- * `waiting_on_human`/`needs_human` outrank the pause fact in the hub's precedence
- * ladder (`blizzard-context:/domain/work/statuses.md`), so pausing from either leaves
- * the rendered status unchanged; every other status is safely predicted `paused`. */
-const PAUSE_OVERRIDE_TOTAL: Record<ChunkStatus, boolean> = {
-  not_ready: true,
-  ready: true,
-  running: true,
-  delivering: true,
-  waiting_on_human: false,
-  needs_human: false,
-  paused: true,
-  stopped: true,
-  done: true,
-};
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the
@@ -142,7 +125,7 @@ export class ChunkDetail {
    * settles, when that outcome is total over the rendered status
    * (`bzh:frontend-pending-override`) — `null` while nothing overrides
    * `detail().status`. Complete always predicts `done`; Pause predicts `paused` only
-   * where {@link PAUSE_OVERRIDE_TOTAL} holds; Resume and Detach predict nothing.
+   * where the pause is total over the current status (`chunk-detail.model.ts`); Resume and Detach predict nothing.
    * Pinned by `chunk-detail.spec.ts`'s "renders the paused override while pending on a
    * chunk below the human-gated states, reverting to the real status on rejection",
    * "renders no status override while Pause is pending on a chunk already
@@ -152,15 +135,9 @@ export class ChunkDetail {
    * status it would revert to" and "renders no status override while Detach is pending — the outcome
    * depends on facts detach never touches".
    */
-  protected readonly overrideStatus = computed<ChunkStatus | null>(() => {
-    const detail = this.detail();
-    if (detail === undefined) return null;
-    const completing = isPendingFor(this.pendingChunkCompletes(), (vars) => vars.chunkId === detail.chunk_id);
-    if (completing) return 'done';
-    const pausing = isPendingFor(this.pendingChunkPauses(), (vars) => vars.chunkId === detail.chunk_id && vars.paused);
-    if (pausing && PAUSE_OVERRIDE_TOTAL[detail.status]) return 'paused';
-    return null;
-  });
+  protected readonly overrideStatus = computed<ChunkStatus | null>(() =>
+    pendingStatusOverride(this.detail(), this.pendingChunkCompletes(), this.pendingChunkPauses()),
+  );
 
   /** The chunk's status as the header's status chip renders it — {@link overrideStatus}
    * while it names one for this chunk, else the real `detail.status`
@@ -177,9 +154,7 @@ export class ChunkDetail {
 
   /** The ids of the questions an answer mutation is in flight for, threaded to the
    * awaiting-human gate's option chips and Answer buttons. */
-  protected readonly pendingAnswerQuestionIds = computed(() =>
-    this.pendingAnswers().map((vars) => vars.questionId),
-  );
+  protected readonly pendingAnswerQuestionIds = computed(() => pendingQuestionIds(this.pendingAnswers()));
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens. Shared by every action
@@ -210,7 +185,7 @@ export class ChunkDetail {
   }
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
-  protected readonly detail = computed(() => (this.chunkId() === null ? undefined : this.detailQuery.data()));
+  protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
 
   /**
    * The detail read's async state (AC 5) — consulted only once the template's
@@ -227,10 +202,7 @@ export class ChunkDetail {
 
   /** The open chunk's related work items + fetch state for the Issue tab. A failed
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
-  protected readonly workItems = computed<WorkItemsState>(() => {
-    if (this.chunkId() === null) return { status: 'loading', items: [] };
-    return deriveWorkItemsState(this.workItemsQuery);
-  });
+  protected readonly workItems = computed<WorkItemsState>(() => openWorkItems(this.chunkId(), this.workItemsQuery));
 
   /** Answer an open question. A lost first-write-wins race comes back as a 409 whose body
    * is the *winning* answer, so it is reported as an outcome naming the winner rather than

@@ -590,6 +590,7 @@ export type ChunkDetail = {
     restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
+    status_if_paused?: ChunkStatus | null;
     /**
      * Terminal
      */
@@ -768,6 +769,10 @@ export type ChunkSummary = {
      */
     runner_id?: string | null;
     status: ChunkStatus;
+    /**
+     * Terminal
+     */
+    terminal?: boolean;
     /**
      * Work Refs
      */

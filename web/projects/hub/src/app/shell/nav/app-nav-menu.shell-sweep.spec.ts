@@ -48,6 +48,7 @@ class TestHubShell {
     paused: 0,
     stopped: 0,
     done: 1,
+    terminal: 1,
   };
   // Carries its own estimate line too — the header's own widest natural content now
   // includes it, so this sweep still tests the tightest fit the header ever renders.

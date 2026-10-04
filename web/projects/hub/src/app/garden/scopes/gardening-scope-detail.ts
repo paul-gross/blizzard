@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, injectPendingMutationVariables, type KitAsyncStateValue, type RoutineView, type ScopeView } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
+import { relatedRoutineRows, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectEditScopeMutation } from './scope-edit.mutations';
 import { injectHubRoutinesQuery } from '../core/routines.query';
@@ -57,7 +58,6 @@ export class GardeningScopeDetail {
    * is pending…". */
   private readonly pendingScopeLifecycle = injectPendingMutationVariables<ScopeLifecycleVars>(scopeLifecycleMutationKey);
 
-  private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
   private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
 
   /** The `scopeSlug` route param, or `null` on the bare child route. */
@@ -65,10 +65,7 @@ export class GardeningScopeDetail {
     initialValue: null,
   });
 
-  private readonly selectedScope = computed<ScopeView | null>(() => {
-    const slug = this.scopeSlug();
-    return slug === null ? null : (this.scopes().find((s) => s.slug === slug) ?? null);
-  });
+  private readonly selectedScope = computed<ScopeView | null>(() => scopeBySlug(this.scopeSlug(), this.scopes()));
 
   private readonly scopeRoutinesQuery = injectHubScopeRoutinesQuery(() => this.selectedScope()?.slug ?? null);
 
@@ -83,16 +80,9 @@ export class GardeningScopeDetail {
    * let it settle first and render every entry as its bare id with no name and no
    * default marked, which self-corrects once `routinesQuery` catches up but reads as
    * a wrong, settled answer in between. */
-  private readonly relatedRoutines = computed<readonly RelatedRoutineVm[] | null>(() => {
-    const ids = this.scopeRoutinesQuery.data();
-    const scope = this.selectedScope();
-    if (ids === undefined || scope === null || this.routinesQuery.data() === undefined) return null;
-    const routinesById = new Map(this.routines().map((r) => [r.routine_id, r]));
-    return ids.map((id) => {
-      const routine = routinesById.get(id);
-      return { name: routine?.name ?? id, isDefault: routine?.default_scope_slug === scope.slug };
-    });
-  });
+  private readonly relatedRoutines = computed<readonly RelatedRoutineVm[] | null>(() =>
+    relatedRoutineRows(this.scopeRoutinesQuery.data(), this.selectedScope(), this.routinesQuery.data()),
+  );
 
   /**
    * The selected scope's `retired` flag as it will read once a currently pending
@@ -108,32 +98,20 @@ export class GardeningScopeDetail {
    * so the fired direction is always the resulting one, the same strong case
    * `graph-lifecycle.mutations.ts`'s own `retired` boolean rides.
    */
-  protected readonly overrideRetired = computed<boolean | null>(() => {
-    const scope = this.selectedScope();
-    if (scope === null) return null;
-    const pending = this.pendingScopeLifecycle().find((vars) => vars.slug === scope.slug);
-    return pending ? pending.retired : null;
-  });
+  protected readonly overrideRetired = computed<boolean | null>(() =>
+    scopeOverrideRetired(this.selectedScope(), this.pendingScopeLifecycle()),
+  );
 
   /** The selected scope's panel view model: real `retired`, overridden
    * `renderedRetired` — see `ScopePanelVm`. */
-  protected readonly scopePanelVm = computed<ScopePanelVm | null>(() => {
-    const scope = this.selectedScope();
-    if (scope === null) return null;
-    const real = scope.retired ?? false;
-    return {
-      slug: scope.slug,
-      description: scope.description,
-      retired: real,
-      renderedRetired: this.overrideRetired() ?? real,
-      relatedRoutines: this.relatedRoutines(),
-    };
-  });
+  protected readonly scopePanelVm = computed<ScopePanelVm | null>(() =>
+    scopePanelVm(this.selectedScope(), this.overrideRetired(), this.relatedRoutines()),
+  );
 
   /** "Nothing selected" is its own rest state, branched before the read's own
    * pending/error/empty triad (`bzh:frontend-empty-state-gated`). */
   protected readonly scopePanelState = computed<KitAsyncStateValue>(() =>
-    this.scopeSlug() === null ? 'empty' : asyncState(this.scopesQuery, this.selectedScope() === null),
+    restingAsyncState(this.scopeSlug() === null, this.scopesQuery, this.selectedScope() === null),
   );
 
   /** Set on a failed edit/retire/enable; cleared at the start of the next attempt. */

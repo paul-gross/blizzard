@@ -5,6 +5,7 @@ import { injectRunnerDashboardQuery } from '../../core/status.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { LocalPauseControl } from '../../machine/app-pause-control';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
+import { headerConnectionLabel, headerStatCells } from './app-header.model';
 
 /**
  * The runner's desktop app header — the shared 48px
@@ -60,28 +61,21 @@ export class AppHeader {
    * still be `ok`. Falls through to the dashboard read's own state — `ok` once it
    * resolves, `offline` on a failed read, `connecting…` for the pending gap before
     * the first read settles — otherwise. */
-  protected readonly connection = computed<string>(() => {
-    const streamState = this.liveUpdates.status();
-    if (streamState === 'reconnecting') return 'reconnecting…';
-    if (this.liveUpdates.authFailed()) return 'degraded';
-    if (this.dashboardQuery.isPending()) return 'connecting…';
-    if (this.dashboardQuery.isError()) return 'offline';
-    return 'ok';
-  });
+  protected readonly connection = computed<string>(() =>
+    headerConnectionLabel(
+      this.liveUpdates.status(),
+      this.liveUpdates.authFailed(),
+      this.dashboardQuery.isPending(),
+      this.dashboardQuery.isError(),
+    ),
+  );
 
   /** The header's live stat cells — environments in use/capacity off the
    * environments pool, active agent leases/capacity off the runner section's
    * `capacities`. Withheld (`[]`) until the dashboard read has resolved at
    * least once, the same stance the hub header's own `spendToday` cell takes
     * rather than show a misleading `Envs 0/0`. */
-  protected readonly headerStats = computed<readonly StatCell[]>(() => {
-    if (this.dashboardQuery.isPending()) return [];
-    const envs = this.dashboardQuery.data()?.environments?.items ?? [];
-    const envsUsed = envs.filter((env) => env.chunk_id != null).length;
-    const capacities = this.dashboardQuery.data()?.runner?.capacities;
-    return [
-      { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
-      { key: 'agents', label: 'Agents', value: capacities?.used ?? 0, capacity: capacities?.max_agents ?? 0 },
-    ];
-  });
+  protected readonly headerStats = computed<readonly StatCell[]>(() =>
+    headerStatCells(this.dashboardQuery.isPending(), this.dashboardQuery.data()),
+  );
 }

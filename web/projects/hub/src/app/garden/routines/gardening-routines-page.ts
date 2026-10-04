@@ -6,7 +6,7 @@ import { injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
-import { isRoutineBlocked } from './gardening-effective-graph';
+import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
 
 /**
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
@@ -52,24 +52,16 @@ export class GardeningRoutinesPage {
   /** The effective selection: the route param if it still names a routine the
    * loaded data actually has, else `null` — never a stale highlight left over from
    * a routine that no longer exists. */
-  protected readonly selectedRoutineName = computed<string | null>(() => {
-    const routineName = this.routineNameParam();
-    if (routineName === null) return null;
-    return this.routines().some((r) => r.name === routineName) ? routineName : null;
-  });
+  protected readonly selectedRoutineName = computed<string | null>(() =>
+    presentRoutineName(this.routineNameParam(), this.routines()),
+  );
 
   protected selectRoutine(name: string): void {
     void this.router.navigate(['/gardening', 'routines', name], { queryParamsHandling: 'preserve' });
   }
 
   protected readonly listRows = computed<readonly RoutineListRowVm[]>(() =>
-    this.routines().map((r) => ({
-      routineId: r.routine_id,
-      name: r.name,
-      graphName: r.graph_name,
-      blocked: isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), r.graph_name),
-      retired: r.retired ?? false,
-    })),
+    routineListRows(this.routines(), this.graphs(), this.graphsQuery.isPending()),
   );
 
   protected readonly listState = computed<KitAsyncStateValue>(() =>

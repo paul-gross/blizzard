@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, injectPendingMutationVariables, compactRef, errorMessage, type FindingView, type GardenProposalClosureView, type GardenProposalView, type KitAsyncStateValue } from 'fleet';
-import { FleetProposalPanel, type ProposalClosureVm, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalOriginVm, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
+import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type FindingView, type GardenProposalView, type KitAsyncStateValue } from 'fleet';
+import { FleetProposalPanel, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingsQuery } from '../core/finding.query';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
@@ -13,6 +13,15 @@ import { map } from 'rxjs';
 
 import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';
 import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
+import {
+  acceptedItemPointer,
+  proposalById,
+  proposalEvidenceRows,
+  proposalPanelState,
+  proposalPanelVm,
+  proposalWorkItemVm,
+  type AcceptedItemPointer,
+} from './gardening-proposal-detail.model';
 
 /**
  * The selected proposal's own detail — the right-hand child of
@@ -59,16 +68,14 @@ export class GardeningProposalDetail {
 
   /** The selected row's own full record — already carried by the one list read, so
    * this is a lookup, never a second fetch. */
-  private readonly selectedProposal = computed<GardenProposalView | null>(() => {
-    const id = this.proposalId();
-    return id === null ? null : (this.proposals().find((p) => p.proposal_id === id) ?? null);
-  });
+  private readonly selectedProposal = computed<GardenProposalView | null>(() =>
+    proposalById(this.proposals(), this.proposalId()),
+  );
 
-  /** Panel state branches on selection before ever consulting the list read's own
-   * async state (`bzh:frontend-empty-state-gated`) — once something is selected its
-   * record is already in hand, synchronously, from {@link proposals}. */
+  /** Branches on selection before the list read's own async state
+   * (`bzh:frontend-empty-state-gated`). */
   protected readonly panelState = computed<KitAsyncStateValue>(() =>
-    this.selectedProposal() === null ? asyncState(this.proposalsQuery, true) : 'ready',
+    proposalPanelState(this.selectedProposal(), this.proposalsQuery),
   );
 
   private readonly findingsQuery = injectHubFindingsQuery(() => this.selectedProposal()?.findings ?? []);
@@ -76,85 +83,39 @@ export class GardeningProposalDetail {
   /** The (source, ref) pair naming an accepted-and-minted proposal's linked work
    * item — `null` for a waiting, passed, or accepted-and-declined proposal, so the
    * work-item query stays disabled for all three. */
-  private readonly acceptedItemPointer = computed<{ source: string; ref: string } | null>(() => {
-    const closure = this.selectedProposal()?.closure;
-    if (closure?.closure !== 'accepted' || closure.item_outcome !== 'minted') return null;
-    return { source: closure.source!, ref: closure.ref! };
-  });
+  private readonly acceptedItemPointer = computed<AcceptedItemPointer | null>(() =>
+    acceptedItemPointer(this.selectedProposal()?.closure),
+  );
 
   private readonly workItemQuery = injectHubWorkItemQuery(
     () => this.acceptedItemPointer()?.source ?? null,
     () => this.acceptedItemPointer()?.ref ?? null,
   );
 
-  /** The accepted-and-minted work item, resolved for display — `null` while the
-   * read is still in flight, so a loading window never shows a synthesized label
-   * that could pass for resolved data; once settled, `label`/`webUrl` come off the
-   * real record, or the bare pointer once the read has genuinely failed (the item
-   * is gone), and `web_url` alone reads `null` once the chunk is merely terminal. */
-  private readonly workItemVm = computed<ProposalWorkItemVm | null>(() => {
-    const pointer = this.acceptedItemPointer();
-    if (pointer === null || this.workItemQuery.isPending()) return null;
-    const item = this.workItemQuery.data();
-    return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
-  });
+  /** The accepted-and-minted work item, resolved for display — `null` while its read
+   * is in flight. */
+  private readonly workItemVm = computed<ProposalWorkItemVm | null>(() =>
+    proposalWorkItemVm(this.acceptedItemPointer(), this.workItemQuery.isPending(), this.workItemQuery.data()),
+  );
 
-  private closureVm(closure: GardenProposalClosureView): ProposalClosureVm {
-    if (closure.closure === 'passed') {
-      return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
-    }
-    return {
-      kind: 'accepted',
-      closedBy: closure.closed_by,
-      closedAt: closure.closed_at,
-      reason: closure.reason,
-      workItem: closure.item_outcome === 'minted' ? this.workItemVm() : null,
-    };
-  }
-
-  private originVm(proposal: GardenProposalView): ProposalOriginVm {
-    if (proposal.origin === 'operator') {
-      return { kind: 'operator', createdBy: proposal.created_by!, routineName: proposal.routine_name };
-    }
-    return { kind: 'routine-run', routineName: proposal.routine_name! };
-  }
-
-  protected readonly panelVm = computed<ProposalPanelVm | null>(() => {
-    const proposal = this.selectedProposal();
-    if (proposal === null) return null;
-    return {
-      proposalId: proposal.proposal_id,
-      origin: this.originVm(proposal),
-      proposalClass: proposal.class,
-      title: proposal.title,
-      body: proposal.body,
-      closure: proposal.closure ? this.closureVm(proposal.closure) : null,
-      createdAt: proposal.created_at,
-      hasFindings: proposal.findings.length > 0,
-    };
-  });
+  protected readonly panelVm = computed<ProposalPanelVm | null>(() =>
+    proposalPanelVm(this.selectedProposal(), this.workItemVm()),
+  );
 
   private readonly evidenceFindings = computed<readonly FindingView[]>(() => this.findingsQuery.data() ?? []);
 
-  protected readonly evidenceRows = computed<readonly ProposalEvidenceRowVm[]>(() => {
-    const workItem = this.workItemVm();
-    return this.evidenceFindings().map((f) => ({
-      findingId: f.finding_id,
-      locus: f.locus,
-      summary: f.summary,
-      state: f.state,
-      exit: f.exit ?? null,
-      workItem,
-      pending: this.pendingTriage().some((vars) => vars.findingIds.includes(f.finding_id)),
-    }));
-  });
+  protected readonly evidenceRows = computed<readonly ProposalEvidenceRowVm[]>(() =>
+    proposalEvidenceRows(this.evidenceFindings(), this.workItemVm(), this.pendingTriage()),
+  );
 
   /** A proposal citing no findings leaves the findings query disabled, which reports
    * `isPending()` forever — so that case is `empty` before the helper is consulted. */
   protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
-    (this.selectedProposal()?.findings.length ?? 0) === 0
-      ? 'empty'
-      : asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
+    restingAsyncState(
+      (this.selectedProposal()?.findings.length ?? 0) === 0,
+      this.findingsQuery,
+      this.evidenceFindings().length === 0,
+    ),
   );
 
   /** The variables of every inline triage mutation still in flight, across the four

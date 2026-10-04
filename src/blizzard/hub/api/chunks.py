@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
@@ -236,7 +236,11 @@ def chunk_counts(services: Annotated[HubServices, Depends(get_services)]) -> Chu
     """The all-time fleet count per derived status — over exactly the chunks
     ``GET /api/chunks`` pages over, with no window applied."""
     counts = services.chunks.facts.status_counts()
-    return ChunkCountsView(total=sum(counts.values()), **{st.value: n for st, n in counts.items()})
+    return ChunkCountsView(
+        total=sum(counts.values()),
+        terminal=sum(n for st, n in counts.items() if st in TERMINAL_STATUSES),
+        **{st.value: n for st, n in counts.items()},
+    )
 
 
 def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:

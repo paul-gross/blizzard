@@ -5,6 +5,7 @@ import { FleetScopeList, type ScopeRowVm } from './scope-list';
 import { injectHubScopesQuery } from '../core/scopes.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
+import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
 
 /**
  * The `/gardening/scopes` sub-tab (`plans/garden/user-interface.md` §Declaring and
@@ -48,19 +49,15 @@ export class GardeningScopesPage {
   /** The effective selection: the route param if it still names a scope the loaded
    * data actually has, else `null` — never a stale highlight left over from a scope
    * that no longer exists. */
-  protected readonly selectedScopeSlug = computed<string | null>(() => {
-    const scopeSlug = this.scopeSlugParam();
-    if (scopeSlug === null) return null;
-    return this.scopes().some((s) => s.slug === scopeSlug) ? scopeSlug : null;
-  });
+  protected readonly selectedScopeSlug = computed<string | null>(() =>
+    presentScopeSlug(this.scopeSlugParam(), this.scopes()),
+  );
 
   protected selectScope(slug: string): void {
     void this.router.navigate(['/gardening', 'scopes', slug], { queryParamsHandling: 'preserve' });
   }
 
-  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() =>
-    this.scopes().map((s) => ({ slug: s.slug, description: s.description, retired: s.retired ?? false })),
-  );
+  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes()));
 
   protected readonly scopesState = computed<KitAsyncStateValue>(() =>
     asyncState(this.scopesQuery, this.scopeRows().length === 0),

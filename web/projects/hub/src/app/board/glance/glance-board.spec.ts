@@ -66,6 +66,7 @@ const CHUNKS = [
     chunk_id: 'ch_01donerecent0000000000000000',
     graph_id: 'gr_1',
     status: 'done',
+    terminal: true,
     completed_at: completedAt(60 * 60 * 1000),
     current_node_id: null,
     model: 'claude-opus-4-8',
@@ -76,6 +77,7 @@ const CHUNKS = [
     chunk_id: 'ch_01stoppedrecent00000000000000',
     graph_id: 'gr_1',
     status: 'stopped',
+    terminal: true,
     completed_at: completedAt(2 * 60 * 60 * 1000),
     current_node_id: null,
     model: 'claude-opus-4-8',
@@ -85,6 +87,7 @@ const CHUNKS = [
     chunk_id: 'ch_01doneold00000000000000000000',
     graph_id: 'gr_1',
     status: 'done',
+    terminal: true,
     completed_at: completedAt(25 * 60 * 60 * 1000),
     current_node_id: null,
     model: 'claude-opus-4-8',
@@ -94,6 +97,7 @@ const CHUNKS = [
     chunk_id: 'ch_01donemissing000000000000000',
     graph_id: 'gr_1',
     status: 'done',
+    terminal: true,
     completed_at: null,
     current_node_id: null,
     model: 'claude-opus-4-8',
@@ -154,6 +158,7 @@ const COUNTS = {
   paused: 0,
   stopped: 1,
   done: 3,
+  terminal: 4,
 };
 
 describe('GlanceBoard — attention bucketing and vitals', () => {
@@ -263,7 +268,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/chunk-counts') return { ...COUNTS, done: 200, stopped: 7 };
+      if (method === 'GET' && path === '/api/chunk-counts') return { ...COUNTS, done: 200, stopped: 7, terminal: 207 };
       if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
       if (method === 'GET' && path === '/api/spend') return SPEND;

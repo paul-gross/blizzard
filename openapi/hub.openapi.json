@@ -1377,7 +1377,7 @@
         "type": "object"
       },
       "ChunkCountsView": {
-        "description": "``GET /api/chunk-counts`` \u2014 the all-time fleet count per derived status, over exactly\nthe chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field.",
+        "description": "``GET /api/chunk-counts`` \u2014 the all-time fleet count per derived status, over exactly\nthe chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field,\nplus ``terminal`` \u2014 the count over every terminal status, the hub's judgment of which statuses finish.",
         "properties": {
           "delivering": {
             "title": "Delivering",
@@ -1411,6 +1411,10 @@
             "title": "Stopped",
             "type": "integer"
           },
+          "terminal": {
+            "title": "Terminal",
+            "type": "integer"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -1430,7 +1434,8 @@
           "needs_human",
           "paused",
           "stopped",
-          "done"
+          "done",
+          "terminal"
         ],
         "title": "ChunkCountsView",
         "type": "object"
@@ -1868,6 +1873,16 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "status_if_paused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "terminal": {
             "default": false,
@@ -2483,6 +2498,11 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "terminal": {
+            "default": false,
+            "title": "Terminal",
+            "type": "boolean"
           },
           "work_refs": {
             "default": [],

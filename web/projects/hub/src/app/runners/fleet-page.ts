@@ -3,6 +3,7 @@ import { errorMessage, injectPendingMutationVariables } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 import { injectRunnerRows, type RunnerRow } from './runner-rows';
+import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 
 import { FleetView } from './fleet-view';
@@ -55,7 +56,7 @@ export class FleetPage {
    * against — the per-row disable that keeps a sibling row's toggle enabled while
    * only the one tapped disables. */
   protected readonly pendingRunnerIds = computed<readonly string[]>(() =>
-    this.pendingPauses().map((vars) => vars.runnerId),
+    pendingRunnerIds(this.pendingPauses()),
   );
 
   /**
@@ -66,15 +67,9 @@ export class FleetPage {
    * rejected pause/resume reverts to the real `hub_paused` for free the instant
    * `isPending()` clears.
    */
-  protected readonly rows = computed<readonly RunnerRow[]>(() => {
-    const pending = this.pendingPauses();
-    if (pending.length === 0) return this.runnerRows.rows();
-    const requested = new Map(pending.map((vars) => [vars.runnerId, vars.paused]));
-    return this.runnerRows.rows().map((row) => {
-      const override = requested.get(row.runner_id);
-      return override === undefined ? row : { ...row, hub_paused: override };
-    });
-  });
+  protected readonly rows = computed<readonly RunnerRow[]>(() =>
+    withPendingRunnerPauses(this.runnerRows.rows(), this.pendingPauses()),
+  );
 
   /** The page's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */

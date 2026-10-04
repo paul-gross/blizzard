@@ -905,7 +905,8 @@ export type ChunkCompleteRequest = {
  * ChunkCountsView
  *
  * ``GET /api/chunk-counts`` — the all-time fleet count per derived status, over exactly
- * the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field.
+ * the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field,
+ * plus ``terminal`` — the count over every terminal status, the hub's judgment of which statuses finish.
  */
 export type ChunkCountsView = {
     /**
@@ -940,6 +941,10 @@ export type ChunkCountsView = {
      * Stopped
      */
     stopped: number;
+    /**
+     * Terminal
+     */
+    terminal: number;
     /**
      * Total
      */
@@ -1193,6 +1198,7 @@ export type ChunkDetail = {
     restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
+    status_if_paused?: ChunkStatus | null;
     /**
      * Terminal
      */
@@ -1567,6 +1573,10 @@ export type ChunkSummary = {
      */
     runner_id?: string | null;
     status: ChunkStatus;
+    /**
+     * Terminal
+     */
+    terminal?: boolean;
     /**
      * Work Refs
      */
