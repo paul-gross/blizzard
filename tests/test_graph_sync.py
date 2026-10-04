@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from blizzard.hub.domain.graph import GraphArtifact
+from blizzard.hub.documents.codec import YAML_CODEC
+from blizzard.hub.domain.graph import GraphArtifact, GraphDoc
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub
@@ -285,3 +286,19 @@ def test_sync_is_not_swallowed_by_the_graph_id_route(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.get("/api/graphs/sync").status_code == 404  # no such graph id, by GET
     assert hub.client.post("/api/graphs/sync", json={}).status_code == 200  # the verb, by POST
+
+
+def test_strict_decode_equals_pyyaml_for_every_packaged_graph() -> None:
+    for graph in PACKAGED.files:
+        assert YAML_CODEC.decode(graph.path.read_bytes()) == yaml.safe_load(graph.text), graph.path
+        assert GraphDoc.of(YAML_CODEC.decode(graph.inlined_yaml.encode())) == graph.doc, graph.path
+
+
+def test_a_store_seeded_by_the_previous_encoder_reconciles_up_to_date(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    for graph in PACKAGED.files:
+        hub.services.graph_mint.mint(graph.doc, definition_yaml=yaml.safe_dump(graph.body, sort_keys=False))
+
+    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, PACKAGED.paths).outcomes()
+
+    assert {o.status for o in outcomes} == {GraphSyncStatus.UP_TO_DATE}

@@ -1,17 +1,16 @@
 """Packaged workflow graphs, and the loader that reads them.
 
-Packaged data is one directory per graph, each holding its own ``graph.yaml`` plus its own ``prompts/``
-— never shared across graphs, since two can name the same prompt filename with different content. This
-module is the *loader*: the edge that reads YAML and inlines prompt *file* references before the pure
-parser and validator run, deliberately outside the domain, which touches neither (``bzh:domain-core``)."""
+Packaged data is one directory per graph — its own ``graph.yaml`` plus its own ``prompts/``, never shared, since two
+can name the same prompt filename with different content. This module is the *loader*: the edge that decodes a
+definition file through the config codec and inlines prompt *file* references, outside the domain
+(``bzh:domain-core``)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
+from blizzard.hub.documents.codec import YAML_CODEC, accepted_extensions, codec_for_path
 from blizzard.hub.domain.graph import GraphDoc
 
 # The prompt-carrying fields whose file references are inlined at load.
@@ -91,7 +90,7 @@ class GraphFile:
 
     @property
     def text(self) -> str:
-        """The raw YAML text (the ``POST /graphs`` body, un-inlined)."""
+        """The raw definition text (the ``POST /graphs`` body, un-inlined)."""
         return self.path.read_text()
 
     @property
@@ -100,9 +99,10 @@ class GraphFile:
         ``artifacts:`` entry replaced by its referenced file's text, resolved relative to
         :attr:`path`. A missing prompt file raises :class:`FileNotFoundError`; a missing
         ``artifacts:`` file raises :class:`GraphArtifactFileMissing`, naming the entry."""
-        raw = yaml.safe_load(self.text)
-        if not isinstance(raw, dict):
-            raise ValueError(f"{self.path} is not a graph-definition mapping")
+        codec = codec_for_path(self.path)
+        if codec is None:
+            raise ValueError(f"{self.path}: unsupported extension; expected one of {', '.join(accepted_extensions())}")
+        raw = codec.decode(self.path.read_bytes())
         # Popped before the prompt walk runs, so it never descends into `artifacts:`.
         artifacts = raw.pop(_TOP_LEVEL_ARTIFACTS_KEY, None)
         Inliner(self.path.parent).inline(raw)
@@ -116,9 +116,9 @@ class GraphFile:
 
     @property
     def inlined_yaml(self) -> str:
-        """:attr:`body` re-serialized — what a mint taking raw ``definition_yaml``, which resolves no
+        """:attr:`body` re-serialized as YAML — what a mint taking raw ``definition_yaml``, which resolves no
         file references of its own, needs."""
-        return yaml.safe_dump(self.body, sort_keys=False)
+        return YAML_CODEC.encode(self.body).decode("utf-8")
 
 
 @dataclass(frozen=True)

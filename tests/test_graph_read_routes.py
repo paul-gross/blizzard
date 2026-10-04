@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests.support import build_hub, count_queries
 
@@ -257,3 +259,21 @@ def test_get_graph_round_trips_checks_gating(tmp_path: Path) -> None:
     by_name = {c["name"]: c for c in build["choices"]}
     assert by_name["pass"]["requires_checks"] is True
     assert by_name["fail"]["requires_checks"] is False
+
+
+def test_mint_rejects_a_duplicate_key_with_the_decode_error(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": "name: a\nname: b\n"})
+
+    assert resp.status_code == 422
+    report = resp.json()
+    assert report["ok"] is False
+    assert "duplicate key 'name'" in report["errors"][0]
+    assert hub.client.get("/api/graphs").json() == []
+
+
+def test_mint_accepts_a_json_definition_in_the_definition_field(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    _mint(hub, json.dumps(yaml.safe_load(_GRAPH_A)))

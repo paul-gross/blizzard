@@ -3062,7 +3062,7 @@
           "short_help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired."
         },
         "mint": {
-          "help": "Mint a graph from PATH's YAML definition; PATH may be '-' to read stdin.\n\nA file PATH inlines file references relative to its own directory: a 'prompt'/'prompt_addendum' value only when it\nreads as a path, so literal prose stays literal, but every 'artifacts:' value always \u2014 one that fails to resolve\nfails the load, naming the entry. Stdin has no directory, so it posts verbatim; a 422 renders in full.",
+          "help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin.\n\nA file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict \u2014 a duplicate key is an\nerror, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only\nwhen it reads as a path, every 'artifacts:' value always. Stdin posts verbatim; a 422 renders in full.",
           "params": [
             {
               "hidden": false,
@@ -3101,7 +3101,7 @@
             }
           ],
           "path": "hub graph mint",
-          "short_help": "Mint a graph from PATH's YAML definition; PATH may be '-' to read stdin."
+          "short_help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin."
         },
         "retire": {
           "help": "Retire GRAPH_ID \u2014 excludes it from name resolution; in-flight chunks run on.",

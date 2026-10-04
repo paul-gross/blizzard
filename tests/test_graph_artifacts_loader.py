@@ -7,11 +7,13 @@ as a path. A missing referenced file is a load-time error naming the entry and i
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
+from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph import GraphDoc
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import GraphArtifactFileMissing, GraphFile
@@ -193,3 +195,27 @@ nodes:
     graph_path.write_text(graph_yaml)
 
     assert "artifacts" not in GraphFile(graph_path).body
+
+
+def test_a_json_definition_decodes_by_its_extension(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps(yaml.safe_load(_GRAPH_YAML)))
+    yaml_body = GraphFile(_write_graph(tmp_path)).body
+
+    assert GraphFile(graph_path).body == yaml_body
+
+
+def test_an_unknown_extension_is_refused_naming_the_accepted_ones(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.txt"
+    graph_path.write_text(_GRAPH_YAML)
+
+    with pytest.raises(ValueError, match=r"\.yaml, \.yml, \.json"):
+        GraphFile(graph_path).body  # noqa: B018
+
+
+def test_a_duplicate_key_fails_the_load_naming_the_key_and_line(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.yaml"
+    graph_path.write_text("name: a\nname: b\n")
+
+    with pytest.raises(ConfigDecodeError, match=r"duplicate key 'name' \(line 2"):
+        GraphFile(graph_path).body  # noqa: B018

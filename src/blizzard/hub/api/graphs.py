@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Annotated
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
@@ -19,6 +18,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
 from blizzard.hub.domain.graph import Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph_authoring import GraphValidationError
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
@@ -119,11 +119,8 @@ def _graph_view(
 def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
     """Validate and mint an immutable graph; 422 on validation errors."""
     try:
-        raw = yaml.safe_load(request.definition_yaml)
-        if not isinstance(raw, dict):
-            raise GraphParseError("graph definition must be a YAML mapping")
-        doc = GraphDoc.of(raw)
-    except (GraphParseError, yaml.YAMLError) as exc:
+        doc = GraphDoc.of(YAML_CODEC.decode(request.definition_yaml.encode("utf-8")))
+    except (GraphParseError, ConfigDecodeError) as exc:
         report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
         return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=report.model_dump())
 
