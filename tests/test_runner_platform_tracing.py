@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -11,17 +12,40 @@ from typing import cast
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from google.protobuf.json_format import Parse
+from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.message import Message
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
+from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
+    ExportMetricsServiceRequest,
+    ExportMetricsServiceResponse,
+)
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
     ExportTraceServiceResponse,
 )
+from opentelemetry.proto.common.v1.common_pb2 import AnyValue
+from opentelemetry.sdk._logs import ReadableLogRecord
+from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, LogRecordExporter, LogRecordExportResult
+from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
+    Metric,
+    MetricExporter,
+    MetricExportResult,
+    MetricsData,
+    NumberDataPoint,
+)
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
+from blizzard.foundation.platform_tracing.received_export import (
+    IReceivedTelemetryExport,
+    build_received_telemetry_export,
+)
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -36,9 +60,16 @@ from blizzard.runner.domain.tracing.platform import (
     TICK_STEP,
 )
 from blizzard.runner.domain.tracing.receiver import MAX_BODY_BYTES
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
+from blizzard.runner.domain.tracing.receiver_limits import (
+    ReceiverBounds,
+    ReceiverCount,
+    ReceiverCounter,
+    SpanRateLimiter,
+)
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.harness_telemetry import plan_harness_telemetry
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance
@@ -47,6 +78,8 @@ from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from tests import claude_code_telemetry
+from tests.harness_sections import sections
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -125,13 +158,22 @@ def _app(  # type: ignore[no-untyped-def]
     limiter: SpanRateLimiter | None = None,
     worker_programs: bool = False,
     services: dict[str, str] | None = None,
+    harness_telemetry: bool = False,
+    received: IReceivedTelemetryExport | None = None,
+    metric_bounds: ReceiverBounds | None = None,
+    log_bounds: ReceiverBounds | None = None,
+    claude_counter: ReceiverCounter | None = None,
 ):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         hub_url="http://hub.local:8421",
-        tracing=TracingConfig(worker_programs=worker_programs, worker_program_services=services or {}),
+        tracing=TracingConfig(
+            worker_programs=worker_programs,
+            worker_program_services=services or {},
+            harness_telemetry=harness_telemetry,
+        ),
     )
 
     def hub(request: httpx.Request) -> httpx.Response:
@@ -154,11 +196,16 @@ def _app(  # type: ignore[no-untyped-def]
         platform_tracing=handle,
         span_limiter=limiter,
         receiver_counter=counter,
+        claude_trace_counter=claude_counter,
+        metric_bounds=metric_bounds,
+        log_bounds=log_bounds,
+        received_telemetry=received,
         trace_status=LeaseTraceStatusReader(
             settings=TracingSettings.of(_ENDPOINT),
             leases=make_stores(store).lease_traces,
             clock=FixedClock(_NOW),
             receiver=counter,
+            claude_trace_receiver=claude_counter,
         ),
     )
     return app
@@ -698,3 +745,535 @@ def test_a_hub_node_poll_parents_one_past_the_views_latest_epoch_even_ahead_of_t
     )
     spans = _ticked(tmp_path, hub, _held_after_lease_1)
     _assert_directly_under(_call(spans, "hub_advance"), step_root(StepKey.attempt("ch_1", latest_epoch + 1)))
+
+
+# --- harness telemetry: Claude Code's own metrics, logs and traces ---
+
+_CLAUDE_METRICS_SCOPE = "com.anthropic.claude_code"
+_CLAUDE_LOGS_SCOPE = "com.anthropic.claude_code.events"
+_CLAUDE_TRACING_SCOPE = "com.anthropic.claude_code.tracing"
+_CLAUDE_SERVICE = "blizzard-claude-code"
+_ENCODED = {"json": "application/json", "protobuf": "application/x-protobuf"}
+_NEW_PATHS = ["/v1/metrics", "/v1/logs"]
+_STAMPS = {_CALLER: "worker", "blizzard.chunk.id": "ch_1", "blizzard.lease.id": "lease_1", RUNNER_ID: _RUNNER}
+
+
+class _CapturingMetricExporter(MetricExporter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.exported: list[MetricsData] = []
+
+    def export(self, metrics_data: MetricsData, timeout_millis: float = 10_000, **kwargs: object) -> MetricExportResult:
+        self.exported.append(metrics_data)
+        return MetricExportResult.SUCCESS
+
+    def force_flush(self, timeout_millis: float = 10_000) -> bool:
+        return True
+
+    def shutdown(self, timeout_millis: float = 30_000, **kwargs: object) -> None:
+        return None
+
+    def points(self) -> list[tuple[Resource, str, Metric, NumberDataPoint]]:
+        return [
+            (resource_metrics.resource, scope_metrics.scope.name, metric, point)
+            for data in self.exported
+            for resource_metrics in data.resource_metrics
+            for scope_metrics in resource_metrics.scope_metrics
+            for metric in scope_metrics.metrics
+            for point in metric.data.data_points  # type: ignore[union-attr]
+        ]
+
+
+class _Telemetry:
+    """The runner's received-telemetry export over in-memory exporters, with what each one saw."""
+
+    def __init__(self, *, harness_telemetry: bool = True) -> None:
+        self.metrics = _CapturingMetricExporter()
+        self.logs = InMemoryLogRecordExporter()
+        self.handle = build_received_telemetry_export(
+            TracingConfig(platform=True, harness_telemetry=harness_telemetry),
+            _ENDPOINT,
+            resource={"service.name": "blizzard-runner"},
+            metric_exporter=self.metrics,
+            log_exporter=self.logs,
+        )
+
+    def metric_points(self) -> list[tuple[Resource, str, Metric, NumberDataPoint]]:
+        """What the metric exporter saw once the handle's queue has drained."""
+        self.handle.shutdown(5.0)
+        return self.metrics.points()
+
+    def log_records(self) -> tuple[ReadableLogRecord, ...]:
+        """What the log exporter saw once the handle's batch processor has drained."""
+        self.handle.shutdown(5.0)
+        return self.logs.get_finished_logs()
+
+
+def _metrics_body(
+    *, scope: str | None = None, repeat: int = 1, extra: dict[str, str] | None = None, encoding: str = "protobuf"
+) -> bytes:
+    message = ExportMetricsServiceRequest()
+    message.ParseFromString(claude_code_telemetry.protobuf_body("metrics"))
+    for resource in message.resource_metrics:
+        for scope_metrics in resource.scope_metrics:
+            if scope is not None:
+                scope_metrics.scope.name = scope
+            for metric in scope_metrics.metrics:
+                points = metric.sum.data_points
+                originals = list(points)
+                for _ in range(repeat - 1):
+                    points.extend(originals)
+                for point in points:
+                    for key, value in (extra or {}).items():
+                        point.attributes.add(key=key, value=AnyValue(string_value=value))
+    return _encoded_body(message, encoding)
+
+
+def _logs_body(
+    *,
+    scope: str | None = None,
+    repeat: int = 1,
+    trace: int | None = None,
+    extra: dict[str, str] | None = None,
+    encoding: str = "protobuf",
+) -> bytes:
+    message = ExportLogsServiceRequest()
+    message.ParseFromString(claude_code_telemetry.protobuf_body("logs"))
+    for resource in message.resource_logs:
+        for scope_logs in resource.scope_logs:
+            if scope is not None:
+                scope_logs.scope.name = scope
+            originals = list(scope_logs.log_records)
+            for _ in range(repeat - 1):
+                scope_logs.log_records.extend(originals)
+            for record in scope_logs.log_records:
+                if trace is not None:
+                    record.trace_id = trace.to_bytes(16, "big")
+                for key, value in (extra or {}).items():
+                    record.attributes.add(key=key, value=AnyValue(string_value=value))
+    return _encoded_body(message, encoding)
+
+
+def _claude_spans_body(*, scope: str | None = None, repeat: int = 1, encoding: str = "protobuf") -> bytes:
+    message = ExportTraceServiceRequest()
+    message.ParseFromString(claude_code_telemetry.protobuf_body("traces"))
+    for resource in message.resource_spans:
+        for scope_spans in resource.scope_spans:
+            if scope is not None:
+                scope_spans.scope.name = scope
+            originals = list(scope_spans.spans)
+            for _ in range(repeat - 1):
+                scope_spans.spans.extend(originals)
+            for span in scope_spans.spans:
+                span.trace_id = _own_trace().to_bytes(16, "big")
+    return _encoded_body(message, encoding)
+
+
+def _encoded_body(message: Message, encoding: str) -> bytes:
+    """The message as the recorded export carries it (protobuf), or as OTLP/JSON with hex ids."""
+    if encoding == "protobuf":
+        return message.SerializeToString()
+    return json.dumps(claude_code_telemetry.hex_ids(MessageToDict(message))).encode()
+
+
+def _post(client: TestClient, path: str, body: bytes, encoding: str = "protobuf", token: bool = True):  # type: ignore[no-untyped-def]
+    return client.post(path, content=body, headers={"Content-Type": _ENCODED[encoding], **(_TOKEN if token else {})})
+
+
+def _body_for(path: str, **kwargs: object) -> bytes:
+    return _metrics_body(**kwargs) if path == "/v1/metrics" else _logs_body(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("encoding", ["json", "protobuf"])
+def test_claude_code_metrics_export_stamped_under_its_service_name(tmp_path: Path, encoding: str) -> None:
+    telemetry = _Telemetry()
+    handle = _handle(InMemorySpanExporter())
+    app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
+    with TestClient(app) as client:
+        response = _post(client, "/v1/metrics", _metrics_body(encoding=encoding), encoding)
+        assert response.status_code == 200
+        assert "partialSuccess" not in response.json() if encoding == "json" else response.content == b""
+    exported = telemetry.metric_points()
+    assert [metric.name for _, _, metric, _ in exported] == [
+        "claude_code.session.count",
+        "claude_code.active_time.total",
+    ]
+    for resource, scope, metric, point in exported:
+        assert resource.attributes["service.name"] == _CLAUDE_SERVICE
+        assert scope == _CLAUDE_METRICS_SCOPE
+        assert {key: (point.attributes or {})[key] for key in _STAMPS} == _STAMPS
+        assert metric.data.aggregation_temporality == AggregationTemporality.DELTA  # type: ignore[union-attr]
+    first = exported[0][3]
+    assert (first.start_time_unix_nano, first.time_unix_nano, first.value) == (
+        1791055936556000000,
+        1791055936709000000,
+        1.0,
+    )
+
+
+@pytest.mark.parametrize("encoding", ["json", "protobuf"])
+def test_claude_code_logs_export_stamped_under_its_service_name(tmp_path: Path, encoding: str) -> None:
+    telemetry = _Telemetry()
+    handle = _handle(InMemorySpanExporter())
+    app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
+    with TestClient(app) as client:
+        assert _post(client, "/v1/logs", _logs_body(trace=_own_trace(), encoding=encoding), encoding).status_code == 200
+    records = telemetry.log_records()
+    assert len(records) == 6
+    for readable in records:
+        assert readable.resource.attributes["service.name"] == _CLAUDE_SERVICE
+        assert readable.instrumentation_scope is not None
+        assert readable.instrumentation_scope.name == _CLAUDE_LOGS_SCOPE
+        attributes = dict(readable.log_record.attributes or {})
+        assert {key: attributes[key] for key in _STAMPS} == _STAMPS
+        assert readable.log_record.trace_id == _own_trace()
+
+
+def test_a_log_record_naming_another_trace_loses_its_trace_context(tmp_path: Path) -> None:
+    telemetry = _Telemetry()
+    handle = _handle(InMemorySpanExporter())
+    app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
+    with TestClient(app) as client:
+        assert _post(client, "/v1/logs", _logs_body()).status_code == 200
+    records = telemetry.log_records()
+    assert len(records) == 6
+    assert {readable.log_record.trace_id for readable in records} <= {0, None}
+
+
+def test_claude_codes_identity_attributes_reach_the_exporter_unchanged(tmp_path: Path) -> None:
+    telemetry = _Telemetry()
+    handle = _handle(InMemorySpanExporter())
+    app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
+    identity = {
+        "user.email": "dev@example.test",
+        "user.account_uuid": "acct-1",
+        "user.id": "user-1",
+        "organization.id": "org-1",
+    }
+    with TestClient(app) as client:
+        assert _post(client, "/v1/metrics", _metrics_body(extra=identity)).status_code == 200
+        assert _post(client, "/v1/logs", _logs_body(extra=identity)).status_code == 200
+    points = telemetry.metric_points()
+    records = telemetry.log_records()
+    assert (len(points), len(records)) == (2, 6)
+    for _, _, _, point in points:
+        assert {key: (point.attributes or {})[key] for key in identity} == identity
+    for readable in records:
+        assert {key: (readable.log_record.attributes or {})[key] for key in identity} == identity
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+@pytest.mark.parametrize("headers", [{}, {"X-Blizzard-Lease-Token": "wrong"}])
+def test_the_new_receivers_refuse_a_missing_or_unknown_token_403(
+    tmp_path: Path, path: str, headers: dict[str, str]
+) -> None:
+    telemetry = _Telemetry()
+    app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=telemetry.handle)
+    with TestClient(app) as client:
+        response = client.post(
+            path, content=_body_for(path), headers={"Content-Type": "application/x-protobuf", **headers}
+        )
+        assert response.status_code == 403
+    assert telemetry.metric_points() == [] and not telemetry.log_records()
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+def test_the_new_receivers_refuse_a_closed_leases_token_403(tmp_path: Path, path: str) -> None:
+    telemetry = _Telemetry()
+    app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=telemetry.handle)
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
+    with TestClient(app) as client:
+        assert _post(client, path, _body_for(path)).status_code == 403
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+def test_the_new_receivers_are_404_while_either_switch_is_off(tmp_path: Path, path: str) -> None:
+    off = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
+    with TestClient(_app(tmp_path, off, [], harness_telemetry=True)) as client:
+        assert _post(client, path, _body_for(path)).status_code == 404
+    (tmp_path / "second").mkdir()
+    with TestClient(_app(tmp_path / "second", _handle(InMemorySpanExporter()), [])) as client:
+        assert _post(client, path, _body_for(path)).status_code == 404
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+def test_the_new_receivers_refuse_a_body_past_the_size_cap_413(tmp_path: Path, path: str) -> None:
+    app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True)
+    with TestClient(app) as client:
+        headers = {"Content-Type": "application/json", **_TOKEN}
+        assert client.post(path, content=b"x" * (MAX_BODY_BYTES + 1), headers=headers).status_code == 413
+        streamed = client.post(path, content=iter([b"x" * MAX_BODY_BYTES, b"x"]), headers=headers)
+        assert streamed.status_code == 413
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+@pytest.mark.parametrize(
+    ("headers", "body", "expected"),
+    [
+        ({"Content-Type": "text/plain"}, b"{}", 415),
+        ({"Content-Type": "application/json", "Content-Encoding": "gzip"}, b"{}", 415),
+        ({"Content-Type": "application/json"}, b"not json", 400),
+        ({"Content-Type": "application/x-protobuf"}, b"\xff\xff", 400),
+    ],
+)
+def test_the_new_receivers_refuse_an_unsupported_or_malformed_request(
+    tmp_path: Path, path: str, headers: dict[str, str], body: bytes, expected: int
+) -> None:
+    app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True)
+    with TestClient(app) as client:
+        assert client.post(path, content=body, headers={**headers, **_TOKEN}).status_code == expected
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+def test_the_new_receivers_refuse_a_request_past_the_rate_429_and_count_it(tmp_path: Path, path: str) -> None:
+    bounds = ReceiverBounds(SpanRateLimiter(FixedClock(_NOW), capacity=1, refill_per_second=0.001), ReceiverCounter())
+    app = _app(
+        tmp_path,
+        _handle(InMemorySpanExporter()),
+        [],
+        harness_telemetry=True,
+        metric_bounds=bounds,
+        log_bounds=bounds,
+    )
+    with TestClient(app) as client:
+        refused = _post(client, path, _body_for(path, repeat=2))
+        assert (refused.status_code, refused.headers.get("Retry-After")) == (429, "1")
+    assert bounds.counter.count().accepted == 0
+    assert bounds.counter.count().dropped > 0
+
+
+def test_each_signal_is_limited_and_counted_on_its_own(tmp_path: Path) -> None:
+    telemetry = _Telemetry()
+    metric_bounds = ReceiverBounds.fresh(FixedClock(_NOW))
+    log_bounds = ReceiverBounds.fresh(FixedClock(_NOW))
+    counter = ReceiverCounter()
+    app = _app(
+        tmp_path,
+        _handle(InMemorySpanExporter()),
+        [],
+        counter,
+        harness_telemetry=True,
+        received=telemetry.handle,
+        metric_bounds=metric_bounds,
+        log_bounds=log_bounds,
+    )
+    with TestClient(app) as client:
+        assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
+        assert _post(client, "/v1/logs", _logs_body(scope="some.library")).status_code == 200
+    assert (metric_bounds.counter.count().accepted, metric_bounds.counter.count().dropped) == (2, 0)
+    assert (log_bounds.counter.count().accepted, log_bounds.counter.count().dropped) == (0, 6)
+    assert counter.count().accepted == 0
+
+
+@pytest.mark.parametrize("path", _NEW_PATHS)
+def test_a_foreign_scope_flood_does_not_spend_the_kept_scopes_budget(tmp_path: Path, path: str) -> None:
+    bounds = ReceiverBounds(SpanRateLimiter(FixedClock(_NOW), capacity=6, refill_per_second=0.001), ReceiverCounter())
+    app = _app(
+        tmp_path,
+        _handle(InMemorySpanExporter()),
+        [],
+        harness_telemetry=True,
+        metric_bounds=bounds,
+        log_bounds=bounds,
+    )
+    with TestClient(app) as client:
+        flood = _post(client, path, _body_for(path, scope="some.library", repeat=50))
+        assert flood.status_code == 200
+        assert _post(client, path, _body_for(path)).status_code == 200
+
+
+def test_a_foreign_scope_flood_does_not_spend_the_trace_receivers_budget(tmp_path: Path) -> None:
+    handle = _handle(InMemorySpanExporter())
+    limiter = SpanRateLimiter(FixedClock(_NOW), capacity=2, refill_per_second=0.001)
+    with TestClient(_app(tmp_path, handle, [], limiter=limiter, harness_telemetry=True)) as client:
+        flood = _post(client, "/v1/traces", _claude_spans_body(scope="some.library", repeat=50))
+        assert flood.status_code == 200
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+
+
+def test_claude_code_spans_export_under_its_service_name_with_the_runner_id(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [], harness_telemetry=True)) as client:
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+        assert _post(client, "/v1/traces", _claude_spans_body(encoding="json"), "json").status_code == 200
+    spans = _finished(handle, exporter)
+    assert len(spans) == 4
+    for span in spans:
+        assert span.resource.attributes["service.name"] == _CLAUDE_SERVICE
+        assert {key: (span.attributes or {})[key] for key in _STAMPS} == _STAMPS
+        assert (span.attributes or {})["user.id"] == "sanitized"
+
+
+def test_claude_codes_spans_are_tallied_apart_from_the_worker_spans(tmp_path: Path) -> None:
+    handle = _handle(InMemorySpanExporter())
+    counter, claude_counter = ReceiverCounter(), ReceiverCounter()
+    app = _app(tmp_path, handle, [], counter, claude_counter=claude_counter, harness_telemetry=True)
+    with TestClient(app) as client:
+        assert _post_json(client, _export(_own_trace())).status_code == 200
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+    assert counter.count() == ReceiverCount(accepted=1, dropped=0)
+    assert claude_counter.count() == ReceiverCount(accepted=2, dropped=0)
+
+
+def test_claude_code_spans_are_dropped_while_harness_telemetry_is_off(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    with TestClient(_app(tmp_path, handle, [])) as client:
+        response = _post(client, "/v1/traces", _claude_spans_body())
+        assert ExportTraceServiceResponse.FromString(response.content).partial_success.rejected_spans == 2
+    assert _finished(handle, exporter) == []
+
+
+def test_a_mapped_scope_renames_claude_codes_spans_and_worker_programs_no_longer_names_them(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    app = _app(
+        tmp_path,
+        handle,
+        [],
+        worker_programs=True,
+        services={_CLAUDE_TRACING_SCOPE: "claude-fleet"},
+    )
+    with TestClient(app) as client:
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+    assert [span.resource.attributes["service.name"] for span in _finished(handle, exporter)] == ["claude-fleet"] * 2
+    (tmp_path / "second").mkdir()
+    unmapped_exporter = InMemorySpanExporter()
+    unmapped = _handle(unmapped_exporter)
+    unmapped_app = _app(tmp_path / "second", unmapped, [], worker_programs=True)
+    with TestClient(unmapped_app) as client:
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+    names = [span.resource.attributes["service.name"] for span in _finished(unmapped, unmapped_exporter)]
+    assert names == [_CLAUDE_SERVICE] * 2
+
+
+def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_configured(tmp_path: Path) -> None:
+    settings = tmp_path / "worker-settings.json"
+    settings.write_text(json.dumps({"env": {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://operator:4318"}}))
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
+    )
+    plan = plan_harness_telemetry(config, bundle=None, runner_environ=_ENDPOINT, enabled=True)
+    assert plan.traces is HarnessTelemetryOutcome.OPERATOR_CONFIGURED
+
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    claude_counter = ReceiverCounter()
+    app = _app(tmp_path, handle, [], claude_counter=claude_counter, worker_programs=True, harness_telemetry=True)
+    with TestClient(app) as client:
+        assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
+    assert [span.resource.attributes["service.name"] for span in _finished(handle, exporter)] == [_CLAUDE_SERVICE] * 2
+    assert claude_counter.count() == ReceiverCount(accepted=2, dropped=0)
+
+
+def test_a_mapped_scope_renames_claude_codes_metrics(tmp_path: Path) -> None:
+    telemetry = _Telemetry()
+    app = _app(
+        tmp_path,
+        _handle(InMemorySpanExporter()),
+        [],
+        harness_telemetry=True,
+        received=telemetry.handle,
+        services={_CLAUDE_METRICS_SCOPE: "claude-fleet"},
+    )
+    with TestClient(app) as client:
+        assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
+    names = [resource.attributes["service.name"] for resource, _, _, _ in telemetry.metric_points()]
+    assert names == ["claude-fleet"] * 2
+
+
+@pytest.mark.parametrize("path", ["/v1/traces", *_NEW_PATHS])
+def test_the_otlp_receivers_make_no_server_span(tmp_path: Path, path: str) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    telemetry = _Telemetry()
+    with TestClient(_app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)) as client:
+        _post(client, path, _body_for(path) if path != "/v1/traces" else _claude_spans_body())
+    assert [s for s in _finished(handle, exporter) if (s.attributes or {}).get("http.route")] == []
+
+
+class _HeldMetricExporter(_CapturingMetricExporter):
+    """A destination that answers only once ``release`` is set, recording whether it was held past its patience."""
+
+    def __init__(self, release: threading.Event) -> None:
+        super().__init__()
+        self.release = release
+        self.timed_out = False
+
+    def export(self, metrics_data: MetricsData, timeout_millis: float = 10_000, **kwargs: object) -> MetricExportResult:
+        self.timed_out = self.timed_out or not self.release.wait(_HELD_SECONDS)
+        return super().export(metrics_data)
+
+
+class _HeldLogExporter(LogRecordExporter):
+    def __init__(self, release: threading.Event) -> None:
+        self.release = release
+        self.timed_out = False
+        self.exported: list[ReadableLogRecord] = []
+
+    def export(self, batch: Sequence[ReadableLogRecord]) -> LogRecordExportResult:
+        self.timed_out = self.timed_out or not self.release.wait(_HELD_SECONDS)
+        self.exported.extend(batch)
+        return LogRecordExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return True
+
+
+#: How long a held destination waits for release; a receiver that exported inline would hold its response this long.
+_HELD_SECONDS = 5.0
+
+
+def test_a_slow_destination_does_not_hold_the_receivers_response(tmp_path: Path) -> None:
+    release = threading.Event()
+    metrics = _HeldMetricExporter(release)
+    logs = _HeldLogExporter(release)
+    received = build_received_telemetry_export(
+        TracingConfig(platform=True, harness_telemetry=True),
+        _ENDPOINT,
+        resource={"service.name": "blizzard-runner"},
+        metric_exporter=metrics,
+        log_exporter=logs,
+    )
+    app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=received)
+    with TestClient(app) as client:
+        for _ in range(2):
+            assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
+            assert _post(client, "/v1/logs", _logs_body()).status_code == 200
+    release.set()
+    received.shutdown(_HELD_SECONDS)
+    assert not metrics.timed_out and not logs.timed_out
+    assert len(metrics.points()) == 4
+    assert len(logs.exported) == 12
+
+
+def test_a_summary_point_is_refused_and_counted_not_lost(tmp_path: Path) -> None:
+    telemetry = _Telemetry()
+    bounds = ReceiverBounds.fresh(FixedClock(_NOW))
+    message = ExportMetricsServiceRequest()
+    message.ParseFromString(_metrics_body())
+    scope_metrics = message.resource_metrics[0].scope_metrics[0]
+    summary = scope_metrics.metrics.add(name="claude_code.latency").summary
+    summary.data_points.add(count=1)
+    summary.data_points.add(count=2)
+    app = _app(
+        tmp_path,
+        _handle(InMemorySpanExporter()),
+        [],
+        harness_telemetry=True,
+        received=telemetry.handle,
+        metric_bounds=bounds,
+    )
+    with TestClient(app) as client:
+        response = _post(client, "/v1/metrics", message.SerializeToString())
+        assert response.status_code == 200
+    assert ExportMetricsServiceResponse.FromString(response.content).partial_success.rejected_data_points == 2
+    assert (bounds.counter.count().accepted, bounds.counter.count().dropped) == (2, 2)
+    assert len(telemetry.metric_points()) == 2

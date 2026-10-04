@@ -27,7 +27,8 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
+from blizzard.runner.harness.internal import claude_code_telemetry, harness_shared
 from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.overload import ProviderOverload
@@ -158,8 +159,10 @@ class ClaudeCodeAdapter:
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
+        harness_telemetry: HarnessTelemetryPlan | None = None,
     ) -> None:
         self._binary = binary
+        self._harness_telemetry = harness_telemetry or HarnessTelemetryPlan()
         self._settings_path = settings_path
         # The published bundle's composed settings and companion files; it supersedes the
         # runner's own hook file, which the composition already folded in.
@@ -720,9 +723,16 @@ class ClaudeCodeAdapter:
         this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam)
         all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
-        return harness_shared.build_identity_env(
+        env = harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
+        if preamble.lease_token:
+            env.update(
+                claude_code_telemetry.captured_env(
+                    self._harness_telemetry.captured(), preamble.local_api_url, preamble.lease_token
+                )
+            )
+        return env
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)

@@ -7,15 +7,19 @@ Both roots that build a ``ClaudeCodeAdapter`` are covered.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import blizzard.runner.app as runner_app
 import blizzard.runner.loop.build as loop_build
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.platform_tracing.handle import build_platform_tracing
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
@@ -29,6 +33,7 @@ from blizzard.runner.config import (
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -629,3 +634,68 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
 
     settings = snapshot.path.resolve() / "claude-code" / "settings.json"
     assert argv[:2] == ["--settings", str(settings)]
+
+
+def _harness_telemetry_env(
+    tmp_path: Path, *, harness_telemetry: bool, platform: bool = True, settings_env: dict[str, str] | None = None
+) -> dict[str, str]:
+    """The identity env of the Claude Code adapter the production route builds from ``[tracing]``."""
+    settings = tmp_path / "worker-settings.json"
+    settings.write_text(json.dumps({"env": settings_env or {}}))
+    tracing = TracingConfig(platform=platform, harness_telemetry=harness_telemetry)
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
+        tracing=tracing,
+    )
+    environ = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
+    handle = build_platform_tracing(
+        tracing,
+        environ,
+        resource={},
+        scope="test",
+        scope_version="0",
+        exporter=InMemorySpanExporter(),
+    )
+    graph = build_runner_process(config, environ=environ, platform_tracing=handle)
+    try:
+        adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+        assert isinstance(adapter, ClaudeCodeAdapter)
+        preamble = WorkerPreamble(
+            environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+            lease_id="lease_1",
+            local_api_url="http://127.0.0.1:8431",
+            lease_token="tok",
+        )
+        return adapter.identity_env(preamble, "ch_1", "sess")
+    finally:
+        graph.close()
+
+
+def _harness_telemetry_names(env: dict[str, str]) -> list[str]:
+    return sorted(n for n in env if n.startswith(("OTEL_", "CLAUDE_CODE_ENABLE_TELEMETRY", "CLAUDE_CODE_ENHANCED")))
+
+
+@pytest.mark.unit
+def test_process_graph_points_every_captured_signal_at_the_runner_from_the_toml_key(tmp_path: Path) -> None:
+    env = _harness_telemetry_env(tmp_path, harness_telemetry=True)
+    assert env["OTEL_TRACES_EXPORTER"] == env["OTEL_METRICS_EXPORTER"] == env["OTEL_LOGS_EXPORTER"] == "otlp"
+    assert env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == "http://127.0.0.1:8431/v1/logs"
+
+
+@pytest.mark.unit
+def test_process_graph_yields_the_signal_the_worker_settings_env_names(tmp_path: Path) -> None:
+    env = _harness_telemetry_env(tmp_path, harness_telemetry=True, settings_env={"OTEL_METRICS_EXPORTER": "none"})
+    assert "OTEL_METRICS_EXPORTER" not in env
+    assert env["OTEL_LOGS_EXPORTER"] == "otlp"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("harness_telemetry", "platform"), [(False, True), (True, False)])
+def test_process_graph_sets_no_harness_telemetry_variable_without_both_switches(
+    tmp_path: Path, harness_telemetry: bool, platform: bool
+) -> None:
+    env = _harness_telemetry_env(tmp_path, harness_telemetry=harness_telemetry, platform=platform)
+    assert _harness_telemetry_names(env) == []

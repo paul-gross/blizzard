@@ -12,14 +12,17 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import create_app
-from blizzard.runner.cli.traces import traces_group
+from blizzard.runner.cli.traces import harness_telemetry_lines, traces_group
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
@@ -299,3 +302,74 @@ def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
     assert result.exit_code != 0
     assert "window 1 of 2" in result.output
     assert f"resume with --since {since.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output
+
+
+_PLAN = HarnessTelemetryPlan(
+    traces=HarnessTelemetryOutcome.CAPTURED,
+    metrics=HarnessTelemetryOutcome.OPERATOR_CONFIGURED,
+    logs=HarnessTelemetryOutcome.NO_RUNNER_DESTINATION,
+)
+
+
+def _reader_with_plan(runner: _Runner, plan: HarnessTelemetryPlan | None) -> LeaseTraceStatusReader:
+    spans, points = ReceiverCounter(), ReceiverCounter()
+    spans.record(accepted=3, dropped=1)
+    points.record(accepted=7, dropped=0)
+    return LeaseTraceStatusReader(
+        settings=runner.settings,
+        leases=runner.store,
+        clock=runner.clock,
+        receiver=ReceiverCounter(),
+        harness_telemetry=plan,
+        claude_trace_receiver=spans,
+        metric_receiver=points,
+        log_receiver=ReceiverCounter(),
+    )
+
+
+def test_status_carries_the_plan_and_each_signals_receiver_count(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    harness = _reader_with_plan(runner, _PLAN).read().harness_telemetry
+
+    assert harness is not None and harness.plan == _PLAN
+    counts = {signal.value: (c.accepted, c.dropped) for signal, c in harness.receivers.items()}
+    assert counts == {"traces": (3, 1), "metrics": (7, 0), "logs": (0, 0)}
+    assert _reader_with_plan(runner, None).read().harness_telemetry is None
+
+
+def test_the_status_route_serves_the_runner_only_harness_telemetry_block(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    runner.status = _reader_with_plan(runner, _PLAN)
+
+    with _client(runner, tmp_path) as client:
+        body = client.get("/api/traces/status").json()
+
+    assert body["harness_telemetry"] == {
+        "traces": {"outcome": "captured", "accepted": 3, "dropped": 1},
+        "metrics": {"outcome": "operator_configured", "accepted": 7, "dropped": 0},
+        "logs": {"outcome": "no_runner_destination", "accepted": 0, "dropped": 0},
+    }
+
+
+def test_the_status_route_omits_the_block_where_no_plan_is_wired(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    with _client(runner, tmp_path) as client:
+        assert client.get("/api/traces/status").json()["harness_telemetry"] is None
+
+
+def test_the_verb_names_each_signals_outcome(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    runner.status = _reader_with_plan(runner, _PLAN)
+    body = _client(runner, tmp_path).get("/api/traces/status").json()
+
+    assert harness_telemetry_lines(body["harness_telemetry"]) == [
+        "harness telemetry:",
+        "  traces: captured  (3 spans accepted, 1 dropped)",
+        "  metrics: operator-configured (not captured)",
+        "  logs: no runner destination (not captured)",
+    ]
+    off = harness_telemetry_lines(
+        {s: {"outcome": "off", "accepted": 0, "dropped": 0} for s in ("traces", "metrics", "logs")}
+    )
+    assert off == ["harness telemetry: off"]
+    assert harness_telemetry_lines(None) == []

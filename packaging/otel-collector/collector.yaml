@@ -1,5 +1,6 @@
 # Example operator collector: one OTLP/HTTP stream in, two backends out.
 # Validate with `mise run collector-config-check`; docs/deployment/tracing.md explains each block.
+# The hosted exporter (HOSTED_TRACES_* variables) carries all three signals; the store exporter, traces only.
 
 receivers:
   otlp:
@@ -28,3 +29,12 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp/store, otlphttp/hosted]
+    # A runner's Claude Code telemetry, when it sets `harness_telemetry`: the hosted service only.
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/hosted]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/hosted]

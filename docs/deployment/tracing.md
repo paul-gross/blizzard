@@ -258,6 +258,10 @@ No span carries prompt text, transcript content or check output; an ask's questi
 descriptions; a bounce's envelope; the name or login of anyone who resolved a gate or answered an ask; or a chunk's
 title or body. Work items, names, ids, counts, durations and costs are the whole of what a trace holds.
 
+One opt-in exception: with [harness telemetry](#harness-telemetry) on, Claude Code's own identity attributes
+(`user.email`, `user.account_uuid`, `user.id`, `organization.id`) are exported with its telemetry. They are the
+operator's choice to send, and no other rule here is lifted.
+
 ## Runner steps start at the claim
 
 A runner step starts when the hub records the lease, not when the worker spawned. That gap is usually one runner drain,
@@ -269,13 +273,16 @@ the same instant.
 
 [`packaging/otel-collector/collector.yaml`](../../packaging/otel-collector/collector.yaml) is an example OpenTelemetry
 Collector configuration that receives OTLP over HTTP and sends every trace to two backends. It is validated against
-`otelcol-contrib` 0.162.0 by `mise run collector-config-check`.
+`otelcol-contrib` 0.162.0 by `mise run collector-config-check`. It also carries `metrics` and `logs` pipelines to the
+hosted exporter, for the signals a runner with [harness telemetry](#harness-telemetry) sends; that exporter
+(`HOSTED_TRACES_*` variables) carries all three signals despite its variable names.
 
 - **Receiver.** One `otlp` receiver on the HTTP protocol, port 4318 — protobuf over HTTP is the only protocol the hub
   will send.
 - **Processor.** `batch` groups spans before export, so the backends see fewer, larger requests.
 - **Exporters.** `otlp/store` sends over gRPC to a self-hosted store such as Tempo; `otlphttp/hosted` sends over HTTP
-  with an API key header to a hosted service such as Honeycomb. Both feed from the one `traces` pipeline.
+  with an API key header to a hosted service such as Honeycomb. Both feed from the one `traces` pipeline; the `metrics`
+  and `logs` pipelines feed `otlphttp/hosted` only.
 - **Credentials.** Endpoints and the API key are read from the environment (`TRACE_STORE_ENDPOINT`,
   `TRACE_STORE_INSECURE`, `HOSTED_TRACES_ENDPOINT`, `HOSTED_TRACES_API_KEY`), never written into the file.
 
@@ -401,6 +408,8 @@ A worker's own tools can send spans to the runner that spawned them. The runner 
 `POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
 pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
 only while platform tracing is on; with it off the path answers `404`, and a sender is expected to carry on.
+[Harness telemetry](#harness-telemetry) adds `POST /v1/metrics` and `POST /v1/logs`, which follow the same
+authentication, encodings and caps, with the exceptions listed there.
 
 - **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
   request names no lease: the runner finds the lease the token was minted for, which must still be active or under an
@@ -429,9 +438,9 @@ only while platform tracing is on; with it off the path answers `404`, and a sen
   `blizzard.lease.id` from the lease, replacing anything the sender set. A URL attribute loses its query string and
   fragment, as every platform span's does.
 - **Caps.** A request body over 1 MiB is refused `413`. Each lease may send 1000 spans in a burst and 50 a second
-  sustained; a request needing more spans than its bucket holds is refused `429` whole, and its spans are counted as
-  dropped. A span keeps at most 64 of its attributes, and a span name, scope version or string attribute value is cut at
-  1024 characters.
+  sustained; a request whose kept spans exceed what its bucket holds is refused `429` whole, and its spans are counted
+  as dropped. Only kept spans are charged, so spans the receiver drops cannot use up the budget. A span keeps at most 64
+  of its attributes, and a span name, scope version or string attribute value is cut at 1024 characters.
 
 #### Worker programs
 
@@ -441,27 +450,102 @@ environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the runner's `/v1
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token). It also
 sets winter's own switch, which ignores the generic names: `WINTER_OTEL_EXPORTER_OTLP_ENDPOINT` (the runner's base URL;
 winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease token), so `winter` command spans nest
-under the step. With it off, no `OTEL_EXPORTER_*` or `WINTER_OTEL_*` variable reaches a worker, and `WINTER_OTEL_*`
-names in `env_passthrough` are always withheld.
+under the step. With it off, no `WINTER_OTEL_*` variable and none of these `OTEL_EXPORTER_*` variables reaches a worker
+(a Claude Code worker may still get its own under [harness telemetry](#harness-telemetry)), and `WINTER_OTEL_*` names in
+`env_passthrough` are always withheld.
 
 - **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
-  `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's work trace are kept, with
-  the same refusals of the work root's and the step roots' ids, the runner stamps caller, chunk and lease, and every cap
-  and the redacting export apply. The CLI's own spans are unchanged.
+  `blizzard-worker-program`, except Claude Code's own scopes, which are `blizzard-claude-code`. Everything else holds:
+  only spans inside the presenting lease's work trace are kept, with the same refusals of the work root's and the step
+  roots' ids, the runner stamps caller, chunk and lease, and every cap and the redacting export apply. The CLI's own
+  spans are unchanged.
 - **Naming a program's spans.** The `[tracing.worker_program_services]` table, empty by default, maps an instrumentation
   scope name to the `service.name` its kept spans leave with, for example `winter_cli = "winter-blizzard"`. A scope not
-  listed stays `blizzard-worker-program`, and the CLI scope `blizzard.cli` stays `blizzard-cli`. The sender's own
-  resource is never read. The runner refuses to start on an empty scope or name, a `blizzard.cli` key, a non-string
-  name, or a name that is `blizzard-hub`, `blizzard-runner`, `blizzard-chunk` or `blizzard-cli`. The table has no effect
-  without `worker_programs = true`, and none on the hub, which has no receiver. A bad entry is a config-load failure and
-  the runner does not start, unlike the OpenTelemetry environment settings, which are reported and leave the runner
-  running with tracing off.
+  listed stays `blizzard-worker-program`, or `blizzard-claude-code` for one of Claude Code's three scopes, and the CLI
+  scope `blizzard.cli` stays `blizzard-cli`. The sender's own resource is never read. The runner refuses to start on an
+  empty scope or name, a `blizzard.cli` key, a non-string name, or a name that is `blizzard-hub`, `blizzard-runner`,
+  `blizzard-chunk` or `blizzard-cli`. The table has no effect unless `worker_programs = true` or
+  `harness_telemetry = true`, and none on the hub, which has no receiver. A bad entry is a config-load failure and the
+  runner does not start, unlike the OpenTelemetry environment settings, which are reported and leave the runner running
+  with tracing off.
 - **Risk.** Blizzard cannot control what a third-party program puts in its spans; one may record request bodies or query
   parameters. Turn this on only for programs you trust with that.
-- **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports to the runner as
-  well.
+- **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports its traces to the
+  runner as well. Claude Code does so only with its own telemetry switched on, and its spans then leave as
+  `blizzard-claude-code`.
 - **`TRACEPARENT`.** Most SDKs do not read it on their own; a program joins the chunk's work trace, under the step's
   root, only if it is configured to.
+
+#### Harness telemetry
+
+With `harness_telemetry = true` in the `[tracing]` block of `blizzard-runner.toml`, default `false` and effective only
+alongside `platform = true`, a Claude Code worker exports its metrics, logs and traces to the runner. Measured on
+`claude` 2.1.288 to 2.1.289; the managed-settings behavior below is read from `claude`'s code, not run.
+
+- **What a worker gets.** For each signal you have not configured, each invocation's environment carries that signal's
+  exporter (`otlp`), endpoint (the runner's `/v1/traces`, `/v1/metrics` or `/v1/logs`), protocol `http/protobuf` and
+  header (the lease token), plus `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`. Only a
+  worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
+- **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,
+  `.tracing` for traces. Each span, data point and log record is stamped with `blizzard.caller=worker`,
+  `blizzard.chunk.id`, `blizzard.lease.id` and `blizzard.runner.id`.
+- **Where it goes.** Under `service.name` `blizzard-claude-code` through the runner's own OpenTelemetry settings for
+  that signal. Claude Code's own resource name is `claude-code`; `[tracing.worker_program_services]` renames by scope.
+- **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on
+  `claude` 2.1.289.
+- **Yielding.** A signal is left to you when its own exporter or endpoint, or the generic `OTEL_EXPORTER_OTLP_ENDPOINT`,
+  is set in the worker's allowlisted env or in the `env` of the settings document the runner passes as `--settings`: the
+  published bundle's composed `settings.json` when there is one, otherwise `worker_settings_path`. A `--settings` `env`
+  that sets that signal's `OTEL_EXPORTER_OTLP_<SIGNAL>_HEADERS` or `_PROTOCOL` yields it too, since either would replace
+  the runner's own. For traces and logs, `BETA_TRACING_ENDPOINT` together with `ENABLE_BETA_TRACING_DETAILED` counts
+  too, and so does a falsy `CLAUDE_CODE_ENABLE_TELEMETRY` in the `--settings` `env`, which switches telemetry off. The
+  variables the runner sets itself never cause a yield. With `worker_programs` on, its traces endpoint in the
+  process env beats a generic endpoint in settings, so a traces signal reported `operator-configured` can still reach
+  the runner.
+- **Opting out.** Put that signal's exporter, such as `OTEL_METRICS_EXPORTER=none`, in the `--settings` document's
+  `env`. An edit to the default `<runner dir>/worker-settings.json` is erased by `runner init`; its durable homes are a
+  bundle or a `worker_settings_path` that points elsewhere. The plan is derived when the runner starts, so a change to
+  the worker settings `env` takes effect on a runner restart.
+- **Outcomes.** `blizzard runner status` and `blizzard runner traces status` show each signal as `captured`,
+  `operator-configured (not captured)`, `no runner destination (not captured)` or `off`, one line when all are off; a
+  runner with no enabled Claude Code binding is `off`. A captured signal's counts are Claude Code's alone; the traces
+  count is its spans, apart from the `worker spans` line. A signal has no runner destination when the runner's own
+  OpenTelemetry variables give it none, such as a traces-only endpoint; the runner then sets nothing for it rather than
+  letting Claude Code's localhost default take it.
+- **Precedence.** A `--settings` or user-settings `env` entry beats a same-named process variable, a
+  process signal-specific endpoint beats a settings generic one, and managed settings win per signal family (read from
+  `claude`'s code, not run). The
+  record of what was measured and what inferred, and when to measure again, is in
+  blizzard-context's
+  [`blizzard:manual-claude-code-harness-telemetry`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/manual.md).
+- **Accepted overrides.** A generic endpoint, or an exporter with no endpoint, set only in the user's own Claude
+  settings is invisible to the runner, which captures that signal anyway. Where your endpoint wins but you set no
+  headers, the lease token goes to it as `X-Blizzard-Lease-Token`. A per-signal `OTEL_EXPORTER_OTLP_<SIGNAL>_HEADERS` or
+  `_PROTOCOL` in the user's own Claude settings beats the runner's process variables and replaces its lease-token
+  header: the runner refuses that signal `403`, nothing captures it, and status still says `captured`. Your header
+  value, an API key say, is then sent to the runner's receiver. Put that signal's exporter in the `--settings`
+  document, which opts it out, or set no per-signal headers or protocol.
+- **Your destinations switch on.** Claude Code exports nothing until `CLAUDE_CODE_ENABLE_TELEMETRY=1`, which the runner
+  sets once any signal is captured, so the destinations you configured start receiving then. Traces also need
+  `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`, which the runner sets with it; you need both in your settings `env` only
+  when the runner captures nothing, such as when every signal is yielded.
+- **Receivers.** `POST /v1/metrics` and `POST /v1/logs` take the trace receiver's authentication, encodings and 1 MiB
+  cap, but answer `404` unless platform tracing and `harness_telemetry` are both on. Each signal has its own per-lease
+  rate, the same burst and sustained rates as the trace receiver's caps, counted in data points or log records,
+  charged only for what is kept. A summary
+  metric point is refused and counted. Exponential histograms are carried, without their `zero_threshold`. Metrics leave
+  through a bounded background queue that drops its oldest batch when full, and logs through the SDK's batch log
+  processor. A log record keeps its trace context only inside the lease's work trace.
+- **`TRACEPARENT`.** With traces captured Claude Code's spans join the chunk's trace under the step's root. It passes
+  its own `claude_code.tool.execution` span on as `TRACEPARENT` to a tool it runs, so a
+  [worker program](#worker-programs) that reads `TRACEPARENT` nests under that tool's span. A `blizzard runner`
+  command's span still parents on the step's root, since the CLI reads only `BLIZZARD_TRACEPARENT`, which Claude Code
+  passes through unchanged.
+- **What leaves.** Claude Code's identity attributes (`user.email`, `user.account_uuid`, `user.id`, `organization.id`)
+  pass through unchanged; turning this on is the choice to export them. Content logging you enable with `OTEL_LOG_*` is
+  exported too, a risk like the one under worker programs.
+- **Two destinations.** The runner exports to one. Fan out through your own collector, as under
+  [Fanning one stream to two backends](#fanning-one-stream-to-two-backends).
 
 ### Operator command spans
 
@@ -531,9 +615,10 @@ configures, with no daemon in between.
 
 Last export and last error are read from what the sweep recorded, so they survive a restart.
 
-`blizzard runner traces status` also reports the runner's receiver: the worker spans it accepted and dropped since it
-started. These are counts held in memory, so they reset on a restart; `blizzard hub traces status` has no such line,
-since the hub has no receiver.
+`blizzard runner traces status` also reports the runner's receivers: the worker spans it accepted and dropped since it
+started, and a `harness telemetry` section giving each signal's outcome (see [Harness telemetry](#harness-telemetry))
+and, for a captured one, its accepted and dropped counts in spans, data points or log records. These are counts held in
+memory, so they reset on a restart; `blizzard hub traces status` has no such line, since the hub has no receiver.
 
 ## Telling a window again
 

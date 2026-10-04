@@ -18,6 +18,10 @@ from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
+from blizzard.foundation.platform_tracing.received_export import (
+    DisabledReceivedTelemetryExport,
+    IReceivedTelemetryExport,
+)
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -29,7 +33,7 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -111,6 +115,22 @@ class RunnerWiring:
     def receiver_counter(self) -> ReceiverCounter:
         counter: ReceiverCounter | None = getattr(self.state, "receiver_counter", None)
         return counter if counter is not None else self._refuse("span receiver counter")
+
+    def claude_trace_counter(self) -> ReceiverCounter:
+        counter: ReceiverCounter | None = getattr(self.state, "claude_trace_counter", None)
+        return counter if counter is not None else self._refuse("Claude Code span receiver counter")
+
+    def metric_bounds(self) -> ReceiverBounds:
+        bounds: ReceiverBounds | None = getattr(self.state, "metric_bounds", None)
+        return bounds if bounds is not None else self._refuse("metric receiver bounds")
+
+    def log_bounds(self) -> ReceiverBounds:
+        bounds: ReceiverBounds | None = getattr(self.state, "log_bounds", None)
+        return bounds if bounds is not None else self._refuse("log receiver bounds")
+
+    def received_telemetry(self) -> IReceivedTelemetryExport:
+        """The received metrics and logs export; the disabled one where the composer wired none."""
+        return getattr(self.state, "received_telemetry", None) or DisabledReceivedTelemetryExport()
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)

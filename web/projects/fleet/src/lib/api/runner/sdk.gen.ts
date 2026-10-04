@@ -503,7 +503,8 @@ export const traceReplayApiTracesReplayPost = <ThrowOnError extends boolean = fa
 /**
  * Trace Status
  *
- * Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error.
+ * Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,
+ * and Claude Code's harness-telemetry plan with each signal's receiver counts.
  */
 export const traceStatusApiTracesStatusGet = <ThrowOnError extends boolean = false>(options?: Options<TraceStatusApiTracesStatusGetData, ThrowOnError>): RequestResult<TraceStatusApiTracesStatusGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<TraceStatusApiTracesStatusGetResponses, unknown, ThrowOnError>({ url: '/api/traces/status', ...options });
 

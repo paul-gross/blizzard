@@ -74,6 +74,7 @@ class ClaudeCodeDeclaration:
             transcript_source=transcript_source,
             process=process,
             launcher=launcher,
+            harness_telemetry=shared.harness_telemetry,
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 

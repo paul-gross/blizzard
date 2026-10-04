@@ -23,6 +23,7 @@ from blizzard.runner.composition import (
     build_read_stores,
     build_runner_platform_tracing,
     build_runner_process,
+    build_runner_received_telemetry,
 )
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.domain.tracing.sweep import announce_rejected_tracing
@@ -100,7 +101,11 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
     graph = build_runner_process(
-        config, events=broker, bundle=bundle, platform_tracing=build_runner_platform_tracing(config)
+        config,
+        events=broker,
+        bundle=bundle,
+        platform_tracing=build_runner_platform_tracing(config),
+        received_telemetry=build_runner_received_telemetry(config),
     )
     try:
         hosted = build_hosted_app(config, process_graph=graph)

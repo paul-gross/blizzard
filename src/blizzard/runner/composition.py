@@ -24,6 +24,11 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
+from blizzard.foundation.platform_tracing.received_export import (
+    DisabledReceivedTelemetryExport,
+    IReceivedTelemetryExport,
+    build_received_telemetry_export,
+)
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -39,7 +44,7 @@ from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
 )
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.environments.factory import build_workspace_provider
@@ -47,6 +52,7 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.catalog import configured_tiers
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan, plan_harness_telemetry
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
@@ -107,11 +113,20 @@ class RunnerProcess:
     trace_sweep: LeaseTraceSweep | None
     #: The operator's replay over the same assembly and exporter — dry-run only while tracing is off.
     trace_replay: LeaseTraceReplay
-    #: The worker-span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
+    #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
     span_limiter: SpanRateLimiter
     receiver_counter: ReceiverCounter
+    #: Claude Code's spans alone, counted apart from the shared span tally above.
+    claude_trace_counter: ReceiverCounter
+    #: The metrics and logs receivers' own bound and tally, counted in data points and log records.
+    metric_bounds: ReceiverBounds
+    log_bounds: ReceiverBounds
     #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
+    #: Where admitted metrics and logs leave — off unless the host passed a handle.
+    received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
+    #: What the Claude Code binding does with each of a worker's telemetry signals, derived once at startup.
+    harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
 
     def close(self) -> None:
         try:
@@ -120,7 +135,10 @@ class RunnerProcess:
             try:
                 self.engine.dispose()
             finally:
-                self.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+                try:
+                    self.received_telemetry.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+                finally:
+                    self.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -141,6 +159,15 @@ def build_runner_platform_tracing(config: RunnerConfig, environ: Mapping[str, st
     )
 
 
+def build_runner_received_telemetry(
+    config: RunnerConfig, environ: Mapping[str, str] | None = None
+) -> IReceivedTelemetryExport:
+    """The handle Claude Code's received metrics and logs leave through: off unless ``[tracing]
+    harness_telemetry`` and platform tracing are both on."""
+    env = os.environ if environ is None else environ
+    return build_received_telemetry_export(config.tracing, env, resource=resource_attributes(env, __version__))
+
+
 def build_runner_process(
     config: RunnerConfig,
     *,
@@ -149,6 +176,7 @@ def build_runner_process(
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
+    received_telemetry: IReceivedTelemetryExport | None = None,
 ) -> RunnerProcess:
     """Construct the process-scoped graph; dispose partial resources on failure.
 
@@ -166,7 +194,15 @@ def build_runner_process(
         clock = SystemClock()
         process = LinuxProcessProbe()
         provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
-        harnesses = build_production_harness_registry(config, executor=executor, process=process, bundle=bundle)
+        plan = plan_harness_telemetry(
+            config,
+            bundle=bundle,
+            runner_environ=os.environ if environ is None else environ,
+            enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
+        )
+        harnesses = build_production_harness_registry(
+            config, executor=executor, process=process, bundle=bundle, harness_telemetry=plan
+        )
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
@@ -206,7 +242,12 @@ def build_runner_process(
             trace_replay=trace_replay,
             span_limiter=SpanRateLimiter(clock),
             receiver_counter=ReceiverCounter(),
+            claude_trace_counter=ReceiverCounter(),
+            metric_bounds=ReceiverBounds.fresh(clock),
+            log_bounds=ReceiverBounds.fresh(clock),
             platform_tracing=platform_tracing,
+            received_telemetry=received_telemetry or DisabledReceivedTelemetryExport(),
+            harness_telemetry=plan,
         )
     except BaseException:
         try:

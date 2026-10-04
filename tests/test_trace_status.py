@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.traces import TraceStatusResponse
 from tests.support import HubHarness, InMemoryTraceExporter
 from tests.test_trace_export_sweep import _closed_pair, _sweep
 from tests.trace_hub import trace_hub
@@ -125,3 +126,21 @@ def test_the_last_error_is_ongoing_until_an_export_recovers_and_carries_no_expor
     assert recovered["last_error_ongoing"] is False
     assert recovered["last_error_at"] == failed["last_error_at"]
     assert recovered["last_export_at"] is not None
+
+
+def test_the_hubs_status_schema_carries_no_runner_only_field() -> None:
+    assert list(TraceStatusResponse.model_json_schema()["properties"]) == [
+        "state",
+        "endpoint",
+        "rejected_setting",
+        "rejected_value",
+        "cursor_at",
+        "lag_seconds",
+        "last_export_at",
+        "last_export_span_count",
+        "last_error_at",
+        "last_error_message",
+        "last_error_ongoing",
+        "receiver",
+        "replay_max_window_seconds",
+    ]

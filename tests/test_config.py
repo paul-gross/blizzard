@@ -2002,6 +2002,24 @@ def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -
 
 
 @pytest.mark.unit
+def test_harness_telemetry_round_trips_and_refuses_a_non_boolean(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    assert TracingConfig().harness_telemetry is False
+    assert "\n# harness_telemetry = false\n" in HubConfig.scaffold(root).to_toml()
+    config = dataclasses.replace(HubConfig.scaffold(root), tracing=TracingConfig(harness_telemetry=True))
+    text = config.to_toml()
+    assert "\nharness_telemetry = true\n" in text
+    (root / "blizzard-hub.toml").write_text(text)
+    assert HubConfig.load(root).tracing.harness_telemetry is True
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nharness_telemetry = "yes"\n'
+    )
+    with pytest.raises(HubConfigError, match=re.escape("tracing.harness_telemetry must be true or false")):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
 def test_worker_program_services_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()

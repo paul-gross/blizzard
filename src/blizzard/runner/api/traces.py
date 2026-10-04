@@ -7,25 +7,30 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.runner_traces import (
+    HarnessSignalStatus,
+    HarnessTelemetryStatus,
     ReceiverStatus,
     RunnerTraceReplayFailure,
     RunnerTraceReplayResponse,
+    RunnerTraceStatusResponse,
     TraceReplayRequest,
-    TraceStatusResponse,
 )
 
 router = APIRouter(prefix="/api/traces", tags=["traces"])
 
 
-@router.get("/status", response_model=TraceStatusResponse)
-def trace_status(request: Request) -> TraceStatusResponse:
-    """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error."""
+@router.get("/status", response_model=RunnerTraceStatusResponse)
+def trace_status(request: Request) -> RunnerTraceStatusResponse:
+    """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,
+    and Claude Code's harness-telemetry plan with each signal's receiver counts."""
     read = RunnerWiring.of(request).trace_status().read()
-    return TraceStatusResponse(
+    harness = read.harness_telemetry
+    return RunnerTraceStatusResponse(
         state=read.state,
         endpoint=read.endpoint,
         rejected_setting=read.rejected_setting,
@@ -43,6 +48,20 @@ def trace_status(request: Request) -> TraceStatusResponse:
             else None
         ),
         replay_max_window_seconds=read.replay_max_window_seconds,
+        harness_telemetry=(
+            HarnessTelemetryStatus(
+                **{
+                    signal.value: HarnessSignalStatus(
+                        outcome=harness.plan.outcome(signal),
+                        accepted=harness.receivers[signal].accepted,
+                        dropped=harness.receivers[signal].dropped,
+                    )
+                    for signal in TelemetrySignal
+                }
+            )
+            if harness
+            else None
+        ),
     )
 
 

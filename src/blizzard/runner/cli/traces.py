@@ -39,13 +39,44 @@ def _daemon_options(command: Any) -> Any:
     )(command)
 
 
+_OUTCOME_TEXT = {
+    "captured": "captured",
+    "operator_configured": "operator-configured (not captured)",
+    "no_runner_destination": "no runner destination (not captured)",
+    "off": "off",
+}
+_SIGNAL_UNIT = {"traces": "spans", "metrics": "data points", "logs": "log records"}
+
+
+def harness_telemetry_lines(harness: dict[str, Any] | None) -> list[str]:
+    """The ``harness telemetry`` section: one line per signal, its outcome and, where captured, what the
+    runner's receiver has taken in; a single ``off`` line where every signal is off. Empty where the runner
+    reported no plan."""
+    if harness is None:
+        return []
+    if all(harness[signal]["outcome"] == "off" for signal in _SIGNAL_UNIT):
+        return ["harness telemetry: off"]
+    lines = ["harness telemetry:"]
+    for signal, unit in _SIGNAL_UNIT.items():
+        entry = harness[signal]
+        line = f"  {signal}: {_OUTCOME_TEXT[entry['outcome']]}"
+        if entry["outcome"] == "captured":
+            line += f"  ({entry['accepted']} {unit} accepted, {entry['dropped']} dropped)"
+        lines.append(line)
+    return lines
+
+
 def _status_lines(s: dict[str, Any]) -> list[str]:
     if s["state"] == "enabled":
         lines = [f"tracing: on, exporting to {s['endpoint']}"]
     elif s["state"] == "rejected":
-        return [f"tracing: off — {s['rejected_setting']}={s['rejected_value']!r} is not supported", _COLLECTOR_HINT]
+        return [
+            f"tracing: off — {s['rejected_setting']}={s['rejected_value']!r} is not supported",
+            _COLLECTOR_HINT,
+            *harness_telemetry_lines(s.get("harness_telemetry")),
+        ]
     else:
-        return ["tracing: off"]
+        return ["tracing: off", *harness_telemetry_lines(s.get("harness_telemetry"))]
     cursor = s["cursor_at"] or "none yet"
     lag = "none waiting" if s["lag_seconds"] is None else f"{s['lag_seconds']:.0f}s"
     lines.append(f"cursor: {cursor}  lag: {lag}")
@@ -61,7 +92,7 @@ def _status_lines(s: dict[str, Any]) -> list[str]:
     receiver = s.get("receiver")
     if receiver is not None:
         lines.append(f"worker spans: {receiver['accepted_spans']} accepted, {receiver['dropped_spans']} dropped")
-    return lines
+    return [*lines, *harness_telemetry_lines(s.get("harness_telemetry"))]
 
 
 @click.group("traces")
