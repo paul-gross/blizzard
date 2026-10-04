@@ -6,7 +6,7 @@ import { stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { LocalPanelMobile } from './app-panel-mobile';
-import type { MachineChunkRow } from './app-panel';
+import type { MachineChunkRow } from './app-panel.model';
 
 /** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
 const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;

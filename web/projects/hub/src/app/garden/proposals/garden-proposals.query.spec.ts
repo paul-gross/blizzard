@@ -5,18 +5,6 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
-import { isGardenProposalWaiting } from './gardening-proposals-page.model';
-
-describe('isGardenProposalWaiting', () => {
-  it('is waiting when the proposal carries no closure', () => {
-    expect(isGardenProposalWaiting({ closure: null } as never)).toBe(true);
-    expect(isGardenProposalWaiting({} as never)).toBe(true);
-  });
-
-  it('is not waiting once a closure is recorded', () => {
-    expect(isGardenProposalWaiting({ closure: { closure: 'passed' } } as never)).toBe(false);
-  });
-});
 
 @Component({
   selector: 'app-test-garden-proposals-query-host',

@@ -17,8 +17,6 @@ import { LocalPanelLayout } from './app-panel-layout';
 import { LocalPanelMobile } from './app-panel-mobile';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
-export type { MachineChunkRow } from './app-panel.model';
-
 /**
  * The runner's machine-local panel — the data-orchestration container.
  * Owns the leases query plus the one shared

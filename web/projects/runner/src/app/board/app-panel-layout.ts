@@ -9,7 +9,7 @@ import { ChunkRow } from './chunk-list/chunk-row';
 import { EnvList } from '../environments/env-list';
 import { LocalAsks } from '../asks/app-asks';
 import { LocalInfo } from '../machine/app-info';
-import type { MachineChunkRow } from './app-panel';
+import type { MachineChunkRow } from './app-panel.model';
 import { LocalSubscriptions } from '../status/app-subscriptions';
 
 /**

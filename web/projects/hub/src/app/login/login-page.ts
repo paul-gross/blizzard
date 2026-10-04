@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { KitAsyncState } from 'fleet';
+import { asyncState, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 import { LoginButtons } from '../core/auth/login-buttons';
 import { consumeReturnUrl, safeAuthorizeReturnTo } from '../core/auth/auth-redirect';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
-import { providersState } from './login-page.model';
 
 /** `localStorage` key the last provider signed in with is remembered under —
  * pinned by `login-page.spec.ts`'s "writes the last-used provider to
@@ -46,8 +45,8 @@ export class LoginPage {
 
   protected readonly providers = computed(() => this.providersQuery.data() ?? []);
 
-  protected readonly state = computed<'loading' | 'error' | 'empty' | 'ready'>(() =>
-    providersState(this.providersQuery.isPending(), this.providersQuery.isError(), this.providers()),
+  protected readonly state = computed<KitAsyncStateValue>(() =>
+    asyncState(this.providersQuery, this.providers().length === 0),
   );
 
   private readonly lastUsedSignal = signal<string | null>(

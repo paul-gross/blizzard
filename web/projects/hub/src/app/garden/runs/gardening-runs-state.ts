@@ -2,23 +2,8 @@ import { computed, Injectable, type Signal } from '@angular/core';
 import { asyncState, type KitAsyncStateValue } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRunsQuery } from './garden-runs.query';
-import { type RunListCountsVm, type RunListRowVm } from './run-list';
-
-/** A run's counts triple, summed across every set it delivered — `null` when it
- * delivered none, so the row renders no triple rather than a misleading `+0`. */
-function summedCounts(
-  delivered: readonly { added_count: number; observed_count: number; gone_count: number }[],
-): RunListCountsVm | null {
-  if (delivered.length === 0) return null;
-  return delivered.reduce(
-    (sum, set) => ({
-      added: sum.added + set.added_count,
-      observed: sum.observed + set.observed_count,
-      gone: sum.gone + set.gone_count,
-    }),
-    { added: 0, observed: 0, gone: 0 },
-  );
-}
+import { mintedAtFor, runListRows } from './gardening-runs-state.model';
+import { type RunListRowVm } from './run-list';
 
 /**
  * The `/gardening/runs` tab's one run-list read, shared by the list route and the
@@ -40,18 +25,7 @@ export class GardeningRunsState {
 
   readonly runsQuery = injectHubRunsQuery(() => this.window.since);
 
-  readonly listRows: Signal<readonly RunListRowVm[]> = computed(() =>
-    (this.runsQuery.data() ?? []).map((row) => ({
-      chunkId: row.chunk_id,
-      routineName: row.routine_name,
-      scopeSlug: row.scope_slug,
-      mode: row.mode,
-      mintedAt: row.minted_at,
-      outcome: row.outcome,
-      escalated: row.escalation !== null,
-      counts: summedCounts(row.delivered),
-    })),
-  );
+  readonly listRows: Signal<readonly RunListRowVm[]> = computed(() => runListRows(this.runsQuery.data() ?? []));
 
   readonly listState: Signal<KitAsyncStateValue> = computed(() =>
     asyncState(this.runsQuery, this.listRows().length === 0),
@@ -60,6 +34,6 @@ export class GardeningRunsState {
   /** When `chunkId` was minted, off the matching list row — `null` when the run has
    * aged out of the window above, which the delta read carries no instant to cover. */
   mintedAtFor(chunkId: string): string | null {
-    return this.listRows().find((row) => row.chunkId === chunkId)?.mintedAt ?? null;
+    return mintedAtFor(this.listRows(), chunkId);
   }
 }
