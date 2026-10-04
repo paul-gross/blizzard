@@ -27,7 +27,14 @@ from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DecisionChoice, MigrationFact, MigrationSource
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    DecisionChoice,
+    MigrationFact,
+    MigrationSource,
+    WorkRefLabel,
+)
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -42,7 +49,6 @@ from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import RouteToken
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node
-from blizzard.hub.domain.observability.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope

@@ -13,9 +13,8 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MovementKind, TransitionFact
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MovementKind, TransitionFact, WorkRefLabel
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
-from blizzard.hub.domain.observability.tracing.repository import WorkRefLabel
 from blizzard.wire.envelope import (
     EnvelopeArtifact,
     EnvelopeChoice,

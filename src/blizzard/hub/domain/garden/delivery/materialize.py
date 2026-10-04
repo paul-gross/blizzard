@@ -1,6 +1,6 @@
 """Delivery materialization — turning a :class:`ValidatedDelivery`
 into the rows a passing delivery mints, written in one transaction
-(blizzard-product:/delivered/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
+(blizzard-product:/delivered/garden/machinery.md §Delivery). Sibling to ``validation.py``
 rather than folded into it so that module stays pure validation with no I/O; this one
 mints ids, resolves a proposal's submission-local ref citations against them, and hands
 a ready-to-insert plan to the store, trusting that validation rather than repeating it."""

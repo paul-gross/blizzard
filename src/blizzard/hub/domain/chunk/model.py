@@ -7,7 +7,7 @@ The derivations are pure functions over already-loaded domain facts
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -23,9 +23,10 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
+from blizzard.hub.domain.runners.activity import ActivityEntry
 
 if TYPE_CHECKING:
-    # Deferred: ``chunks.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
+    # Deferred: ``ports.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
     # ``DependencyEdge`` — a runtime import here would cycle back.
     from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 
@@ -581,34 +582,6 @@ class EventFeed:
             ),
             detail={"cause": esc.cause, "detail": esc.detail} if esc.cause or esc.detail else None,
         )
-
-
-@dto
-@dataclass(frozen=True)
-class ActivityEntry:
-    """One row of the activity feed — a historical fact reshaped into the
-    same vocabulary a live SSE frame carries. ``type`` mirrors a frame-type constant as a
-    plain string (``bzh:domain-core``); ``key`` is a table-qualified natural key used only
-    as the sort tiebreak; ``at`` is the fact's own recorded instant."""
-
-    type: str
-    key: str
-    at: datetime
-    # chunk-changed
-    chunk_id: str | None = None
-    status: str | None = None
-    prev_status: str | None = None
-    node: str | None = None
-    prev_node: str | None = None
-    runner_id: str | None = None
-    cause: str | None = None
-    graph_id: str | None = None
-    # event-logged
-    severity: EventLogSeverity | None = None
-    kind: str | None = None
-    # runner-changed
-    by: str | None = None
-    reason: str | None = None
 
 
 @domain_model
@@ -1453,3 +1426,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         written first as its idempotence guard. Returns ``None`` and writes nothing when
         ``proposal_id`` already carries a closure."""
         ...
+
+
+#: A work ref's source-native token (``acme#42``), or ``None`` when no configured source renders it.
+WorkRefLabel = Callable[[WorkRef], str | None]

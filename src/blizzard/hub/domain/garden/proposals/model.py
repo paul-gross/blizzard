@@ -17,10 +17,10 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, Finding
-from blizzard.hub.domain.operations.edit import UNSET, UnsetType
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 if TYPE_CHECKING:
-    # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
+    # Deferred to break the cycle: `closure.py` itself imports
     # `GardenProposal` and `GardenProposalAlreadyClosed` from this module.
     from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IReadGardenProposalClosureRepository
     from blizzard.hub.domain.garden.routines import Routine

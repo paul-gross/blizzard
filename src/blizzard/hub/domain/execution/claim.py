@@ -15,14 +15,13 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import dto
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.chunk.model import Chunk, holds_claim
+from blizzard.hub.domain.chunk.model import Chunk, WorkRefLabel, holds_claim
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-from blizzard.hub.domain.observability.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.envelope import NodeEnvelope

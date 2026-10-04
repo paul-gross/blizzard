@@ -38,7 +38,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceNameTaken,
 )
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
-from blizzard.hub.domain.operations.edit import UNSET
+from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.work_items.editing import (
     WorkItemEdit,
     WorkItemHeldByDependents,

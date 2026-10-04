@@ -39,7 +39,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.operations.edit import UNSET
+from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,

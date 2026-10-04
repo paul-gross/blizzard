@@ -157,8 +157,8 @@ def derive_blocked_prerequisites(
     """Every unmet prerequisite per dependent chunk id, in declared order — never folded into
     :class:`ChunkFacts` (``bzh:facts-not-status``). Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives
     any; a dependent absent from ``statuses`` reads as its default ``not_ready``. ``standing_edges`` must already
-    carry
-    :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s own order.
+    carry the order of
+    :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IReadChunkDependenciesRepository.list_standing_edges`.
     A dependent with none is absent from the result rather than carrying an empty list.
     Full rule: `blizzard-context:/domain/work/statuses.md` §The blocked marking."""
     unmet: dict[str, list[str]] = {}
@@ -209,8 +209,8 @@ def derive_chunk_neighborhood(
     chunk_id: str, edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
 ) -> ChunkNeighborhood:
     """A sibling of :func:`derive_blocked_markings`, answering a different question: every edge naming
-    ``chunk_id``, for a chunk at any status. ``edges`` must already be
-    :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IReadChunkDependenciesRepository.standing_edges_for`'s own order,
+    ``chunk_id``, for a chunk at any status. ``edges`` must already be in the order of
+    :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IReadChunkDependenciesRepository.standing_edges_for`,
     and ``statuses`` must carry ``chunk_id``'s own status. Full rule: `blizzard-context:/domain/work/statuses.md` §The
     neighborhood."""
     prerequisites: list[ChunkNeighbor] = []

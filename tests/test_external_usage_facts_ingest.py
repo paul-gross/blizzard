@@ -17,7 +17,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService
-from blizzard.hub.domain.runners.registration import FleetService, RetiredRunnerGuard
+from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore

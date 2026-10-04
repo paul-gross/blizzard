@@ -8,7 +8,6 @@ check-then-act over "does this chunk have a live route", so they share one lock 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Final
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -20,20 +19,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-
-
-class UnsetType(Enum):
-    """The type of :data:`UNSET` — a single-member enum, not a plain class, so
-    ``is``/``is not`` comparisons against it narrow a ``T | UnsetType`` union for
-    pyright (identity narrowing on a bare class instance is not reliably supported;
-    on an enum literal it is)."""
-
-    TOKEN = 0
-
-
-#: "Field absent from the request, leave it unchanged" — distinct from ``None``, which
-#: means "clear it", and from a field's own falsy value.
-UNSET: Final = UnsetType.TOKEN
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 #: Closed at ``done``/``stopped`` — no future transition is left to consult the intent.
 _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})

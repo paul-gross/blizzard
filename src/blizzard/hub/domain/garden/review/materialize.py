@@ -1,6 +1,6 @@
 """Review-finding delivery materialization — turning a
 :class:`ValidatedReviewFindings` into the rows a passing delivery mints, written in one
-transaction. Sibling to `review_findings.py` rather than folded into it so that module
+transaction. Sibling to `validation.py` rather than folded into it so that module
 stays pure validation with no I/O; this one mints ids through the injected clock
 (`bzh:injected-clock`) and hands a ready-to-insert plan to the store, trusting that
 validation rather than repeating it."""
@@ -24,7 +24,7 @@ from blizzard.hub.domain.graph.model import Node
 class ReviewFindingsOutcome(Enum):
     """What :meth:`ReviewFindingsMaterialize.deliver` reports. The first two members mean
     the delivery is durably recorded — the distinction exists only to assert on in tests,
-    mirroring `garden_delivery_materialize.DeliveryOutcome`; ``FENCED`` means the write
+    mirroring `delivery.materialize.DeliveryOutcome`; ``FENCED`` means the write
     fence refused it (``bzh:epoch-fencing``) and nothing landed."""
 
     RECORDED = "recorded"  # this call minted every row

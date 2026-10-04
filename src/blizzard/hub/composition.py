@@ -53,7 +53,7 @@ from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
@@ -65,6 +65,7 @@ from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService, RunnerFactsService
+from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.validation import CommitResolver
@@ -112,7 +113,6 @@ from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
-from blizzard.hub.domain.observability.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.observability.transcripts import (
@@ -129,7 +129,7 @@ from blizzard.hub.domain.operations.queue import GroupService, QueueService
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
-from blizzard.hub.domain.runners.registration import FleetService, IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.materialization import WorkItemMaterializationReconciler
@@ -731,7 +731,7 @@ def build_services(
     garden_trend_store = GardenTrendStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_run_store = GardenRunStore(store_connections)
-    # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
+    # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
         forge_http_client or httpx.Client(timeout=10.0),

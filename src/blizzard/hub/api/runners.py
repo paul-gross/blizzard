@@ -20,12 +20,10 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.execution.fleet import RunnerHoldsRoutes, RunnerNotEnrolled, RunnerNotRetired
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
-    RunnerHoldsRoutes,
     RunnerLiveness,
-    RunnerNotEnrolled,
-    RunnerNotRetired,
     RunnerRegistration,
     RunnerRetired,
 )

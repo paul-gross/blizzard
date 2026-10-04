@@ -29,8 +29,8 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
-from blizzard.hub.domain.operations.edit import UNSET, UnsetType
 
 
 def prepare_mint(

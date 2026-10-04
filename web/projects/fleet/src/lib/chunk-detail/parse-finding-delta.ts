@@ -3,11 +3,11 @@
  * and its `FindingOp` union — **that Python module is the source of truth**, this is
  * not generated from it. It is absent from the openapi-generated client
  * (`api/hub/types.gen.ts`) because it is a delivery-time validation shape
- * (`garden_delivery.py`'s `parse_delta`), never an endpoint's response model, so
+ * (`garden/delivery/validation.py`'s `parse_delta`), never an endpoint's response model, so
  * nothing regenerates this file when the Python model changes.
  *
  * Because this mirror can silently drift from its source, every field below is
- * exactly what `garden_delivery.py`'s `parse_delta` requires and no more: an unknown
+ * exactly what `garden/delivery/validation.py`'s `parse_delta` requires and no more: an unknown
  * top-level key or an unknown key on one op is ignored rather than rejected, so a
  * field `FindingDelta` grows later does not turn every already-delivered artifact
  * into a fallback-to-raw. The one deliberate departure from the Python model's own
