@@ -361,8 +361,13 @@ class GroupService:
             return self._group_locked(handle, survivor_id, merge_ids)
 
     def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:
-        survivor, survivor_status = self._require_unacquired_chunk(handle, survivor_id)
-        targets = self._resolve_targets(handle, survivor_id, merge_ids)
+        # One read each for the survivor and every merge id; the checks below run
+        # against these maps in the same order the per-id reads did.
+        ids = [survivor_id, *merge_ids]
+        records = handle.records_for(ids)
+        facts = handle.facts_for(ids)
+        survivor, survivor_status = self._require_unacquired_chunk(records, facts, survivor_id)
+        targets = self._resolve_targets(records, facts, survivor_id, merge_ids)
         folded_ids = [t.chunk_id for t in targets]
 
         standing = handle.standing_edges()
@@ -405,22 +410,26 @@ class GroupService:
             survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
         )
 
-    def _resolve_targets(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> list[Chunk]:
+    def _resolve_targets(
+        self, records: dict[str, Chunk], facts: dict[str, ChunkFacts], survivor_id: str, merge_ids: list[str]
+    ) -> list[Chunk]:
         seen: set[str] = set()
         targets: list[Chunk] = []
         for merge_id in merge_ids:
             if merge_id == survivor_id or merge_id in seen:
                 continue  # self and duplicates are no-ops, not errors
             seen.add(merge_id)
-            targets.append(self._require_unacquired_chunk(handle, merge_id)[0])
+            targets.append(self._require_unacquired_chunk(records, facts, merge_id)[0])
         return targets
 
-    def _require_unacquired_chunk(self, handle: ILockedChunkRead, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
-        chunk = handle.record(chunk_id)
-        facts = handle.facts(chunk_id)
-        if chunk is None or facts is None:
+    def _require_unacquired_chunk(
+        self, records: dict[str, Chunk], facts: dict[str, ChunkFacts], chunk_id: str
+    ) -> tuple[Chunk, ChunkStatus]:
+        chunk = records.get(chunk_id)
+        chunk_facts = facts.get(chunk_id)
+        if chunk is None or chunk_facts is None:
             raise ChunkNotFound(chunk_id)
-        status = facts.status()
+        status = chunk_facts.status()
         if status not in PRE_CLAIM_STATUSES:
             raise ChunkNotGroupable(chunk_id, status)
         return chunk, status

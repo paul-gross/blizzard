@@ -93,3 +93,43 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
 
     assert winner is not None
     assert winner.artifact_id == "art_zzzzzzzzzzzzzzzzzzzzzzzzzz"
+
+
+def test_latest_artifacts_matches_latest_artifact_per_name_and_drops_an_unknown_name(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    at = hub.clock.now()
+
+    with hub.engine.begin() as conn:
+        for artifact_id, node_id, epoch, name in (
+            ("art_a1", "nd_a", 1, "multi"),
+            ("art_a2", "nd_a", 2, "multi"),
+            ("art_aa", "nd_a", 1, "tied"),
+            ("art_zz", "nd_z", 1, "tied"),
+            ("art_s1", "nd_a", 1, "single"),
+        ):
+            conn.execute(
+                sa.insert(artifacts).values(
+                    artifact_id=artifact_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    node_name="survey",
+                    epoch=epoch,
+                    name=name,
+                    kind="asset",
+                    data=artifact_id,
+                    produced_at=at,
+                    seq=1,
+                )
+            )
+
+    repo = hub.services.chunks.artifacts
+    names = ["multi", "tied", "single", "unknown"]
+    result = repo.latest_artifacts(chunk_id, names)
+
+    assert set(result) == {"multi", "tied", "single"}
+    for name in ("multi", "tied", "single"):
+        assert result[name] == repo.latest_artifact(chunk_id, name)
+    assert result["multi"].artifact_id == "art_a2"
+    assert result["tied"].artifact_id == "art_zz"
+    assert repo.latest_artifacts(chunk_id, []) == {}

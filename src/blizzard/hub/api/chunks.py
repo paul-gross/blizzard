@@ -394,8 +394,9 @@ def record_garden_delivery(
     delta_artifacts: dict[str, str] = {}
     delta_artifact_id_by_name: dict[str, str] = {}
     missing_delta: list[str] = []
+    delta_rows = services.chunks.artifacts.latest_artifacts(chunk_id, request_body.delta)
     for name in request_body.delta:
-        artifact = services.chunks.artifacts.latest_artifact(chunk_id, name)
+        artifact = delta_rows.get(name)
         if artifact is None:
             missing_delta.append(name)
             continue
@@ -409,8 +410,9 @@ def record_garden_delivery(
 
     proposal_artifacts: dict[str, str] = {}
     proposal_artifact_id_by_name: dict[str, str] = {}
+    proposal_rows = services.chunks.artifacts.latest_artifacts(chunk_id, request_body.proposals)
     for name in request_body.proposals:
-        artifact = services.chunks.artifacts.latest_artifact(chunk_id, name)
+        artifact = proposal_rows.get(name)
         if artifact is not None:
             proposal_artifacts[name] = artifact.data
             proposal_artifact_id_by_name[name] = artifact.artifact_id

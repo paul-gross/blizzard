@@ -7,6 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import or_, select
@@ -122,6 +123,42 @@ class ChunkArtifactsStore:
                 node_name=a.node_name,
                 epoch=a.epoch,
             )
+
+    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, ArtifactRow]:
+        if not names:
+            return {}
+        result: dict[str, ArtifactRow] = {}
+        with self._store.read("latest_artifacts") as conn:
+            for batch in id_batches(names):
+                # The winner per name is picked off the unloaded columns, in
+                # `latest_artifact`'s own order, so a superseded version's blob is never read.
+                winner_by_name: dict[str, str] = {}
+                for r in conn.execute(
+                    select(s.artifacts.c.name, s.artifacts.c.artifact_id)
+                    .where((s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch))
+                    .order_by(
+                        s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
+                    )
+                ).all():
+                    winner_by_name.setdefault(r.name, r.artifact_id)
+                if not winner_by_name:
+                    continue
+                for a in conn.execute(
+                    select(s.artifacts).where(s.artifacts.c.artifact_id.in_(list(winner_by_name.values())))
+                ).all():
+                    result[a.name] = ArtifactRow(
+                        kind=ArtifactKind(a.kind),
+                        name=a.name,
+                        data=a.data,
+                        repo=a.repo,
+                        forge=a.forge,
+                        artifact_id=a.artifact_id,
+                        chunk_id=a.chunk_id,
+                        node_id=a.node_id,
+                        node_name=a.node_name,
+                        epoch=a.epoch,
+                    )
+        return result
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
         with self._store.read("has_hub_artifact") as conn:

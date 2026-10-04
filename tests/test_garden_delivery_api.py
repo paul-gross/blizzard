@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_lease, seed_work_item
+from tests.support import HubHarness, build_hub, capture_statements, hub_store_connections, seed_lease, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -861,3 +861,21 @@ def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Pa
 
     assert resp.status_code == 409, resp.text
     assert _finding_count(hub) == 0
+
+
+def test_artifact_lookups_are_flat_as_the_delta_names_grow(tmp_path: Path) -> None:
+    def artifact_selects(sub: str, count: int) -> int:
+        (tmp_path / sub).mkdir()
+        hub = build_hub(tmp_path / sub)
+        _seed_scope(hub, _SCOPE)
+        chunk_id = _seed_chunk(hub)
+        names = [f"delta-{i}" for i in range(count)]
+        for name in names:
+            _record_artifact(hub, chunk_id, name=name, content=_delta())
+        with capture_statements(hub.engine) as statements:
+            resp = _post(hub, chunk_id, delta=[*names, "missing"])
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["outcome"] == "recorded"
+        return sum(1 for statement, _ in statements if "FROM artifacts" in statement)
+
+    assert artifact_selects("one", 1) == artifact_selects("many", 5)
