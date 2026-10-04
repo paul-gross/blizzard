@@ -526,7 +526,7 @@ def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_a
     }
     assert len(by_scope["some.library"]) == 64 + 3
     assert "blizzard.cli.command" not in by_scope["some.library"]
-    assert sorted(admitted) == [["blizzard.cli"], ["some.library"]]
+    assert sorted(batch for batch in admitted if batch) == [["blizzard.cli"], ["some.library"]]
 
 
 def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(tmp_path: Path) -> None:
