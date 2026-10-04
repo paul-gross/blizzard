@@ -21,7 +21,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, mint_graph
 
 pytestmark = pytest.mark.component
 
@@ -365,6 +365,33 @@ def test_counts_by_agent_type(store: AnalyticsEventQueryStore) -> None:
 def test_counts_by_node(store: AnalyticsEventQueryStore) -> None:
     rows = store.counts_by_node(_criteria())
     assert {(r.key, r.count) for r in rows} == {("nd_build", 4), ("nd_review", 1)}
+
+
+def test_counts_by_node_names_each_node_and_its_graph_and_leaves_an_unresolved_id_unnamed(tmp_path: Path) -> None:
+    """Two graphs whose node and graph names differ, so each correlation predicate is the
+    only thing tying a node id to its own names — dropping either lets a neighbour's through."""
+    store, engine, insert_events = _new_store(tmp_path)
+    mint_graph(engine, "gr_a", name="alpha", nodes={"nd_a1": "build", "nd_a2": "review"}, at=_NOW)
+    mint_graph(engine, "gr_b", name="beta", nodes={"nd_b1": "ship"}, at=_NOW)
+    insert_events(
+        "sg_1",
+        _event(turn_path="0", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="1", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="2", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="3", node_id="nd_a2", graph_id="gr_a"),
+        _event(turn_path="4", node_id="nd_b1", graph_id="gr_b"),
+        _event(turn_path="5", node_id="nd_b1", graph_id="gr_b"),
+        _event(turn_path="6", node_id="nd_gone", graph_id="gr_b"),
+    )
+
+    rows = {r.key: (r.count, r.graph_name, r.node_name) for r in store.counts_by_node(_criteria())}
+
+    assert rows == {
+        "nd_a1": (3, "alpha", "build"),
+        "nd_a2": (1, "alpha", "review"),
+        "nd_b1": (2, "beta", "ship"),
+        "nd_gone": (1, None, None),
+    }
 
 
 def test_counts_are_ordered_most_frequent_first(store: AnalyticsEventQueryStore) -> None:

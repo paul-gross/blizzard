@@ -223,6 +223,29 @@ def test_by_name_folds_a_graph_minted_twice_into_one_row_per_name(tmp_path: Path
     assert folded[0]["cost_usd"] == pytest.approx(0.3)
 
 
+def test_by_name_resolves_each_node_to_its_own_graph_and_node_name(tmp_path: Path) -> None:
+    """Two graphs whose names differ and whose node names differ, plus usage on a node no
+    graph defines: each id resolves through both correlation predicates to its own names."""
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    admin = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
+    other_yaml = _GRAPH_YAML.replace("name: default-delivery", "name: other-delivery").replace("review", "audit")
+    other = hub.client.post("/api/graphs", json={"definition_yaml": other_yaml}, headers=_cookie(admin))
+    assert other.status_code == 201, other.text
+    other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["review"], epoch=1, seq=1, cost_usd=0.1)
+    _push_usage(hub, chunk_id=chunk_id, node_id=other_nodes["audit"], epoch=1, seq=2, cost_usd=0.2)
+    _push_usage(hub, chunk_id=chunk_id, node_id="nd_gone", epoch=1, seq=3, cost_usd=0.4)
+
+    resp = hub.client.get("/api/analytics/spend/nodes", params={"by_name": "true"}, headers=_cookie(token))
+
+    assert {r["key"]: r["cost_usd"] for r in resp.json()["spend"]} == {
+        "default-delivery/review": pytest.approx(0.1),
+        "other-delivery/audit": pytest.approx(0.2),
+        "nd_gone": pytest.approx(0.4),
+    }
+
+
 def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path) -> None:
     hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)

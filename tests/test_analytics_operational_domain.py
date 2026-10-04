@@ -457,15 +457,28 @@ def test_summarize_outcomes_merges_both_halves_and_never_drops_a_node_with_only_
 # --- the by-name roll-up folds -------------------------------------------------------
 
 
-def _total(tokens: int, *, cost: float = 0.0, estimated: float | None = None, partial: bool = False) -> UsageTotal:
+def _total(
+    tokens: int,
+    *,
+    cost: float = 0.0,
+    estimated: float | None = None,
+    partial: bool = False,
+    output: int = 0,
+    cache_read: int = 0,
+    cache_create: int = 0,
+    billed: float | None = None,
+    billed_partial: bool = False,
+) -> UsageTotal:
     return UsageTotal(
         input_tokens=tokens,
-        output_tokens=0,
-        cache_read_tokens=0,
-        cache_create_tokens=0,
+        output_tokens=output,
+        cache_read_tokens=cache_read,
+        cache_create_tokens=cache_create,
         cost_usd=cost,
         cost_partial=partial,
         estimated_cost_usd=estimated,
+        billed_partial=billed_partial,
+        billed_cost_usd=billed,
     )
 
 
@@ -488,6 +501,66 @@ def test_spend_folds_two_mints_of_one_node_and_keeps_same_named_nodes_of_other_g
     assert folded["nd_gone"].graph_name is None
 
 
+def test_spend_fold_sums_every_token_kind_and_folds_the_billed_figures() -> None:
+    """Each summed field carries a distinct non-zero value per row, so dropping any one sum,
+    or folding billed over only some rows, changes an asserted number."""
+    rows = [
+        SpendStats(
+            "nd_1",
+            _total(10, output=20, cache_read=30, cache_create=40, cost=0.5, billed=0.5),
+            graph_name="adv",
+            node_name="build",
+        ),
+        SpendStats(
+            "nd_2",
+            _total(1, output=2, cache_read=3, cache_create=4, cost=0.25, billed=0.25, billed_partial=True),
+            graph_name="adv",
+            node_name="build",
+        ),
+        SpendStats(
+            "nd_3",
+            _total(100, output=200, cache_read=300, cache_create=400, estimated=0.75, billed_partial=True),
+            graph_name="adv",
+            node_name="build",
+        ),
+    ]
+
+    [row] = fold_spend_by_name(rows)
+
+    total = row.total
+    assert (total.input_tokens, total.output_tokens) == (111, 222)
+    assert (total.cache_read_tokens, total.cache_create_tokens) == (333, 444)
+    assert total.cost_usd == pytest.approx(0.75)
+    assert total.estimated_cost_usd == pytest.approx(0.75)
+    assert total.billed_cost_usd == pytest.approx(0.75)
+    assert total.billed_partial is True
+    assert total.cost_partial is False
+
+
+def test_spend_fold_leaves_billed_unset_and_not_partial_when_no_row_carries_it() -> None:
+    rows = [
+        SpendStats("nd_1", _total(1, estimated=0.5, billed_partial=True), graph_name="adv", node_name="build"),
+        SpendStats("nd_2", _total(2, estimated=0.5, billed_partial=True), graph_name="adv", node_name="build"),
+    ]
+
+    [row] = fold_spend_by_name(rows)
+
+    assert row.total.billed_cost_usd is None
+    assert row.total.billed_partial is True
+
+
+def test_spend_fold_reports_billed_complete_only_when_every_row_is_billed() -> None:
+    rows = [
+        SpendStats("nd_1", _total(1, billed=0.5), graph_name="adv", node_name="build"),
+        SpendStats("nd_2", _total(2, billed=0.5), graph_name="adv", node_name="build"),
+    ]
+
+    [row] = fold_spend_by_name(rows)
+
+    assert row.total.billed_partial is False
+    assert row.total.billed_cost_usd == pytest.approx(1.0)
+
+
 def test_spend_folds_graph_rows_by_graph_name() -> None:
     rows = [SpendStats("gr_1", _total(1), graph_name="adv"), SpendStats("gr_2", _total(2), graph_name="adv")]
 
@@ -502,10 +575,16 @@ def test_counts_fold_sums_and_orders_by_count_then_key() -> None:
         CountRow("nd_2", 3, "adv", "build"),
         CountRow("nd_3", 5, "bas", "build"),
         CountRow("nd_4", 5),
+        CountRow("nd_5", 7, "cas", "review"),
+        CountRow("nd_6", 1, "cas", "build"),
     ]
 
-    assert [(r.key, r.count) for r in fold_counts_by_name(rows)] == [
-        ("adv/build", 5),
-        ("bas/build", 5),
-        ("nd_4", 5),
+    folded = fold_counts_by_name(rows)
+
+    assert [(r.key, r.count, r.graph_name, r.node_name) for r in folded] == [
+        ("cas/review", 7, "cas", "review"),
+        ("adv/build", 5, "adv", "build"),
+        ("bas/build", 5, "bas", "build"),
+        ("nd_4", 5, None, None),
+        ("cas/build", 1, "cas", "build"),
     ]
