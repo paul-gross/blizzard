@@ -278,15 +278,15 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
     waited = {kind: sum(i.ms() for i in intervals if i.kind is kind) for kind in IntervalKind}
     asks = [i for i in intervals if i.kind is IntervalKind.ASK]
     choice, to_node = _choice_and_destination(facts, step)
-    graph = facts.graphs[step.position.graph_id]
+    graph = facts.graphs.get(step.position.graph_id)
     return StepSummary(
         step_key=step.key,
         kind=step.kind,
         chunk_id=facts.chunk_id,
         work_refs=facts.work_refs,
         work_sources=facts.work_sources,
-        graph_id=graph.graph_id,
-        graph_name=graph.name,
+        graph_id=step.position.graph_id,
+        graph_name=graph.name if graph is not None else step.position.graph_id,
         node_id=step.position.node_id,
         node_name=step.position.node_name,
         node_executor=_node_executor(facts, step),
