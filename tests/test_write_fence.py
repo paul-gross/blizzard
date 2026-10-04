@@ -491,3 +491,22 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
     chunk.stop()
     assert migrate(2) == FenceRefusal.terminal(2)
     assert chunk.rows(s.chunk_migrations) == 0
+
+
+def test_the_store_refuses_a_write_at_the_epoch_a_transition_reached_done_as_terminal(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk = _Chunk(hub)
+    assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
+
+    refused = chunk.stores.escalations.record_escalation(
+        chunk.chunk_id,
+        epoch=1,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        takeover_command="x",
+        at=hub.clock.now(),
+        cause=None,
+        detail=None,
+    )
+
+    assert refused == FenceRefusal.terminal(1)
+    assert chunk.rows(s.escalations) == 0

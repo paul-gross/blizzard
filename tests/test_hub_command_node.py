@@ -592,6 +592,28 @@ def test_build_hub_env_links_the_board_only_from_a_declared_public_url() -> None
     assert json.loads(env_for(None)[ENV_WORK_ITEMS]) == []
 
 
+def test_build_hub_env_takes_the_board_url_from_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "blizzard.hub.delivery.hub_node.board_chunk_url",
+        lambda public_url, chunk_id: f"via-helper:{public_url}:{chunk_id}",
+    )
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+
+    env = HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=1,
+        artifacts=[],
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        public_url="https://blizzard.example.com",
+    ).vars
+
+    assert env[ENV_CHUNK_URL] == "via-helper:https://blizzard.example.com:ch_x"
+
+
 # Component — the executor wired with fakes over a real hub store
 
 

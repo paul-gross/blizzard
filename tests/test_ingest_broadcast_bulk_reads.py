@@ -354,8 +354,7 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
 def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
     """The single-chunk escalation route (``ChunkChanged.before``/``publish``, the
     singular pair, still going through ``ChunkFrameState.load`` for its one chunk) issues
-    the same statement count this refactor leaves untouched — a pinned baseline, not a
-    batch-size comparison, since this route takes no batch."""
+    a pinned statement count, not a batch-size comparison, since this route takes no batch."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub, "esc", runner_id="r1")
 
@@ -372,9 +371,8 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:
     """``DELETE /api/chunks/{id}``'s degrade branch (the gone-chunk read ``ChunkFrameState``
-    skips ``from_graph``/route reads for, same as ``ChunkChanged.publish`` did) issues the
-    same pinned statement count as before this refactor, plus the row lock
-    ``DeleteService`` now takes first inside its own write transaction and its fresh
+    skips ``from_graph``/route reads for) issues a pinned statement count, including the row
+    lock ``DeleteService`` takes first inside its own write transaction and its fresh
     re-read of the chunk under that lock (``bzh:store-exclusive-write``)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "del"}], promote=False)

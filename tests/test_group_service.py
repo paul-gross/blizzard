@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -423,3 +424,31 @@ def test_a_record_without_facts_is_not_found_not_not_groupable() -> None:
     with pytest.raises(ChunkNotFound) as raised:
         service.group("chk_survivor", ["chk_bare"])
     assert raised.value.chunk_id == "chk_bare"
+
+
+def test_a_self_id_then_a_duplicate_then_a_valid_id_folds_each_real_target_once() -> None:
+    """The survivor's own id and a repeated id are no-ops that never end the scan: the
+    valid id after them still folds, once, and the result names the survivor, its status and
+    the fold's last ``grouped_id``."""
+    chunks = {cid: _chunk(cid) for cid in ("chk_survivor", "chk_a", "chk_b")}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    service, work_refs, dependencies = _service(chunks, facts)
+
+    result = service.group("chk_survivor", ["chk_survivor", "chk_a", "chk_a", "chk_b"])
+
+    assert [fold["chunk_id"] for fold in dependencies.folds] == ["chk_a", "chk_b"]
+    assert [chunk_id for chunk_id, _ in work_refs.added] == ["chk_survivor", "chk_survivor"]
+    assert result.survivor is chunks["chk_survivor"]
+    assert result.status is ChunkStatus.NOT_READY
+    assert result.grouped_id == 2
+
+
+def test_merge_ids_naming_only_the_survivor_fold_nothing_and_carry_no_grouped_id() -> None:
+    chunks = {"chk_survivor": _chunk("chk_survivor")}
+    service, work_refs, dependencies = _service(chunks, {"chk_survivor": _not_ready_facts()})
+
+    result = service.group("chk_survivor", ["chk_survivor", "chk_survivor"])
+
+    assert dependencies.fold_calls == 0
+    assert work_refs.added == []
+    assert result.grouped_id is None

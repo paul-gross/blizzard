@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
+from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
@@ -391,6 +391,55 @@ def test_sweep_records_a_gone_ref_distinctly_from_a_failed_one() -> None:
     assert chunks.retired == [("ch_1", ref)]  # gone retires the intent, same as closed
     assert chunks.events[0].severity == "warning"
     assert chunks.events[0].kind == "work-item-close-failed"
+
+
+def test_sweep_records_the_closed_and_failed_events_with_their_exact_message_and_detail() -> None:
+    closed_ref = WorkRef(source="default", ref="1")
+    failed_ref = WorkRef(source="default", ref="2")
+    chunks = _FakeCloseChunks(
+        [
+            PendingCloseIntent(chunk_id="ch_1", ref=closed_ref, intent_id=1),
+            PendingCloseIntent(chunk_id="ch_2", ref=failed_ref, intent_id=2),
+        ]
+    )
+
+    _drainer(chunks, {"default": FakeCloser(fail_refs={"2"})}).sweep()
+
+    assert chunks.events == [
+        _RecordedEvent(
+            severity="info", kind="work-item-closed", chunk_id="ch_1", message="closed default#1", detail=None
+        ),
+        _RecordedEvent(
+            severity="warning",
+            kind="work-item-close-failed",
+            chunk_id="ch_2",
+            message="failed to close default#2: boom closing 2",
+            detail={"outcome": "failed", "reason": "boom closing 2"},
+        ),
+    ]
+
+
+def test_sweep_builds_each_traces_board_url_through_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "blizzard.hub.domain.work_closure.board_chunk_url",
+        lambda public_url, chunk_id: f"via-helper:{public_url}:{chunk_id}",
+    )
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))])
+    chunks.sources["ch_1"] = DeliverySources(markers=[_marker("ch_1", "merged/acme/widget", "abc123def456789")])
+    closer = FakeCloser()
+
+    _drainer(chunks, {"default": closer}, public_url="https://hub.example/").sweep()
+
+    trace = closer.traces[0]
+    assert trace is not None
+    assert trace.board_url == "via-helper:https://hub.example/:ch_1"
+
+
+def test_board_chunk_url_trims_the_trailing_slash_and_is_absent_without_a_public_url() -> None:
+    assert board_chunk_url("https://hub.example/", "ch_1") == "https://hub.example/board/chunk/ch_1"
+    assert board_chunk_url("https://hub.example", "ch_1") == "https://hub.example/board/chunk/ch_1"
+    assert board_chunk_url(None, "ch_1") is None
+    assert board_chunk_url("", "ch_1") is None
 
 
 def test_sweep_leaves_a_failed_intent_pending_and_retries_it() -> None:
