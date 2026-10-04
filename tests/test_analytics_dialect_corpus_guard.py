@@ -20,8 +20,7 @@ pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
-#: Every dialect with pinned captures — Claude Code has none. A dialect's captures are the
-#: admitted corpus plus every live supplement, one directory per recorded version.
+#: Dialects with pinned captures; Claude Code has none.
 _CORPUS_DIRS: dict[str, Path] = {
     "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode",
 }

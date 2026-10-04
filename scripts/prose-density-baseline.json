@@ -4418,7 +4418,7 @@
    "comments": 58,
    "docstrings": 26,
    "over_cap": 8,
-   "total": 527
+   "total": 531
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -4835,10 +4835,10 @@
    "total": 7
   },
   "blizzard/runner/environments/factory.py": {
-   "comments": 0,
-   "docstrings": 1,
+   "comments": 1,
+   "docstrings": 5,
    "over_cap": 0,
-   "total": 24
+   "total": 49
   },
   "blizzard/runner/environments/internal/__init__.py": {
    "comments": 0,
@@ -4847,10 +4847,10 @@
    "total": 3
   },
   "blizzard/runner/environments/internal/basic_provider.py": {
-   "comments": 7,
+   "comments": 8,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 218
+   "total": 228
   },
   "blizzard/runner/environments/internal/git.py": {
    "comments": 1,
@@ -4865,16 +4865,16 @@
    "total": 62
   },
   "blizzard/runner/environments/internal/winter_provider.py": {
-   "comments": 21,
+   "comments": 23,
    "docstrings": 21,
    "over_cap": 0,
-   "total": 204
+   "total": 217
   },
   "blizzard/runner/environments/provider.py": {
    "comments": 0,
-   "docstrings": 30,
+   "docstrings": 35,
    "over_cap": 0,
-   "total": 74
+   "total": 88
   },
   "blizzard/runner/environments/repository.py": {
    "comments": 0,
@@ -5357,10 +5357,10 @@
    "total": 635
   },
   "blizzard/runner/loop/build.py": {
-   "comments": 32,
+   "comments": 30,
    "docstrings": 59,
    "over_cap": 3,
-   "total": 382
+   "total": 378
   },
   "blizzard/runner/loop/capability_snapshot.py": {
    "comments": 0,
@@ -6904,7 +6904,7 @@
    "comments": 115,
    "docstrings": 117,
    "over_cap": 11,
-   "total": 1460
+   "total": 1471
   },
   "runner_trace_fixtures.py": {
    "comments": 3,
@@ -7190,9 +7190,9 @@
   },
   "test_analytics_dialect_corpus_guard.py": {
    "comments": 1,
-   "docstrings": 12,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 81
+   "total": 100
   },
   "test_analytics_durations_api.py": {
    "comments": 25,
@@ -9432,6 +9432,12 @@
    "over_cap": 0,
    "total": 235
   },
+  "test_runner_basic_provider_spawn_cwd.py": {
+   "comments": 1,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 90
+  },
   "test_runner_checks.py": {
    "comments": 35,
    "docstrings": 24,
@@ -10709,6 +10715,12 @@
    "docstrings": 8,
    "over_cap": 0,
    "total": 85
+  },
+  "test_workspace_provider_contract.py": {
+   "comments": 2,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 97
   },
   "test_write_fence.py": {
    "comments": 7,
