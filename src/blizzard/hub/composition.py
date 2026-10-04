@@ -239,6 +239,8 @@ class HubServices:
     egress_export: EgressSweep | None
     #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
     egress_unavailable: EgressUnavailable | None
+    #: The unset ``path_key_env`` variable that dropped the ``events`` dataset from a running export; else ``None``.
+    egress_missing_path_key: str | None
     #: The operator's read of the fact export — always composed, so status answers with the export off.
     egress_status: EgressStatusReader
     #: Moves a dataset's cursor — always composed; it refuses while the export is off.
@@ -476,12 +478,16 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
     return writer
 
 
-def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig, FilePathPolicy | None]:
-    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks."""
+def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig, FilePathPolicy | None, str | None]:
+    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks. The
+    third value names the unset key variable when a configured ``events`` dataset was dropped for it."""
     try:
-        return config, FilePathPolicy(config.file_paths, key)
+        return config, FilePathPolicy(config.file_paths, key), None
     except ValueError:
-        return replace(config, datasets=tuple(name for name in config.datasets if name != "events")), None
+        if "events" not in config.datasets:
+            return config, None, None
+        kept = replace(config, datasets=tuple(name for name in config.datasets if name != "events"))
+        return kept, None, config.path_key_env
 
 
 def build_services(
@@ -579,7 +585,7 @@ def build_services(
         clock=clock,
         replay_max_window=trace_config.replay_max_window,
     )
-    egress_config, egress_paths = _egress_paths(egress or EgressConfig(), egress_path_key)
+    egress_config, egress_paths, egress_missing_key = _egress_paths(egress or EgressConfig(), egress_path_key)
     egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
@@ -595,9 +601,12 @@ def build_services(
     egress_event_store = EgressEventStore(store_connections)
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
+    # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
+    egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
     egress_status = EgressStatusReader(
         config=egress_config,
         rejected=egress_unavailable is not None,
+        missing_path_key=egress_missing_path_key,
         egress=egress_store,
         event_reads=egress_event_store,
         steps=trace_store,
@@ -625,6 +634,7 @@ def build_services(
         clock=clock,
         config=egress_config,
         active=egress_export is not None,
+        missing_path_key=egress_missing_path_key,
         pass_lock=egress_pass_lock,
     )
     egress_backfill = EgressBackfill(
@@ -635,6 +645,7 @@ def build_services(
         clock=clock,
         config=egress_config,
         writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
+        missing_path_key=egress_missing_path_key,
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -834,6 +845,7 @@ def build_services(
         trace_replay=trace_replay,
         egress_export=egress_export,
         egress_unavailable=egress_unavailable,
+        egress_missing_path_key=egress_missing_path_key,
         egress_status=egress_status,
         egress_reset=egress_reset,
         egress_backfill=egress_backfill,

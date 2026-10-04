@@ -19,7 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, step_partition
-from blizzard.hub.domain.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.egress.event_rows import FilePathPolicy, missing_key_reason
 from blizzard.hub.domain.egress.events_window import events_rows, position_of
 from blizzard.hub.domain.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
 from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
@@ -100,6 +100,7 @@ class EgressBackfill:
         clock: IClock,
         config: EgressConfig,
         writers: Callable[[], IEgressWriter] | None,
+        missing_path_key: str | None = None,
     ) -> None:
         if EVENTS_SCHEMA.name in config.datasets and paths is None:
             raise ValueError("the events dataset needs a file path policy")
@@ -115,6 +116,7 @@ class EgressBackfill:
         self._max_window = timedelta(seconds=config.backfill_max_window)
         self._max_window_seconds = config.backfill_max_window
         self._writers = writers
+        self._missing_path_key = missing_path_key
 
     def backfill(self, since: datetime, until: datetime, *, dataset: str | None, dry_run: bool) -> BackfillResult:
         if self._writers is None:
@@ -125,6 +127,8 @@ class EgressBackfill:
             raise BackfillWindowRefused(
                 f"window is wider than backfill_max_window ({self._max_window_seconds} seconds)"
             )
+        if dataset == EVENTS_SCHEMA.name and self._missing_path_key is not None:
+            raise BackfillWindowRefused(missing_key_reason(self._missing_path_key))
         if dataset is not None and dataset not in self._datasets:
             raise BackfillWindowRefused(
                 f"dataset {dataset!r} is not configured; the export writes {', '.join(self._datasets)}"

@@ -16,6 +16,7 @@ from typing import Literal
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.egress.repository import EgressCursorRecord, EventsPosition, IWriteEgressCursor, UsagePosition
 from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.event_log import EventLogService
@@ -50,6 +51,7 @@ class EgressReset:
         clock: IClock,
         config: EgressConfig,
         active: bool,
+        missing_path_key: str | None = None,
         pass_lock: threading.Lock,
     ) -> None:
         self._egress = egress
@@ -58,11 +60,14 @@ class EgressReset:
         self._datasets = config.datasets
         self._settle = timedelta(seconds=config.settle_seconds)
         self._active = active
+        self._missing_path_key = missing_path_key
         self._lock = pass_lock
 
     def reset(self, dataset: str, to: datetime) -> ResetResult:
         if not self._active:
             raise ResetUnavailable("the egress export is not configured; there is no cursor to reset")
+        if dataset == EVENTS_SCHEMA.name and self._missing_path_key is not None:
+            raise ResetRefused(missing_key_reason(self._missing_path_key))
         if dataset not in self._datasets:
             raise ResetRefused(f"dataset {dataset!r} is not configured; the export writes {', '.join(self._datasets)}")
         now = self._clock.now()

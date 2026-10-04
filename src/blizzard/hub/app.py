@@ -73,6 +73,7 @@ from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_process_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
+from blizzard.hub.domain.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
@@ -457,6 +458,7 @@ def build_hosted_app(
         tracing_settings=tracing,
         platform_tracer=platform_tracing.tracer,
         egress=config.egress,
+        egress_path_key=_egress_path_key(config.egress),
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
@@ -490,10 +492,19 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
-    """An export the hub cannot honor never stops startup: the hub serves with the export off and
-    records one hub-wide ``egress-config-rejected`` per start, naming what is missing."""
+    """An export the hub cannot fully honor never stops startup, and records one hub-wide ``egress-config-rejected``
+    per start. Without its format's extra the export is off and the event names the format; without the path hash
+    key a hashing file path policy needs, only the events dataset is off and the event names the variable — never
+    a key value."""
     unavailable = services.egress_unavailable
-    if unavailable is None:
+    variable = services.egress_missing_path_key
+    if unavailable is not None:
+        message = f"fact egress is off: {unavailable.reason}"
+        detail = {"setting": "egress.format", "value": egress.format}
+    elif variable is not None:
+        message = f"fact egress: {missing_key_reason(variable)}"
+        detail = {"setting": "egress.path_key_env", "value": variable}
+    else:
         return
     services.event_log.record(
         kind="egress-config-rejected",
@@ -501,10 +512,16 @@ def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> No
         chunk_id=None,
         lease_id=None,
         node_name=None,
-        message=f"fact egress is off: {unavailable.reason}",
-        detail={"setting": "egress.format", "value": egress.format},
+        message=message,
+        detail=detail,
         at=services.clock.now(),
     )
+
+
+def _egress_path_key(egress: EgressConfig) -> bytes | None:
+    """The file path hash key, read once here from the variable ``egress.path_key_env`` names; empty is unset."""
+    value = os.environ.get(egress.path_key_env, "")
+    return value.encode() if value else None
 
 
 @dataclass(frozen=True)

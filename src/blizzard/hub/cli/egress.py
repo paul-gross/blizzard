@@ -29,6 +29,8 @@ class StatusView:
         if s["state"] == "rejected":
             return [f"egress: off — {s['rejected_setting']}={s['rejected_value']!r} is not available"]
         lines = [f"egress: on, writing {s['format']} to {s['directory']}"]
+        if s["rejected_setting"] is not None:
+            lines.append(f"events: off — {s['rejected_setting']}={s['rejected_value']!r} names no key")
         for dataset in s["datasets"]:
             cursor = dataset["cursor_at"] or "none yet"
             lag = "none waiting" if dataset["lag_seconds"] is None else f"{dataset['lag_seconds']:.0f}s"

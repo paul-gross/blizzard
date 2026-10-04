@@ -66,6 +66,7 @@ class EgressStatusReader:
         *,
         config: EgressConfig,
         rejected: bool,
+        missing_path_key: str | None = None,
         egress: IReadEgress,
         event_reads: IReadEgressEvents,
         steps: IReadTraceSteps,
@@ -74,6 +75,7 @@ class EgressStatusReader:
     ) -> None:
         self._config = config
         self._rejected = rejected
+        self._missing_path_key = missing_path_key
         self._egress = egress
         self._event_reads = event_reads
         self._steps = steps
@@ -94,8 +96,9 @@ class EgressStatusReader:
         ongoing = failure is not None and self._egress.newest_egress_latch() == _FAILED
         return EgressStatus(
             state="on",
-            rejected_setting=None,
-            rejected_value=None,
+            # A missing path hash key drops only the events dataset; the export stays on and names the variable.
+            rejected_setting="egress.path_key_env" if self._missing_path_key is not None else None,
+            rejected_value=self._missing_path_key,
             directory=str(config.directory),
             format=config.format,
             datasets=tuple(self._dataset(name, cursor) for name, cursor in cursors.items()),

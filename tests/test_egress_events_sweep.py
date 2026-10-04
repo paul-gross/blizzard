@@ -9,19 +9,24 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub import app as hub_app
+from blizzard.hub.cli.egress import StatusView
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.event_rows import derivation_id
 from blizzard.hub.domain.egress.repository import EventsPosition
 from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import HubHarness, hub_store_connections
-from tests.test_egress_sweep import _closed_step, _hub, _node_id
+from tests.test_egress_sweep import _closed_step, _kinds, _node_id
+from tests.trace_hub import trace_hub
 
 pytestmark = pytest.mark.component
 
@@ -36,17 +41,16 @@ def _config(tmp_path: Path, **extra: object) -> EgressConfig:
         directory=tmp_path / "out",
         settle_seconds=0,
         min_free_bytes=0,
-        file_paths="absolute",
-        **extra,  # type: ignore[arg-type]
+        **{"file_paths": "absolute", **extra},  # type: ignore[arg-type]
     )
 
 
 class _Events:
     """A hub with the export on, a closed runner step, and that step's transcript segments, derived by hand."""
 
-    def __init__(self, tmp_path: Path, **extra: object) -> None:
+    def __init__(self, tmp_path: Path, *, path_key: bytes | None = None, **extra: object) -> None:
         self.directory = tmp_path / "out"
-        self.hub, self.graph = _hub(tmp_path, _config(tmp_path, **extra))
+        self.hub, self.graph = trace_hub(tmp_path, egress=_config(tmp_path, **extra), egress_path_key=path_key)
         self.sweep()  # anchors every dataset
         self.chunk_id = _closed_step(self.hub, self.graph, 1)
 
@@ -259,3 +263,54 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
     assert moved.events == EventsPosition(derived_at - timedelta(1))
     world.sweep()
     assert _derivations(world.rows()) == [("sg_a", 1), ("sg_a", 1)]
+
+
+@pytest.mark.parametrize("file_paths", ["relative", "hashed"])
+def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
+    tmp_path: Path, file_paths: str
+) -> None:
+    world = _Events(tmp_path, file_paths=file_paths)
+    hub = world.hub
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.services)
+    world.segment("sg_a")
+    world.derive("sg_a", 1)
+    world.sweep()
+
+    assert _kinds(hub) == ["egress-config-rejected"]
+    with hub.engine.connect() as conn:
+        detail = json.loads(conn.execute(sa.select(schema.event_log.c.detail)).scalar_one())
+    assert detail == {"setting": "egress.path_key_env", "value": "BZ_EGRESS_PATH_KEY"}
+    assert len(world.rows("steps")) == 1
+    assert world.files("invocations")
+    assert world.files("events") == []
+    status = hub.client.get("/api/egress/status").json()
+    assert (status["state"], status["rejected_setting"], status["rejected_value"]) == (
+        "on",
+        "egress.path_key_env",
+        "BZ_EGRESS_PATH_KEY",
+    )
+    assert {d["name"] for d in status["datasets"]} == {"steps", "invocations"}
+    assert "events: off — egress.path_key_env='BZ_EGRESS_PATH_KEY' names no key" in StatusView(status).lines()
+    now = hub.clock.now()
+    for path, body in (
+        ("/api/egress/reset", {"dataset": "events", "to": iso_utc(now)}),
+        (
+            "/api/egress/backfill",
+            {"dataset": "events", "since": iso_utc(now - timedelta(1)), "until": iso_utc(now), "dry_run": True},
+        ),
+    ):
+        resp = hub.client.post(path, json=body)
+        assert resp.status_code == 422, path
+        assert "BZ_EGRESS_PATH_KEY" in resp.json()["detail"], path
+
+
+def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(tmp_path: Path) -> None:
+    world = _Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.services)
+    world.segment("sg_a")
+    world.derive("sg_a", 1)
+    world.sweep()
+
+    assert _kinds(world.hub) == []
+    assert _derivations(world.rows()) == [("sg_a", 1)]
+    assert world.hub.client.get("/api/egress/status").json()["rejected_setting"] is None

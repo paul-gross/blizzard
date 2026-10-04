@@ -668,6 +668,7 @@ def build_hub(
     tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
     egress: EgressConfig | None = None,
+    egress_path_key: bytes | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -739,6 +740,7 @@ def build_hub(
         tracing_settings=tracing_settings,
         tracing=config.tracing,
         egress=config.egress,
+        egress_path_key=egress_path_key,
     )
     app = create_app(config, services=services)
     client = TestClient(app)
