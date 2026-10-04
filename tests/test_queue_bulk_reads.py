@@ -72,8 +72,13 @@ def test_page_marks_only_its_dependents_but_resolves_off_page_prerequisites(
             == 202
         )
 
+    # The second page must name a dependent; otherwise an equal-rank prerequisite
+    # can land there and correctly have no blocked marking.
+    positioned = hub.client.post(f"{path}/position", json={"chunk_id": prerequisite, "after_chunk_id": None})
+    assert positioned.status_code == 200, positioned.text
     page = hub.client.get(path, params={"limit": 1})
     assert page.status_code == 200, page.text
+    assert page.json()["entries"][0]["chunk_id"] == prerequisite
     with capture_statements(hub.engine) as statements:
         page = hub.client.get(path, params={"limit": 1, "cursor": page.json()["next_cursor"]})
     assert page.status_code == 200, page.text
