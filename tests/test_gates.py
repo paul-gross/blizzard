@@ -11,8 +11,10 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
-from tests.support import assert_all_timestamps_utc, build_hub, pointer_token, report_lease
+from blizzard.hub.store import schema as s
+from tests.support import assert_all_timestamps_utc, build_hub, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -316,11 +318,7 @@ def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
     # Report an escalation (retries exhausted) — the chunk derives needs_human.
-    esc = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
-    )
-    assert esc.status_code == 202
+    assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     # Requeue supersedes the escalation and releases the route -> the chunk is ready again.
@@ -396,17 +394,32 @@ def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
-    esc = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
-    )
-    assert esc.status_code == 202
+    assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert resp.status_code == 202, resp.text
     # The runner is released, but detach is not requeue: the escalation stays open.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+
+def test_requeue_of_a_detached_escalated_chunk_writes_no_route_release(tmp_path: Path) -> None:
+    """Detach already released the route; the requeue that closes the escalation has none to release."""
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+    with hub.engine.connect() as conn:
+        released_before = conn.execute(sa.select(sa.func.count()).select_from(s.route_released)).scalar_one()
+
+    hub.clock.advance(timedelta(seconds=1))
+    assert hub.client.post(f"/api/chunks/{chunk_id}/requeues").status_code == 202
+
+    with hub.engine.connect() as conn:
+        assert conn.execute(sa.select(sa.func.count()).select_from(s.route_released)).scalar_one() == released_before
+    assert released_before == 1
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
 
 def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> None:

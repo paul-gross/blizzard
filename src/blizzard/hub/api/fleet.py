@@ -48,7 +48,6 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
 )
-from blizzard.hub.domain.chunk.ports.fence import FenceRefusal
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -78,8 +77,6 @@ from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
-    EscalationReport,
-    LeaseMintReport,
     RunnerFactAck,
     RunnerFactBatch,
 )
@@ -732,57 +729,6 @@ def submit_decision(
     # The runner-config gate parked the chunk on an open decision: surface it.
     chunks_api.OpenDecision(services, chunk_id).publish()
     return result.response
-
-
-@router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)
-def report_lease(
-    chunk_id: str,
-    report: LeaseMintReport,
-    services: Annotated[HubServices, Depends(get_services)],
-    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
-) -> dict[str, str]:
-    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired,
-    409 when its admission refuses it."""
-    fleet.assert_owns(report.runner_id)
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    refusal = services.runner_facts.record_lease_minted(
-        chunk, epoch=report.epoch, runner_id=report.runner_id, lease_id=report.lease_id
-    )
-    if refusal is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
-    return {"chunk_id": chunk_id}
-
-
-@router.post("/chunks/{chunk_id}/escalations", status_code=status.HTTP_202_ACCEPTED)
-def report_escalation(
-    chunk_id: str,
-    report: EscalationReport,
-    services: Annotated[HubServices, Depends(get_services)],
-    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
-) -> dict[str, str]:
-    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired,
-    409 when fenced out."""
-    fleet.assert_owns(report.runner_id)
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    change = chunk_events.ChunkChanged.before(services, chunk_id)
-    escalation_id = services.runner_facts.record_escalation(
-        chunk,
-        epoch=report.epoch,
-        runner_id=report.runner_id,
-        lease_id=report.lease_id,
-        takeover_command=report.takeover_command,
-        wrapped_takeover_command=report.wrapped_takeover_command,
-        cause=report.cause,
-        detail=report.detail,
-    )
-    if isinstance(escalation_id, FenceRefusal):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=escalation_id.detail)
-    change.publish(cause="escalated", key=f"escalations:{escalation_id}")
-    return {"chunk_id": chunk_id}
 
 
 @router.post("/events", response_model=RunnerFactAck)

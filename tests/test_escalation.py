@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token
+from tests.support import build_hub, make_ready, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -79,11 +79,7 @@ def test_escalation_derives_needs_human_and_surfaces_takeover(tmp_path: Path) ->
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
 
     hub.clock.advance(timedelta(minutes=5))  # the escalation lands after the claim's lease
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
-    )
-    assert resp.status_code == 202, resp.text
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"
@@ -97,17 +93,12 @@ def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) ->
     chunk_id = _claim(hub)
 
     hub.clock.advance(timedelta(minutes=5))
-    hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
-    )
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     # A requeue mints a fresh lease AFTER the escalation — supersession, no resolution.
     hub.clock.advance(timedelta(minutes=5))
-    assert (
-        hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
-    )
+    assert report_lease(hub, chunk_id, epoch=2, seq=2)["applied"] == [2]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"  # back on the route, escalation closed
@@ -121,16 +112,15 @@ def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
     chunk_id = _claim(hub)
 
     hub.clock.advance(timedelta(minutes=5))
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={
-            "epoch": 1,
-            "runner_id": "r1",
-            "takeover_command": _TAKEOVER,
-            "wrapped_takeover_command": _wrapped_takeover(chunk_id),
-        },
+    ack = report_escalation(
+        hub,
+        chunk_id,
+        epoch=1,
+        seq=1,
+        takeover_command=_TAKEOVER,
+        wrapped_takeover_command=_wrapped_takeover(chunk_id),
     )
-    assert resp.status_code == 202, resp.text
+    assert ack["applied"] == [1], ack
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["escalation"] is not None
@@ -145,11 +135,7 @@ def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) ->
     chunk_id = _claim(hub)
 
     hub.clock.advance(timedelta(minutes=5))
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
-    )
-    assert resp.status_code == 202, resp.text
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["escalation"] is not None
@@ -164,17 +150,16 @@ def test_escalation_cause_and_detail_round_trip(tmp_path: Path) -> None:
     chunk_id = _claim(hub)
 
     hub.clock.advance(timedelta(minutes=5))
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={
-            "epoch": 1,
-            "runner_id": "r1",
-            "takeover_command": _TAKEOVER,
-            "cause": "retries-exhausted",
-            "detail": "retries 2 of 2 used; last failure: exited",
-        },
+    ack = report_escalation(
+        hub,
+        chunk_id,
+        epoch=1,
+        seq=1,
+        takeover_command=_TAKEOVER,
+        cause="retries-exhausted",
+        detail="retries 2 of 2 used; last failure: exited",
     )
-    assert resp.status_code == 202, resp.text
+    assert ack["applied"] == [1], ack
 
     escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
     assert escalation["cause"] == "retries-exhausted"
@@ -210,12 +195,3 @@ def test_escalation_fact_carries_cause_and_detail_and_keeps_an_unknown_cause_ver
     escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
     assert escalation["cause"] == "a-future-cause"
     assert escalation["detail"] == "something new"
-
-
-def test_escalation_on_unknown_chunk_is_404(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    resp = hub.client.post(
-        "/api/fleet/chunks/ch_missing/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
-    )
-    assert resp.status_code == 404

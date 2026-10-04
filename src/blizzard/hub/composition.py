@@ -64,7 +64,7 @@ from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.execution.detach import DetachService
-from blizzard.hub.domain.execution.facts import FactIngestService, RunnerFactsService
+from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
@@ -211,7 +211,6 @@ class HubServices:
     transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
     graph_lifecycle: GraphLifecycleService
-    runner_facts: RunnerFactsService
     questions: QuestionService
     queue: QueueService
     group: GroupService
@@ -821,7 +820,6 @@ def build_services(
         ),
         graph_mint=graph_mint,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
-        runner_facts=RunnerFactsService(route=chunk_route, escalations=chunk_escalations, retired=retired, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
         group=GroupService(

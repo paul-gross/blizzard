@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import CHUNK_CHANGED, EVENT_LOGGED, QUEUE_CHANGED, RUNNER_CHANGED
-from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_lease
+from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -194,11 +194,8 @@ def test_escalation_carries_cause_escalated(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _node_id = _claimed(hub)
     before = _latest_event_id(hub)
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"runner_id": "r1", "epoch": 1, "takeover_command": "cd wd && claude --resume"},
-    )
-    assert resp.status_code == 202, resp.text
+    ack = report_escalation(hub, chunk_id, epoch=1, seq=2, takeover_command="cd wd && claude --resume")
+    assert ack["applied"] == [2], ack
     frames = _chunk_changed_frames(hub, since=before)
     assert frames[-1]["cause"] == "escalated"
     assert frames[-1]["status"] == "needs_human"
@@ -227,11 +224,8 @@ def test_group_carries_cause_grouped(tmp_path: Path) -> None:
 def test_requeue_carries_cause_requeued(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _node_id = _claimed(hub)
-    esc = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"runner_id": "r1", "epoch": 1, "takeover_command": "cd wd && claude --resume"},
-    )
-    assert esc.status_code == 202, esc.text
+    ack = report_escalation(hub, chunk_id, epoch=1, seq=2, takeover_command="cd wd && claude --resume")
+    assert ack["applied"] == [2], ack
     before = _latest_event_id(hub)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/requeues")
     assert resp.status_code == 202, resp.text

@@ -119,8 +119,11 @@ def test_wrong_runner_id_is_rejected_on_a_fleet_write(tmp_path: Path) -> None:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
 
     resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/leases",
-        json={"epoch": 1, "runner_id": "runner-b"},
+        "/api/fleet/events",
+        json={
+            "runner_id": "runner-b",
+            "facts": [{"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
+        },
         headers=_bearer(token),
     )
     assert resp.status_code == 403

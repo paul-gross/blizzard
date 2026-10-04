@@ -273,8 +273,6 @@ _FLEET: set[tuple[str, str]] = {
     ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/leases"),
-    ("POST", "/api/fleet/chunks/{chunk_id}/escalations"),
     ("POST", "/api/fleet/events"),
     ("POST", "/api/fleet/runners"),
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"),

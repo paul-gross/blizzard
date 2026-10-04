@@ -136,11 +136,7 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     ),
     "chunk-statuses": "IHubClient.chunk_statuses — GET /api/fleet/chunk-statuses (repeatable chunk_id)",
     "reset": "test-only control — clears held state + levers, no IHubClient operation",
-    "escalate": (
-        "no live IHubClient caller (blizzard#521 retired report_escalation, unused before this "
-        "too) — drives the hub's still-served escalation route directly, "
-        "POST /api/fleet/chunks/{id}/escalations"
-    ),
+    "escalate": "IHubClient.push_facts (escalation.recorded) — POST /api/fleet/events",
     "decide": "IHubClient.submit_decision — POST /api/fleet/chunks/{id}/decisions",
     "ask": "IHubClient.push_facts (question.asked) — POST /api/fleet/events",
     "poll-answer": "IHubClient.get_question — GET /api/fleet/questions/{id}",

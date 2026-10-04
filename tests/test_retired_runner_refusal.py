@@ -171,10 +171,6 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
         )
     ),
     "transcript ingest": lambda r: r.hub.services.transcript_ingest.ingest(_RUNNER, [r.transcript_record()]),
-    "lease report": lambda r: r.hub.services.runner_facts.record_lease_minted(r.chunk, epoch=2, runner_id=_RUNNER),
-    "escalation report": lambda r: r.hub.services.runner_facts.record_escalation(
-        r.chunk, runner_id=_RUNNER, epoch=1, takeover_command="claude --resume"
-    ),
     "completion": lambda r: r.hub.services.apply.apply(
         r.chunk,
         r.graph,

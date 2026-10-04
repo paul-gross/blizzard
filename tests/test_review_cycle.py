@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token
+from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -88,8 +88,8 @@ def _completion(node_id: str, *, epoch: int, choice: str, artifacts: list[dict])
 
 
 def _report_lease(hub, chunk_id: str, epoch: int) -> None:  # type: ignore[no-untyped-def]
-    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": epoch, "runner_id": "r1"})
-    assert resp.status_code == 202, resp.text
+    # One lease per epoch, minted in epoch order, so the epoch doubles as the runner's fact seq.
+    assert report_lease(hub, chunk_id, epoch=epoch, seq=epoch)["applied"] == [epoch]
 
 
 def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
