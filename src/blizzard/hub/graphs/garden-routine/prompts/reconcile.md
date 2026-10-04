@@ -4,10 +4,11 @@ You are joining this run cold, on purpose: the session that swept the target has
 findings are real, and your job needs someone who has not.
 
 You have three inputs: the `survey` asset from this run — read it with `blizzard runner artifact get survey --content` —
-this routine's finding bucket, and its open proposals. Fetch findings with
-`blizzard runner garden findings` and proposals with `blizzard runner garden proposals`, both flagless: the hub derives
-this run's routine and scope from the chunk itself. The bucket is the routine's findings in every scope plus review findings on yours, each with `scope_slug` and `state`; proposals are the routine's
-whole open set, each naming the finding ids it answers — needed to tell an answered finding from one still waiting. Read all three before writing anything.
+this routine's finding bucket, and its open proposals. Fetch findings with `blizzard runner garden findings` and
+proposals with `blizzard runner garden proposals`, both flagless: the hub derives this run's routine and scope from the
+chunk itself. The bucket is the routine's findings in every scope plus review findings on yours, each with `scope_slug`
+and `state`; proposals are the routine's whole open set, each naming the finding ids it answers — needed to tell an
+answered finding from one still waiting. Read all three before writing anything.
 
 ## Re-check every delivered finding first
 

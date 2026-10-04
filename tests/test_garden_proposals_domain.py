@@ -195,7 +195,7 @@ def test_create_operator_names_the_resolved_routine() -> None:
     assert proposal.routine_name == "nightly"
 
 
-def test_create_operator_rejects_a_exited_finding() -> None:
+def test_create_operator_rejects_an_exited_finding() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
@@ -381,7 +381,7 @@ def test_attach_rejects_a_finding_already_linked_to_this_proposal() -> None:
     assert repo.attached == []
 
 
-def test_attach_rejects_a_exited_finding() -> None:
+def test_attach_rejects_an_exited_finding() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
@@ -649,3 +649,57 @@ def test_list_for_routine_defaults_to_open() -> None:
     rows = reader.list_for_routine("nightly")
 
     assert [(p.proposal_id, c) for p, c in rows] == [("gprop_1", None)]
+
+
+def _authoring_over(repo: _FakeGardenProposalRepo) -> GardenProposalAuthoring:
+    return GardenProposalAuthoring(
+        proposals=_as_write_repo(repo),
+        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        clock=FixedClock(instant=_T0),
+    )
+
+
+def test_detach_unlinks_an_exited_finding_because_exit_is_not_checked() -> None:
+    repo = _FakeGardenProposalRepo()
+    exited = replace(_finding("fin_1"), live=False, state="wont-fix")
+
+    _authoring_over(repo).detach(_proposal("gprop_1"), [exited])
+
+    assert repo.detached == [("gprop_1", ["fin_1"])]
+
+
+def test_detach_unlinks_a_gone_finding() -> None:
+    repo = _FakeGardenProposalRepo()
+    gone = replace(_finding("fin_1"), live=False, state="gone")
+
+    _authoring_over(repo).detach(_proposal("gprop_1"), [gone])
+
+    assert repo.detached == [("gprop_1", ["fin_1"])]
+
+
+def test_edit_strips_a_padded_class_and_body() -> None:
+    repo = _FakeGardenProposalRepo()
+
+    _authoring_over(repo).edit(_proposal("gprop_1"), GardenProposalEdit(class_="  new-class \n", body="\n new body  "))
+
+    assert repo.edited == [("gprop_1", GardenProposalEdit(class_="new-class", body="new body"))]
+
+
+def test_edit_rejects_a_blank_class() -> None:
+    repo = _FakeGardenProposalRepo()
+
+    with pytest.raises(GardenProposalBlankFieldError) as raised:
+        _authoring_over(repo).edit(_proposal("gprop_1"), GardenProposalEdit(class_="  "))
+
+    assert "class" in str(raised.value)
+    assert repo.edited == []
+
+
+def test_edit_rejects_a_blank_body() -> None:
+    repo = _FakeGardenProposalRepo()
+
+    with pytest.raises(GardenProposalBlankFieldError) as raised:
+        _authoring_over(repo).edit(_proposal("gprop_1"), GardenProposalEdit(body="\n\t"))
+
+    assert "body" in str(raised.value)
+    assert repo.edited == []

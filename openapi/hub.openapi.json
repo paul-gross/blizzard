@@ -17499,7 +17499,7 @@
         ]
       },
       "post": {
-        "description": "Mint an operator-authored proposal, naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, non-live, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
+        "description": "Mint an operator-authored proposal, naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, exited, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
         "operationId": "create_garden_proposal_api_garden_proposals_post",
         "requestBody": {
           "content": {
@@ -17688,7 +17688,7 @@
     },
     "/api/garden-proposals/{proposal_id}/attach": {
       "post": {
-        "description": "Link the given finding ids to PROPOSAL_ID \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
+        "description": "Link the given finding ids to PROPOSAL_ID \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, exited, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
         "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
         "parameters": [
           {

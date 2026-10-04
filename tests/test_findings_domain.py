@@ -138,3 +138,86 @@ def test_a_later_fact_after_delivered_restores_liveness_too() -> None:
     assert state.state == "live"
     assert state.last_seen_at == _T2
     assert state.observed_count == 1
+
+
+_NOTE = "why"
+
+
+@pytest.mark.parametrize("kind", ["add", "observed", "reopened"])
+def test_a_live_kind_newest_derives_live_with_its_note_and_actor(kind: str) -> None:
+    state = derive_liveness([FindingFact(kind=kind, recorded_at=_T0, note=_NOTE, actor="pat")])
+
+    assert (state.state, state.live, state.note, state.actor) == ("live", True, _NOTE, "pat")
+
+
+def test_a_gone_newest_derives_the_gone_state_with_its_note_and_no_actor() -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind="gone", recorded_at=_T1, note=_NOTE)]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.live, state.note, state.actor) == ("gone", False, _NOTE, None)
+
+
+@pytest.mark.parametrize("kind", ["delivered", "resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"])
+def test_every_other_kind_newest_derives_its_own_kind_as_the_state(kind: str) -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind=kind, recorded_at=_T1, note=_NOTE, actor="pat")]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.live, state.note, state.actor) == (kind, False, _NOTE, "pat")
+
+
+def test_the_note_and_actor_come_from_the_newest_fact_not_an_earlier_one() -> None:
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0, note="old", actor="old-actor"),
+        FindingFact(kind="observed", recorded_at=_T1),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.note, state.actor) == (None, None)
+
+
+def test_a_recorded_at_tie_keeps_the_later_inserted_fact() -> None:
+    facts = [
+        FindingFact(kind="observed", recorded_at=_T1, note="first"),
+        FindingFact(kind="gone", recorded_at=_T1, note="second"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.note) == ("gone", "second")
+
+
+def test_newest_is_by_recorded_at_not_insertion_order() -> None:
+    facts = [FindingFact(kind="gone", recorded_at=_T2, note=_NOTE), FindingFact(kind="observed", recorded_at=_T1)]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.note) == ("gone", _NOTE)
+
+
+def test_the_empty_case_asserts_the_full_result() -> None:
+    state = derive_liveness([])
+
+    assert (state.state, state.live, state.note, state.actor) == ("live", True, None, None)
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (None, None, 0)
+
+
+def test_the_seen_span_is_min_and_max_over_add_and_observed_only() -> None:
+    facts = [
+        FindingFact(kind="observed", recorded_at=_T1),
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="observed", recorded_at=_T2),
+        FindingFact(kind="gone", recorded_at=datetime(2026, 3, 1, tzinfo=UTC)),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (_T0, _T2, 2)
+
+
+def test_facts_with_nothing_seen_leave_the_span_unset() -> None:
+    state = derive_liveness([FindingFact(kind="gone", recorded_at=_T1)])
+
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (None, None, 0)
