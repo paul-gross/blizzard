@@ -48,6 +48,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
+from blizzard.runner.loop.claim import InterruptedClaims
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
@@ -2576,6 +2577,101 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("restart_epoch", "hub_epoch", "prior_epoch", "adopts"),
+    [(2, 4, 2, False), (4, 4, 2, True), (2, 2, 2, True), (2, 2, 5, False)],
+    ids=["historical", "newer-current", "level-current", "stale-current"],
+)
+def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub_epoch, prior_epoch, adopts):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_prior",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=prior_epoch,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_prior",
+        pid=100,
+        process_start_time="old",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-prior"),
+        spawned_at=_NOW,
+    )
+    store.record_closure(
+        lease_id="lease_prior", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    store.set_route_token("ch_1", token="tok", at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        route_runner_id="r1",
+        latest_epoch=hub_epoch,
+        restart_epochs=[restart_epoch],
+    )
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "retro", node_id="nd_retro", choices=_CHOICES, session=SessionMode.RESUME, epoch=hub_epoch
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+    if not adopts:
+        assert harness.spawns == []
+        if hub_epoch < prior_epoch:
+            Advance(ctx).run()
+            assert store.active_lease_for_chunk("ch_1") is None
+            return
+        Advance(ctx).run()
+        lease = store.active_lease_for_chunk("ch_1")
+        assert lease is not None and lease.session_id == "sess-prior"
+        assert store.boundary(lease.lease_id, 1, "resume") is not None
+    else:
+        lease = store.active_lease_for_chunk("ch_1")
+        assert lease is not None and lease.session_id == "sess-a"
+        assert store.boundary(lease.lease_id, 1, "spawn") is not None
+
+
+@pytest.mark.unit
+def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=7
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, epoch=7)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+    epochs: list[int | None] = []
+    original = InterruptedClaims._adopt
+
+    def traced_adopt(self, chunk_id, latest_epoch):  # type: ignore[no-untyped-def]
+        epochs.append(latest_epoch)
+        return original(self, chunk_id, latest_epoch)
+
+    monkeypatch.setattr(InterruptedClaims, "_adopt", traced_adopt)
+    Fill(ctx).run()
+    lease = store.active_lease_for_chunk("ch_1")
+    assert epochs == [7]
+    assert lease is not None and lease.node_name == "build"
+    assert store.boundary(lease.lease_id, 1, "spawn") is not None
+
+
+@pytest.mark.unit
 def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     # A chunk held at a hub node: a binding but no active lease.
@@ -3507,9 +3603,11 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
         harness=harness,
         probe=FakeProbe(),
         config=_cap_config(100.0),  # raised well above the $7 spend
+        clock=FixedClock(_NOW + timedelta(seconds=1)),
     )
 
-    Fill(ctx2).run()  # `_reconcile_interrupted_claims` adopts — spawns the current (review) node
+    store.record_requeue(chunk_id="ch_1", at=_NOW + timedelta(seconds=1))
+    Fill(ctx2).run()  # the explicit local requeue resumes the current node
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"

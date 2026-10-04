@@ -610,7 +610,7 @@ def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp
     )
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkStatusView(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=2, route_runner_id="r1"
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=2, route_runner_id="r1", restart_epochs=[2]
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2)
     hub.queue = []

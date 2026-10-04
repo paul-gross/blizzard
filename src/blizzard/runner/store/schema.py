@@ -40,6 +40,7 @@ leases = Table(
     Column("pgid", Integer, nullable=True),  # the current generation's owned process group
     Column("created_at", UtcDateTime, nullable=False),
 )
+Index("ix_leases_chunk_id_epoch", leases.c.chunk_id, leases.c.epoch)
 
 # --- Environment bindings (chunk -> env ids, from the provider) -------------
 
@@ -199,6 +200,7 @@ binding_releases = Table(
     Column("chunk_id", String, nullable=False),
     Column("environment_id", String, nullable=False),
     Column("released_at", UtcDateTime, nullable=False),
+    Column("lease_epoch_floor", Integer, nullable=True),  # newest local mint when this binding was released
 )
 
 # `HELD_BINDING` correlates on exactly this triple, once per `env_bindings`

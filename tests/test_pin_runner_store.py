@@ -18,7 +18,7 @@ from blizzard.runner.store.errors import (
     RunnerStoreError,
     RunnerStoreErrorFactory,
 )
-from blizzard.runner.store.schema import park_facts, pause_parks
+from blizzard.runner.store.schema import binding_releases, park_facts, pause_parks
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -67,6 +67,50 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-un
     assert store.held_environment_ids() == ["e1"]
     assert store.live_tenure_chunk_ids() == ["ch_1"]
     assert [b.environment_id for b in store.bindings_for_chunk("ch_1")] == ["e1"]
+
+
+@pytest.mark.unit
+def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    for chunk, epoch in (("ch_1", 1), ("ch_2", 9), ("ch_3", 1)):
+        store.record_lease(
+            NewLease(
+                lease_id=f"lease_{chunk}_old",
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                runner_id="r1",
+                retries_max=2,
+                created_at=_NOW,
+            )
+        )
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+    with store._engine.connect() as conn:
+        floor = conn.execute(sa.select(binding_releases.c.lease_epoch_floor)).scalar_one()
+    assert floor == 1
+    assert not store.has_lease_in_binding_tenure("ch_1", _NOW)
+    assert store.has_lease_in_binding_tenure("ch_2", _NOW)
+    assert store.has_lease_in_binding_tenure("ch_3", _NOW)
+    assert not store.has_lease_in_binding_tenure("ch_2", _NOW + timedelta(seconds=1))
+    assert not store.has_lease_in_binding_tenure("ch_missing", _NOW)
+
+    store.record_lease(
+        NewLease(
+            lease_id="lease_ch_1_new",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_retro",
+            node_name="retro",
+            epoch=2,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    assert store.has_lease_in_binding_tenure("ch_1", _NOW)
+    assert not store.has_lease_in_binding_tenure("ch_1", _NOW + timedelta(seconds=1))
 
 
 @pytest.mark.unit

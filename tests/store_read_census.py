@@ -634,6 +634,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "list_closed_leases"): lambda w: w.read.lease_record.list_closed_leases(10),
     (IReadLeaseRecordRepository, "attempt_count"): lambda w: w.read.lease_record.attempt_count(w.chunk_1, w.node_a),
     (IReadLeaseRecordRepository, "latest_epoch"): lambda w: w.read.lease_record.latest_epoch(w.chunk_1),
+    (IReadLeaseRecordRepository, "has_lease_in_binding_tenure"): lambda w: (
+        w.read.lease_record.has_lease_in_binding_tenure(w.chunk_1, _t(0))
+    ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
     (IReadLeaseRecordRepository, "count_active_leases"): lambda w: w.read.lease_record.count_active_leases(),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
