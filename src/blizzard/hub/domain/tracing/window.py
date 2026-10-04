@@ -30,6 +30,7 @@ class ClosedStep:
     key: CursorKey
     step: NodeStep
     facts: StepFacts
+    steps: tuple[NodeStep, ...]
 
 
 @dataclass(frozen=True)
@@ -71,22 +72,30 @@ def _chunk_items(chunk: StepFacts) -> list[FinishedChunk]:
 
 
 def select_window(
-    facts: Iterable[StepFacts], since: CursorKey, until: datetime, frontier: datetime | None, limit: int
+    facts: Iterable[StepFacts],
+    since: CursorKey,
+    until: datetime,
+    frontier: datetime | None,
+    limit: int,
+    newest: datetime | None,
 ) -> TraceWindow:
     """The items after ``since`` and at or before ``until``, short of ``frontier``, first ``limit`` by key.
 
     Every item closing before ``frontier`` was read, so with no truncation the cursor may pass to it
-    even when its rows closed nothing unsent — that is what keeps a saturated read from stalling."""
+    even when its rows closed nothing unsent — that is what keeps a saturated read from stalling. With
+    neither, every closing fact through ``newest`` — the latest instant the read returned — was read, so the
+    cursor passes that instant and the next read starts strictly after it."""
     closed: list[TraceItem] = []
     for chunk in facts:
-        for step in identify_steps(chunk):
+        steps = identify_steps(chunk)
+        for step in steps:
             if step.close is None or step.close.at > until:
                 continue
             if frontier is not None and step.close.at >= frontier:
                 continue
             key = CursorKey.of(step)
             if key > since:
-                closed.append(ClosedStep(key, step, chunk))
+                closed.append(ClosedStep(key, step, chunk, steps))
         for item in _chunk_items(chunk):
             if item.key.at > until or (frontier is not None and item.key.at >= frontier):
                 continue
@@ -98,6 +107,8 @@ def select_window(
         return TraceWindow(told, told[-1].key)
     if frontier is not None:
         return TraceWindow(told, CursorKey.opening(frontier))
+    if newest is not None:
+        return TraceWindow(told, max(CursorKey.past(newest), since))
     return TraceWindow(told, told[-1].key if told else since)
 
 
@@ -105,7 +116,7 @@ def read_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit
     """:func:`select_window` over the chunks holding a closing fact in ``[since.at, until]``."""
     candidates = reads.closing_candidates(since.at, until, limit)
     facts = reads.step_facts_for(candidates.chunk_ids)
-    return select_window(facts.values(), since, until, candidates.frontier, limit)
+    return select_window(facts.values(), since, until, candidates.frontier, limit, candidates.newest)
 
 
 def assemble_window(window: TraceWindow) -> tuple[SpanRecord, ...]:
@@ -115,7 +126,7 @@ def assemble_window(window: TraceWindow) -> tuple[SpanRecord, ...]:
 
 def _assemble(item: TraceItem) -> tuple[SpanRecord, ...]:
     if isinstance(item, ClosedStep):
-        return assemble_step(item.facts, item.step)
+        return assemble_step(item.facts, item.step, item.steps)
     return (
         assemble_completion(item.facts)
         if item.completion

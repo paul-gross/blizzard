@@ -44,12 +44,16 @@ SENTINEL = "SENTINEL-do-not-leak"
 
 def _told(facts: StepFacts) -> dict[str, tuple[SpanRecord, ...]]:
     """Every closed step's spans, keyed by the step key's text."""
-    return {s.key.text(): assemble_step(facts, s) for s in identify_steps(facts) if s.close is not None}
+    return {
+        s.key.text(): assemble_step(facts, s, identify_steps(facts))
+        for s in identify_steps(facts)
+        if s.close is not None
+    }
 
 
 def _step(facts: StepFacts, index: int = 0) -> tuple[SpanRecord, ...]:
     step = identify_steps(facts)[index]
-    return assemble_step(facts, step)
+    return assemble_step(facts, step, identify_steps(facts))
 
 
 def _by_name(spans: tuple[SpanRecord, ...]) -> dict[str, SpanRecord]:
@@ -461,7 +465,7 @@ def test_link_reason_and_derived_context(facts: StepFacts, reason: str) -> None:
     facts = replace(facts, transitions=(*facts.transitions, fx.to("g1", "gate", 90, last)))
     steps = identify_steps(facts)
     assert _step(facts, 0)[0].links == ()
-    spans = assemble_step(facts, steps[1])
+    spans = assemble_step(facts, steps[1], identify_steps(facts))
     (link,) = spans[0].links
     assert link.attributes[attr.LINK_REASON] == reason
     assert link.context == DerivedContext.of(steps[0].key, SpanRole.STEP)
@@ -475,7 +479,7 @@ def test_a_link_to_a_gate_uses_the_gate_role() -> None:
     )
     steps = identify_steps(facts)
     gate_index = next(i for i, s in enumerate(steps) if s.kind is StepKind.GATE)
-    nxt = assemble_step(facts, steps[gate_index + 1])
+    nxt = assemble_step(facts, steps[gate_index + 1], identify_steps(facts))
     assert nxt[0].links[0].context == DerivedContext.of(steps[gate_index].key, SpanRole.GATE)
 
 
@@ -545,7 +549,7 @@ def test_a_move_back_onto_the_same_node_is_next_not_retry() -> None:
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
     )
     steps = identify_steps(facts)
-    (link,) = assemble_step(facts, steps[1])[0].links
+    (link,) = assemble_step(facts, steps[1], identify_steps(facts))[0].links
     assert link.attributes[attr.LINK_REASON] == "next"
 
 

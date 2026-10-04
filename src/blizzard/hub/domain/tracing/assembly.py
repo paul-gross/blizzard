@@ -20,7 +20,7 @@ from blizzard.foundation.trace_spans import (
 )
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.facts import StepFacts
-from blizzard.hub.domain.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome, identify_steps
+from blizzard.hub.domain.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome
 from blizzard.hub.domain.tracing.summary import (
     Interval,
     IntervalKind,
@@ -178,11 +178,11 @@ def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tupl
     return (LinkRecord(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
 
 
-def assemble_step(facts: StepFacts, step: NodeStep) -> tuple[SpanRecord, ...]:
-    """The finished spans of one closed step, root first. An open step is refused: only closed steps are told."""
+def assemble_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[SpanRecord, ...]:
+    """The finished spans of one closed step of ``steps`` — the chunk's identified steps — root first.
+    An open step is refused: only closed steps are told."""
     if step.close is None:
         raise ValueError(f"step {step.key.text()} is open; only closed steps are assembled")
-    steps = identify_steps(facts)
     summary = summarize_step(facts, step, steps)
     dims = step_dimensions(summary)
     gate = step.kind is StepKind.GATE

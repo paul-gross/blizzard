@@ -157,15 +157,15 @@ def _ids(window) -> list[str]:  # type: ignore[no-untyped-def]
 def test_window_keeps_steps_strictly_after_since_and_at_or_before_until() -> None:
     facts = [_chunk("ch_a", closes_at=10), _chunk("ch_b", closes_at=10), _chunk("ch_c", closes_at=20)]
     since = CursorKey(fx.at(10), "ch_a", 1)
-    window = select_window(facts, since, fx.at(20), None, 10)
+    window = select_window(facts, since, fx.at(20), None, 10, fx.at(20))
     assert _ids(window) == ["ch_b", "ch_c"]
-    assert window.position == CursorKey(fx.at(20), "ch_c", 1)
-    assert _ids(select_window(facts, since, fx.at(19), None, 10)) == ["ch_b"]
+    assert window.position == CursorKey.past(fx.at(20))
+    assert _ids(select_window(facts, since, fx.at(19), None, 10, fx.at(19))) == ["ch_b"]
 
 
 def test_window_takes_the_limit_in_key_order_and_positions_at_the_last_told() -> None:
     facts = [_chunk("ch_c", closes_at=5), _chunk("ch_a", closes_at=5), _chunk("ch_b", closes_at=3)]
-    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), None, 2)
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), None, 2, fx.at(5))
     assert _ids(window) == ["ch_b", "ch_a"]
     assert window.position == CursorKey(fx.at(5), "ch_a", 1)
 
@@ -177,27 +177,49 @@ def test_window_over_limit_with_a_frontier_stops_at_the_third_told_key() -> None
         _chunk("ch_a", closes_at=3),
         _chunk("ch_b", closes_at=5),
     ]
-    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3)
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3, fx.at(5))
     assert _ids(window) == ["ch_a", "ch_b", "ch_c"]
     assert window.position == CursorKey(fx.at(5), "ch_c", 1)
 
 
 def test_window_at_exact_limit_with_a_frontier_advances_to_the_frontier() -> None:
     facts = [_chunk("ch_c", closes_at=5), _chunk("ch_a", closes_at=3), _chunk("ch_b", closes_at=5)]
-    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3)
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 3, fx.at(5))
     assert _ids(window) == ["ch_a", "ch_b", "ch_c"]
     assert window.position == CursorKey.opening(fx.at(8))
 
 
 def test_window_holds_back_steps_at_or_past_the_frontier_and_may_pass_to_it() -> None:
     facts = [_chunk("ch_a", closes_at=5), _chunk("ch_b", closes_at=8)]
-    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 10)
+    window = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), fx.at(8), 10, fx.at(5))
     assert _ids(window) == ["ch_a"]
     assert window.position == CursorKey.opening(fx.at(8))
 
 
 def test_window_with_nothing_closed_and_no_frontier_stays_put() -> None:
     since = CursorKey(fx.at(3), "ch_a", 1)
-    window = select_window([fx.make_facts(**fx.runner_epoch(1, 10))], since, fx.at(20), None, 10)
+    window = select_window([fx.make_facts(**fx.runner_epoch(1, 10))], since, fx.at(20), None, 10, None)
     assert window.closed_steps() == ()
     assert window.position == since
+
+
+def test_window_that_read_only_non_closing_rows_passes_the_newest_instant_read() -> None:
+    since = CursorKey(fx.at(3), "ch_a", 1)
+    window = select_window([fx.make_facts(**fx.runner_epoch(1, 10))], since, fx.at(20), None, 10, fx.at(12))
+    assert window.closed_steps() == ()
+    assert window.position == CursorKey.past(fx.at(12))
+
+
+def test_window_passing_the_newest_instant_does_not_pass_a_later_close() -> None:
+    facts = [_chunk("ch_a", closes_at=5), _chunk("ch_b", closes_at=9)]
+    first = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(7), None, 10, fx.at(5))
+    assert _ids(first) == ["ch_a"]
+    second = select_window(facts, first.position, fx.at(10), None, 10, fx.at(9))
+    assert _ids(second) == ["ch_b"]
+
+
+def test_a_step_closing_at_the_instant_just_told_is_not_lost_nor_told_twice() -> None:
+    facts = [_chunk("ch_a", closes_at=5), _chunk("ch_b", closes_at=5)]
+    first = select_window(facts, CursorKey.opening(fx.at(0)), fx.at(10), None, 10, fx.at(5))
+    assert _ids(first) == ["ch_a", "ch_b"]
+    assert _ids(select_window(facts, first.position, fx.at(10), None, 10, None)) == []

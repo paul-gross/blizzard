@@ -9,7 +9,7 @@ from decimal import Decimal
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, invocation_row, money, step_row
+from blizzard.hub.domain.egress.rows import InvocationRow, StepRow, UsageRow, money, step_row
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.facts import DecisionRecord, DecisionResolutionRecord, QuestionRecord, StepFacts
@@ -164,7 +164,7 @@ def test_row_cost_sums_to_the_span_roots_cost(name: str) -> None:
         if step.close is None:
             continue
         row = step_row(summarize_step(facts, step), EXPORTED)
-        root = assemble_step(facts, step)[0]
+        root = assemble_step(facts, step, identify_steps(facts))[0]
         folded = float((row.cost_billed_usd or 0) + (row.cost_estimated_usd or 0))
         assert folded == pytest.approx(root.attributes[attr.STEP_COST_USD], abs=1e-9)  # type: ignore[arg-type]
 
@@ -175,20 +175,20 @@ def test_an_open_steps_invocation_matches_its_row_once_it_closes() -> None:
         **fx.runner_epoch(1, 10),
     )
     assert next(s for s in identify_steps(open_facts)).close is None
-    early = invocation_row(open_facts, _usage_row(open_facts.usage[0]), EXPORTED)
+    early = fx.invocation_of(open_facts, _usage_row(open_facts.usage[0]), EXPORTED)
     closed_facts = replace(open_facts, transitions=(fx.to("g1", "review", 30, 1),))
     (summary,) = _summaries(closed_facts)
     row = step_row(summary, EXPORTED)
     assert (early.step_key, early.trace_id) == (row.step_key, row.trace_id)
     assert early.step_key == StepKey.attempt("ch_1", 1).text()
     assert (early.graph_id, early.node_id, early.node_name) == ("g1", "g1-build", "build")
-    assert invocation_row(closed_facts, _usage_row(closed_facts.usage[0]), EXPORTED) == early
+    assert fx.invocation_of(closed_facts, _usage_row(closed_facts.usage[0]), EXPORTED) == early
 
 
 def test_an_invocation_row_renames_its_usage_fact() -> None:
     fact = fx.usage(cost_usd=None, estimated_cost_usd=0.25, harness_id=None, harness_version=None)
     facts = fx.make_facts(usage=(fact,), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
-    row = invocation_row(facts, UsageRow(7, "ch_1", "r-9", fact), EXPORTED)
+    row = fx.invocation_of(facts, UsageRow(7, "ch_1", "r-9", fact), EXPORTED)
     assert (row.usage_id, row.runner_id, row.kind, row.model) == (7, "r-9", "spawn", "claude-x")
     assert (row.harness_id, row.harness_version) == (None, None)
     assert (row.cost_billed_usd, row.cost_estimated_usd) == (None, Decimal("0.25"))
@@ -200,15 +200,15 @@ def test_an_invocation_row_renames_its_usage_fact() -> None:
 def test_an_invocation_without_a_runner_step_at_its_epoch_is_refused() -> None:
     facts = fx.make_facts(**fx.runner_epoch(1, 10))
     with pytest.raises(LookupError):
-        invocation_row(facts, _usage_row(fx.usage(epoch=4)), EXPORTED)
+        fx.invocation_of(facts, _usage_row(fx.usage(epoch=4)), EXPORTED)
     with pytest.raises(ValueError, match="belongs to"):
-        invocation_row(facts, _usage_row(fx.usage(), chunk_id="ch_other"), EXPORTED)
+        fx.invocation_of(facts, _usage_row(fx.usage(), chunk_id="ch_other"), EXPORTED)
 
 
 def test_an_invocation_on_a_hub_epoch_is_refused() -> None:
     facts = fx.hub_facts()
     with pytest.raises(LookupError):
-        invocation_row(facts, _usage_row(fx.usage(epoch=2)), EXPORTED)
+        fx.invocation_of(facts, _usage_row(fx.usage(epoch=2)), EXPORTED)
 
 
 def _planted() -> StepFacts:
@@ -238,7 +238,7 @@ def test_planted_content_never_reaches_a_row() -> None:
     planted = _planted()
     rows: list[StepRow | InvocationRow] = [step_row(s, EXPORTED) for s in _summaries(planted)]
     assert {r.step_kind for r in rows if isinstance(r, StepRow)} == {"runner", "gate"}
-    rows += [invocation_row(planted, _usage_row(u), EXPORTED) for u in planted.usage]
+    rows += [fx.invocation_of(planted, _usage_row(u), EXPORTED) for u in planted.usage]
     assert len(rows) >= 3
     assert scan(rows, SENTINEL) == []
     assert scan(rows, "ch_1") != []

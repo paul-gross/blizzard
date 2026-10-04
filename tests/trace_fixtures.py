@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.egress.assembly import runner_step
+from blizzard.hub.domain.egress.rows import InvocationRow, UsageRow, invocation_row
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.tracing.facts import (
     BounceRecord,
@@ -30,6 +32,7 @@ from blizzard.hub.domain.tracing.facts import (
     StepFacts,
     TransitionRecord,
 )
+from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -271,3 +274,12 @@ def scenarios() -> dict[str, StepFacts]:
         ),
         "no-invocations": make_facts(transitions=(to("g1", "review", 40, 1),), **runner_epoch(1, 10)),
     }
+
+
+def invocation_of(facts: StepFacts, usage: UsageRow, exported_at: datetime) -> InvocationRow:
+    """``usage``'s invocation row, resolving the runner step it belongs to as the sweeps do;
+    :class:`LookupError` when the facts hold none."""
+    step = runner_step(identify_steps(facts), usage.fact.epoch)
+    if step is None:
+        raise LookupError(f"usage {usage.usage_id} has no runner step at epoch {usage.fact.epoch}")
+    return invocation_row(facts, step, usage, exported_at)

@@ -41,7 +41,14 @@ from blizzard.hub.egress.writer import (
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, InMemoryEgressWriter, hub_store_connections, ingest
+from tests.support import (
+    HubHarness,
+    InMemoryEgressWriter,
+    count_queries,
+    count_rows_read,
+    hub_store_connections,
+    ingest,
+)
 from tests.trace_hub import claim, label, pass_build, trace_hub
 
 pytestmark = pytest.mark.component
@@ -615,3 +622,47 @@ def test_the_store_answers_each_datasets_own_newest_cursor(tmp_path: Path) -> No
     assert steps.step is not None
     assert invocations.step is None
     assert store.newest_egress_latch() is None
+
+
+def test_an_idle_pass_reads_no_closing_candidates_however_many_steps_are_open(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    sweep = _sweep(hub, writer)
+    sweep.sweep()
+    _closed_step(hub, graph, 1)
+    measured: list[tuple[int, int]] = []
+    for batch in range(3):
+        for ref in range(3):
+            chunk_id = ingest(hub, [{"source": "default", "ref": str(100 + batch * 3 + ref)}])
+            claim(hub, chunk_id, seq=next(_SEQ))
+            _push_usage(hub, chunk_id, _node_id(graph))
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()  # reads the new rows once and moves past them
+        cursor_rows = _cursor_rows(hub)
+        measured.append((count_queries(hub.engine, sweep.sweep), count_rows_read(hub.engine, sweep.sweep)))
+        assert _cursor_rows(hub) == cursor_rows
+
+    assert len(set(measured)) == 1
+    assert len(_rows(writer, "steps")) == 1
+
+
+def test_a_step_open_while_the_cursor_passed_is_written_once_when_it_closes(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    sweep = _sweep(hub, writer)
+    sweep.sweep()
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
+    claim(hub, chunk_id, seq=next(_SEQ))
+    _push_usage(hub, chunk_id, _node_id(graph))
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()
+    assert _rows(writer, "steps") == []
+
+    pass_build(hub, chunk_id, graph)
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=1))
+        sweep.sweep()
+
+    assert [r["chunk_id"] for r in _rows(writer, "steps")] == [chunk_id]
+    assert len(_rows(writer, "invocations")) == 1

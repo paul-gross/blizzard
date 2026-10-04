@@ -30,10 +30,12 @@ class ClosingCandidates:
     """The chunks holding a closing fact in a window, and how far that read is complete.
 
     ``frontier`` is set when a closing-fact table held more rows than the read's limit: a step
-    closing at or after it may sit in an unread chunk. It is always later than the read's ``since``."""
+    closing at or after it may sit in an unread chunk. It is always later than the read's ``since``.
+    ``newest`` is the latest closing-fact instant the read returned, or ``None`` when it returned none."""
 
     chunk_ids: tuple[str, ...]
     frontier: datetime | None = None
+    newest: datetime | None = None
 
 
 @dataclass(frozen=True)
