@@ -106,7 +106,7 @@ ever read: neither startup nor `blizzard runner init` writes, deletes, or touche
 The supported material is copied, with symlinks dereferenced, into an immutable snapshot at
 `<runtime root>/harness-config/snapshots/<content-hash>/`, mirroring the bundle's layout. `harness-config/current` is a
 symlink to the published snapshot, replaced atomically; a failed publish leaves `current` and every earlier snapshot in
-place, and an unchanged bundle reuses its snapshot. Changes to the bundle take effect on the next restart, and a turn
+place, and an unchanged bundle reuses its snapshot. A file's permission bits are part of its content: a change to only a file's mode (for example `chmod +x` on a plugin script) publishes a new snapshot, and the copy keeps the mode. Changes to the bundle take effect on the next restart, and a turn
 already running keeps the snapshot it started with. Old snapshots are not pruned.
 
 `blizzard runner harness status --dir <runtime root>` prints the autonomy value and where it comes from, any Claude Code

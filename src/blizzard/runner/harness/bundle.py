@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -240,6 +241,7 @@ def _tree_hash(root: Path) -> str:
     for path in sorted(root.rglob("*")):
         digest.update(path.relative_to(root).as_posix().encode() + b"\0")
         if path.is_file():
+            digest.update(b"%o\0" % stat.S_IMODE(path.stat().st_mode))
             digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()

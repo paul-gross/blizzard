@@ -38,6 +38,7 @@ from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
@@ -607,3 +608,24 @@ def test_both_roots_boot_with_a_single_enabled_harness(
     build_hosted_app(config)
     with loop_context(config) as loop:
         assert loop.harnesses.known_harnesses == expected
+
+
+@pytest.mark.unit
+def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    (bundle / "claude-code").mkdir(parents=True)
+    (bundle / "claude-code" / "mcp.json").write_text("{}")
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+    snapshot = publish_harness_bundle(bundle, tmp_path)
+
+    def settings_argv(ctx: LoopContext) -> list[str]:
+        adapter = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+        assert isinstance(adapter, ClaudeCodeAdapter)
+        return adapter._settings_args()
+
+    argv = LoopWiring.of(config, bundle=snapshot)._with_context(settings_argv)
+
+    settings = snapshot.path.resolve() / "claude-code" / "settings.json"
+    assert argv[:2] == ["--settings", str(settings)]

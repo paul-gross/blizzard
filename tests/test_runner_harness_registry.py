@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from concurrent.futures import Executor
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from blizzard.runner.app import create_app_for_export
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.health import HarnessHealthResult
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
@@ -24,7 +27,7 @@ from blizzard.runner.harness.registry import (
     UnavailableHarnessError,
     UnknownHarnessError,
 )
-from blizzard.runner.loop.capability_snapshot import default_harness_id
+from blizzard.runner.loop.capability_snapshot import capability_snapshot, default_harness_id
 from blizzard.runner.loop.process import LinuxProcessProbe
 from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
@@ -72,7 +75,9 @@ _ROLE_ACCESSORS = (
 
 @pytest.mark.unit
 @pytest.mark.parametrize("accessor", _ROLE_ACCESSORS)
-def test_every_role_accessor_resolves_the_bound_adapter_and_raises_the_registry_errors(accessor: str) -> None:
+def test_every_role_accessor_resolves_the_bound_adapter_and_raises_the_registry_errors_naming_the_owner(
+    accessor: str,
+) -> None:
     adapter = _harness()
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     unbound = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding()})
@@ -80,8 +85,33 @@ def test_every_role_accessor_resolves_the_bound_adapter_and_raises_the_registry_
     assert getattr(registry, accessor)(CLAUDE_CODE_HARNESS_ID) is adapter
     with pytest.raises(UnknownHarnessError):
         getattr(registry, accessor)("other")
-    with pytest.raises(UnavailableHarnessError):
+    with pytest.raises(UnavailableHarnessError) as raised:
         getattr(unbound, accessor)(CLAUDE_CODE_HARNESS_ID)
+    assert raised.value.harness_id == CLAUDE_CODE_HARNESS_ID
+    assert raised.value.capability == "adapter"
+
+
+class _RecordingHealth:
+    def __init__(self) -> None:
+        self.refreshed: list[tuple[str, object, str | None]] = []
+
+    def refresh(self, harness_id: str, *, adapter: object, observed_version: str | None) -> HarnessHealthResult:
+        self.refreshed.append((harness_id, adapter, observed_version))
+        return HarnessHealthResult(harness_id=harness_id, available=True, cause=None, degradations=())
+
+
+@pytest.mark.unit
+def test_capability_snapshot_refreshes_each_harness_health_with_its_own_adapter_and_version() -> None:
+    claude, opencode = _harness(), _harness()
+    claude.harness_version, opencode.harness_version = "1.0", "2.0"
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=claude), OPENCODE_HARNESS_ID: HarnessBinding(adapter=opencode)}
+    )
+    health = _RecordingHealth()
+
+    capability_snapshot(registry, health=cast(HarnessHealthCache, health))
+
+    assert health.refreshed == [(CLAUDE_CODE_HARNESS_ID, claude, "1.0"), (OPENCODE_HARNESS_ID, opencode, "2.0")]
 
 
 @pytest.mark.unit
