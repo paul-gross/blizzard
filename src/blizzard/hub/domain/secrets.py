@@ -206,27 +206,26 @@ class ISecretReader(Protocol):
 
 
 class SecretAuthoring:
-    """Create and replace a secret's value."""
+    """Create and replace a secret's value. The plaintext arrives as a ``str`` so no
+    request-plane module has to import :class:`SecretValue`; it is wrapped on entry."""
 
     def __init__(self, *, secrets: IWriteSecretRepository, cipher: ISecretCipher, clock: IClock) -> None:
         self._secrets = secrets
         self._cipher = cipher
         self._clock = clock
 
-    def create(self, name: SecretName, value: SecretValue, *, by: str) -> SecretRecord:
-        sealed = self._cipher.seal(value, name=name.value, revision=1)
+    def create(self, name: SecretName, value: str, *, by: str) -> SecretRecord:
+        sealed = self._cipher.seal(SecretValue(value), name=name.value, revision=1)
         return self._secrets.create(name.value, sealed=sealed, at=self._clock.now(), by=by)
 
-    def replace(
-        self, record: SecretRecord, value: SecretValue, *, by: str, if_match: int | None = None
-    ) -> SecretRecord:
+    def replace(self, record: SecretRecord, value: str, *, by: str, if_match: int | None = None) -> SecretRecord:
         """Seal under ``record.revision + 1`` and compare-and-set from ``record.revision``.
         ``if_match`` is the revision the caller last saw, checked before any write."""
         if self._secrets.is_retired(record.name):
             raise SecretRetired(record.name)
         if if_match is not None and if_match != record.revision:
             raise SecretRevisionConflict(record.name, current=record.revision)
-        sealed = self._cipher.seal(value, name=record.name, revision=record.revision + 1)
+        sealed = self._cipher.seal(SecretValue(value), name=record.name, revision=record.revision + 1)
         return self._secrets.replace(
             record.name, from_revision=record.revision, sealed=sealed, at=self._clock.now(), by=by
         )

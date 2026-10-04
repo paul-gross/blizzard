@@ -8,6 +8,7 @@ from blizzard.auth_core import (
     ANALYTICS_ADMIN,
     CHUNK_CONTROL,
     CHUNK_INGEST,
+    CONFIG_EDIT,
     FLEET_VIEW,
     GATE_RESOLVE,
     GRAPH_EDIT,
@@ -43,6 +44,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         USER_MANAGE,
         TRANSCRIPT_READ,
         ANALYTICS_ADMIN,
+        CONFIG_EDIT,
     }
     guest = expand(Role.GUEST)
     assert FLEET_VIEW in guest
@@ -129,3 +131,10 @@ def test_operating_write_permissions_are_contributor_and_above() -> None:
 
 def test_expand_returns_a_frozenset() -> None:
     assert isinstance(expand(Role.ADMIN), frozenset)
+
+
+def test_config_edit_is_admin_and_above() -> None:
+    for role in (Role.ADMIN, Role.SUPERUSER):
+        assert CONFIG_EDIT in expand(role)
+    for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
+        assert CONFIG_EDIT not in expand(role)

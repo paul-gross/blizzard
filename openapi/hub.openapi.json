@@ -8231,6 +8231,82 @@
         "title": "ScopeView",
         "type": "object"
       },
+      "SecretCreateRequest": {
+        "description": "Store a new secret under ``name`` \u2014 409 when the name is taken.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "format": "password",
+            "title": "Value",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "SecretCreateRequest",
+        "type": "object"
+      },
+      "SecretReplaceRequest": {
+        "description": "Replace a secret's value, advancing its revision.",
+        "properties": {
+          "value": {
+            "format": "password",
+            "title": "Value",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "SecretReplaceRequest",
+        "type": "object"
+      },
+      "SecretView": {
+        "description": "A secret's metadata as served by every secret route.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "replaced_at": {
+            "title": "Replaced At",
+            "type": "string"
+          },
+          "replaced_by": {
+            "title": "Replaced By",
+            "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "revision",
+          "replaced_at",
+          "replaced_by",
+          "created_at"
+        ],
+        "title": "SecretView",
+        "type": "object"
+      },
       "SessionMode": {
         "description": "Per-node session freshness.",
         "enum": [
@@ -19434,6 +19510,292 @@
         "summary": "List Scope Routines",
         "tags": [
           "scopes"
+        ]
+      }
+    },
+    "/api/secrets": {
+      "get": {
+        "description": "Every secret's metadata, retired ones hidden unless `include_retired`.",
+        "operationId": "list_secrets_api_secrets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SecretView"
+                  },
+                  "title": "Response List Secrets Api Secrets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Secrets",
+        "tags": [
+          "secrets"
+        ]
+      },
+      "post": {
+        "description": "Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name.",
+        "operationId": "create_secret_api_secrets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Secret",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/api/secrets/{name}": {
+      "get": {
+        "description": "One secret's metadata; 404 on an unknown name.",
+        "operationId": "get_secret_api_secrets__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Secret",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/api/secrets/{name}/enable": {
+      "post": {
+        "description": "Re-enable a retired secret; idempotent, 404 on an unknown name.",
+        "operationId": "enable_secret_api_secrets__name__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Secret",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/api/secrets/{name}/retire": {
+      "post": {
+        "description": "Retire a secret \u2014 a reversible brake; 404 on an unknown name.",
+        "operationId": "retire_secret_api_secrets__name__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Secret",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/api/secrets/{name}/value": {
+      "put": {
+        "description": "Replace a secret's value, advancing its revision. 409 naming the current revision\nwhen `If-Match` is stale or a concurrent replace won, and when the secret is retired;\n404 on an unknown name.",
+        "operationId": "replace_secret_api_secrets__name__value_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Secret",
+        "tags": [
+          "secrets"
         ]
       }
     },

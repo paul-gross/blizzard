@@ -109,6 +109,7 @@ from blizzard.hub.domain.routines import (
 )
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.secrets import IHubKeyProvider, ISecretCatalog, SecretAuthoring, SecretLifecycle
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.tracing.replay import TraceReplay
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
@@ -125,6 +126,7 @@ from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.secrets import secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -277,6 +279,12 @@ class HubServices:
     scope_registry: ScopeRegistry
     #: The scope retire/enable brake.
     scope_lifecycle: ScopeLifecycle
+    #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
+    secret_catalog: ISecretCatalog
+    #: Create and replace a secret's value.
+    secret_authoring: SecretAuthoring
+    #: The secret retire/enable brake.
+    secret_lifecycle: SecretLifecycle
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -454,6 +462,7 @@ def build_services(
     oauth_http_client: httpx.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
+    secret_keys: IHubKeyProvider,
     trusted_proxies: TrustedProxies | None = None,
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
@@ -807,6 +816,9 @@ def build_services(
         scopes=scope_store,
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
+        secret_catalog=core.secrets,
+        secret_authoring=SecretAuthoring(secrets=core.secrets, cipher=secret_cipher(secret_keys), clock=clock),
+        secret_lifecycle=SecretLifecycle(secrets=core.secrets, clock=clock),
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store),

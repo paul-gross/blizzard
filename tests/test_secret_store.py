@@ -23,7 +23,6 @@ from blizzard.hub.domain.secrets import (
     SecretRetired,
     SecretRevisionConflict,
     SecretUnreadable,
-    SecretValue,
 )
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider, secret_cipher
@@ -49,7 +48,7 @@ class _World:
         self.reader = StoreSecretReader(catalog=self.store, sealed=self.store, cipher=cipher)
 
     def create(self, name: str, value: str) -> None:
-        self.authoring.create(SecretName.parse(name), SecretValue(value), by="op")
+        self.authoring.create(SecretName.parse(name), value, by="op")
 
     def raw(self, name: str):  # type: ignore[no-untyped-def]
         with self.engine.connect() as conn:
@@ -89,7 +88,7 @@ def test_replace_moves_to_the_next_revision_and_reseals(world: _World) -> None:
     record = world.store.get("gh")
     assert record is not None
 
-    replaced = world.authoring.replace(record, SecretValue("new"), by="alice")
+    replaced = world.authoring.replace(record, "new", by="alice")
 
     assert (replaced.revision, replaced.replaced_by, replaced.created_at) == (2, "alice", _NOW)
     assert replaced.replaced_at == _NOW + timedelta(minutes=5)
@@ -101,10 +100,10 @@ def test_replace_from_a_stale_revision_is_a_conflict_naming_the_current_one(worl
     world.create("gh", "v1")
     stale = world.store.get("gh")
     assert stale is not None
-    world.authoring.replace(stale, SecretValue("v2"), by="op")
+    world.authoring.replace(stale, "v2", by="op")
 
     with pytest.raises(SecretRevisionConflict) as caught:
-        world.authoring.replace(stale, SecretValue("v3"), by="op")
+        world.authoring.replace(stale, "v3", by="op")
     assert caught.value.current == 2
     assert world.reader.reveal(SecretName.parse("gh")).expose() == "v2"
 
@@ -115,7 +114,7 @@ def test_replace_with_a_mismatched_if_match_is_refused_before_writing(world: _Wo
     assert record is not None
 
     with pytest.raises(SecretRevisionConflict) as caught:
-        world.authoring.replace(record, SecretValue("v2"), by="op", if_match=7)
+        world.authoring.replace(record, "v2", by="op", if_match=7)
     assert caught.value.current == 1
     assert world.raw("gh").revision == 1
 
@@ -129,7 +128,7 @@ def test_a_retired_secret_refuses_replace_and_reveal_until_enabled(world: _World
     assert world.store.is_retired("gh")
     assert world.store.retired_names() == {"gh"}
     with pytest.raises(SecretRetired):
-        world.authoring.replace(record, SecretValue("v2"), by="op")
+        world.authoring.replace(record, "v2", by="op")
     with pytest.raises(SecretRetired):
         world.reader.reveal(SecretName.parse("gh"))
 
@@ -159,7 +158,7 @@ def test_a_ciphertext_restored_at_an_older_revision_fails_to_open(world: _World)
     old = world.raw("gh")
     record = world.store.get("gh")
     assert record is not None
-    world.authoring.replace(record, SecretValue("v2"), by="op")
+    world.authoring.replace(record, "v2", by="op")
 
     world.overwrite("gh", ciphertext=old.ciphertext, nonce=old.nonce)
 

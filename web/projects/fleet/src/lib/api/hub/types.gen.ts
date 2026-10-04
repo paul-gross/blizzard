@@ -5226,6 +5226,62 @@ export type ScopeView = {
 };
 
 /**
+ * SecretCreateRequest
+ *
+ * Store a new secret under ``name`` — 409 when the name is taken.
+ */
+export type SecretCreateRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * SecretReplaceRequest
+ *
+ * Replace a secret's value, advancing its revision.
+ */
+export type SecretReplaceRequest = {
+    /**
+     * Value
+     */
+    value: string;
+};
+
+/**
+ * SecretView
+ *
+ * A secret's metadata as served by every secret route.
+ */
+export type SecretView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Replaced At
+     */
+    replaced_at: string;
+    /**
+     * Replaced By
+     */
+    replaced_by: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
  * SessionMode
  *
  * Per-node session freshness.
@@ -6455,6 +6511,22 @@ export type WorkSourcesListView = {
      * Sources
      */
     sources?: Array<WorkSourceSummary>;
+};
+
+/**
+ * SecretCreateRequest
+ *
+ * Store a new secret under ``name`` — 409 when the name is taken.
+ */
+export type SecretCreateRequestWritable = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: string;
 };
 
 export type ListActivityApiActivityGetData = {
@@ -11458,6 +11530,189 @@ export type ListScopeRoutinesApiScopesSlugRoutinesGetResponses = {
 };
 
 export type ListScopeRoutinesApiScopesSlugRoutinesGetResponse = ListScopeRoutinesApiScopesSlugRoutinesGetResponses[keyof ListScopeRoutinesApiScopesSlugRoutinesGetResponses];
+
+export type ListSecretsApiSecretsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/secrets';
+};
+
+export type ListSecretsApiSecretsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSecretsApiSecretsGetError = ListSecretsApiSecretsGetErrors[keyof ListSecretsApiSecretsGetErrors];
+
+export type ListSecretsApiSecretsGetResponses = {
+    /**
+     * Response List Secrets Api Secrets Get
+     *
+     * Successful Response
+     */
+    200: Array<SecretView>;
+};
+
+export type ListSecretsApiSecretsGetResponse = ListSecretsApiSecretsGetResponses[keyof ListSecretsApiSecretsGetResponses];
+
+export type CreateSecretApiSecretsPostData = {
+    body: SecretCreateRequestWritable;
+    path?: never;
+    query?: never;
+    url: '/api/secrets';
+};
+
+export type CreateSecretApiSecretsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateSecretApiSecretsPostError = CreateSecretApiSecretsPostErrors[keyof CreateSecretApiSecretsPostErrors];
+
+export type CreateSecretApiSecretsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SecretView;
+};
+
+export type CreateSecretApiSecretsPostResponse = CreateSecretApiSecretsPostResponses[keyof CreateSecretApiSecretsPostResponses];
+
+export type GetSecretApiSecretsNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/secrets/{name}';
+};
+
+export type GetSecretApiSecretsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSecretApiSecretsNameGetError = GetSecretApiSecretsNameGetErrors[keyof GetSecretApiSecretsNameGetErrors];
+
+export type GetSecretApiSecretsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SecretView;
+};
+
+export type GetSecretApiSecretsNameGetResponse = GetSecretApiSecretsNameGetResponses[keyof GetSecretApiSecretsNameGetResponses];
+
+export type EnableSecretApiSecretsNameEnablePostData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/secrets/{name}/enable';
+};
+
+export type EnableSecretApiSecretsNameEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableSecretApiSecretsNameEnablePostError = EnableSecretApiSecretsNameEnablePostErrors[keyof EnableSecretApiSecretsNameEnablePostErrors];
+
+export type EnableSecretApiSecretsNameEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SecretView;
+};
+
+export type EnableSecretApiSecretsNameEnablePostResponse = EnableSecretApiSecretsNameEnablePostResponses[keyof EnableSecretApiSecretsNameEnablePostResponses];
+
+export type RetireSecretApiSecretsNameRetirePostData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/secrets/{name}/retire';
+};
+
+export type RetireSecretApiSecretsNameRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireSecretApiSecretsNameRetirePostError = RetireSecretApiSecretsNameRetirePostErrors[keyof RetireSecretApiSecretsNameRetirePostErrors];
+
+export type RetireSecretApiSecretsNameRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SecretView;
+};
+
+export type RetireSecretApiSecretsNameRetirePostResponse = RetireSecretApiSecretsNameRetirePostResponses[keyof RetireSecretApiSecretsNameRetirePostResponses];
+
+export type ReplaceSecretApiSecretsNameValuePutData = {
+    body: SecretReplaceRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/secrets/{name}/value';
+};
+
+export type ReplaceSecretApiSecretsNameValuePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplaceSecretApiSecretsNameValuePutError = ReplaceSecretApiSecretsNameValuePutErrors[keyof ReplaceSecretApiSecretsNameValuePutErrors];
+
+export type ReplaceSecretApiSecretsNameValuePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: SecretView;
+};
+
+export type ReplaceSecretApiSecretsNameValuePutResponse = ReplaceSecretApiSecretsNameValuePutResponses[keyof ReplaceSecretApiSecretsNameValuePutResponses];
 
 export type FleetSpendApiSpendGetData = {
     body?: never;

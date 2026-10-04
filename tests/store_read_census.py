@@ -72,7 +72,7 @@ from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.secrets import ISecretCatalog, SecretAuthoring, SecretLifecycle, SecretName, SecretValue
+from blizzard.hub.domain.secrets import ISecretCatalog, SecretAuthoring, SecretLifecycle, SecretName
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCursorRecord
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
@@ -1093,8 +1093,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     secret_authoring = SecretAuthoring(
         secrets=secret_store, cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")), clock=clock
     )
-    secret_authoring.create(SecretName.parse("gh-token"), SecretValue("tok-a"), by="operator")
-    retired_secret = secret_authoring.create(SecretName.parse("old-token"), SecretValue("tok-b"), by="operator")
+    secret_authoring.create(SecretName.parse("gh-token"), "tok-a", by="operator")
+    retired_secret = secret_authoring.create(SecretName.parse("old-token"), "tok-b", by="operator")
     SecretLifecycle(secrets=secret_store, clock=clock).retire(retired_secret, by="operator")
 
     routine = hub.services.routine_authoring.create(

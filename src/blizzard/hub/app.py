@@ -18,6 +18,8 @@ from typing import Protocol
 
 import httpx
 from fastapi import Depends, FastAPI, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from blizzard import __version__
@@ -59,6 +61,8 @@ from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.scopes import router as scopes_router
+from blizzard.hub.api.secrets import router as secrets_router
+from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
@@ -243,6 +247,12 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
+    """The framework's 422, except on the secret routes, which never echo request input."""
+    assert isinstance(exc, RequestValidationError)
+    return sanitized_validation_response(request, exc) or await request_validation_exception_handler(request, exc)
+
+
 def _annotate_chunk(request: Request) -> None:
     """Stamp ``blizzard.chunk.id`` on the request's span from a ``chunk_id`` path parameter."""
     chunk_id = request.path_params.get("chunk_id")
@@ -297,6 +307,7 @@ def create_app(
     app.state.shutdown = asyncio.Event()
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
+    app.add_exception_handler(RequestValidationError, _validation_error)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -307,6 +318,7 @@ def create_app(
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(scopes_router)
+    app.include_router(secrets_router)
     app.include_router(routines_router)
     app.include_router(findings_router)
     app.include_router(garden_proposals_router)
@@ -415,6 +427,7 @@ def build_hosted_app(
         oauth_providers=oauth_providers,
         oauth_http_client=oauth_client,
         signing_keys_dir=signing_keys_dir,
+        secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
         # No exporter is built unless OpenTelemetry's own variables enable tracing.

@@ -15,7 +15,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.domain.secrets import SecretAuthoring, SecretName, SecretValue
+from blizzard.hub.domain.secrets import SecretAuthoring, SecretName
 from blizzard.hub.secrets import (
     ENV_SECRET_KEY,
     ENV_SECRET_KEY_PREVIOUS,
@@ -45,7 +45,7 @@ def _seed_secret(config: HubConfig) -> str:
     try:
         store = SecretStore(hub_store_connections(engine))
         SecretAuthoring(secrets=store, cipher=secret_cipher(keys), clock=FixedClock(_NOW)).create(
-            SecretName.parse("gh"), SecretValue("tok"), by="op"
+            SecretName.parse("gh"), "tok", by="op"
         )
     finally:
         engine.dispose()
