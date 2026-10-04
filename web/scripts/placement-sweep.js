@@ -4,7 +4,8 @@
  * `web:structural-gate` (`structural-gate.js`'s `main` calls it like any other sweep).
  *
  * The placement unit is each direct child of `fleet/src/lib/`, a feature folder or a
- * top-level module. `fleet` holds only what both apps reach, so a unit must be reached by
+ * top-level module, or — under the grouping folders `core/`, `chunk/`, and `shell/` — each
+ * child of that folder. `fleet` holds only what both apps reach, so a unit must be reached by
  * the non-spec code of **both** `hub` and `runner`. The sweep fails naming the unit and the single
  * app that reaches it, or naming no app when the unit is dead. It also fails any `fleet`
  * file that imports from an app project — `fleet` never depends on its consumers.
@@ -15,7 +16,7 @@
  * same way. Resolving to the file instead would mark every sub-barrel re-exported from
  * `public-api.ts` as reached and the sweep could never fail.
  *
- * Mixed folders (`kit/`, `viewport/`, `sse/`, `chunk-detail/`) pass at the folder level:
+ * Mixed folders (`kit/`, `core/viewport/`, `sse/`, `chunk/chunk-detail/`) pass at the folder level:
  * one shared file reached by both apps carries the unit.
  *
  * Run through `npm run structural-gate`; this module only exports.
@@ -43,10 +44,13 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  *
  * - `testing/` is spec support behind its own `fleet/testing` entry; only specs reach it,
  *   and spec reach does not count.
- * - `format/` is a declaration-free re-export barrel over top-level modules; reach lands on
+ * - `core/format/` is a declaration-free re-export barrel over top-level modules; reach lands on
  *   those modules, which are units of their own, never on the barrel.
  */
-const PLACEMENT_EXEMPT_UNITS = ['testing', 'format'];
+const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format'];
+
+/** Folders that only group units: a file under one belongs to the unit named by its first two segments. */
+const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];
 
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join('/');
@@ -198,15 +202,18 @@ function declarationFilesImportedBy(checker, sf) {
 }
 
 /**
- * The unit a `fleet/src/lib/` file belongs to — its direct child of `lib/` — or `null`
- * when the file is outside `lib/`.
+ * The unit a `fleet/src/lib/` file belongs to — its direct child of `lib/`, or the child of
+ * a grouping folder (`core/when.ts`, `core/viewport`) — or `null` when the file is outside
+ * `lib/`.
  *
  * @param {string} file absolute
  * @param {string} fleetLib absolute
  */
 function unitOf(file, fleetLib) {
   if (!isUnder(file, fleetLib)) return null;
-  return file.slice(fleetLib.length + 1).split('/')[0];
+  const segments = file.slice(fleetLib.length + 1).split('/');
+  if (segments.length > 1 && GROUPING_FOLDERS.includes(segments[0])) return `${segments[0]}/${segments[1]}`;
+  return segments[0];
 }
 
 /**

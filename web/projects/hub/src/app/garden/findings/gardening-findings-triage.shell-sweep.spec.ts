@@ -6,7 +6,7 @@ import { commands, page } from 'vitest/browser';
 import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 
 /**
- * The design tokens are a global stylesheet (`design/tokens.css`'s own doc comment),
+ * The design tokens are a global stylesheet (`core/design/tokens.css`'s own doc comment),
  * loaded via each app's build `styles` — never by a standalone component test
  * (`hover-tint.shell-sweep.spec.ts`'s own note). The gone-row tint claim below is
  * about a resolved `var(--amber)`-derived color, so it reads the sheet's real text

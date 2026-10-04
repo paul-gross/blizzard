@@ -129,7 +129,7 @@ export class MachineDetail {
   /** The dock's last Pause/Resume failure, or `null` — reset on every new attempt
    * (the "report, don't swallow" requirement, the same shape
    * {@link LocalPauseControl}'s own `error` follows for the top bar's pause toggle),
-   * and whenever a different chunk is selected (mirrors `fleet/chunk-detail/
+   * and whenever a different chunk is selected (mirrors `fleet/chunk/chunk-detail/
    * chunk-detail.ts`'s own `beginAction`, below), so a stale failure from a chunk
    * no longer open never lingers into the next one's dock. */
   protected readonly actionError = signal<string | null>(null);

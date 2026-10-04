@@ -6,7 +6,7 @@ import { injectRunnerDashboardQuery } from '../../core/status.query';
  * The runner's mobile bottom tab bar — rendered at the app root,
  * below `<router-outlet>` (`../app.ts`), so it persists across `/board` and
  * `/events` rather than being a per-page fixture, mirroring the hub's own
- * `app/nav/mobile-tab-bar.ts`.
+ * `app/shell/nav/mobile-tab-bar.ts`.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar}, same as the
  * hub's. `Board` and `Events` are wired to a route (`routerLink`/

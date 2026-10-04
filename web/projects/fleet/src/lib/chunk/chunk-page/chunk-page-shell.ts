@@ -12,7 +12,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
  * projects nothing, and the slot renders no marker), `[chunk-page-header]`
  * (the chunk identity — {@link ChunkPageHeader}), `[chunk-page-tabs]` (the
  * tab strip), and the default slot (the active tab's own body). Sibling to
- * {@link AppShell} (`fleet/lib/app-shell/`) in shape and in the same
+ * {@link AppShell} (`fleet/lib/shell/app-shell/`) in shape and in the same
  * no-CSS-reaches-across-the-projection-boundary stance its own doc comment
  * states: every slot here is projected as a **direct** child of `.cps` (no
  * wrapper `<div>`), so ordinary flex-item blockification is what gives each

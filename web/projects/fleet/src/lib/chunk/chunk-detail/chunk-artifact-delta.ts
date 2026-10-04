@@ -15,7 +15,7 @@ import { shortSha } from './short-sha';
  * only: `delta` is already-parsed, plain data (`bzh:frontend-container-presentational`
  * — no query, no parsing here).
  *
- * Grouped by op exactly the way the hub's `gardening/run-delta.ts` groups a *hub-derived* finding
+ * Grouped by op exactly the way the hub's `garden/runs/run-delta.ts` groups a *hub-derived* finding
  * set's own added/observed/gone — this component takes that shape and its rules
  * (three distinct groups, a group with no entries hidden rather than rendered
  * empty), not its view model: an artifact's raw ops carry no live finding row to

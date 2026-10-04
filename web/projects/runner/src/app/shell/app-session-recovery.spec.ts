@@ -25,7 +25,7 @@ class FakeEventSource {
 }
 
 /** Registers a fresh `SessionRecovery`'s interceptor, spying its navigation so no
- * case actually leaves jsdom — see `status/session-recovery.spec.ts`
+ * case actually leaves jsdom — see `core/identity/session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
 async function setUp(route: (method: string, path: string) => unknown) {
   const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;

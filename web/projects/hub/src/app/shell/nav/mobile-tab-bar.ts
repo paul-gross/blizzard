@@ -9,7 +9,7 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
  * mobile screen rather than being a per-page fixture.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar} —
- * the runner's own `app/nav/mobile-tab-bar.ts` mounts the same
+ * the runner's own `app/shell/nav/mobile-tab-bar.ts` mounts the same
  * fleet component with its own item list. This layer builds the hub's
  * {@link MobileTabItem}s: Board, Events, and Gardening
  * are wired to a route today

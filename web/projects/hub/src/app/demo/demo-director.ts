@@ -214,7 +214,7 @@ function pickAnother(artifacts: readonly ArtifactView[], current: string | null)
  *
  * - `chunk-detail` / `detail-id` — by the board's browser e2e tier;
  * - `artifacts-tab-artifact` / `artifacts-tab-artifact-key` — by
- *   `fleet`'s `chunk-page/chunk-page-artifacts-tab.spec.ts`, which exists partly for this.
+ *   `fleet`'s `chunk/chunk-page/chunk-page-artifacts-tab.spec.ts`, which exists partly for this.
  *
  * Do not rely on this spec's own stand-ins for that: they would only prove the
  * director agrees with itself.

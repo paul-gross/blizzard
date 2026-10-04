@@ -32,16 +32,22 @@
  * Also the placement sweep (`placement-sweep.js`, `bzh:frontend-placement`): every
  * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
  *
- * Finally, the wire-conformist sweeps (`wire-conformist-sweep.js`), neither with an exemption
+ * Also the wire-conformist sweeps (`wire-conformist-sweep.js`), neither with an exemption
  * list: hand-written TS never cites a backend `.py` file, and a generated client function from
  * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or
  * `*.mutations.ts` file.
+ *
+ * Finally, the package-layers sweep (`bzh:frontend-package-layers`), with no exemption list: each
+ * project's source root is cut into folder units, and `LAYERED_PROJECTS` declares as data which
+ * units each may import. It fails an import outside the table, a file in no declared unit, a
+ * relative import into another project, and a cycle in a table.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+const ts = require('typescript');
 const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
 const {
   assertBackendCitationDetectorWorks,
@@ -553,7 +559,7 @@ const ON_MUTATE = /\bonMutate\s*:/g;
  *   `setQueryData`, no snapshot/rollback of query data, so it's not the cache-write
  *   pattern this sweep forbids.
  */
-const NO_CACHE_WRITE_EXEMPT_FILES = [path.join('runner', 'src', 'app', 'identity', 'auth.query.ts')];
+const NO_CACHE_WRITE_EXEMPT_FILES = [path.join('runner', 'src', 'app', 'core', 'identity', 'auth.query.ts')];
 
 /** The lines of `source` (any non-spec `.ts` file at `rel`) writing the cache, honoring
  * `NO_CACHE_WRITE_EXEMPT_FILES`. `setQueryData` is checked everywhere a mutation hook is
@@ -650,6 +656,268 @@ function assertNoCacheWriteDetectorWorks() {
   }
 }
 
+// The package-layers sweep (`bzh:frontend-package-layers`). Each project's source root is cut
+// into units — folders, keyed by their path below the root — and each unit maps to the units it
+// may import (the backend's `tests/test_layering.py` shape). A unit may also always import the
+// project's shared kernel, and a spec may also import the project's spec-support unit. A file
+// belongs to the longest key prefixing its path; a key with child keys (`garden` beside
+// `garden/core`) owns only the files directly inside it. Something two features need moves down
+// into `core`; nothing imports `shell`. There is no exemption list: a new edge is a table change.
+
+const FLEET_LAYERS = {
+  api: [],
+  kit: [],
+  core: ['api', 'kit'],
+  sse: ['api', 'core'],
+  transcripts: ['api', 'core', 'kit'],
+  chunk: ['api', 'core', 'kit', 'transcripts'],
+  shell: ['api', 'core', 'kit'],
+  testing: ['api'],
+};
+
+const HUB_LAYERS = {
+  core: [],
+  admin: [],
+  board: ['runners'],
+  demo: [],
+  events: [],
+  graphs: [],
+  login: [],
+  runners: [],
+  'garden/core': [],
+  'garden/proposals': ['garden/core'],
+  'garden/runs': ['garden/core'],
+  'garden/scopes': ['garden/core'],
+  'garden/findings': ['garden/core', 'garden/proposals'],
+  'garden/routines': ['garden/core', 'garden/runs', 'graphs'],
+  garden: ['garden/findings', 'garden/proposals', 'garden/routines', 'garden/runs', 'garden/scopes'],
+  shell: [
+    'admin',
+    'board',
+    'demo',
+    'events',
+    'garden',
+    'garden/findings',
+    'garden/proposals',
+    'garden/routines',
+    'garden/runs',
+    'garden/scopes',
+    'graphs',
+    'login',
+    'runners',
+  ],
+};
+
+const RUNNER_LAYERS = {
+  core: [],
+  asks: [],
+  environments: [],
+  events: [],
+  machine: [],
+  status: [],
+  board: ['asks', 'environments', 'machine', 'status'],
+  shell: ['board', 'events', 'machine'],
+};
+
+/**
+ * @typedef {{ name: string, root: string, kernel: string | null, specSupport: string | null,
+ *   layers: Record<string, string[]> }} LayeredProject
+ * `name` is the folder under `projects/`; `root` is the source root, relative to `projects/`.
+ */
+
+/** @type {LayeredProject[]} */
+const LAYERED_PROJECTS = [
+  { name: 'fleet', root: 'fleet/src/lib', kernel: null, specSupport: 'testing', layers: FLEET_LAYERS },
+  { name: 'hub', root: 'hub/src/app', kernel: 'core', specSupport: null, layers: HUB_LAYERS },
+  { name: 'runner', root: 'runner/src/app', kernel: 'core', specSupport: null, layers: RUNNER_LAYERS },
+];
+
+const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g;
+
+/**
+ * Every module specifier `source` names: static and type-only imports, `export … from`,
+ * dynamic `import()`, and CSS `@import`.
+ *
+ * @param {string} file
+ * @param {string} source
+ */
+function importSpecifiers(file, source) {
+  if (file.endsWith('.css')) return [...source.matchAll(CSS_IMPORT)].map((m) => m[1]);
+  return ts.preProcessFile(source, true, true).importedFiles.map((f) => f.fileName);
+}
+
+/**
+ * The unit owning `rel` (a path below a project's source root), or `null` when no key owns it:
+ * a file directly under the root, under an undeclared folder, or under an undeclared child of a
+ * key that has child keys.
+ *
+ * @param {string} rel
+ * @param {Record<string, string[]>} layers
+ */
+function layerUnitOf(rel, layers) {
+  const segments = rel.split('/');
+  let unit = null;
+  for (let i = 1; i < segments.length; i++) {
+    const key = segments.slice(0, i).join('/');
+    if (Object.hasOwn(layers, key)) unit = key;
+  }
+  if (unit === null) return null;
+  const ownsSubfolders = !Object.keys(layers).some((key) => key.startsWith(`${unit}/`));
+  return ownsSubfolders || segments.length === unit.split('/').length + 1 ? unit : null;
+}
+
+/**
+ * A cycle in `project`'s table, counting every unit's implicit edge to the kernel, as the
+ * units along it (first repeated last) — or `null` when the table is acyclic.
+ *
+ * @param {LayeredProject} project
+ */
+function layerCycle(project) {
+  const edges = (/** @type {string} */ unit) => [
+    ...(project.layers[unit] ?? []),
+    ...(project.kernel !== null && unit !== project.kernel ? [project.kernel] : []),
+  ];
+  /** @type {Map<string, 'open' | 'done'>} */
+  const state = new Map();
+  /** @type {string[]} */
+  const stack = [];
+  /** @param {string} unit @returns {string[] | null} */
+  const visit = (unit) => {
+    if (state.get(unit) === 'done') return null;
+    if (state.get(unit) === 'open') return [...stack.slice(stack.indexOf(unit)), unit];
+    state.set(unit, 'open');
+    stack.push(unit);
+    for (const next of edges(unit)) {
+      const cycle = visit(next);
+      if (cycle) return cycle;
+    }
+    stack.pop();
+    state.set(unit, 'done');
+    return null;
+  };
+  for (const unit of Object.keys(project.layers)) {
+    const cycle = visit(unit);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+/**
+ * Every package-layers violation over `files` (paths relative to `projects/`, forward slashes,
+ * mapped to their source), one printable line each.
+ *
+ * @param {LayeredProject[]} projects
+ * @param {Map<string, string>} files
+ * @returns {string[]}
+ */
+function packageLayerViolations(projects, files) {
+  /** @type {string[]} */
+  const lines = [];
+  const projectNames = new Set(projects.map((p) => p.name));
+
+  for (const project of projects) {
+    const keys = Object.keys(project.layers);
+    for (const key of keys) {
+      const present = [...files.keys()].some((f) => f.startsWith(`${project.root}/${key}/`));
+      if (!present) lines.push(`  ${project.root}/${key}/: declared in the table but holds no file`);
+      for (const dep of project.layers[key]) {
+        if (!Object.hasOwn(project.layers, dep)) lines.push(`  ${project.root}: ${key} → ${dep}, an undeclared unit`);
+      }
+    }
+    for (const unit of [project.kernel, project.specSupport]) {
+      if (unit !== null && !Object.hasOwn(project.layers, unit)) {
+        lines.push(`  ${project.root}: kernel or spec-support unit ${unit} is not declared`);
+      }
+    }
+    const cycle = layerCycle(project);
+    if (cycle) lines.push(`  ${project.root}: the table has a cycle ${cycle.join(' → ')}`);
+  }
+
+  for (const [file, source] of files) {
+    const project = projects.find((p) => file.startsWith(`${p.name}/`));
+    if (!project) continue;
+    const underRoot = file.startsWith(`${project.root}/`);
+    const unit = underRoot ? layerUnitOf(file.slice(project.root.length + 1), project.layers) : null;
+    if (underRoot && unit === null) {
+      lines.push(`  ${file}: in no unit — the root holds only declared unit folders`);
+    }
+    for (const specifier of importSpecifiers(file, source)) {
+      if (!specifier.startsWith('.')) continue;
+      const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+      const targetProject = base.split('/')[0];
+      if (base.startsWith('../') || !projectNames.has(targetProject)) continue;
+      if (targetProject !== project.name) {
+        lines.push(`  ${file}: imports '${specifier}' across projects — use the package entry point`);
+        continue;
+      }
+      if (unit === null) continue;
+      const target = [base, `${base}.ts`, `${base}/index.ts`, `${base}.css`].find((c) => files.has(c));
+      if (!target || !target.startsWith(`${project.root}/`)) continue;
+      const targetUnit = layerUnitOf(target.slice(project.root.length + 1), project.layers);
+      if (targetUnit === null || targetUnit === unit || targetUnit === project.kernel) continue;
+      if (file.endsWith('.spec.ts') && targetUnit === project.specSupport) continue;
+      if (!(project.layers[unit] ?? []).includes(targetUnit)) {
+        lines.push(`  ${file}: ${unit} → ${targetUnit} ('${specifier}') is not in ${unit}'s table`);
+      }
+    }
+  }
+  return lines;
+}
+
+/**
+ * Prove the package-layers detector can still fail, before trusting it over the tree — the
+ * same reasoning `assertRealTimerDetectorWorks` follows. The fixture is an in-memory project
+ * with a planted table: each must-catch shape is a violation the sweep promises to fail, each
+ * must-pass shape an edge it promises to leave alone.
+ */
+function assertPackageLayersDetectorWorks() {
+  /** @type {LayeredProject} */
+  const project = {
+    name: 'app',
+    root: 'app/src/app',
+    kernel: 'core',
+    specSupport: 'testing',
+    layers: { core: [], testing: [], alpha: [], beta: ['alpha'], shell: ['alpha', 'beta'] },
+  };
+  const files = new Map([
+    ['app/src/app/core/key.ts', 'export const key = 1;\n'],
+    ['app/src/app/testing/stub.ts', 'export const stub = 1;\n'],
+    ['app/src/app/alpha/a.ts', "import { b } from '../beta/b';\n"], // must-catch: undeclared alpha → beta
+    ['app/src/app/beta/b.ts', "import { key } from '../core/key';\nexport { a } from '../alpha/a';\n"], // must-pass
+    ['app/src/app/beta/b.spec.ts', "import { stub } from '../testing/stub';\n"], // must-pass: spec → spec support
+    ['app/src/app/shell/app.ts', "const routes = [() => import('../beta/b')];\n"], // must-pass: declared, dynamic
+    ['app/src/app/stray.ts', 'export const stray = 1;\n'], // must-catch: a file in no unit
+    ['app/src/app/gamma/g.ts', 'export const g = 1;\n'], // must-catch: an undeclared folder
+    ['app/src/app/core/far.ts', "import { x } from '../../../../lib/src/x';\n"], // must-catch: across projects
+    ['lib/src/x.ts', 'export const x = 1;\n'],
+  ]);
+  const lib = { name: 'lib', root: 'lib/src', kernel: null, specSupport: null, layers: {} };
+  const lines = packageLayerViolations([project, lib], files);
+  const mustCatch = [
+    'app/src/app/alpha/a.ts: alpha → beta',
+    'app/src/app/stray.ts: in no unit',
+    'app/src/app/gamma/g.ts: in no unit',
+    'app/src/app/core/far.ts: imports',
+  ];
+  for (const needle of mustCatch) {
+    if (!lines.some((line) => line.includes(needle))) {
+      throw new Error(`package-layers detector missed ${needle} (found: ${JSON.stringify(lines)})`);
+    }
+  }
+  const mustPass = ['beta/b.ts:', 'beta/b.spec.ts:', 'shell/app.ts:'];
+  for (const needle of mustPass) {
+    if (lines.some((line) => line.includes(needle))) {
+      throw new Error(`package-layers detector false-positived on ${needle} (found: ${JSON.stringify(lines)})`);
+    }
+  }
+
+  const cyclic = { ...project, layers: { ...project.layers, core: ['alpha'] } }; // must-catch: kernel → alpha → kernel
+  if (!layerCycle(cyclic)) throw new Error('package-layers detector missed a cycle through the kernel');
+  const peerCycle = { ...project, layers: { ...project.layers, alpha: ['beta'] } }; // must-catch: alpha ⇄ beta
+  if (!layerCycle(peerCycle)) throw new Error('package-layers detector missed a cycle between peer units');
+  if (layerCycle(project)) throw new Error('package-layers detector found a cycle in an acyclic table');
+}
+
 function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
@@ -660,6 +928,7 @@ function main() {
   assertPlacementDetectorWorks();
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
+  assertPackageLayersDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -734,6 +1003,15 @@ function main() {
   const backendCitationLines = backendCitationViolations();
   const clientCallLines = clientCallPlacementViolations();
 
+  /** @type {Map<string, string>} */
+  const layeredFiles = new Map();
+  for (const project of LAYERED_PROJECTS) {
+    for (const file of walk(path.join(PROJECTS_DIR, project.name, 'src'), ['.ts', '.css'])) {
+      layeredFiles.set(path.relative(PROJECTS_DIR, file).split(path.sep).join('/'), fs.readFileSync(file, 'utf8'));
+    }
+  }
+  const packageLayerLines = packageLayerViolations(LAYERED_PROJECTS, layeredFiles);
+
   if (
     realTimerViolations.length > 0 ||
     kitFloorViolations.length > 0 ||
@@ -743,7 +1021,8 @@ function main() {
     cacheWriteViolations.length > 0 ||
     placementLines.length > 0 ||
     backendCitationLines.length > 0 ||
-    clientCallLines.length > 0
+    clientCallLines.length > 0 ||
+    packageLayerLines.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -820,6 +1099,15 @@ function main() {
           'and inject that hook where the call is needed.',
       );
     }
+    if (packageLayerLines.length > 0) {
+      console.error('structural-gate: imports and folders outside the package-layer tables:\n');
+      for (const line of packageLayerLines) console.error(line);
+      console.error(
+        '\nA folder imports only the units its project\'s table allows, plus the shared kernel: move what two ' +
+          'features need down into `core`, never import `shell`, and keep every folder a declared unit; a genuinely ' +
+          'new edge is a table change in LAYERED_PROJECTS, and the table stays acyclic.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -833,6 +1121,7 @@ function main() {
   console.log('structural-gate: placement sweep clean.');
   console.log('structural-gate: backend-citation sweep clean.');
   console.log('structural-gate: client-call placement sweep clean.');
+  console.log('structural-gate: package-layers sweep clean.');
 }
 
 main();
