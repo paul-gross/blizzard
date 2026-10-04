@@ -2,7 +2,7 @@
 check, before anything is written; the check itself is specified by
 blizzard-product:/delivered/garden/machinery.md §Delivery. Pure functions over already-loaded
 objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
-`garden_delivery_materialize.py`'s."""
+`materialize.py`'s."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def is_finding_id_shaped(value: str) -> bool:
     proposal's `findings` entry is discriminated on: true resolves against
     `live_findings` exactly as before this submission-local `ref` existed; false
     resolves against a `ref` an `add` op in this same delivery carries. Shared with
-    `garden_delivery_materialize` so the discrimination is asked once."""
+    `materialize` so the discrimination is asked once."""
     parsed = Id.parse(value)
     return parsed is not None and parsed.has_prefix(FINDING_PREFIX)
 
@@ -109,7 +109,7 @@ def is_finding_id_shaped(value: str) -> bool:
 def single_repo_of(delta: FindingDelta) -> str | None:
     """The one repository `delta.revisions` names, or `None` if it names zero or several
     — `introduced` carries no repository of its own, so this is the sole case its commit
-    resolves against. Shared with `garden_delivery_materialize` so the
+    resolves against. Shared with `materialize` so the
     rule is asked once, not reimplemented and left to silently diverge."""
     return next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
 

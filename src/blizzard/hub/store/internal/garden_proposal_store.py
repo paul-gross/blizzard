@@ -29,7 +29,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     RoutineProposalState,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.domain.operations.edit import UnsetType
+from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 

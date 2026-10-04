@@ -4,7 +4,7 @@
  * `candidates`, each candidate a `FindingCandidate` from `src/blizzard/wire/finding.py`.
  *
  * Unlike {@link parseFindingDelta}'s subject, this shape has **no server-side parse at
- * all**: the delta is validated at delivery (`garden_delivery.py`'s `parse_delta`), but
+ * all**: the delta is validated at delivery (`garden/delivery/validation.py`'s `parse_delta`), but
  * the survey is an intra-run handoff — the survey node writes it so the reconcile
  * session, which enters cold, can read what that session saw. Its declaration is the
  * survey prompt itself (`src/blizzard/hub/graphs/garden-routine/prompts/survey.md`)

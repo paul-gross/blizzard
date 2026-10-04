@@ -12,7 +12,8 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.operations.edit import UNSET, ChunkEdit, UnsetType
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.operations.edit import ChunkEdit
 from blizzard.wire.chunk import ChunkPatchRequest
 
 

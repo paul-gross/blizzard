@@ -13,8 +13,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.kernel.pagination import encode_cursor
-from blizzard.hub.domain.observability.analytics import MalformedCursor
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.runtime import migration_runner

@@ -29,7 +29,8 @@ from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsReposi
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import RouteToken
-from blizzard.hub.domain.runners.registration import FleetService, RetiredRunnerGuard
+from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,

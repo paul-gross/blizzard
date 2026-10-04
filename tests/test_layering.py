@@ -682,6 +682,173 @@ def test_domain_core_imports_no_framework_or_driver() -> None:
     assert not violations, f"Q — a domain core must import no framework or driver: {violations}"
 
 
+_HUB_DOMAIN_DIR = _HUB_DIR / "domain"
+
+#: Each hub domain package -> the packages it may import besides itself and ``kernel`` (``bzh:domain-package-layers``).
+_DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
+    "kernel": frozenset(),
+    "artifact": frozenset(),
+    "config": frozenset(),
+    "graph": frozenset({"artifact"}),
+    "runners": frozenset(),
+    "chunk": frozenset({"graph", "runners", "artifact"}),
+    "execution": frozenset({"chunk", "graph", "runners", "artifact"}),
+    "operations": frozenset({"execution", "chunk", "graph", "runners"}),
+    "work_items": frozenset({"operations", "chunk", "graph"}),
+    "garden": frozenset({"work_items", "chunk", "graph"}),
+    "observability": frozenset({"chunk", "graph", "runners"}),
+}
+_DOMAIN_SHARED_KERNEL = "kernel"
+
+
+def _domain_layer_crossings(domain_dir: Path, layers: dict[str, frozenset[str]]) -> list[str]:
+    """Every import of a ``blizzard.hub.domain`` package its importer's layer does not allow, wherever it
+    sits in the module (function bodies and ``TYPE_CHECKING`` blocks included), resolved as
+    :func:`_internal_crossings` resolves them; plus every module that sits in no declared package."""
+    src_root = domain_dir.parent.parent.parent
+    umbrella = list(domain_dir.relative_to(src_root).parts)
+    violations: list[str] = []
+    for path in sorted(domain_dir.rglob("*.py")):
+        rel = path.relative_to(domain_dir).parts
+        if len(rel) == 1 and rel[0] != "__init__.py":
+            violations.append(f"{path.name} sits in no package")
+            continue
+        own = rel[0] if len(rel) > 1 else None
+        if own is not None and own not in layers:
+            violations.append(f"{'/'.join(rel)} sits in undeclared package {own}")
+            continue
+        allowed = {own, _DOMAIN_SHARED_KERNEL, *layers[own]} if own is not None else set()
+        package = list(path.relative_to(src_root).with_suffix("").parts)[:-1]
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                named = [alias.name.split(".") for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = package[: len(package) - (node.level - 1)] if node.level else []
+                base = [*base, *(node.module.split(".") if node.module else [])]
+                named = [[*base, alias.name] for alias in node.names]
+            else:
+                continue
+            for module in named:
+                if module[: len(umbrella)] != umbrella:
+                    continue
+                target = module[len(umbrella)] if len(module) > len(umbrella) else None
+                if target not in allowed:
+                    violations.append(
+                        f"{'/'.join(rel)}:{node.lineno} ({own or 'the umbrella'}) imports {'.'.join(module)}"
+                        f" ({target or 'the umbrella'})"
+                    )
+                    break
+    return violations
+
+
+def _layer_cycle(layers: dict[str, frozenset[str]]) -> list[str]:
+    """A cycle through the declared edges plus every package's implicit edge to the shared kernel, as the
+    packages along it — empty when the layers are acyclic."""
+    edges = {
+        pkg: set(deps) | ({_DOMAIN_SHARED_KERNEL} if pkg != _DOMAIN_SHARED_KERNEL else set())
+        for pkg, deps in layers.items()
+    }
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def visit(pkg: str) -> list[str]:
+        state[pkg] = 1
+        stack.append(pkg)
+        for dep in sorted(edges.get(pkg, ())):
+            if state.get(dep) == 1:
+                return [*stack[stack.index(dep) :], dep]
+            if dep not in state and (found := visit(dep)):
+                return found
+        stack.pop()
+        state[pkg] = 2
+        return []
+
+    for pkg in sorted(edges):
+        if pkg not in state and (found := visit(pkg)):
+            return found
+    return []
+
+
+def test_hub_domain_packages_import_only_what_their_layer_allows() -> None:
+    violations = _domain_layer_crossings(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS)
+    assert not violations, f"a hub domain package may import only its own layer's dependencies: {violations}"
+
+
+def test_hub_domain_package_layers_are_acyclic() -> None:
+    assert _layer_cycle(_DOMAIN_PACKAGE_LAYERS) == []
+    assert all(dep in _DOMAIN_PACKAGE_LAYERS for deps in _DOMAIN_PACKAGE_LAYERS.values() for dep in deps)
+    packages = {p.name for p in _HUB_DOMAIN_DIR.iterdir() if p.is_dir() and (p / "__init__.py").exists()}
+    assert packages == set(_DOMAIN_PACKAGE_LAYERS)
+
+
+def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
+    """A three-package hub domain — ``chunk`` may import neither ``garden`` nor anything but ``kernel`` —
+    with ``files`` laid over it."""
+    domain = tmp_path / "blizzard" / "hub" / "domain"
+    for rel, text in {
+        "../../__init__.py": "",
+        "../__init__.py": "",
+        "__init__.py": "",
+        "chunk/__init__.py": "",
+        "chunk/model.py": "X = 1\n",
+        "garden/__init__.py": "",
+        "garden/run.py": "Y = 1\n",
+        "kernel/__init__.py": "",
+        "kernel/unset.py": "UNSET = 1\n",
+        **files,
+    }.items():
+        (domain / rel).parent.mkdir(parents=True, exist_ok=True)
+        (domain / rel).write_text(text)
+    layers = {"kernel": frozenset[str](), "chunk": frozenset[str](), "garden": frozenset({"chunk"})}
+    return _domain_layer_crossings(domain, layers)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "caught"),
+    [
+        ("chunk/ports.py", "from blizzard.hub.domain.garden.run import Y", True),
+        ("chunk/ports.py", "import blizzard.hub.domain.garden.run", True),
+        ("chunk/ports.py", "from blizzard.hub.domain import garden", True),
+        ("chunk/ports.py", "from blizzard.hub.domain.garden import run", True),
+        ("chunk/ports.py", "def f():\n    from blizzard.hub.domain.garden.run import Y", True),
+        (
+            "chunk/ports.py",
+            "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from blizzard.hub.domain.garden.run import Y",
+            True,
+        ),
+        ("chunk/ports.py", "from ..garden.run import Y", True),
+        ("chunk/ports.py", "from .. import garden", True),
+        ("chunk/ports.py", "import blizzard.hub.domain", True),
+        ("__init__.py", "from blizzard.hub.domain.chunk.model import X", True),
+        ("stray.py", "", True),
+        ("mystery/__init__.py", "", True),
+        ("chunk/ports.py", "from blizzard.hub.domain.chunk.model import X", False),
+        ("chunk/ports.py", "from .model import X", False),
+        ("chunk/ports.py", "from blizzard.hub.domain.kernel.unset import UNSET", False),
+        ("chunk/ports.py", "from blizzard.hub.domain import kernel", False),
+        ("garden/ports.py", "def f():\n    from blizzard.hub.domain.chunk.model import X", False),
+        ("chunk/ports.py", "import blizzard.hub.config", False),
+    ],
+)
+def test_domain_layer_check_counts_every_import_form(tmp_path: Path, rel: str, text: str, caught: bool) -> None:
+    violations = _plant_domain(tmp_path, {rel: f"{text}\n"})
+    assert len(violations) == (1 if caught else 0), violations
+
+
+@pytest.mark.parametrize(
+    "layers",
+    [
+        {"kernel": frozenset[str](), "chunk": frozenset({"garden"}), "garden": frozenset({"chunk"})},
+        {"kernel": frozenset({"chunk"}), "chunk": frozenset[str]()},
+    ],
+)
+def test_domain_layer_cycle_check_catches_a_cycle(layers: dict[str, frozenset[str]]) -> None:
+    cycle = _layer_cycle(layers)
+    assert cycle
+    assert cycle[0] == cycle[-1]
+
+
 _COMPOSITION_ROOT_FILES = (
     _HUB_DIR / "app.py",
     _HUB_DIR / "composition.py",

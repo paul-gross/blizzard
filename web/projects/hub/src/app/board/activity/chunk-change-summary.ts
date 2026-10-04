@@ -20,7 +20,7 @@ export interface ChunkChangeSummary {
  * with the panel's existing `→` vocabulary — each absent segment (and its adjacent
  * arrow) is dropped rather than rendered as placeholder junk (AC 5, widened
  * to `status` — a backfilled row can structurally carry no
- * status yet, `hub/domain/chunk/model.py`'s `ActivityEntry`), so a frame carrying neither node
+ * status yet, `hub/domain/runners/activity.py`'s `ActivityEntry`), so a frame carrying neither node
  * degrades to exactly today's `C-1NWW → running`, and a frame carrying a node but no
  * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
  * build`. `runner` is the compact runner ref when the frame names one, else omitted —

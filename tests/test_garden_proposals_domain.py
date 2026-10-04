@@ -32,7 +32,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     RoutineProposalState,
 )
 from blizzard.hub.domain.garden.routines import Routine
-from blizzard.hub.domain.operations.edit import UnsetType
+from blizzard.hub.domain.kernel.unset import UnsetType
 
 pytestmark = pytest.mark.unit
 

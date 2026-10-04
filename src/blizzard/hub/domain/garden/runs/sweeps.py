@@ -1,9 +1,9 @@
 """A routine's per-scope last-swept table and its windowed measurement series — a read
 over `finding_sets`, each row joined to its own artifact's `produced_at`. Last-swept is
 unwindowed: a scope swept months ago must never read as never. The measurement
-series is cut to `[since, until)`, the same window `garden_trend.py`'s own read reports
+series is cut to `[since, until)`, the same window `findings/trend.py`'s own read reports
 over; the cut is done in Python, not SQL (`bzh:sql-portable`), the same split
-`garden_trend.py` makes."""
+`findings/trend.py` makes."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def compute_sweeps(
     the routine's declared set, retired scopes already filtered out by the caller
     — and the windowed measurement series. One pass over `facts`:
     newest-per-scope by `produced_at`, ties broken by `finding_set_id`
-    (ULID-monotonic, `garden_trend.py`'s own tie convention)."""
+    (ULID-monotonic, `findings/trend.py`'s own tie convention)."""
     newest: dict[str, SweepFact] = {}
     for fact in facts:
         current = newest.get(fact.scope_slug)

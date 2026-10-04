@@ -22,8 +22,9 @@ from blizzard.foundation.event_log import (
     narrow_event_log_kind,
     narrow_event_log_severity,
 )
-from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, OperationalEvent
 from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

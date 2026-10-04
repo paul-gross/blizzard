@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import dto
-from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
-
-#: A work ref's source-native token (``acme#42``), or ``None`` when no configured source renders it.
-WorkRefLabel = Callable[[WorkRef], str | None]
 
 
 @dto

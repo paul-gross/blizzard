@@ -16,7 +16,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.chunk.model import ActivityEntry
+from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     ExternalSubscriptionUsageWindow,

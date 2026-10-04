@@ -27,8 +27,9 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
+from blizzard.hub.domain.chunk.model import ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
+from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
 
