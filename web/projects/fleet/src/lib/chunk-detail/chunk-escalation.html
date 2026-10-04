@@ -3,7 +3,7 @@
     <div class="s-head"><span class="tag">Needs human · takeover</span></div>
     @if (hasWrapped()) {
       <p class="esc-hint">
-        <span data-testid="escalation-cause">{{ causeSentence() }}</span>
+        <span data-testid="escalation-cause">{{ causeSentence() }}</span>&ngsp;
         @if (esc.detail) {
           <span data-testid="escalation-detail">{{ esc.detail }}</span>
         } Run as the runner's service account (the socket is
@@ -22,7 +22,7 @@
       </details>
     } @else if (hasCommand()) {
       <p class="esc-hint" data-testid="unwrapped-hint">
-        <span data-testid="escalation-cause">{{ causeSentence() }}</span>
+        <span data-testid="escalation-cause">{{ causeSentence() }}</span>&ngsp;
         @if (esc.detail) {
           <span data-testid="escalation-detail">{{ esc.detail }}</span>
         } Its unwrapped takeover field carries either a resume
@@ -36,7 +36,7 @@
       </div>
     } @else {
       <p class="esc-hint" data-testid="no-command-hint">
-        <span data-testid="escalation-cause">{{ causeSentence() }}</span>
+        <span data-testid="escalation-cause">{{ causeSentence() }}</span>&ngsp;
         @if (esc.detail) {
           <span data-testid="escalation-detail">{{ esc.detail }}</span>
         } There is no composed command for this escalation.

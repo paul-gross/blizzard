@@ -235,6 +235,15 @@ describe('ChunkEscalation', () => {
       expect(detail).toBe('bounced 5 times at review');
     });
 
+    it('separates the sentence from the detail with a space', async () => {
+      const fixture = await render({
+        ...WRAPPED_DETAIL,
+        escalation: { ...WRAPPED_DETAIL.escalation!, cause: 'bounce-cap', detail: 'bounced 5 times at review' },
+      });
+      const text = (fixture.nativeElement as HTMLElement).querySelector('.esc-hint')?.textContent;
+      expect(text).toContain('(epoch 3). bounced 5 times at review');
+    });
+
     it('renders a runner cause with its detail', async () => {
       const { sentence, detail } = await causeOf('retries-exhausted', 'judge failed 3 attempts');
       expect(sentence).toBe('The worker exhausted its retries (epoch 3).');
