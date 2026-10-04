@@ -1,4 +1,4 @@
-"""The close-intent drain sweep: retires every pending ``close_intents`` row,
+"""The close-intent drain sweep: retires pending ``close_intents`` rows, a bounded number per pass,
 unconditionally like the event-derivation and delivery-materialization sweeps. Dependency-free
 (``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is one
 complete, directly-callable step (``bzh:steppable-loop``); ground is
@@ -6,11 +6,12 @@ complete, directly-callable step (``bzh:steppable-loop``); ground is
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.lane_retry import backoff_delay
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
@@ -37,16 +38,22 @@ _EVENT_CLOSE_FAILED: EventLogKind = "work-item-close-failed"
 CLOSE_DRAIN_BACKOFF_BASE_SECONDS = 60
 #: The backoff's cap — never wait longer than this between due-checks of the same intent.
 CLOSE_DRAIN_BACKOFF_CAP_SECONDS = 3600
+#: The most due intents one pass attempts — the rest wait for the next pass, in the read's order.
+CLOSE_DRAIN_PASS_LIMIT = 100
 
 
 def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
     """Due with no prior attempt at all; otherwise due once
-    ``min(base x 2^(n-1), cap)`` seconds have passed since the last one — a pure domain
+    ``backoff_delay(n, base, cap)`` has passed since the last one — a pure domain
     rule (``bzh:domain-core``), applied by ``CloseIntentDrainer.sweep`` over each pending intent's history."""
     if not attempt_count or last_attempt_at is None:
         return True
-    threshold = min(CLOSE_DRAIN_BACKOFF_BASE_SECONDS * (2 ** (attempt_count - 1)), CLOSE_DRAIN_BACKOFF_CAP_SECONDS)
-    return (now - last_attempt_at).total_seconds() >= threshold
+    threshold = backoff_delay(
+        attempt_count,
+        timedelta(seconds=CLOSE_DRAIN_BACKOFF_BASE_SECONDS),
+        timedelta(seconds=CLOSE_DRAIN_BACKOFF_CAP_SECONDS),
+    )
+    return now - last_attempt_at >= threshold
 
 
 class CloseIntentDrainer:
@@ -86,7 +93,7 @@ class CloseIntentDrainer:
         }
 
     def sweep(self) -> None:
-        """One complete drain pass over every pending intent. A per-ref failure is caught
+        """One complete drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents. A per-ref failure is caught
         and counted rather than raised — a ``gone`` or ``failed`` outcome is itself an
         informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         closed = gone = failed = skipped = 0
@@ -95,7 +102,7 @@ class CloseIntentDrainer:
             intent
             for intent in self._delivery.pending_close_intents()
             if close_intent_is_due(now, attempt_count=intent.attempt_count, last_attempt_at=intent.last_attempt_at)
-        ]
+        ][:CLOSE_DRAIN_PASS_LIMIT]
         traces = self._traces({intent.chunk_id for intent in due})
         for intent in due:
             closer = self._work_sources.closer(intent.ref.source)

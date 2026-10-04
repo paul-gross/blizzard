@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKey
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey

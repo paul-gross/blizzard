@@ -7,10 +7,8 @@ from datetime import timedelta
 import pytest
 
 from blizzard.foundation.trace_export.cursor import (
-    BACKOFF_CAP,
     CursorJump,
     JumpReason,
-    backoff_delay,
     first_pass_jump,
     lag_cap_jump,
 )
@@ -107,32 +105,6 @@ def test_an_idle_stale_cursor_never_jumps() -> None:
 def test_an_unsent_step_inside_the_lag_does_not_jump() -> None:
     now = fx.at(0) + timedelta(days=2)
     assert lag_cap_jump(CursorKey(fx.at(0)), now - _LAG, now, _LAG) is None
-
-
-# --- backoff ---------------------------------------------------------------------------
-
-
-def test_backoff_doubles_from_the_sweep_interval_up_to_the_cap() -> None:
-    every = timedelta(seconds=60)
-    delays = [backoff_delay(n, every) for n in range(1, 8)]
-    assert delays == [
-        timedelta(seconds=60),
-        timedelta(seconds=120),
-        timedelta(seconds=240),
-        timedelta(seconds=480),
-        BACKOFF_CAP,
-        BACKOFF_CAP,
-        BACKOFF_CAP,
-    ]
-    assert timedelta(minutes=10) == BACKOFF_CAP
-
-
-def test_backoff_survives_a_very_long_outage() -> None:
-    assert backoff_delay(10_000, timedelta(seconds=60)) == BACKOFF_CAP
-
-
-def test_backoff_with_no_failure_is_the_sweep_interval() -> None:
-    assert backoff_delay(0, timedelta(seconds=60)) == timedelta(seconds=60)
 
 
 # --- window selection ------------------------------------------------------------------

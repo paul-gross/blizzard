@@ -12,10 +12,11 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_export.cursor import CursorJump, backoff_delay, first_pass_jump, lag_cap_jump
+from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import SpanRecord
@@ -78,22 +79,20 @@ class LeaseTraceSweep:
         self._clock = clock
         self._settle = timedelta(seconds=config.settle_seconds)
         self._max_lag = timedelta(seconds=config.max_lag_seconds)
-        self._sweep_every = timedelta(seconds=config.sweep_seconds)
         self._batch_limit = config.batch_limit
-        self._first_pass = True
-        self._failing = False
-        self._failures = 0
-        self._next_due: datetime | None = None
+        # A restart mid-outage must not announce the same failure again.
+        self._latch = OutageLatch(
+            timedelta(seconds=config.sweep_seconds), lambda: leases.newest_trace_latch() == _FAILED
+        )
+        self._cursor_started = False
 
     def sweep(self) -> None:
         now = self._clock.now()
-        if self._next_due is not None and now < self._next_due:
+        if not self._latch.is_due(now):
             return
         newest = self._leases.newest_trace_cursor()
-        if self._first_pass:
-            self._first_pass = False
-            # A restart mid-outage must not announce the same failure again.
-            self._failing = self._leases.newest_trace_latch() == _FAILED
+        if not self._cursor_started:
+            self._cursor_started = True
             jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=LeaseCursorKey)
             if jump is not None:
                 self._jump(jump, now)
@@ -129,24 +128,21 @@ class LeaseTraceSweep:
             return False
 
     def _failed(self, now: datetime, leases: int) -> None:
-        self._failures += 1
-        delay = backoff_delay(self._failures, self._sweep_every)
-        self._next_due = now + delay
-        _log.warning("trace export failed", leases=leases, failures=self._failures, retry_in=delay.total_seconds())
-        if self._failing:
-            return
-        self._failing = True
-        self._latch(_FAILED, FAILED_MESSAGE)
+        opens = self._latch.failed(now)
+        _log.warning(
+            "trace export failed",
+            leases=leases,
+            failures=self._latch.failures,
+            retry_in=self._latch.retry_in.total_seconds(),
+        )
+        if opens:
+            self._announce(_FAILED, FAILED_MESSAGE)
 
     def _recovered(self) -> None:
-        self._failures = 0
-        self._next_due = None
-        if not self._failing:
-            return
-        self._failing = False
-        self._latch(_RECOVERED, "runner trace export recovered; held leases are being told")
+        if self._latch.succeeded():
+            self._announce(_RECOVERED, "runner trace export recovered; held leases are being told")
 
-    def _latch(self, kind: EventLogKind, message: str) -> None:
+    def _announce(self, kind: EventLogKind, message: str) -> None:
         self._leases.record_trace_latch(
             kind, at=self._clock.now(), report_kind=EVENT_RECORDED, report_payload=_report(kind, message, None)
         )

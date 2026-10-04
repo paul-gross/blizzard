@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
 from blizzard.foundation.trace_ids import (
     SpanRole,
     StepKey,

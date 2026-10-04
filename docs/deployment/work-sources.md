@@ -105,9 +105,10 @@ closer and records each outcome. A PR opened before an upgrade keeps the body it
 
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
-a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires every
-pending intent through that source's binding — the guarantee half of closing delivered work, where a worker's own commit
-metadata is only an opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer*
+a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires up to a
+fixed number of due intents per pass through that source's binding, leaving the rest to the next pass — the guarantee
+half of closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the
+drain. Unlike `annotate`, closing carries no *multi-writer*
 canonical constraint: a close is idempotent at the forge, so more than one hub pointed at the same repo closing the same
 item is not a race to coordinate around.
 

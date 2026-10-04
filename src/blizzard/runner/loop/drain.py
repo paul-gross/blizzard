@@ -51,6 +51,13 @@ class OutboundDrain:
     ctx: LoopContext
 
     def run(self) -> None:
+        # An uncaught raise would escape through `Pull` and skip Fill and Advance.
+        try:
+            self._run_unsafe()
+        except Exception:
+            _log.exception("outbound drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
+
+    def _run_unsafe(self) -> None:
         """Walk this tick's own bounded slice in seq order, batching every contiguous
         run of generic-kind facts into one ``push_facts`` call; a completion or decision
         fact first flushes the run collected so far, then routes to its own arm unchanged."""
