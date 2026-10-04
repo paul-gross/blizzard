@@ -17,6 +17,7 @@ __all__ = [
     "IWriteInvocationBoundaryRepository",
     "InvocationBoundaryKind",
     "InvocationBoundaryRecord",
+    "InvocationBoundaryStart",
 ]
 
 #: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume``.
@@ -28,10 +29,9 @@ WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", 
 
 @dataclass(frozen=True)
 class InvocationBoundaryRecord:
-    """One invocation's durable start marker. ``start_position`` is the opaque
-    ``TranscriptPosition.token`` minted just before launch, or ``None`` — a fresh session's
-    own beginning sentinel. ``start_unreadable`` distinguishes that from a failed tail read;
-    ``closed_at``/``closed_reason`` are unset until the owning lease closes."""
+    """One invocation's durable start marker — its true start, never rewritten. ``start_position``
+    is the opaque ``TranscriptPosition.token`` minted just before launch, or ``None`` — a fresh
+    session's own beginning sentinel; ``start_unreadable`` marks a failed tail read instead."""
 
     lease_id: str
     chunk_id: str
@@ -46,12 +46,30 @@ class InvocationBoundaryRecord:
     start_unreadable: bool = False
 
 
+@dataclass(frozen=True)
+class InvocationBoundaryStart:
+    """Where an invocation boundary's range currently starts: the newest advance's own
+    values, or the marker's when there is none. ``at`` is when that start was recorded."""
+
+    start_position: str | None
+    start_unreadable: bool
+    at: datetime
+
+
 class IReadInvocationBoundaryRepository(Protocol):
     """Read-only invocation-boundary queries (held by read-path edges)."""
 
     def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundaryRecord | None:
-        """This exact invocation's boundary, or ``None`` when it was never opened — the
-        read interrupted-usage recovery keys its range read from."""
+        """This exact invocation's marker — its true start, never rewritten — or ``None``
+        when it was never opened."""
+        ...
+
+    def current_start(
+        self, lease_id: str, generation: int, kind: InvocationBoundaryKind
+    ) -> InvocationBoundaryStart | None:
+        """Where this invocation's range currently starts — the newest advance's start, the
+        marker's own when there is none, or ``None`` when it was never opened. The read
+        interrupted-usage recovery keys a standing judge's range from."""
         ...
 
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
@@ -83,23 +101,20 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         never the fresh-session sentinel."""
         ...
 
-    def advance_boundary(
+    def record_boundary_advance(
         self,
         *,
         lease_id: str,
         generation: int,
         kind: InvocationBoundaryKind,
+        superseded_invocation: str,
         start_position: str | None,
-        opened_at: datetime,
+        advanced_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
-        """Move an already-open ``(lease, generation, kind)`` boundary's own start forward in
-        place, rather than opening a second row: a judge-usage-limit park's
-        resume reuses the SAME judge boundary for its fresh elicitation, since
-        ``record_boundary_open``'s check-then-insert never mints a second row for one
-        ``(lease, generation, kind)`` — the transcript range a still-standing boundary bounds
-        must itself move past the limited elicitation's own signal, or every later
-        classification re-reads it forever. A no-op when the boundary was never opened."""
+        """Append one advance past a judge marker's start, keyed by the superseded elicitation's
+        identity. Check-then-insert (``bzh:sql-portable``): a replay writes nothing, and an
+        unopened boundary is a no-op."""
         ...
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:

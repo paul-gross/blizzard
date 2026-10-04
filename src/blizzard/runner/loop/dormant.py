@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
@@ -211,8 +212,9 @@ class DormantSession:
             self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
             _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
             return
-        if self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch) is not None:
-            self._resume_judge_usage_limit_park(now)
+        standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if standing is not None:
+            self._resume_judge_usage_limit_park(now, superseded_invocation=iso_utc(standing.first_launched_at))
             return
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None:
@@ -318,7 +320,7 @@ class DormantSession:
         if suppressed:
             return
         if fact.invocation_kind == "judge":
-            self._resume_judge_overload_backoff(now)
+            self._resume_judge_overload_backoff(now, superseded_invocation=fact.invocation_identity)
             return
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None:
@@ -338,7 +340,7 @@ class DormantSession:
             pid=pid,
         )
 
-    def _resume_judge_overload_backoff(self, now: datetime) -> None:
+    def _resume_judge_overload_backoff(self, now: datetime, *, superseded_invocation: str) -> None:
         """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch,
         exactly :meth:`_resume_judge_usage_limit_park`'s own shape: the stale record from the
         overloaded elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
@@ -354,18 +356,20 @@ class DormantSession:
         if lease.session is not None:
             # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
             # check-then-insert never mints a second row for one (lease, generation, kind)) —
-            # advance it past the overloaded elicitation's own signal, or the fresh one's own
-            # classification would re-read that same signal off the transcript forever.
+            # record an advance past the overloaded elicitation's own signal, or the fresh one's own
+            # classification would re-read that same signal off the transcript forever. Keyed
+            # by the superseded elicitation, so a replay while it still stands writes nothing.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
             workdir = judgement.bindings[0].workdir if judgement.bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
-            self.ctx.stores.invocation_boundaries.advance_boundary(
+            self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
                 generation=generation,
                 kind="judge",
+                superseded_invocation=superseded_invocation,
                 start_position=start_position,
                 start_unreadable=start_unreadable,
-                opened_at=now,
+                advanced_at=now,
             )
         judgement.run()
         _log.info(
@@ -375,7 +379,7 @@ class DormantSession:
             epoch=lease.epoch,
         )
 
-    def _resume_judge_usage_limit_park(self, now: datetime) -> None:
+    def _resume_judge_usage_limit_park(self, now: datetime, *, superseded_invocation: str) -> None:
         """Unpause a judge-usage-limit park: the worker's own turn already
         finished normally before its verdict elicitation hit the limit, so there is nothing
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
@@ -398,18 +402,20 @@ class DormantSession:
         if lease.session is not None:
             # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
             # check-then-insert never mints a second row for one (lease, generation, kind)) —
-            # advance it past the limited elicitation's own signal, or the fresh one's own
-            # classification would re-read that same signal off the transcript forever.
+            # record an advance past the limited elicitation's own signal, or the fresh one's own
+            # classification would re-read that same signal off the transcript forever. Keyed
+            # by the superseded elicitation, so a replay while it still stands writes nothing.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
             workdir = judgement.bindings[0].workdir if judgement.bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
-            self.ctx.stores.invocation_boundaries.advance_boundary(
+            self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
                 generation=generation,
                 kind="judge",
+                superseded_invocation=superseded_invocation,
                 start_position=start_position,
                 start_unreadable=start_unreadable,
-                opened_at=now,
+                advanced_at=now,
             )
         judgement.run()
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)

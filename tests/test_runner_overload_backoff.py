@@ -13,11 +13,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.overload import BACKOFF_LIMIT, backoff_delay
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
@@ -278,3 +280,29 @@ def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitat
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
+
+
+def test_a_replayed_judge_backoff_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  # type: ignore[no-untyped-def]
+    """A crash before the fresh elicitation launches leaves the overloaded one standing: the
+    retry carries the same identity, so it appends nothing a second time."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", overload=ProviderOverload(detail="Overloaded: 529"), overload_from_call=2
+    )
+    _hub, ctx = _ctx(store, harness, clock=FixedClock(_NOW))
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — overloaded, left standing
+    lease = store.active_lease("lease_1")
+    standing = store.in_flight_elicitation("lease_1", 1)
+    assert lease is not None and standing is not None
+    key = iso_utc(standing.first_launched_at)
+    harness.overload = None
+
+    DormantSession(ctx, lease)._resume_judge_overload_backoff(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    first = store.current_start("lease_1", 1, "judge")
+    DormantSession(ctx, lease)._resume_judge_overload_backoff(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    replayed = store.current_start("lease_1", 1, "judge")
+
+    assert first is not None and replayed == first
+    assert first.at == _NOW + timedelta(minutes=1)
