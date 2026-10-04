@@ -109,15 +109,20 @@ class SelfTestService:
         self, selftest_id: str, *, status: SelfTestStatus, checks: list[SelfTestCheck], error: str | None
     ) -> None:
         with self._lock:
-            run = self._runs[selftest_id]
-            run.checks = checks
-            run.status = status
-            run.error = error
-            harness = run.harness
-        if self._results is not None:
-            self._results.record_selftest_result(
-                harness_id=harness,
-                status=status,
-                error=error,
-                recorded_at=self._clock.now(),
-            )
+            harness = self._runs[selftest_id].harness
+        # Durable before visible: a caller that reads the run as terminal can rely on its
+        # outcome already being recorded. A failed write still resolves the run.
+        try:
+            if self._results is not None:
+                self._results.record_selftest_result(
+                    harness_id=harness,
+                    status=status,
+                    error=error,
+                    recorded_at=self._clock.now(),
+                )
+        finally:
+            with self._lock:
+                run = self._runs[selftest_id]
+                run.checks = checks
+                run.status = status
+                run.error = error
