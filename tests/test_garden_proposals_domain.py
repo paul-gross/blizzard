@@ -14,10 +14,9 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
-from blizzard.hub.domain.edit import UnsetType
-from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure
-from blizzard.hub.domain.garden_proposals import (
+from blizzard.hub.domain.garden.findings.model import Finding
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure
+from blizzard.hub.domain.garden.proposals.model import (
     DuplicateProposalFindingError,
     GardenProposal,
     GardenProposalAlreadyClosed,
@@ -32,7 +31,8 @@ from blizzard.hub.domain.garden_proposals import (
     RoutineGardenProposalReader,
     RoutineProposalState,
 )
-from blizzard.hub.domain.routines import Routine
+from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.operations.edit import UnsetType
 
 pytestmark = pytest.mark.unit
 

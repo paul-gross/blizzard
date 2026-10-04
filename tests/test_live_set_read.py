@@ -14,8 +14,8 @@ import pytest
 from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from tests.support import (
     HubHarness,

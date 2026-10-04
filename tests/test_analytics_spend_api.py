@@ -14,9 +14,9 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.analytics.operational import OperationalCriteria
-from blizzard.hub.domain.pagination import encode_cursor
-from blizzard.hub.domain.work import UsageFact, UsageTotal
+from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal
+from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from tests.support import FakeWorkSource, build_hub, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 

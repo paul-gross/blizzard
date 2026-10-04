@@ -50,81 +50,89 @@ from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubComma
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
-from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService
-from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics
-from blizzard.hub.domain.analytics.queries import IReadAnalyticsEventQueries
-from blizzard.hub.domain.apply import ApplyService
-from blizzard.hub.domain.chunks.stores import ChunkReadStores, ChunkStores
-from blizzard.hub.domain.claim import ClaimService
-from blizzard.hub.domain.complete import CompleteService
+from blizzard.hub.domain.chunk.dependencies import DependencyService
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ingest import IngestService
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
-from blizzard.hub.domain.decisions import DecisionService, RequeueService
-from blizzard.hub.domain.delete import DeleteService
-from blizzard.hub.domain.dependencies import DependencyService
-from blizzard.hub.domain.detach import DetachService
-from blizzard.hub.domain.edit import EditService
-from blizzard.hub.domain.egress.backfill import EgressBackfill
-from blizzard.hub.domain.egress.event_rows import FilePathPolicy
-from blizzard.hub.domain.egress.reset import EgressReset
-from blizzard.hub.domain.egress.status import EgressStatusReader
-from blizzard.hub.domain.egress.sweep import EgressSweep
-from blizzard.hub.domain.enrollment import RunnerEnrollmentService
-from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
-from blizzard.hub.domain.finding_bucket import FindingBucketReader
-from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
-from blizzard.hub.domain.forge_status import AnnotationReconciler
-from blizzard.hub.domain.garden_delivery import CommitResolver
-from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
-from blizzard.hub.domain.garden_proposal_closure import (
+from blizzard.hub.domain.execution.apply import ApplyService
+from blizzard.hub.domain.execution.claim import ClaimService
+from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
+from blizzard.hub.domain.execution.detach import DetachService
+from blizzard.hub.domain.execution.facts import FactIngestService, RunnerFactsService
+from blizzard.hub.domain.execution.questions import QuestionService
+from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
+from blizzard.hub.domain.garden.delivery.validation import CommitResolver
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.model import (
+    FindingExitService,
+    IReadFindingRepository,
+    IReadFindingSetRepository,
+)
+from blizzard.hub.domain.garden.findings.trend import GardenTrendService
+from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalClosureService,
     IReadGardenProposalClosureRepository,
 )
-from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import (
+from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalAuthoring,
     IReadGardenProposalRepository,
     RoutineGardenProposalReader,
 )
-from blizzard.hub.domain.garden_run import GardenRunService
-from blizzard.hub.domain.garden_sweeps import GardenSweepsService
-from blizzard.hub.domain.garden_trend import GardenTrendService
-from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
-from blizzard.hub.domain.graph_authoring import GraphMintService
-from blizzard.hub.domain.graph_lifecycle import GraphLifecycleService
-from blizzard.hub.domain.ingest import IngestService
-from blizzard.hub.domain.pause import PauseService
-from blizzard.hub.domain.promote import PromoteService
-from blizzard.hub.domain.questions import QuestionService
-from blizzard.hub.domain.queue import GroupService, QueueService
-from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry, RetiredRunnerGuard
-from blizzard.hub.domain.restart import RestartService
-from blizzard.hub.domain.review_findings_materialize import ReviewFindingsMaterialize
-from blizzard.hub.domain.routine_baselines import RoutineBaselineService
-from blizzard.hub.domain.routine_run import RunService
-from blizzard.hub.domain.routines import (
+from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
+from blizzard.hub.domain.garden.review.materialize import ReviewFindingsMaterialize
+from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
     RoutineAuthoring,
     RoutineLifecycle,
     RoutineScopeMembership,
 )
-from blizzard.hub.domain.run_context import IReadRunContextRepository
-from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
-from blizzard.hub.domain.secrets import IHubKeyProvider, ISecretCatalog
-from blizzard.hub.domain.stop import StopService
-from blizzard.hub.domain.tracing.replay import TraceReplay
-from blizzard.hub.domain.tracing.repository import WorkRefLabel
-from blizzard.hub.domain.tracing.status import TraceStatusReader
-from blizzard.hub.domain.tracing.sweep import TraceExportSweep
-from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
-from blizzard.hub.domain.work import WorkRef
-from blizzard.hub.domain.work_closure import CloseIntentDrainer
-from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
-from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
+from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
+from blizzard.hub.domain.garden.runs.history import GardenRunService
+from blizzard.hub.domain.garden.runs.run import RunService
+from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
+from blizzard.hub.domain.observability.analytics.derivation import EventDerivationReconciler, EventDerivationService
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
+from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
+from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.observability.egress.reset import EgressReset
+from blizzard.hub.domain.observability.egress.status import EgressStatusReader
+from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
+from blizzard.hub.domain.observability.tracing.replay import TraceReplay
+from blizzard.hub.domain.observability.tracing.repository import WorkRefLabel
+from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
+from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
+from blizzard.hub.domain.observability.transcripts import (
+    IReadTranscriptSegments,
+    TranscriptCaps,
+    TranscriptIngestService,
+)
+from blizzard.hub.domain.operations.complete import CompleteService
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.operations.edit import EditService
+from blizzard.hub.domain.operations.pause import PauseService
+from blizzard.hub.domain.operations.promote import PromoteService
+from blizzard.hub.domain.operations.queue import GroupService, QueueService
+from blizzard.hub.domain.operations.restart import RestartService
+from blizzard.hub.domain.operations.stop import StopService
+from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.runners.registration import FleetService, IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.domain.work_items.materialization import WorkItemMaterializationReconciler
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token

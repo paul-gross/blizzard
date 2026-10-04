@@ -20,11 +20,16 @@ import duckdb
 import pyarrow.parquet as pq
 import pytest
 
-from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
-from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA, invocation_egress_row, step_egress_row
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
-from blizzard.hub.domain.tracing.summary import summarize_step
+from blizzard.hub.domain.observability.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
+from blizzard.hub.domain.observability.egress.schema import (
+    INVOCATIONS_SCHEMA,
+    STEPS_SCHEMA,
+    invocation_egress_row,
+    step_egress_row,
+)
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.egress.internal.files import DirectoryEgressWriter, schema_document
 from blizzard.hub.egress.internal.ndjson import NdjsonEncoder
 from blizzard.hub.egress.internal.parquet import ParquetEncoder, arrow_schema
@@ -289,7 +294,7 @@ def test_the_code_schema_is_the_contract(name: str) -> None:
     code = _CODE_SCHEMAS[name]
     assert [c.name for c in contract.columns] == [c.name for c in code.columns], f"column order; {_REGEN_COMMAND}"
     for published, built in zip(contract.columns, code.columns, strict=True):
-        assert published == built, f"{name}.{published.name} differs from hub/domain/egress/schema.py"
+        assert published == built, f"{name}.{published.name} differs from hub/domain/observability/egress/schema.py"
     assert contract.major_version == code.major_version
 
 

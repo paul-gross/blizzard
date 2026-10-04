@@ -17,22 +17,8 @@ import pytest
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.edit import (
-    UNSET,
-    ChunkAlreadyMoved,
-    ChunkEdit,
-    ChunkNotEditable,
-    EditService,
-    ForcedNodeUnknown,
-    MigrationTargetIsCurrentPin,
-    TargetGraphRetired,
-)
-from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, IReadGraphRepository, Node
-from blizzard.hub.domain.harnesses import InvalidHarnesses
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     EscalationFact,
@@ -42,6 +28,20 @@ from blizzard.hub.domain.work import (
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
+)
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node
+from blizzard.hub.domain.operations.edit import (
+    UNSET,
+    ChunkAlreadyMoved,
+    ChunkEdit,
+    ChunkNotEditable,
+    EditService,
+    ForcedNodeUnknown,
+    MigrationTargetIsCurrentPin,
+    TargetGraphRetired,
 )
 from tests.support import make_graph
 

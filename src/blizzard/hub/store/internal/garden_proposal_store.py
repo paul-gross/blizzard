@@ -18,9 +18,8 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.domain.edit import UnsetType
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalCountBucket, classify_proposal_count_bucket
-from blizzard.hub.domain.garden_proposals import (
+from blizzard.hub.domain.garden.proposals.closure import GardenProposalCountBucket, classify_proposal_count_bucket
+from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
     GardenProposalCounts,
     GardenProposalEdit,
@@ -29,7 +28,8 @@ from blizzard.hub.domain.garden_proposals import (
     IWriteGardenProposalRepository,
     RoutineProposalState,
 )
-from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.operations.edit import UnsetType
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 

@@ -9,8 +9,8 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunks.events import IEventLogPublisher, IWriteChunkEventsRepository
-from blizzard.hub.domain.event_log import EventLogService
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
 
 pytestmark = pytest.mark.unit
 

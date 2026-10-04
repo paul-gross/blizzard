@@ -16,10 +16,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.pause import ChunkNotPausable, PauseService
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     EscalationFact,
@@ -27,6 +24,9 @@ from blizzard.hub.domain.work import (
     RouteCreatedFact,
     TransitionFact,
 )
+from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.operations.pause import ChunkNotPausable, PauseService
 
 pytestmark = pytest.mark.unit
 

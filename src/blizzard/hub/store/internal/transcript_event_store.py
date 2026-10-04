@@ -18,7 +18,7 @@ from typing import Any
 from sqlalchemy import Delete, Insert, Select, func, insert, select
 
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.analytics.events import (
+from blizzard.hub.domain.observability.analytics.events import (
     CandidacyRead,
     DerivationMarker,
     DerivationSignature,
@@ -389,7 +389,7 @@ class TranscriptEventStore:
     def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
         """This adapter stays a pure read (no logger: ``bzh:dependency-inversion``), so a
         caller that needs to observe one of the drops
-        :meth:`~blizzard.hub.domain.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`
+        :meth:`~blizzard.hub.domain.observability.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`
         allows for diffs the requested ``segment_ids`` against this result's keys itself."""
         result: dict[str, SegmentDerivationInput] = {}
         if not segment_ids:

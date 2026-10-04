@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
+from blizzard.hub.domain.chunk.model import ChunkFacts
 
 pytestmark = pytest.mark.unit
 

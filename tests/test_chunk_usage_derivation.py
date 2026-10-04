@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkFacts, UsageFact, UsageTotal
+from blizzard.hub.domain.chunk.model import ChunkFacts, UsageFact, UsageTotal
 
 pytestmark = pytest.mark.unit
 

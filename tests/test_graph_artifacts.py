@@ -15,9 +15,9 @@ import pytest
 from sqlalchemy import create_engine
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import GraphArtifact, GraphDoc, GraphParseError
-from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc, GraphParseError
+from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata
 from tests.support import hub_store_connections

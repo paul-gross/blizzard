@@ -603,7 +603,7 @@ describe('ChunkDetail container', () => {
   //
   // Complete and Pause are the two controls whose outcome is predictable from the
   // mutation's own variables (`domain/work/statuses.md`'s precedence, confirmed against
-  // `src/blizzard/hub/domain/work.py`/`pause.py`/`detach.py`/`delete.py`) — Resume and
+  // `src/blizzard/hub/domain/chunk/model.py`/`pause.py`/`detach.py`/`delete.py`) — Resume and
   // Detach are not, so they render no override at all, only Part A's disabled-and-pending.
   //
   // Every "held pending" assertion below spies on `queryClient.invalidateQueries` and

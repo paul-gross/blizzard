@@ -15,10 +15,10 @@ from sqlalchemy import select
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in

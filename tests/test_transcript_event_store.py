@@ -20,8 +20,8 @@ from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
-from blizzard.hub.domain.transcripts import TranscriptSlice
+from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module

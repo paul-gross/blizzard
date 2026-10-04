@@ -14,8 +14,8 @@ from pathlib import Path
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
-from blizzard.hub.domain.graph import GraphDoc, GraphParseError, IReadGraphRepository
-from blizzard.hub.domain.graph_authoring import GraphMintService, GraphValidationError
+from blizzard.hub.domain.graph.authoring import GraphMintService, GraphValidationError
+from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository
 from blizzard.hub.graphs import PACKAGED, GraphFile
 
 _log = get_logger("blizzard.hub.graph_sync")

@@ -14,7 +14,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
+from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.leases.closure import FAILED
 from blizzard.runner.harness.adapter import WorkerHandle

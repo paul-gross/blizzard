@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedChunkCompletion,
     TracedChunkStop,
@@ -20,14 +21,14 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.position import (
+from blizzard.hub.domain.observability.tracing.position import (
     Position,
     _starting_graph_id,
     arrivals_with_entry,
     movement_arrivals,
     position_of_node,
 )
-from blizzard.hub.domain.tracing.steps import (
+from blizzard.hub.domain.observability.tracing.steps import (
     NodeStep,
     PrecededBy,
     StepKind,
@@ -38,7 +39,6 @@ from blizzard.hub.domain.tracing.steps import (
     _terminal_candidates,
     _with_preceded_by,
 )
-from blizzard.hub.domain.work import MigrationSource
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

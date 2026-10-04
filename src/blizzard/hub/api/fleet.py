@@ -44,23 +44,23 @@ from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.chunks.fence import FenceRefusal
-from blizzard.hub.domain.claim import (
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+)
+from blizzard.hub.domain.chunk.ports.fence import FenceRefusal
+from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
     ClaimDeniedIncompatible,
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
 )
-from blizzard.hub.domain.envelope import Arrival, Envelope
-from blizzard.hub.domain.garden_proposals import RoutineProposalState
-from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
-from blizzard.hub.domain.registry import DeclaredSubscription, RunnerCapability, RunnerRetired
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import (
-    Chunk,
-    ChunkFacts,
-)
+from blizzard.hub.domain.execution.envelope import Arrival, Envelope
+from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
+from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.graph.model import FollowLatest, Graph, Mint
+from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerCapability, RunnerRetired
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
     ChunkDetail,

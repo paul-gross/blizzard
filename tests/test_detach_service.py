@@ -15,11 +15,11 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
-from blizzard.hub.domain.detach import DetachService, NotRouted
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.execution.detach import DetachService, NotRouted
+from blizzard.hub.domain.runners.route import Route
 
 pytestmark = pytest.mark.unit
 

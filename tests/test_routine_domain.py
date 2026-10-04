@@ -13,9 +13,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.harnesses import InvalidHarnesses
-from blizzard.hub.domain.routines import (
+from blizzard.hub.domain.garden.routines import (
     IWriteRoutineRepository,
     IWriteRoutineScopeRepository,
     Routine,
@@ -27,7 +25,9 @@ from blizzard.hub.domain.routines import (
     RoutineNameTakenError,
     RoutineScopeMembership,
 )
-from blizzard.hub.domain.scopes import IWriteScopeRepository, Scope, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
+from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 
 pytestmark = pytest.mark.unit
 

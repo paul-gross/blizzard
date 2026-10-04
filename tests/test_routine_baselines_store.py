@@ -12,8 +12,8 @@ from sqlalchemy import insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
-from blizzard.hub.domain.routine_baselines import RepoLandings, RoutineBaselineService
-from blizzard.hub.domain.routines import Routine
+from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph

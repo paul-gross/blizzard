@@ -26,16 +26,21 @@ from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
-from blizzard.hub.domain.delivery_read import board_chunk_url
-from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.graph import (
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import board_chunk_url
+from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    HubNodePollFact,
+    LandedRepos,
+)
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
     HUB_DEFAULT_SUCCESS_CHOICE,
@@ -45,12 +50,7 @@ from blizzard.hub.domain.graph import (
     Node,
     RunStep,
 )
-from blizzard.hub.domain.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
-from blizzard.hub.domain.work import (
-    Chunk,
-    HubNodePollFact,
-    LandedRepos,
-)
+from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"

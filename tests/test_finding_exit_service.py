@@ -12,7 +12,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.findings import (
+from blizzard.hub.domain.garden.findings.model import (
     FactEntry,
     Finding,
     FindingExitService,

@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore

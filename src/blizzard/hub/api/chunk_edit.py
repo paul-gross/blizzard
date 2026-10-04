@@ -9,10 +9,10 @@ from fastapi import HTTPException, status
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.edit import UNSET, ChunkEdit, UnsetType
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.harnesses import InvalidHarnesses
-from blizzard.hub.domain.work import Chunk, IntendedMigration
+from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
+from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.operations.edit import UNSET, ChunkEdit, UnsetType
 from blizzard.wire.chunk import ChunkPatchRequest
 
 

@@ -17,12 +17,7 @@ from sqlalchemy import Connection, Select, func, insert, select
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.roles import entity
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     IntendedMigration,
     NodeQuestion,
@@ -33,6 +28,11 @@ from blizzard.hub.domain.work import (
     WorkItemMaterializationOutcome,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 
 
@@ -131,7 +131,7 @@ DEFAULT_MODEL = ModelColumn()
 DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 
-# The ``merged/<repo>`` marker also appears in domain/work.py's ``LandedRepos``.
+# The ``merged/<repo>`` marker also appears in domain/chunk/model.py's ``LandedRepos``.
 MARKER_PREFIX = "merged/"
 
 
@@ -279,7 +279,7 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     """Resolve the live route on the caller's connection, even inside a write.
 
-    :attr:`~blizzard.hub.domain.work.RouteHistory.newest` owns same-instant ties."""
+    :attr:`~blizzard.hub.domain.chunk.model.RouteHistory.newest` owns same-instant ties."""
     # (created_at, seq) desc — must stay in lockstep with the key
     # `RouteHistory.newest` orders by; that property, not this query, owns it.
     created = conn.execute(

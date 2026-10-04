@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import hub_store_connections, seed_graph, seed_work_item

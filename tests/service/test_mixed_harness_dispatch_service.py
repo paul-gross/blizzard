@@ -17,8 +17,8 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
-from blizzard.hub.domain.analytics.extraction import extract_events
+from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
+from blizzard.hub.domain.observability.analytics.extraction import extract_events
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.internal.http_hub import HttpHubClient

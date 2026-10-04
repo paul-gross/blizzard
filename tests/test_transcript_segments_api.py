@@ -9,7 +9,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.transcripts import TranscriptCaps
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from tests.support import build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _enroll, _register
 

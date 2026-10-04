@@ -15,9 +15,10 @@ from sqlalchemy import Column, Connection, Table, and_, func, insert, not_, sele
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, IReadManyGraphs
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.chunk.model import MigrationSource, UsageFact, WorkRef
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, IReadManyGraphs
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedBounce,
     TracedChunkCompletion,
@@ -40,7 +41,7 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.repository import (
+from blizzard.hub.domain.observability.tracing.repository import (
     ClosingCandidates,
     IReadTraceStatus,
     IWriteTraceCursor,
@@ -48,7 +49,6 @@ from blizzard.hub.domain.tracing.repository import (
     TraceExportFailure,
     WorkRefLabel,
 )
-from blizzard.hub.domain.work import MigrationSource, UsageFact, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

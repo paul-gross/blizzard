@@ -17,7 +17,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.findings import FactEntry, Finding
+from blizzard.hub.domain.garden.findings.model import FactEntry, Finding
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore

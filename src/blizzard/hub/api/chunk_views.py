@@ -14,10 +14,10 @@ from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.artifacts import GitCommitArtifact, StoredArtifact
-from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
+from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -88,7 +88,7 @@ _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping — the one home every caller of
-    :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
+    :func:`~blizzard.hub.domain.chunk.dependencies.derive_blocked_prerequisites` reaches through,
     listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
     declared order: the marking names its first and counts them all. An absent or empty
     set is no marking."""
@@ -202,7 +202,7 @@ class ChunkView:
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
-        via :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.route_of`."""
+        via :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.route_of`."""
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
         return self.services.chunks.route.route_of(self.chunk.chunk_id)

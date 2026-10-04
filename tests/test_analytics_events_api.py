@@ -12,8 +12,8 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, event_criteria, ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.pagination import encode_cursor
+from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from tests.support import build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 

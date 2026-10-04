@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain import eligibility
-from blizzard.hub.domain.eligibility import EligibilityCheck
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
-from blizzard.hub.domain.registry import RunnerCapability
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.execution import eligibility
+from blizzard.hub.domain.execution.eligibility import EligibilityCheck
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
+from blizzard.hub.domain.runners.registration import RunnerCapability
 
 pytestmark = pytest.mark.unit
 

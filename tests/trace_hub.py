@@ -6,8 +6,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.graph.model import Graph
 from tests.support import HubHarness, build_hub, ingest, report_lease
 
 GRAPH_YAML = """

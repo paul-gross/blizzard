@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from tests.support import build_hub, count_queries
 
 pytestmark = pytest.mark.component

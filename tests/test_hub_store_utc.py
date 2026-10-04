@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.registry import RunnerCapability
+from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import hub_store_connections

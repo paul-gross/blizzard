@@ -17,9 +17,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease

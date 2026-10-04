@@ -1,0 +1,82 @@
+"""Routine baselines — a read-only composition over the finding-set and delivery seams:
+one entry per scope a routine has swept, each carrying the baseline
+finding set's id, its recorded instant (`Id.minted_at`), and per repo how much has
+landed since. See `IReadFindingSetRepository.newest_by_scope_for_routine` for what
+absence means."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from blizzard.foundation.ids import Id
+from blizzard.foundation.roles import dto
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
+from blizzard.hub.domain.garden.routines import Routine
+
+
+@dto
+@dataclass(frozen=True)
+class RepoLandings:
+    """One repo's baseline revision and how much has landed against it since —
+    `IReadChunkDeliveryRepository.count_landed_since`'s own fact."""
+
+    repo: str
+    revision: str
+    landed_since: int
+
+
+@dto
+@dataclass(frozen=True)
+class RoutineBaseline:
+    """One (routine, scope) pair's newest finding set."""
+
+    scope_slug: str
+    finding_set_id: str
+    recorded_at: datetime
+    repos: list[RepoLandings]
+
+
+class MalformedFindingSetIdError(ValueError):
+    """A `finding_sets` row carried an id outside the prefixed-ULID shape
+    `foundation/ids.py` mints — every id this service reads was minted by the hub
+    itself, so this names a store-level invariant break, not a user-facing refusal."""
+
+    def __init__(self, finding_set_id: str) -> None:
+        super().__init__(f"finding-set id {finding_set_id!r} does not decode a mint instant")
+
+
+class RoutineBaselineService:
+    """The read-only baseline composition."""
+
+    def __init__(self, *, finding_sets: IReadFindingSetRepository, delivery: IReadChunkDeliveryRepository) -> None:
+        self._finding_sets = finding_sets
+        self._delivery = delivery
+
+    def baselines_for(self, routine: Routine) -> list[RoutineBaseline]:
+        """Newest-swept-first (`finding_set_id` descending) — the picker's own ordering
+        cue. Takes the already-resolved routine (`bzh:domain-takes-objects`)."""
+        sets = self._finding_sets.newest_by_scope_for_routine(routine.name)
+        baselines = [self._baseline_of(finding_set) for finding_set in sets]
+        return sorted(baselines, key=lambda b: b.finding_set_id, reverse=True)
+
+    def _baseline_of(self, finding_set: FindingSet) -> RoutineBaseline:
+        minted_id = Id.parse(finding_set.finding_set_id)
+        recorded_at = minted_id.minted_at if minted_id is not None else None
+        if recorded_at is None:
+            raise MalformedFindingSetIdError(finding_set.finding_set_id)
+        # Deferred: N here is a routine's own repo count, each with its own `since`, not
+        # the fleet's — small and bounded regardless of fleet size.
+        repos = [
+            RepoLandings(
+                repo=repo, revision=revision, landed_since=self._delivery.count_landed_since(repo, recorded_at)
+            )
+            for repo, revision in sorted(finding_set.revisions.items())
+        ]
+        return RoutineBaseline(
+            scope_slug=finding_set.scope_slug,
+            finding_set_id=finding_set.finding_set_id,
+            recorded_at=recorded_at,
+            repos=repos,
+        )

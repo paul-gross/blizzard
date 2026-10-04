@@ -12,7 +12,7 @@ from sqlalchemy import insert
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
-from blizzard.hub.domain.routines import Routine
+from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row

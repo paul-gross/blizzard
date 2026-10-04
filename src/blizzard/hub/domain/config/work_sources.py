@@ -10,7 +10,7 @@ from typing import Protocol
 from blizzard.foundation.roles import dto
 from blizzard.hub.config import KNOWN_WORK_SOURCE_PROVIDERS, RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.config.changes import ConfigChange, FieldChange
-from blizzard.hub.domain.edit import UNSET, UnsetType
+from blizzard.hub.domain.operations.edit import UNSET, UnsetType
 
 #: Providers whose items cannot be read without a credential.
 PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})

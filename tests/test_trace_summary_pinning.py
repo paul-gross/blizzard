@@ -8,10 +8,10 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.egress.rows import step_row
-from blizzard.hub.domain.tracing.facts import StepFacts, TracedEpochOwner
-from blizzard.hub.domain.tracing.steps import NodeStep, StepKind, identify_steps
-from blizzard.hub.domain.tracing.summary import _node_executor, _runner_id, summarize_step
+from blizzard.hub.domain.observability.egress.rows import step_row
+from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedEpochOwner
+from blizzard.hub.domain.observability.tracing.steps import NodeStep, StepKind, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import _node_executor, _runner_id, summarize_step
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

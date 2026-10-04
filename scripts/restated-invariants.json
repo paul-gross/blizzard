@@ -125,7 +125,7 @@
     {
       "id": "route-token-rekey-lost-plaintext-recovery",
       "statement": "Rekeying a chunk's live route capability token exists as the lost-plaintext recovery: a claim whose route-token response was never read back has no other way to learn it.",
-      "owner": "src/blizzard/hub/domain/claim.py#rekey",
+      "owner": "src/blizzard/hub/domain/execution/claim.py#rekey",
       "owner_kind": "module",
       "owner_assert": {
         "quote": "a claim whose route-token response was never read back has no other way to learn it"
@@ -135,7 +135,7 @@
       ],
       "sites": [
         {
-          "file": "src/blizzard/hub/domain/claim.py",
+          "file": "src/blizzard/hub/domain/execution/claim.py",
           "symbol": "rekey",
           "role": "owner"
         },
@@ -172,7 +172,7 @@
     {
       "id": "transcript-record-cap-runner-under-hub",
       "statement": "The runner's per-record transcript cap is held below the hub's: over the runner's, content is shrunk and every turn survives; over the hub's, the record is rejected and its turns stored as [].",
-      "owner": "src/blizzard/hub/domain/transcripts.py#<module>",
+      "owner": "src/blizzard/hub/domain/observability/transcripts.py#<module>",
       "owner_kind": "module",
       "owner_assert": {
         "quote": "the rogue-runner backstop, not the working"
@@ -188,7 +188,7 @@
       },
       "sites": [
         {
-          "file": "src/blizzard/hub/domain/transcripts.py",
+          "file": "src/blizzard/hub/domain/observability/transcripts.py",
           "symbol": "<module>",
           "role": "owner"
         },
@@ -479,7 +479,7 @@
     {
       "id": "usage-cost-partial-neither-amount",
       "statement": "The hub's derived usage/cost total (UsageTotal) flags cost_partial iff some summed row carries neither a billed nor an estimated amount; an estimate never enters cost_usd. The spend caps' own PARTIAL is billed_partial, a separate reading.",
-      "owner": "src/blizzard/hub/domain/work.py#UsageTotal",
+      "owner": "src/blizzard/hub/domain/chunk/model.py#UsageTotal",
       "owner_kind": "module",
       "owner_assert": {
         "quote": "iff some row carries neither a billed nor an estimated amount"
@@ -489,7 +489,7 @@
       ],
       "sites": [
         {
-          "file": "src/blizzard/hub/domain/work.py",
+          "file": "src/blizzard/hub/domain/chunk/model.py",
           "symbol": "UsageTotal",
           "role": "owner"
         },

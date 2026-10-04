@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component

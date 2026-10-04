@@ -20,10 +20,11 @@ from blizzard.foundation.trace_ids import (
     step_root,
 )
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.chunk_spans import (
+from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.chunk_spans import (
     ChunkOutcome,
     _step_extents,
     assemble_completion,
@@ -31,8 +32,8 @@ from blizzard.hub.domain.tracing.chunk_spans import (
     assemble_work,
     chunk_end,
 )
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedBounce,
     TracedChunkCompletion,
@@ -48,9 +49,8 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteCreation,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.steps import identify_steps
-from blizzard.hub.domain.tracing.window import ClosedStep, FinishedChunk, assemble_window, select_window
-from blizzard.hub.domain.work import UsageFact
+from blizzard.hub.domain.observability.tracing.steps import identify_steps
+from blizzard.hub.domain.observability.tracing.window import ClosedStep, FinishedChunk, assemble_window, select_window
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

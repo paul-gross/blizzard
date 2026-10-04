@@ -12,7 +12,7 @@ import json
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.graph import ProducesSpec
+from blizzard.hub.domain.graph.model import ProducesSpec
 from blizzard.hub.store.internal.graph_store import PRODUCES
 
 pytestmark = pytest.mark.unit

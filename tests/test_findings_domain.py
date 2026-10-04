@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.findings import FindingFact, derive_liveness
+from blizzard.hub.domain.garden.findings.model import FindingFact, derive_liveness
 
 pytestmark = pytest.mark.unit
 

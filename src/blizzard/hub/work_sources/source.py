@@ -15,7 +15,7 @@ from typing import Protocol
 from blizzard.foundation.roles import dto
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkRef
+from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -26,7 +26,7 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 class AuthorView:
     """A work item's author, resolved legible for display — a login for
     a human author, or the runner/chunk/node lineage for a fleet-authored one. ``kind``
-    mirrors :class:`~blizzard.hub.domain.work.WorkItemAuthorKind`'s value."""
+    mirrors :class:`~blizzard.hub.domain.chunk.model.WorkItemAuthorKind`'s value."""
 
     kind: str
     user_id: str | None = None

@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from blizzard.hub.documents.codec import YAML_CODEC
-from blizzard.hub.domain.graph import GraphArtifact, GraphDoc
+from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub

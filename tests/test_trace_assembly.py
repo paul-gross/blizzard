@@ -9,9 +9,10 @@ import pytest
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id
 from blizzard.foundation.trace_spans import FinishedSpan, SpanKind, SpanStatus
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedBounce,
     TracedChunkCompletion,
@@ -33,8 +34,7 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteCreation,
     TracedRouteRelease,
 )
-from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
-from blizzard.hub.domain.work import UsageTotal
+from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

@@ -14,8 +14,8 @@ import pytest
 import yaml
 
 from blizzard.hub.documents.codec import ConfigDecodeError
-from blizzard.hub.domain.graph import GraphDoc
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphArtifactFileMissing, GraphFile
 
 pytestmark = pytest.mark.unit

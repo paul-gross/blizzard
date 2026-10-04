@@ -15,8 +15,8 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component

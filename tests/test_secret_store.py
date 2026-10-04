@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.secrets import (
+from blizzard.hub.domain.config.secrets import (
     SecretAlreadyExists,
     SecretName,
     SecretNotFound,

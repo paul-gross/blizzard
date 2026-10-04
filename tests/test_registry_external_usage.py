@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.api.runners import runner_view
-from blizzard.hub.domain.registry import (
+from blizzard.hub.domain.runners.registration import (
     CREDENTIAL_LAPSED_CONDITION,
     EXTERNAL_USAGE_STALE_AFTER,
     DeclaredSubscription,

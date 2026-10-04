@@ -13,7 +13,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE, RUNNER_AUTH_WARN
-from blizzard.hub.domain.registry import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import build_hub, pointer_token, report_lease
 

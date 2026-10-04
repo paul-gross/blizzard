@@ -9,8 +9,8 @@ from __future__ import annotations
 from sqlalchemy import insert, select
 from sqlalchemy.engine import Connection
 
-from blizzard.hub.domain.run_context import IWriteRunContextRepository, RunContext
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

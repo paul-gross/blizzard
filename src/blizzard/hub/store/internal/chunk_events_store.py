@@ -22,8 +22,8 @@ from blizzard.foundation.event_log import (
     narrow_event_log_kind,
     narrow_event_log_severity,
 )
-from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
-from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
@@ -285,7 +285,7 @@ class ChunkEventsStore:
 
     def activity_events_since(self, since: datetime, *, limit: int) -> list[OperationalEvent]:
         """See
-        :meth:`~blizzard.hub.domain.chunks.events.IReadChunkEventsRepository.activity_events_since` —
+        :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_events_since` —
         the feed's own event source: recency-ordered and deleted-chunk-excluding, which
         ``list_events`` is not."""
         with self._store.read("activity_events_since") as conn:
@@ -315,7 +315,7 @@ class ChunkEventsStore:
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
         """See
-        :meth:`~blizzard.hub.domain.chunks.events.IReadChunkEventsRepository.activity_facts_since` — one
+        :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_facts_since` — one
         bounded read per mapped ``ChunkChangeCause`` fact table, concatenated, unsorted across
         sources. Every per-chunk source joins ``chunks`` for its current ``graph_id``, except
         ``transitions``/``chunk_migrations``, which carry their own column."""

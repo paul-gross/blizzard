@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.tracing import attributes as attr
-from blizzard.hub.domain.tracing.assembly import assemble_step
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedEscalation,
     TracedPromotion,
@@ -15,8 +15,8 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRouteCreation,
     TracedTransition,
 )
-from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
-from blizzard.hub.domain.tracing.summary import IntervalKind, StepSummary, summarize_step
+from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import IntervalKind, StepSummary, summarize_step
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

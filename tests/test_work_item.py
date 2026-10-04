@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.work import WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

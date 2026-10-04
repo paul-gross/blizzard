@@ -14,8 +14,8 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore

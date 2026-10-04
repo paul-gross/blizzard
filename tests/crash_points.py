@@ -25,11 +25,11 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.domain.git_commit_declaration",
     "blizzard.runner.domain.tracing.sweep",
     "blizzard.hub.delivery.hub_node",
-    "blizzard.hub.domain.claim",
-    "blizzard.hub.domain.apply",
-    "blizzard.hub.domain.work_closure",
-    "blizzard.hub.domain.tracing.sweep",
-    "blizzard.hub.domain.egress.sweep",
+    "blizzard.hub.domain.execution.claim",
+    "blizzard.hub.domain.execution.apply",
+    "blizzard.hub.domain.work_items.closure",
+    "blizzard.hub.domain.observability.tracing.sweep",
+    "blizzard.hub.domain.observability.egress.sweep",
 )
 
 

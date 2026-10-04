@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ActivityEntry, ActivityFeed, OperationalEvent
+from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
 
 pytestmark = pytest.mark.unit
 

@@ -13,8 +13,8 @@ from sqlalchemy import Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.garden_delivery_materialize import (
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
     DeltaMaterialization,
@@ -23,7 +23,7 @@ from blizzard.hub.domain.garden_delivery_materialize import (
     NewFindingSet,
     NewProposal,
 )
-from blizzard.hub.domain.run_context import RunContext
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import (

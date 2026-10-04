@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.hub.domain.graph import SessionRef
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.model import SessionRef
+from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphFile
 from tests.repo_files import repo_root
 

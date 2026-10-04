@@ -17,10 +17,10 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.routines import Routine, RunMode
-from blizzard.hub.domain.scopes import ScopeSlug
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.routines import Routine, RunMode
+from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.graph.model import Graph
 from tests.support import HubHarness, build_hub
 
 

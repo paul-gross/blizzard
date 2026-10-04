@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.runners.route import Route
 from tests.support import count_queries
 from tests.test_load_all_facts_store import _LIVE_CHUNK_IDS, _T0, _seed_fixture, _store
 

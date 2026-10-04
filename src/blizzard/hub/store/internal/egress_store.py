@@ -13,16 +13,16 @@ from sqlalchemy import and_, insert, or_, select
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.hub.config import EGRESS_DATASETS
-from blizzard.hub.domain.egress.repository import (
+from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     EgressWriteFailure,
     EventsPosition,
     IWriteEgressCursor,
     UsagePosition,
 )
-from blizzard.hub.domain.egress.rows import AttributedUsage
-from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.work import UsageFact
+from blizzard.hub.domain.observability.egress.rows import AttributedUsage
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

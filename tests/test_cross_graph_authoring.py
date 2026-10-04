@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import ChoiceTarget, GraphDoc
-from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.model import ChoiceTarget, GraphDoc
+from blizzard.hub.domain.graph.validation import Validator
 from tests.support import build_hub
 
 unit = pytest.mark.unit

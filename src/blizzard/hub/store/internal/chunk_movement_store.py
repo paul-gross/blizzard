@@ -18,12 +18,12 @@ from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import MIGRATION_PREFIX, Id
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
-from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

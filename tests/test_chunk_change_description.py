@@ -11,8 +11,8 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.graph import Graph, Node
-from blizzard.hub.domain.work import Chunk, ChunkChange, ChunkFacts, RouteCreatedFact, TransitionFact, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts, RouteCreatedFact, TransitionFact, WorkRef
+from blizzard.hub.domain.graph.model import Graph, Node
 
 pytestmark = pytest.mark.unit
 

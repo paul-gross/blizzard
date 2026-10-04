@@ -21,14 +21,14 @@ from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.delete import DeleteService
-from blizzard.hub.domain.findings import FindingExitService
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef
-from blizzard.hub.domain.work_items import (
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.garden.findings.model import FindingExitService
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.work_items.editing import (
     WorkItemEdit,
     WorkItemEditService,
     WorkItemHeldByDependents,

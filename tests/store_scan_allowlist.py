@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.domain.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.config.changes import IReadConfigChanges
-from blizzard.hub.domain.findings import IReadFindingRepository
+from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
+from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.runner.domain.outbound import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 

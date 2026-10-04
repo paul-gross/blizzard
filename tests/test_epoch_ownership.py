@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.chunks.fence import Claimant, EpochOwner, FenceRefusal, MintAdmission
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal, MintAdmission
 
 pytestmark = pytest.mark.unit
 

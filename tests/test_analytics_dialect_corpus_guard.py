@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.analytics.dialects import DIALECTS
+from blizzard.hub.domain.observability.analytics.dialects import DIALECTS
 from blizzard.runner.harness.catalog import declared_normalizer_versions
 from tests.repo_files import repo_root
 

@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from blizzard.hub.domain.review_findings import (
+from blizzard.hub.domain.garden.review.validation import (
     ReviewFindingsRejected,
     parse_review_finding_delta,
     validate_review_findings,

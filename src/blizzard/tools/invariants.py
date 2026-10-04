@@ -18,10 +18,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import ChunkFacts, MigrationSource, RouteHistory
+from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationSource, RouteHistory
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore

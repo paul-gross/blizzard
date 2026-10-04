@@ -16,16 +16,16 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.chunks.record import ChunkPage
-from blizzard.hub.domain.findings import Finding, FindingFact, FindingPage
-from blizzard.hub.domain.garden_run import (
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
+from blizzard.hub.domain.chunk.ports.record import ChunkPage
+from blizzard.hub.domain.garden.findings.model import Finding, FindingFact, FindingPage
+from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetRaw,
     GardenRunService,
     RunDeliveries,
     RunIdentity,
 )
-from blizzard.hub.domain.work import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 
 pytestmark = pytest.mark.unit
 

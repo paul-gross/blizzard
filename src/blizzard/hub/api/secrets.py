@@ -22,7 +22,7 @@ from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.config.changes import RecordRef
-from blizzard.hub.domain.secrets import (
+from blizzard.hub.domain.config.secrets import (
     SecretAlreadyExists,
     SecretMetadata,
     SecretName,

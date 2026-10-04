@@ -17,9 +17,9 @@ from sqlalchemy import func, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import HUB_EXEC_SLOT_PREFIX, Id
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

@@ -14,8 +14,8 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral
+from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component

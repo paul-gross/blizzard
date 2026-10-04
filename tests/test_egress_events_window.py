@@ -8,11 +8,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact
-from blizzard.hub.domain.egress.event_rows import ExportedEventsEntry
-from blizzard.hub.domain.egress.events_window import position_of, take
-from blizzard.hub.domain.egress.repository import EventsPosition
-from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, events_position_text
+from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
+from blizzard.hub.domain.observability.egress.event_rows import ExportedEventsEntry
+from blizzard.hub.domain.observability.egress.events_window import position_of, take
+from blizzard.hub.domain.observability.egress.repository import EventsPosition
+from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, events_position_text
 
 pytestmark = pytest.mark.unit
 

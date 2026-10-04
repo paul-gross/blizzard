@@ -14,9 +14,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
-from blizzard.hub.domain.finding_bucket import FindingBucket
-from blizzard.hub.domain.findings import EXIT_KINDS, Finding
-from blizzard.hub.domain.garden_delivery import (
+from blizzard.hub.domain.garden.delivery.validation import (
     CommitResolution,
     CommitResolver,
     GardenDeliveryRejected,
@@ -28,7 +26,9 @@ from blizzard.hub.domain.garden_delivery import (
     parse_proposals,
     validate_delivery,
 )
-from blizzard.hub.domain.run_context import RunContext
+from blizzard.hub.domain.garden.findings.bucket import FindingBucket
+from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, Finding
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 from blizzard.wire.garden_proposal import GardenProposalCandidate
 

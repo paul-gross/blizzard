@@ -17,9 +17,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
-from blizzard.hub.domain.graph import Graph, GraphDoc, GraphSummary
-from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.work import ChunkFacts, MigrationFact, MigrationSource, TransitionFact
+from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationFact, MigrationSource, TransitionFact
+from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphSummary
 from blizzard.hub.store import schema as s
 from tests.support import build_hub
 

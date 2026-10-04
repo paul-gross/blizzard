@@ -60,14 +60,8 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
-from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.delivery_read import DeliveryTrace
-from blizzard.hub.domain.graph import Edge, Graph, Node
-from blizzard.hub.domain.secrets import IHubKeyProvider
-from blizzard.hub.domain.transcripts import TranscriptCaps
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
+from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     HubWorkItem,
@@ -75,6 +69,12 @@ from blizzard.hub.domain.work import (
     WorkItemAuthor,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.secrets import IHubKeyProvider
+from blizzard.hub.domain.graph.model import Edge, Graph, Node
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,

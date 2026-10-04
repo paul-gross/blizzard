@@ -27,40 +27,44 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunks.work_refs import resolve_live_holders
-from blizzard.hub.domain.decisions import NotEscalated
-from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
-from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_prerequisites, derive_chunk_neighborhood
-from blizzard.hub.domain.detach import NotRouted
-from blizzard.hub.domain.edit import (
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
+from blizzard.hub.domain.chunk.dependencies import (
+    ChunkNeighbor,
+    derive_blocked_prerequisites,
+    derive_chunk_neighborhood,
+)
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import resolve_live_holders
+from blizzard.hub.domain.execution.decisions import NotEscalated
+from blizzard.hub.domain.execution.detach import NotRouted
+from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
+from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected, validate_delivery
+from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
+from blizzard.hub.domain.garden.review.validation import (
+    ReviewFindingsRejected,
+    parse_review_finding_delta,
+    validate_review_findings,
+)
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable
+from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
     ChunkNotEditable,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
-from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
-from blizzard.hub.domain.garden_delivery_materialize import DeliveryOutcome
-from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
-from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.pause import ChunkNotPausable
-from blizzard.hub.domain.restart import (
+from blizzard.hub.domain.operations.pause import ChunkNotPausable
+from blizzard.hub.domain.operations.restart import (
     ChunkNotRestartable,
     RestartCurrentNodeUnknown,
     RestartGraphPinChanged,
     RestartNodeUnknown,
 )
-from blizzard.hub.domain.review_findings import (
-    ReviewFindingsRejected,
-    parse_review_finding_delta,
-    validate_review_findings,
-)
-from blizzard.hub.domain.review_findings_materialize import ReviewFindingsOutcome
-from blizzard.hub.domain.stop import ChunkNotStoppable
-from blizzard.hub.domain.work import Chunk, ChunkFacts, FleetSummary, WorkRef
+from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,

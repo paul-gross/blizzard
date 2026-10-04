@@ -11,14 +11,14 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.dependencies import (
+from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
     ChunkNeighborhood,
     derive_blocked_markings,
     derive_blocked_prerequisites,
     derive_chunk_neighborhood,
 )
-from blizzard.hub.domain.work import DependencyEdge
+from blizzard.hub.domain.chunk.model import DependencyEdge
 
 pytestmark = pytest.mark.unit
 

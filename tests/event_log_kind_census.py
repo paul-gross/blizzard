@@ -36,33 +36,33 @@ Disposition = Recorded | Projected
 
 #: One entry per :data:`~blizzard.foundation.event_log.EventLogKind` member.
 EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
-    "needs-human": Projected("hub/domain/work.py:EventFeed._projected", "critical"),
+    "needs-human": Projected("hub/domain/chunk/model.py:EventFeed._projected", "critical"),
     "worker-lost": Recorded("runner/loop/attempt.py:Attempt.fail", "critical"),
     "owner-unresolvable": Recorded("runner/loop/attempt.py:Attempt.escalate_owner_unresolvable", "critical"),
     "no-acceptable-harness": Recorded("runner/loop/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
     "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
     "attempt-failed": Recorded("runner/loop/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/loop/outbound.py:OutboundFacts.command_failed", "warning"),
-    "work-item-close-failed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "warning"),
+    "work-item-close-failed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.sweep", "warning"),
     "transcript-truncated": Recorded("runner/loop/outbound.py:OutboundFacts.transcript_truncated", "warning"),
     "transcript-sidechain-dropped": Recorded(
         "runner/loop/transcript_pump.py:TranscriptPump._warn_sidechains_dropped", "warning"
     ),
     "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/loop/attempt.py:Attempt.fail", "info"),
-    "work-item-closed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "info"),
+    "work-item-closed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.sweep", "info"),
     "trace-export-failed": Recorded(
-        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
         "warning",
         ("runner/domain/tracing/sweep.py:LeaseTraceSweep._failed",),
     ),
     "trace-export-recovered": Recorded(
-        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
         "info",
         ("runner/domain/tracing/sweep.py:LeaseTraceSweep._recovered",),
     ),
     "trace-window-skipped": Recorded(
-        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
         "warning",
         ("runner/domain/tracing/sweep.py:LeaseTraceSweep._jump",),
     ),
@@ -71,8 +71,8 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
         "warning",
         ("runner/domain/tracing/sweep.py:announce_rejected_tracing",),
     ),
-    "egress-write-failed": Recorded("hub/domain/egress/sweep.py:EgressSweep._failed", "warning"),
-    "egress-write-recovered": Recorded("hub/domain/egress/sweep.py:EgressSweep._recovered", "info"),
+    "egress-write-failed": Recorded("hub/domain/observability/egress/sweep.py:EgressSweep._failed", "warning"),
+    "egress-write-recovered": Recorded("hub/domain/observability/egress/sweep.py:EgressSweep._recovered", "info"),
     "egress-config-rejected": Recorded("hub/app.py:_announce_rejected_egress", "warning"),
-    "egress-cursor-reset": Recorded("hub/domain/egress/reset.py:EgressReset.reset", "info"),
+    "egress-cursor-reset": Recorded("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
 }

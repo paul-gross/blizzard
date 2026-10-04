@@ -12,7 +12,7 @@ from datetime import datetime
 from sqlalchemy import ColumnElement, and_, desc, exists, func, insert, or_, select
 
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.findings import (
+from blizzard.hub.domain.garden.findings.model import (
     FACT_KINDS,
     LIVE_KINDS,
     FactEntry,
@@ -25,7 +25,7 @@ from blizzard.hub.domain.findings import (
     UnknownFactKindError,
     derive_liveness,
 )
-from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 

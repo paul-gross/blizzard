@@ -60,7 +60,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
+from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.store import schema as runner_schema

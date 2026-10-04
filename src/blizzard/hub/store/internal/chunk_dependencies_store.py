@@ -15,9 +15,9 @@ from sqlalchemy import Connection, select, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import DEPENDENCY_EDGE_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.work import DependencyEdge
+from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
@@ -116,7 +116,7 @@ class ChunkDependenciesStore:
     ) -> DependencyEdge | None:
         """Read-then-write on the same connection, so there is no window between the
         two; see
-        :meth:`~blizzard.hub.domain.chunks.dependencies.IWriteChunkDependenciesRepository.release`."""
+        :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IWriteChunkDependenciesRepository.release`."""
         with self._store.write("release") as conn:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
             if row is None:

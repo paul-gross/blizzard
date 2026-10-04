@@ -15,7 +15,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.secrets import (
+from blizzard.hub.domain.config.secrets import (
     IResealSecretRepository,
     ISealedSecretRepository,
     IWriteSecretRepository,

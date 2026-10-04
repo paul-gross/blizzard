@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.tracing.facts import (
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
     TracedChunkCompletion,
     TracedChunkStop,
@@ -19,9 +20,8 @@ from blizzard.hub.domain.tracing.facts import (
     TracedRestart,
     TracedRouteRelease,
 )
-from blizzard.hub.domain.tracing.position import position_at
-from blizzard.hub.domain.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.observability.tracing.position import position_at
+from blizzard.hub.domain.observability.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

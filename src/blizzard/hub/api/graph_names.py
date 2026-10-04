@@ -8,7 +8,7 @@ from datetime import datetime
 
 from fastapi import HTTPException, status
 
-from blizzard.hub.domain.graph import Graph, GraphSummary, IReadGraphRepository
+from blizzard.hub.domain.graph.model import Graph, GraphSummary, IReadGraphRepository
 
 
 def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:

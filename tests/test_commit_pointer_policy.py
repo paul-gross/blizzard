@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.commit_pointer import CommitPointerPolicy
+from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
 from blizzard.wire.completion import SubmittedArtifact
 
 pytestmark = pytest.mark.unit

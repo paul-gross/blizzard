@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.work import WorkItemAuthorKind, WorkItemMaterializationOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import WorkItemAuthorKind, WorkItemMaterializationOutcome, WorkRef
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub

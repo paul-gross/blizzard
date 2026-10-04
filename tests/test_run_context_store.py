@@ -13,8 +13,8 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.run_context import RunContext
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

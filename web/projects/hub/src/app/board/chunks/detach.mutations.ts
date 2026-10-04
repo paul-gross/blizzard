@@ -7,7 +7,7 @@ import { chunkDetachMutationKey } from '../../mutation-keys';
 /** Forcibly detach a chunk from its runner — the board's counterpart of
  * `blizzard hub detach`. Not requeue: it writes no supersession fact and
  * bumps no epoch, so a `needs_human` chunk detached this way still derives
- * `needs_human` (`src/blizzard/hub/domain/detach.py`). */
+ * `needs_human` (`src/blizzard/hub/domain/execution/detach.py`). */
 export interface DetachVars {
   readonly chunkId: string;
 }

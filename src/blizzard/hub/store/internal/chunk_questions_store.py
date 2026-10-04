@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
-from blizzard.hub.domain.work import AnswerOutcome, NodeQuestion
+from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row

@@ -15,11 +15,11 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli.egress import StatusView
 from blizzard.hub.config import EgressConfig
-from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
-from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.egress.event_rows import derivation_id
-from blizzard.hub.domain.egress.repository import EventsPosition
-from blizzard.hub.domain.transcripts import TranscriptSlice
+from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.egress.event_rows import derivation_id
+from blizzard.hub.domain.observability.egress.repository import EventsPosition
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore

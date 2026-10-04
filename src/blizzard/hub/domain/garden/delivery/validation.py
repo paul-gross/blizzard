@@ -1,0 +1,321 @@
+"""Delivery validation — the hub-executed delivery node's shape
+check, before anything is written; the check itself is specified by
+blizzard-product:/delivered/garden/machinery.md §Delivery. Pure functions over already-loaded
+objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
+`garden_delivery_materialize.py`'s."""
+
+from __future__ import annotations
+
+import functools
+import re
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from pydantic import TypeAdapter, ValidationError
+
+from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.roles import dto
+from blizzard.hub.domain.garden.findings.bucket import FindingBucket
+from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp
+from blizzard.wire.garden_proposal import GardenProposalCandidate
+
+# Lowercase hex, 7-40 characters — a well-formed commit sha's shape. Says nothing about
+# whether the commit actually exists; that is `CommitResolver`'s question.
+_COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+_PROPOSALS_ADAPTER: TypeAdapter[list[GardenProposalCandidate]] = TypeAdapter(list[GardenProposalCandidate])
+
+
+class GardenDeliveryRejected(Exception):
+    """A delivered artifact failed validation. This exception's own message is the
+    operator-legible reason the graph attaches to its bounce — never a raw pydantic
+    error, never a stack of causes a person has to untangle."""
+
+
+# Every finding known to this routine, live or gone, minus an exited one:
+# keyed by finding id, valued by that finding's own recorded scope slug.
+LiveFindings = Mapping[str, str]
+
+
+# The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
+# `CommitResolver` to return it costs no extra forge round trip.
+@dto
+@dataclass(frozen=True)
+class CommitResolution:
+    exists: bool
+    authored_at: datetime | None = None
+
+
+# Resolves `(repo, commit_sha)`: a :class:`CommitResolution` when `repo` is addressable,
+# `None` when it is not, degrading that commit to a well-formedness check.
+CommitResolver = Callable[[str, str], CommitResolution | None]
+
+
+@dto
+@dataclass(frozen=True)
+class ValidatedDelivery:
+    """What a passing :func:`validate_delivery` hands the next phase: the run it was
+    delivered under and the parsed, checked deltas and proposal candidates to build a
+    `DeliveryPlan` from — nothing here is durable yet (machinery.md §Delivery)."""
+
+    run: RunContext
+    deltas: list[FindingDelta]
+    proposals: list[GardenProposalCandidate]
+    proposal_sources: list[str] = field(default_factory=list)  # proposals[i]'s own artifact name, positionally
+    #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
+    #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
+    introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
+    #: Every currently-`delivered` finding, valued by its closer's actor, or `None`.
+    delivered_findings: dict[str, str | None] = field(default_factory=dict)
+
+
+def parse_delta(artifact_name: str, raw: str) -> FindingDelta:
+    """Parse `raw` as JSON and validate it against :class:`FindingDelta`. Both a JSON
+    syntax failure and a shape mismatch surface as pydantic `ValidationError` from
+    `model_validate_json` and become one :class:`GardenDeliveryRejected`, naming
+    `artifact_name` rather than dumping the raw pydantic error."""
+    try:
+        return FindingDelta.model_validate_json(raw)
+    except ValidationError as exc:
+        raise GardenDeliveryRejected(
+            f"artifact {artifact_name!r} does not match the finding-delta shape: {_summarize(exc)}"
+        ) from exc
+
+
+def parse_proposals(artifact_name: str, raw: str) -> list[GardenProposalCandidate]:
+    """Parse `raw` as JSON and validate it against `list[GardenProposalCandidate]` —
+    the shape of a `--proposals` artifact. See :func:`parse_delta` for the error
+    contract."""
+    try:
+        return _PROPOSALS_ADAPTER.validate_json(raw)
+    except ValidationError as exc:
+        raise GardenDeliveryRejected(
+            f"artifact {artifact_name!r} does not match the garden-proposal-candidate shape: {_summarize(exc)}"
+        ) from exc
+
+
+def is_finding_id_shaped(value: str) -> bool:
+    """Whether `value` parses as a well-formed `fin_<ULID>` id — the shape rule a
+    proposal's `findings` entry is discriminated on: true resolves against
+    `live_findings` exactly as before this submission-local `ref` existed; false
+    resolves against a `ref` an `add` op in this same delivery carries. Shared with
+    `garden_delivery_materialize` so the discrimination is asked once."""
+    parsed = Id.parse(value)
+    return parsed is not None and parsed.has_prefix(FINDING_PREFIX)
+
+
+def single_repo_of(delta: FindingDelta) -> str | None:
+    """The one repository `delta.revisions` names, or `None` if it names zero or several
+    — `introduced` carries no repository of its own, so this is the sole case its commit
+    resolves against. Shared with `garden_delivery_materialize` so the
+    rule is asked once, not reimplemented and left to silently diverge."""
+    return next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
+
+
+def check_delta(
+    delta: FindingDelta,
+    *,
+    run: RunContext,
+    live_findings: LiveFindings,
+    exited_ids: frozenset[str] = frozenset(),
+    resolve_commit: CommitResolver | None = None,
+) -> dict[tuple[str, str], datetime | None]:
+    """Validate one already-parsed delta against `run` and `live_findings`, raising
+    :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
+    every transformation's id, one op per id, and a `gone` op's non-empty note. `exited_ids`
+    only distinguishes an exited id from an unknown one in the message. Returns every
+    `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
+    if delta.scope != run.scope_slug:
+        raise GardenDeliveryRejected(
+            f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}"
+        )
+    for repo, sha in delta.revisions.items():
+        _resolve_commit(repo, sha, resolve_commit)
+
+    introduced_at: dict[tuple[str, str], datetime | None] = {}
+    single_repo = single_repo_of(delta)
+    seen_ids: set[str] = set()
+    for op in delta.findings:
+        if isinstance(op, AddFindingOp):
+            if op.ref is not None and is_finding_id_shaped(op.ref):
+                # Otherwise the shape rule a proposal's citation is discriminated on
+                # could be gamed into rebinding an existing finding id.
+                raise GardenDeliveryRejected(
+                    f"add op ref {op.ref!r} is shaped like a finding id and cannot be used as a submission-local ref"
+                )
+            if op.introduced is not None:
+                # `introduced` names no repository of its own, so it resolves only against
+                # a sole declared one; zero or several leave which one ambiguous.
+                if single_repo is not None:
+                    resolution = _resolve_commit(single_repo, op.introduced, resolve_commit)
+                    introduced_at[(single_repo, op.introduced)] = resolution.authored_at if resolution else None
+                else:
+                    _check_commit_wellformed(op.introduced, context="a finding addition's introduced commit")
+            continue
+        _check_known_id(op.id, run=run, live_findings=live_findings, scope=delta.scope, exited_ids=exited_ids)
+        if op.id in seen_ids:
+            # Two ops naming one finding could durably write contradictory facts, an
+            # `observed` and a `resolved` both landing on the same record.
+            raise GardenDeliveryRejected(f"finding {op.id!r} is named by more than one op in this delta")
+        seen_ids.add(op.id)
+        if isinstance(op, GoneFindingOp) and not op.note.strip():
+            raise GardenDeliveryRejected(f"finding {op.id!r}'s gone fact must carry a non-empty note")
+    return introduced_at
+
+
+def check_add_refs(deltas: Sequence[FindingDelta]) -> frozenset[str]:
+    """Every `ref` an `add` op carries across `deltas` — what :func:`check_proposal`
+    resolves a non-`fin_` citation against — raising :class:`GardenDeliveryRejected` if
+    one is carried by more than one op, the same way :func:`check_proposal_refs` already
+    refuses a duplicated proposal ref."""
+    seen: set[str] = set()
+    for delta in deltas:
+        for op in delta.findings:
+            if isinstance(op, AddFindingOp) and op.ref is not None:
+                if op.ref in seen:
+                    raise GardenDeliveryRejected(f"add op ref {op.ref!r} is carried more than once in this delivery")
+                seen.add(op.ref)
+    return frozenset(seen)
+
+
+def check_proposal(
+    proposal: GardenProposalCandidate,
+    *,
+    run: RunContext,
+    live_findings: LiveFindings,
+    exited_ids: frozenset[str] = frozenset(),
+    known_refs: frozenset[str] = frozenset(),
+) -> None:
+    """Validate one already-parsed proposal candidate. Each entry in `proposal.findings`
+    is either a `fin_<ULID>` id live on `run.routine_name` or a `ref` an `add` op in this
+    same delivery carries, checked against `known_refs`. An entry repeated within the same
+    proposal is refused too — `garden_proposal_findings`'s own primary key can carry a
+    finding only once per proposal."""
+    seen: set[str] = set()
+    for entry in proposal.findings:
+        if entry in seen:
+            raise GardenDeliveryRejected(f"proposal {proposal.ref!r} cites {entry!r} more than once")
+        seen.add(entry)
+        if is_finding_id_shaped(entry):
+            _check_known_id(entry, run=run, live_findings=live_findings, scope=None, exited_ids=exited_ids)
+        elif entry not in known_refs:
+            raise GardenDeliveryRejected(
+                f"proposal cites {entry!r}, which is neither a live finding id nor a ref carried by an add op "
+                "in this delivery's own deltas"
+            )
+
+
+def check_proposal_refs(artifact_name: str, proposals: Sequence[GardenProposalCandidate]) -> None:
+    """Validate that one artifact's candidates carry distinct `ref`s. A delivered
+    proposal is identified by its source artifact plus its submission-local `ref`, so an
+    artifact naming one twice says two different proposals are the same one — rejected
+    here as a legible bounce rather than left to collide at insert. Two *different*
+    artifacts reusing a `ref` name unrelated proposals and are fine."""
+    seen: set[str] = set()
+    for proposal in proposals:
+        if proposal.ref in seen:
+            raise GardenDeliveryRejected(
+                f"artifact {artifact_name!r} carries the proposal ref {proposal.ref!r} more than once"
+            )
+        seen.add(proposal.ref)
+
+
+def validate_delivery(
+    *,
+    run: RunContext,
+    delta_artifacts: Mapping[str, str],
+    proposal_artifacts: Mapping[str, str],
+    bucket: FindingBucket,
+    resolve_commit: CommitResolver | None = None,
+) -> ValidatedDelivery:
+    """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` are
+    artifact-name → raw-JSON-text maps a route handler holds before parsing.
+    `bucket` is the run's :class:`FindingBucket`: what it may cite. Raises :class:`GardenDeliveryRejected` on the
+    first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
+    live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
+    exited_ids = bucket.exited_ids
+    delivered_findings = {f.finding_id: f.actor for f in bucket.citable if f.state == "delivered"}
+    deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
+    proposals: list[GardenProposalCandidate] = []
+    proposal_sources: list[str] = []
+    for name, raw in proposal_artifacts.items():
+        candidates = parse_proposals(name, raw)
+        check_proposal_refs(name, candidates)
+        proposals.extend(candidates)
+        proposal_sources.extend(name for _ in candidates)
+
+    if resolve_commit is not None:
+        # Memoize per delivery: many findings sharing one `introduced` commit must not
+        # spend the fleet-wide hub-exec slot twice. Built fresh here, so never stale.
+        resolve_commit = functools.lru_cache(maxsize=None)(resolve_commit)
+
+    introduced_at: dict[tuple[str, str], datetime | None] = {}
+    for delta in deltas:
+        introduced_at.update(
+            check_delta(
+                delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolve_commit=resolve_commit
+            )
+        )
+    known_refs = check_add_refs(deltas)
+    for proposal in proposals:
+        check_proposal(proposal, run=run, live_findings=live_findings, exited_ids=exited_ids, known_refs=known_refs)
+
+    return ValidatedDelivery(
+        run=run,
+        deltas=deltas,
+        proposals=proposals,
+        proposal_sources=proposal_sources,
+        introduced_at=introduced_at,
+        delivered_findings=delivered_findings,
+    )
+
+
+def _check_known_id(
+    finding_id: str,
+    *,
+    run: RunContext,
+    live_findings: LiveFindings,
+    scope: str | None,
+    exited_ids: frozenset[str] = frozenset(),
+) -> None:
+    if not is_finding_id_shaped(finding_id):
+        raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {FINDING_PREFIX}_<ULID> id")
+    live_scope = live_findings.get(finding_id)
+    if live_scope is None:
+        if finding_id in exited_ids:
+            raise GardenDeliveryRejected(
+                f"finding {finding_id!r} has been exited on routine {run.routine_name!r} and cannot be transformed "
+                "by a run — only a person's reopen can revive it"
+            )
+        raise GardenDeliveryRejected(f"finding {finding_id!r} is not live on routine {run.routine_name!r}")
+    if scope is not None and live_scope != scope:
+        raise GardenDeliveryRejected(
+            f"finding {finding_id!r} is outside the declared scope {scope!r} (its own scope is {live_scope!r})"
+        )
+
+
+def _check_commit_wellformed(sha: str, *, context: str) -> None:
+    if not _COMMIT_RE.fullmatch(sha):
+        raise GardenDeliveryRejected(f"commit {sha!r} ({context}) is not a well-formed commit sha")
+
+
+def _resolve_commit(repo: str, sha: str, resolver: CommitResolver | None) -> CommitResolution | None:
+    _check_commit_wellformed(sha, context=f"repository {repo!r}")
+    if resolver is None:
+        return None
+    resolution = resolver(repo, sha)
+    if resolution is not None and not resolution.exists:
+        raise GardenDeliveryRejected(f"commit {sha!r} for repository {repo!r} does not resolve")
+    return resolution
+
+
+def _summarize(exc: ValidationError) -> str:
+    """A short, operator-legible rendering of `exc` — location and message per error,
+    never pydantic's own multi-line `str()` with its "further information" links."""
+    parts = []
+    for error in exc.errors():
+        loc = ".".join(str(part) for part in error["loc"]) or "<root>"
+        parts.append(f"{loc}: {error['msg']}")
+    return "; ".join(parts)

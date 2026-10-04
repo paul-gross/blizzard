@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.tracing.facts import TracedMigration, TracedRestart
-from blizzard.hub.domain.tracing.position import movement_arrivals, position_at
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.observability.tracing.facts import TracedMigration, TracedRestart
+from blizzard.hub.domain.observability.tracing.position import movement_arrivals, position_at
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit

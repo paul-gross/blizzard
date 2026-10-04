@@ -11,7 +11,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
-from blizzard.hub.domain.secrets import (
+from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
     ISealedSecretRepository,
     ISecretCatalog,

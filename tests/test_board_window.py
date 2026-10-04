@@ -16,8 +16,8 @@ from sqlalchemy import insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.api.chunks import BOARD_DONE_WINDOW
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, chunk_stores, count_queries, seed_graph
 

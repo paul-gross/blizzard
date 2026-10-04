@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, chunk_stores, ingest, report_lease
 

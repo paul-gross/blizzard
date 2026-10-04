@@ -16,10 +16,10 @@ from dataclasses import dataclass
 
 from sqlalchemy import Connection
 
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.registry import RunnerRegistration
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DependencyEdge
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore

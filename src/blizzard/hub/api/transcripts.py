@@ -17,7 +17,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.transcripts import (
+from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     SegmentSummary,
     TranscriptIngestResult,

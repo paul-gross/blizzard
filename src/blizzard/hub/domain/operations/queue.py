@@ -1,0 +1,440 @@
+"""Queue-shaping domain — ``ready``/``not_ready`` reordering and grouping.
+
+Order derives from appended position facts; grouping folds work refs into the survivor
+and discards the rest as ephemeral. Neither touches an acquired chunk, but their scopes
+differ: grouping needs only an unheld chunk, while reordering ranks the
+``ready`` queue and ``not_ready`` list independently (``bzh:ranking-is-per-list``)."""
+
+from __future__ import annotations
+
+import math
+
+# The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
+import threading
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
+from blizzard.hub.domain.chunk.dependencies import plan_fold, would_close_a_cycle
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
+from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.execution.eligibility import EligibilityCheck
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.runners.registration import RunnerCapability
+
+_log = get_logger("blizzard.hub.queue")
+
+# Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor.
+FOLD_ACTOR = "fold"
+
+
+class QueueList(Enum):
+    """Which of the two independently-ranked lists a queue op targets
+    (``bzh:ranking-is-per-list``) — never mixed into one order."""
+
+    READY = "ready"
+    NOT_READY = "not_ready"
+
+
+class QueueMatchPolicy(Enum):
+    """The matched fleet peek's hold-or-pass-over policy — applied to the
+    capability-eligibility and blocked-dependency dimensions together, never one alone.
+    :meth:`of` never raises: an unrecognized wire value reads as :attr:`PASS_OVER`
+    (``docs/versioning.md``'s round-trip-the-unrecognized rule)."""
+
+    HOLD = "hold"
+    PASS_OVER = "pass-over"
+
+    @classmethod
+    def of(cls, value: str) -> QueueMatchPolicy:
+        return cls.HOLD if value == cls.HOLD.value else cls.PASS_OVER
+
+
+@dto
+@dataclass(frozen=True)
+class MatchedEntry:
+    """The one ready chunk :func:`select_matched_entry` returns, at its own position in
+    the unmutated ready order — the order itself is never reshaped, only scanned
+    past."""
+
+    chunk: Chunk
+    position: int
+
+
+def _capability_ineligible(
+    chunk: Chunk, graph: Graph, facts: ChunkFacts | None, capabilities: Sequence[RunnerCapability]
+) -> bool:
+    """Whether ``capabilities`` cannot work ``chunk``'s current node. An empty
+    snapshot applies no capability filter; pinned by
+    ``test_no_capabilities_asserted_applies_no_capability_filter``."""
+    if not capabilities:
+        return False
+    node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
+    node = graph.node_by_id(node_id)
+    if node is None:  # pragma: no cover - a pinned graph always resolves its own node
+        return True
+    return not EligibilityCheck(chunk, graph, node, capabilities).eligible
+
+
+def select_matched_entry(
+    chunks: Sequence[Chunk],
+    *,
+    graphs: Mapping[str, Graph],
+    facts: Mapping[str, ChunkFacts],
+    capabilities: Sequence[RunnerCapability],
+    blocked: Mapping[str, list[str]],
+    policy: QueueMatchPolicy,
+) -> MatchedEntry | None:
+    """The matched peek's own selection: the first entry in ``chunks``'s order the caller
+    can both work (capability-eligible) and claim (not dependency-blocked). Under
+    :attr:`QueueMatchPolicy.HOLD` only the head is examined; :attr:`PASS_OVER` scans the
+    whole order."""
+    for position, chunk in enumerate(chunks):
+        graph = graphs.get(chunk.graph_id)
+        if graph is None:  # pragma: no cover - a pinned graph always resolves
+            unusable = True
+        else:
+            unusable = chunk.chunk_id in blocked or _capability_ineligible(
+                chunk, graph, facts.get(chunk.chunk_id), capabilities
+            )
+        if not unusable:
+            return MatchedEntry(chunk=chunk, position=position)
+        if policy is QueueMatchPolicy.HOLD:
+            return None
+    return None
+
+
+class ChunkNotGroupable(ValueError):
+    """A group op named a chunk that is not free to be folded away — outside
+    :data:`~blizzard.foundation.chunk_status.PRE_CLAIM_STATUSES`, the pre-claim window."""
+
+    def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
+        super().__init__(
+            f"chunk {chunk_id} is {status.value} — grouping needs a chunk at "
+            f"{' or '.join(sorted(s.value for s in PRE_CLAIM_STATUSES))}: "
+            "no runner holding it, and no human hold or terminal on it either"
+        )
+        self.chunk_id = chunk_id
+        self.status = status
+
+
+class FoldWouldCloseCycle(Exception):
+    """Folding ``merge_ids`` into ``survivor_id`` would close a cycle in the resulting
+    standing dependency graph — refused before any write, a set-level
+    question over the whole fold rather than per edge."""
+
+    def __init__(self, survivor_id: str, folded_chunk_ids: list[str]) -> None:
+        super().__init__(
+            f"folding {', '.join(folded_chunk_ids)} into {survivor_id} would close a cycle "
+            "in the standing dependency graph"
+        )
+        self.survivor_id = survivor_id
+        self.folded_chunk_ids = folded_chunk_ids
+
+
+def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
+    """``QueueService.page``'s whole cursor format: an effective-position/chunk_id pair."""
+    parts = decode_cursor(cursor)
+    if (
+        len(parts) != 2
+        or isinstance(parts[0], bool)
+        or not isinstance(parts[0], int | float)
+        or not isinstance(parts[1], str)
+    ):
+        raise MalformedCursor(cursor)
+    return float(parts[0]), parts[1]
+
+
+@dto
+@dataclass(frozen=True)
+class QueueEntry:
+    """One paged queue/backlog row — the chunk plus its absolute
+    0-based whole-list position, so drained pages read ``0…n-1`` like an unpaginated peek."""
+
+    chunk: Chunk
+    position: int
+
+
+@dto
+@dataclass(frozen=True)
+class QueuePage:
+    """A bounded, keyset-paginated page of :meth:`QueueService.page` —
+    ``next_cursor`` is ``None`` exactly when this page is the last one."""
+
+    entries: list[QueueEntry]
+    next_cursor: str | None
+
+
+class QueueService:
+    """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
+    hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
+
+    def __init__(self, *, queue: IWriteChunkQueueRepository, record: IReadChunkRecordRepository, clock: IClock) -> None:
+        self._queue = queue
+        self._record = record
+        self._clock = clock
+
+    def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
+        breaking a same-instant tie. ``statuses`` is the caller's own
+        already-derived live fleet statuses (``load_live_statuses()``), never re-derived here."""
+        candidates = self._candidates(list_, statuses=statuses)
+        positions, promoted_ats = self._ranking_facts(candidates)
+        return sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
+
+    def page(
+        self,
+        list_: QueueList,
+        *,
+        statuses: Mapping[str, ChunkStatus],
+        cursor: str | None = None,
+        limit: int,
+    ) -> QueuePage:
+        """``list_``'s chunks bounded and keyset-paginated; the
+        keyset applies over :meth:`ordered`'s already-materialized order, not a second
+        SQL read. ``position`` is each entry's absolute index in the whole list, so a
+        since-repositioned cursor chunk still resumes by key. ``cursor`` is a prior
+        :attr:`QueuePage.next_cursor`, else raising :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        candidates = self._candidates(list_, statuses=statuses)
+        positions, promoted_ats = self._ranking_facts(candidates)
+        keyed = sorted((self._effective_position(c, positions, promoted_ats), c.chunk_id, c) for c in candidates)
+        after = _decode_queue_cursor(cursor) if cursor is not None else None
+        entries: list[QueueEntry] = []
+        entry_keys: list[tuple[float, str]] = []
+        for index, (effective_position, chunk_id, chunk) in enumerate(keyed):
+            if after is not None and (effective_position, chunk_id) <= after:
+                continue
+            entries.append(QueueEntry(chunk=chunk, position=index))
+            entry_keys.append((effective_position, chunk_id))
+            if len(entries) == limit + 1:
+                break
+        page_entries = entries[:limit]
+        next_cursor = encode_cursor(*entry_keys[limit - 1]) if len(entries) > limit else None
+        return QueuePage(entries=page_entries, next_cursor=next_cursor)
+
+    def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """Ready chunks in queue order — ascending by effective position."""
+        return self.ordered(QueueList.READY, statuses=statuses)
+
+    def ordered_not_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """``not_ready`` chunks in backlog order — ascending by effective position."""
+        return self.ordered(QueueList.NOT_READY, statuses=statuses)
+
+    def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
+        """Idempotent whole-order replacement: one ascending explicit position fact per
+        chunk in ``ordered``, front to back, in one write transaction. Takes
+        already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``).
+        ``list_`` only selects which store write routes the positions (guarded for
+        ``not_ready``, see :meth:`_write_fn`) — the list itself is never read here."""
+        write = self._write_fn(list_)
+        write([(chunk.chunk_id, float(position)) for position, chunk in enumerate(ordered)], at=self._clock.now())
+        _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
+
+    def reposition(
+        self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]
+    ) -> None:
+        """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new
+        explicit position immediately after ``after`` (top when ``after is None``),
+        without restamping every other chunk. Bisection exhausting the
+        representable doubles renormalizes via :meth:`replace_order`; ``statuses`` is
+        the caller's own already-derived fleet statuses, reused as-is throughout."""
+        write = self._write_fn(list_)
+        candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
+        positions, promoted_ats = self._ranking_facts(candidates)
+        ordered = sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
+
+        if after is None:
+            new_position = self._effective_position(ordered[0], positions, promoted_ats) - 1.0 if ordered else 0.0
+        else:
+            after_index = next(i for i, c in enumerate(ordered) if c.chunk_id == after.chunk_id)
+            after_pos = self._effective_position(after, positions, promoted_ats)
+            if after_index == len(ordered) - 1:
+                new_position = after_pos + 1.0
+            else:
+                next_chunk = ordered[after_index + 1]
+                next_pos = self._effective_position(next_chunk, positions, promoted_ats)
+                if math.nextafter(after_pos, next_pos) >= next_pos:
+                    renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
+                    self.replace_order(list_, renormalized)
+                    positions, promoted_ats = self._ranking_facts(candidates)
+                    after_pos = self._effective_position(after, positions, promoted_ats)
+                    next_pos = self._effective_position(next_chunk, positions, promoted_ats)
+                new_position = (after_pos + next_pos) / 2
+
+        write([(chunk.chunk_id, new_position)], at=self._clock.now())
+        _log.info(
+            "queue chunk repositioned",
+            list=list_.value,
+            chunk_id=chunk.chunk_id,
+            after_chunk_id=after.chunk_id if after is not None else None,
+            position=new_position,
+        )
+
+    def _write_fn(self, list_: QueueList) -> Callable[..., None]:
+        """The one place :meth:`replace_order`/:meth:`reposition` pick which store write
+        routes a batch of positions — ``not_ready`` through the promoted-guarded
+        :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_backlog_positions`,
+        ``ready`` through
+        :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_queue_positions`."""
+        if list_ is QueueList.NOT_READY:
+            return self._queue.record_backlog_positions
+        return self._queue.record_queue_positions
+
+    def _candidates(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`
+        pick which of the two independently-ranked lists (``bzh:ranking-is-per-list``)
+        they read candidates from."""
+        if list_ is QueueList.READY:
+            return self._record.list_ready(statuses=statuses)
+        return self._record.list_not_ready(statuses=statuses)
+
+    def _ranking_facts(self, candidates: Sequence[Chunk]) -> tuple[dict[str, float], dict[str, datetime]]:
+        """The explicit positions and promotion instants of ``candidates`` alone — the
+        ranking inputs, read bounded by the candidate set (``bzh:live-set-read``)."""
+        chunk_ids = [c.chunk_id for c in candidates]
+        return self._queue.queue_positions(chunk_ids), self._queue.promoted_ats(chunk_ids)
+
+    @staticmethod
+    def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:
+        """A chunk's sort key: its newest explicit position, else its promotion instant,
+        else its mint instant. The fallback is a unix timestamp, so a chunk
+        minted long ago but promoted late still sorts at the tail rather than mid-queue.
+        """
+        explicit = positions.get(chunk.chunk_id)
+        if explicit is not None:
+            return explicit
+        promoted_at = promoted_ats.get(chunk.chunk_id)
+        return promoted_at.timestamp() if promoted_at is not None else chunk.minted_at.timestamp()
+
+
+@dto
+@dataclass(frozen=True)
+class GroupResult:
+    """A completed group: the survivor and the status it is left at.
+
+    The status rides along because grouping does not imply ``ready``: folding backlog
+    chunks yields a backlog survivor."""
+
+    survivor: Chunk
+    status: ChunkStatus
+    # The last ``chunk_grouped.id`` this call wrote; ``None`` when ``merge_ids`` resolved to zero targets.
+    grouped_id: int | None = None
+
+
+class GroupService:
+    """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk,
+    carrying each folded chunk's standing dependency edges onto the survivor."""
+
+    def __init__(
+        self,
+        *,
+        work_refs: IWriteChunkWorkRefsRepository,
+        dependencies: IWriteChunkDependenciesRepository,
+        exclusive: IChunkExclusiveWrites,
+        clock: IClock,
+        cycle_lock: threading.Lock,
+    ) -> None:
+        self._work_refs = work_refs
+        self._dependencies = dependencies
+        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
+        # CAS shares — the row lock over the survivor and every named merge id.
+        self._exclusive = exclusive
+        self._clock = clock
+        # The residual fleet-wide lock DependencyService's own cycle check also shares —
+        # closes the race a row lock over this fold's own chunks alone cannot.
+        self._cycle_lock = cycle_lock
+
+    def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
+        """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
+        and each folded chunk's standing dependency edges. Refused before any
+        write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
+        with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
+            return self._group_locked(handle, survivor_id, merge_ids)
+
+    def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:
+        # One read each for the survivor and every merge id; the checks below run
+        # against these maps in the same order the per-id reads did.
+        ids = [survivor_id, *merge_ids]
+        records = handle.records_for(ids)
+        facts = handle.facts_for(ids)
+        survivor, survivor_status = self._require_unacquired_chunk(records, facts, survivor_id)
+        targets = self._resolve_targets(records, facts, survivor_id, merge_ids)
+        folded_ids = [t.chunk_id for t in targets]
+
+        standing = handle.standing_edges()
+        plan = plan_fold(standing, survivor_id, folded_ids)
+        minted_pairs = [
+            (m.dependent_chunk_id, m.prerequisite_chunk_id) for cid in folded_ids for m in plan.mint_by_target[cid]
+        ]
+        if would_close_a_cycle(plan.remaining, minted_pairs):
+            raise FoldWouldCloseCycle(survivor_id, folded_ids)
+
+        now = self._clock.now()
+        for target in targets:
+            self._work_refs.add_work_refs_locked(handle, survivor_id, target.work_refs, at=now)
+
+        grouped_id: int | None = None
+        if targets:
+            fold_targets = [
+                FoldTarget(
+                    chunk_id=target.chunk_id,
+                    release=plan.release_by_target[target.chunk_id],
+                    mint=plan.mint_by_target[target.chunk_id],
+                )
+                for target in targets
+            ]
+            # One call, one transaction across every target — a target's
+            # own row can never commit ahead of a sibling's edge release/mint.
+            grouped_ids = self._dependencies.record_fold_locked(
+                handle, fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now
+            )
+            grouped_id = grouped_ids[targets[-1].chunk_id]
+        _log.info(
+            "chunks grouped",
+            survivor=survivor_id,
+            status=survivor_status.value,
+            merged=folded_ids,
+            count=len(targets),
+        )
+        merged = handle.record(survivor_id)
+        return GroupResult(
+            survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
+        )
+
+    def _resolve_targets(
+        self, records: dict[str, Chunk], facts: dict[str, ChunkFacts], survivor_id: str, merge_ids: list[str]
+    ) -> list[Chunk]:
+        seen: set[str] = set()
+        targets: list[Chunk] = []
+        for merge_id in merge_ids:
+            if merge_id == survivor_id or merge_id in seen:
+                continue  # self and duplicates are no-ops, not errors
+            seen.add(merge_id)
+            targets.append(self._require_unacquired_chunk(records, facts, merge_id)[0])
+        return targets
+
+    def _require_unacquired_chunk(
+        self, records: dict[str, Chunk], facts: dict[str, ChunkFacts], chunk_id: str
+    ) -> tuple[Chunk, ChunkStatus]:
+        chunk = records.get(chunk_id)
+        chunk_facts = facts.get(chunk_id)
+        if chunk is None or chunk_facts is None:
+            raise ChunkNotFound(chunk_id)
+        status = chunk_facts.status()
+        if status not in PRE_CLAIM_STATUSES:
+            raise ChunkNotGroupable(chunk_id, status)
+        return chunk, status

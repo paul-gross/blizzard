@@ -15,8 +15,8 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.fence import EpochAdmission
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.git_commits import DeclaredCommits

@@ -19,7 +19,7 @@ from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.tracing.attributes import RUNNER_ID
+from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID
 
 _log = get_logger("blizzard.hub.auth")
 

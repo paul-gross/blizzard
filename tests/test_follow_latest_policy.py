@@ -13,8 +13,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.domain.graph import FollowLatest
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.chunk.model import MigrationSource
+from blizzard.hub.domain.graph.model import FollowLatest
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}

@@ -10,9 +10,9 @@ from __future__ import annotations
 from typing import Protocol
 
 from blizzard.foundation.work_items import WorkItemPriority
-from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import HubWorkItem, WorkItemAuthor, WorkRef
-from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
 
 
 class WorkItemRefUnknownError(Exception):
@@ -41,7 +41,7 @@ class IWorkEditor(Protocol):
     ) -> CreatedWorkItem:
         """Allocate a fresh item at this source, open, and mint its resting chunk pinned
         to ``graph`` in the same transaction. Raises
-        :class:`~blizzard.hub.domain.ingest.IngestConflict` on an out-of-band pre-empt."""
+        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> HubWorkItem:

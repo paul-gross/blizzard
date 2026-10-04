@@ -14,10 +14,15 @@ from datetime import datetime
 
 from sqlalchemy import func, insert, select, update
 
-from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    PendingCloseIntent,
+    WorkItemCloseOutcome,
+    WorkItemMaterializationOutcome,
+    WorkRef,
+)
+from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (

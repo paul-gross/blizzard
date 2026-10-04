@@ -11,15 +11,15 @@ from typing import Any
 
 from sqlalchemy import Select, func, select
 
-from blizzard.hub.domain.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
-from blizzard.hub.domain.analytics.queries import (
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
+from blizzard.hub.domain.observability.analytics.queries import (
     EventPage,
     EventQueryCriteria,
     IReadAnalyticsEventQueries,
     KeyedCount,
     QueriedEvent,
 )
-from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

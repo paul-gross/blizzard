@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
-from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

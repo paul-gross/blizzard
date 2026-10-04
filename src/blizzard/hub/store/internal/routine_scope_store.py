@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.hub.domain.routines import IWriteRoutineScopeRepository
+from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import routine_scopes
 

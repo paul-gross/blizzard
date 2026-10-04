@@ -20,7 +20,7 @@ from sqlalchemy.dialects import sqlite
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_operational_store import _spend_by_node_stmt

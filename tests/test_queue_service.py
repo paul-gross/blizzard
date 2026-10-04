@@ -17,10 +17,10 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
-from blizzard.hub.domain.queue import QueueList, QueueService
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.operations.queue import QueueList, QueueService
 
 _NO_STATUSES: dict[str, ChunkStatus] = {}
 """The fake repo below pre-filters `ready`/`not_ready` itself, so `QueueService` never

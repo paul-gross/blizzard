@@ -10,10 +10,19 @@ from pydantic import ValidationError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.envelope import Arrival, Envelope, LatestArtifacts
-from blizzard.hub.domain.graph import Choice, Edge, Graph, GraphArtifact, Node, ProducesSpec, RotatePolicy, SessionDecl
-from blizzard.hub.domain.work import Chunk, ChunkFacts, RestartFact, TransitionFact, WorkRef
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RestartFact, TransitionFact, WorkRef
+from blizzard.hub.domain.execution.envelope import Arrival, Envelope, LatestArtifacts
+from blizzard.hub.domain.graph.model import (
+    Choice,
+    Edge,
+    Graph,
+    GraphArtifact,
+    Node,
+    ProducesSpec,
+    RotatePolicy,
+    SessionDecl,
+)
 from blizzard.wire.envelope import EnvelopeArtifact
 
 pytestmark = pytest.mark.unit

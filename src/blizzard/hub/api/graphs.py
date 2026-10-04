@@ -19,8 +19,8 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
-from blizzard.hub.domain.graph import Graph, GraphDoc, GraphParseError, Mints, Node
-from blizzard.hub.domain.graph_authoring import GraphValidationError
+from blizzard.hub.domain.graph.authoring import GraphValidationError
+from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
     GraphChoiceView,

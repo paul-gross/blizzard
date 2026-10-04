@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.graph import GraphArtifact, ProducesSpec
+from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from tests.support import build_hub
 

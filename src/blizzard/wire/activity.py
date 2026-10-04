@@ -2,7 +2,7 @@
 
 A bounded, merged read over the same fact-derived vocabulary a live ``chunk-changed`` /
 ``event-logged`` / ``runner-changed`` frame carries — shaped by
-:class:`blizzard.hub.domain.work.ActivityFeed`.
+:class:`blizzard.hub.domain.chunk.model.ActivityFeed`.
 """
 
 from __future__ import annotations

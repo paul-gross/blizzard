@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
-from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
-from blizzard.hub.domain.tracing.summary import summarize_step
+from blizzard.hub.domain.observability.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
+from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests import trace_fixtures as fx

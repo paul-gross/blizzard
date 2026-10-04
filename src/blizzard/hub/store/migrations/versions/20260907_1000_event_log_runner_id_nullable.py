@@ -24,7 +24,7 @@ _TABLE = "event_log"
 _HUB_RUNNER_ID = "hub"
 
 # The three hub-authored kinds — restated, not imported, from
-# ``blizzard.hub.domain.work_closure._EVENT_CLOSED``/``_EVENT_CLOSE_FAILED`` and
+# ``blizzard.hub.domain.work_items.closure._EVENT_CLOSED``/``_EVENT_CLOSE_FAILED`` and
 # ``blizzard.hub.delivery.hub_node._EVENT_UNROUTABLE_OUTCOME`` (``bzh:frozen-revisions``).
 # Matching on kind, not on the ``'hub'`` value alone, spares an operator-named runner
 # literally called "hub" from being nulled by this backfill.

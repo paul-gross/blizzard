@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryNameTaken,
     RepositorySecretUnavailable,
 )
+from blizzard.hub.domain.config.secrets import SecretName, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     ConfiguredWorkSource,
@@ -31,7 +32,6 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
 )
-from blizzard.hub.domain.secrets import SecretName, SecretReferenced
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore

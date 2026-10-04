@@ -17,9 +17,9 @@ import httpx
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.work import IReadWorkItemRepository
-from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.domain.chunk.model import IReadWorkItemRepository
+from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor

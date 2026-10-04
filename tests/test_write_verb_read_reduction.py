@@ -15,7 +15,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.models import Session
 from blizzard.hub.auth.sessions import IReadSessionRepository
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from tests.support import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user

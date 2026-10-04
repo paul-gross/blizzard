@@ -16,11 +16,11 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.artifacts import StoredArtifact
-from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
-from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import DecisionChoice, DocketEntry, GateDecision
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import DecisionChoice, DocketEntry, GateDecision
+from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -88,7 +88,7 @@ class ChunkDecisionsStore:
         )
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
-        """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for` —
+        """See :meth:`~blizzard.hub.domain.chunk.ports.decisions.IReadChunkDecisionsRepository.live_decisions_for` —
         set-based throughout, unlike :meth:`_decision_row`'s per-decision
         docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`.
         Newest-first per chunk, same "newest not-yet-transitioned" semantics as

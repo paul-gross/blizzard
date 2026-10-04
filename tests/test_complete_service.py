@@ -20,12 +20,12 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
-from blizzard.hub.domain.complete import CompleteService
-from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.operations.complete import CompleteService
 
 pytestmark = pytest.mark.unit
 

@@ -9,9 +9,9 @@ from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.finding_bucket import FindingBucketReader
-from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.run_context import RunContext
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.model import Finding
+from blizzard.hub.domain.garden.run_context import RunContext
 
 pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

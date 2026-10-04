@@ -20,7 +20,7 @@ from sqlalchemy.sql.dml import Update
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden_proposals import GardenProposalEdit, GardenProposalFindingAlreadyLinkedError
+from blizzard.hub.domain.garden.proposals.model import GardenProposalEdit, GardenProposalFindingAlreadyLinkedError
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore

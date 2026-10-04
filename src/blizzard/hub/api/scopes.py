@@ -16,7 +16,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.scopes import Scope, ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView
 
 router = APIRouter(prefix="/api", tags=["scopes"], dependencies=[Depends(reject_runner_principal)])

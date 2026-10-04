@@ -10,8 +10,8 @@ from sqlalchemy import create_engine
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, GraphDoc, GraphParseError, ProducesSpec
-from blizzard.hub.domain.graph_authoring import Reification
+from blizzard.hub.domain.graph.authoring import Reification
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, GraphDoc, GraphParseError, ProducesSpec
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 from blizzard.hub.store.internal.graph_store import GraphStore

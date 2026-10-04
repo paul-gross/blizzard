@@ -14,8 +14,8 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import Graph, IWriteGraphRepository
-from blizzard.hub.domain.graph_lifecycle import GraphLifecycleService
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from blizzard.hub.domain.graph.model import Graph, IWriteGraphRepository
 
 pytestmark = pytest.mark.unit
 

@@ -17,15 +17,15 @@ from sqlalchemy import select
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunks.fence import EpochAdmission
-from blizzard.hub.domain.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.work import (
+from blizzard.hub.domain.chunk.model import (
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemMaterializationOutcome,
     WorkRef,
     mint_chunk,
 )
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

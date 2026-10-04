@@ -3,7 +3,7 @@
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). The window
 itself is bound in SQL and the list is ordered by an explicit ``ORDER BY`` on
 ``chunks.minted_at`` (never incidental row order, ``bzh:sql-portable``); outcome
-derivation is left entirely to `src/blizzard/hub/domain/garden_run.py`, which reads the
+derivation is left entirely to `src/blizzard/hub/domain/garden/runs/history.py`, which reads the
 chunk's own facts through its own seams."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 
-from blizzard.hub.domain.garden_run import (
+from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetRaw,
     IReadGardenRunRepository,

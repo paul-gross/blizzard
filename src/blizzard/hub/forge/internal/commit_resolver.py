@@ -12,7 +12,7 @@ from datetime import datetime
 import httpx
 
 from blizzard.foundation.repo_ref import RepoRef
-from blizzard.hub.domain.garden_delivery import CommitResolution
+from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 
 
 class GitHubCommitResolver:
