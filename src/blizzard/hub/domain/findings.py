@@ -32,6 +32,10 @@ FACT_KINDS = frozenset(
 #: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one.
 EXIT_KINDS = frozenset({"resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"})
 
+#: The fact kinds whose being newest makes a finding live — the one home of the liveness mapping,
+#: shared by `derive_liveness` and the store's SQL prefilter.
+LIVE_KINDS = frozenset({"add", "observed", "reopened"})
+
 #: The ground itself changed — work landed, or a person confirmed non-reproduction.
 OUTFLOW_KINDS = frozenset({"resolved", "gone-confirmed"})
 
@@ -133,7 +137,7 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
     for fact in facts[1:]:
         if fact.recorded_at >= newest.recorded_at:  # a tie keeps the later-inserted fact
             newest = fact
-    if newest.kind in ("add", "observed", "reopened"):
+    if newest.kind in LIVE_KINDS:
         state = "live"
     elif newest.kind == "gone":
         state = "gone"
@@ -224,9 +228,9 @@ class IReadFindingRepository(Protocol):
     ) -> FindingPage:
         """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
         `list_across_routines`; `source` narrows to `"routine"` or
-        `"review"`, `None` reads both. Liveness is derived in Python after
-        the SQL read, so implementation tops up windows until `limit` matches or
-        exhaustion; `cursor` is a prior :attr:`FindingPage.next_cursor`."""
+        `"review"`, `None` reads both. Statements and rows read are set by the page, not by
+        how many findings have exited: `include_gone=False` drops non-live findings in the
+        query itself. `cursor` is a prior :attr:`FindingPage.next_cursor`."""
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
