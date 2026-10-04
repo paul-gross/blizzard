@@ -109,6 +109,30 @@ def test_a_replayed_ingest_is_idempotent_through_the_route(tmp_path: Path) -> No
     assert resp.json()["applied"] == []
 
 
+def test_ingest_accepts_a_record_with_and_without_spawn_cwd_and_no_read_returns_it(tmp_path: Path) -> None:
+    warn_hub = build_hub(tmp_path)
+    _register(warn_hub, runner_id="r1")
+    runner = _bearer(_enroll(warn_hub, "r1"))
+    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    chunk_id = _ingest_chunk(hub)
+    with_cwd = _record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0, segment_id="sg_1") | {"spawn_cwd": "/ws"}
+    without = _record(chunk_id, seq=2, turn_range_start=0, turn_range_end=0, segment_id="sg_2")
+
+    resp = hub.client.post(
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [with_cwd, without]}, headers=runner
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == [1, 2]
+    read = hub.client.get(f"/api/fleet/chunks/{chunk_id}/transcript-segments?node_id=nd_build&epoch=1", headers=runner)
+    assert read.status_code == 200, read.text
+    assert read.json()["turns"]
+    assert "spawn_cwd" not in read.text
+    operator = hub.client.get(f"/api/chunks/{chunk_id}/transcripts")
+    assert operator.status_code == 200, operator.text
+    assert "spawn_cwd" not in operator.text
+
+
 def test_ingest_is_refused_for_a_runner_that_does_not_own_the_batchs_runner_id(tmp_path: Path) -> None:
     warn_hub = build_hub(tmp_path)
     register = warn_hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"})

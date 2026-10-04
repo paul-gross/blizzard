@@ -90,6 +90,7 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
         process_start_time="1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+        spawn_cwd="/ws",
     )
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
@@ -233,6 +234,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
     assert (final.turn_range_start, final.turn_range_end) == (3, 2)  # empty — claims no new turns
     assert (final.normalizer_version, final.harness_version) == ("claude-code/1.2", "1.2.3")
     assert (final.model, final.effort) == ("claude-sonnet-5", "high")
+    assert final.spawn_cwd == "/ws"
     assert final.turns == []
     assert final.record_truncated is False
 

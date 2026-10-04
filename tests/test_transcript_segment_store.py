@@ -400,3 +400,17 @@ def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the
     store.update_still_rejected(record, byte_count=1200, reason="record_too_large", at=_NOW)
 
     assert store.runner_window_bytes("r1", since=_NOW) == 1200
+
+
+def test_spawn_cwd_round_trips_and_is_null_when_absent(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
+    with_cwd = _record(segment_id="sg_a", spawn_cwd="/ws")
+    without = _record(segment_id="sg_b")
+
+    for record in (with_cwd, without):
+        store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), codec="zlib", at=_NOW)
+
+    with engine.connect() as conn:
+        rows = {r.segment_id: r.spawn_cwd for r in conn.execute(select(s.transcript_segments))}
+    assert rows == {"sg_a": "/ws", "sg_b": None}

@@ -65,7 +65,13 @@ def _open_provisional_spawn_id(conn: Connection, lease_id: str, *, required: boo
 
 
 def _open_transcript_segment(
-    conn: Connection, *, lease_id: str, session: SessionReference, generation: int, at: datetime
+    conn: Connection,
+    *,
+    lease_id: str,
+    session: SessionReference,
+    generation: int,
+    at: datetime,
+    spawn_cwd: str | None,
 ) -> None:
     """Open this generation's transcript segment, carrying a resumed session's cursor
     forward and finalizing its predecessor — shared by :meth:`~LeaseLivenessStore.record_spawn`
@@ -121,6 +127,7 @@ def _open_transcript_segment(
             harness_version=None,
             model=context_row.resolved_model,
             effort=context_row.resolved_effort,
+            spawn_cwd=spawn_cwd,
             truncated_reason=None,
             shipping_stopped_reason=None,
             finalized_at=None,
@@ -242,6 +249,7 @@ class LeaseLivenessStore:
         session: SessionReference,
         harness_version: str | None = None,
         pgid: int | None = None,
+        spawn_cwd: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -273,7 +281,9 @@ class LeaseLivenessStore:
                 )
             )
             generation = _lease_generation(conn, lease_id)
-            _open_transcript_segment(conn, lease_id=lease_id, session=session, generation=generation, at=spawned_at)
+            _open_transcript_segment(
+                conn, lease_id=lease_id, session=session, generation=generation, at=spawned_at, spawn_cwd=spawn_cwd
+            )
         _log.info(
             "worker spawned",
             lease_id=lease_id,
@@ -317,6 +327,7 @@ class LeaseLivenessStore:
         session: SessionReference,
         identified_at: datetime,
         harness_version: str | None = None,
+        spawn_cwd: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             provisional_id = _open_provisional_spawn_id(conn, lease_id)
@@ -331,7 +342,9 @@ class LeaseLivenessStore:
                 .values(session_id=session.session_id, harness_id=session.harness_id)
             )
             generation = _lease_generation(conn, lease_id)
-            _open_transcript_segment(conn, lease_id=lease_id, session=session, generation=generation, at=identified_at)
+            _open_transcript_segment(
+                conn, lease_id=lease_id, session=session, generation=generation, at=identified_at, spawn_cwd=spawn_cwd
+            )
         _log.info(
             "worker identified",
             lease_id=lease_id,

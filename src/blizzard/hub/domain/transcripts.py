@@ -73,6 +73,8 @@ class SegmentRecord:
     #: Frozen at the runner's segment open.
     model: str | None = None
     effort: str | None = None
+    #: The worker's working directory, frozen at the runner's segment open.
+    spawn_cwd: str | None = None
 
 
 @dataclass(frozen=True)

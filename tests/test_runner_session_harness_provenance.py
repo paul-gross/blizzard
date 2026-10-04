@@ -246,11 +246,13 @@ def test_transcript_segment_freezes_the_leases_own_resolved_model_and_effort(tmp
         process_start_time="1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+        spawn_cwd="/ws",
     )
 
     (segment,) = store.transcript_segments_for_chunk("chunk_1")
     assert segment.model == "claude-sonnet-5"
     assert segment.effort == "high"
+    assert segment.spawn_cwd == "/ws"
 
 
 def test_transcript_segment_leaves_model_and_effort_unset_when_unresolved(tmp_path: Path) -> None:
@@ -280,3 +282,34 @@ def test_transcript_segment_leaves_model_and_effort_unset_when_unresolved(tmp_pa
     (segment,) = store.transcript_segments_for_chunk("chunk_1")
     assert segment.model is None
     assert segment.effort is None
+    assert segment.spawn_cwd is None
+
+
+def test_identified_spawn_freezes_the_spawn_cwd_onto_its_segment(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_lease(
+        NewLease(
+            lease_id="lease_a",
+            chunk_id="chunk_1",
+            graph_id="graph_1",
+            node_id="node_1",
+            node_name="build",
+            epoch=1,
+            runner_id="runner_1",
+            retries_max=1,
+            created_at=_NOW,
+        )
+    )
+    store.record_provisional_spawn(
+        "lease_a", pid=1, process_start_time="1", pgid=None, spawned_at=_NOW, harness_id=CLAUDE_CODE_HARNESS_ID
+    )
+
+    store.record_identified_spawn(
+        "lease_a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        identified_at=_NOW,
+        spawn_cwd="/ws",
+    )
+
+    (segment,) = store.transcript_segments_for_chunk("chunk_1")
+    assert segment.spawn_cwd == "/ws"

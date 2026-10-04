@@ -283,6 +283,7 @@ class TranscriptLedgerStore:
         stamped_at: datetime,
         session: SessionReference,
         supersedes: str | None = None,
+        spawn_cwd: str | None = None,
     ) -> str:
         segment_id = Id.mint_at(SEGMENT_PREFIX, stamped_at).value
         with self._store.begin() as conn:
@@ -301,6 +302,7 @@ class TranscriptLedgerStore:
                     shipped_turns=0,
                     normalizer_version=NO_NORMALIZER_VERSION,
                     harness_version=None,
+                    spawn_cwd=spawn_cwd,
                     truncated_reason=None,
                     shipping_stopped_reason=None,
                     supersedes=supersedes,
@@ -397,6 +399,7 @@ class TranscriptLedgerStore:
             harness_version=str(r.harness_version) if r.harness_version is not None else None,
             model=str(r.model) if r.model is not None else None,
             effort=str(r.effort) if r.effort is not None else None,
+            spawn_cwd=str(r.spawn_cwd) if r.spawn_cwd is not None else None,
             truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
             shipping_stopped_reason=str(r.shipping_stopped_reason) if r.shipping_stopped_reason is not None else None,
             supersedes=str(r.supersedes) if r.supersedes is not None else None,

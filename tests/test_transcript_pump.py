@@ -103,6 +103,7 @@ def _ledger_row_stub() -> TranscriptSegmentLedgerRow:
         harness_version="claude/9",
         model="claude-sonnet-5",
         effort="high",
+        spawn_cwd="/ws",
         truncated_reason=None,
         shipping_stopped_reason=None,
         supersedes=None,
@@ -308,6 +309,7 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
         process_start_time="1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+        spawn_cwd="/ws",
     )
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
@@ -375,12 +377,14 @@ def test_pump_ships_a_record_and_advances_the_cursor() -> None:
     assert (body["turn_range_start"], body["turn_range_end"]) == (0, 1)  # the turn-range key
     assert body["normalizer_version"] == "fake/1"
     assert (body["model"], body["effort"]) == ("claude-sonnet-5", "high")
+    assert body["spawn_cwd"] == "/ws"
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert (segment.cursor, segment.shipped_turns) == ("pos-1", 2)
     assert segment.normalizer_version == "fake/1"
     assert segment.shipped_bytes == len(pending[0].payload.encode("utf-8"))
     assert (segment.model, segment.effort) == ("claude-sonnet-5", "high")
+    assert segment.spawn_cwd == "/ws"
 
 
 def test_pump_never_reads_before_the_cursor() -> None:

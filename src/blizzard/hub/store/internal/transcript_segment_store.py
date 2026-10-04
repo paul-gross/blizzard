@@ -60,6 +60,7 @@ def _identity_values(record: SegmentRecord) -> dict[str, object]:
         "harness_version": record.harness_version,
         "model": record.model,
         "effort": record.effort,
+        "spawn_cwd": record.spawn_cwd,
         "record_truncated": record.record_truncated,
         "supersedes": record.supersedes,
     }

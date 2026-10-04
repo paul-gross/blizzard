@@ -85,6 +85,8 @@ class TranscriptSegmentRecord(BaseModel):
     # Optional for previous-minor runners, exactly as harness_id is.
     model: str | None = None
     effort: str | None = None
+    # Optional for previous-minor runners; the worker's working directory, frozen at the segment's open.
+    spawn_cwd: str | None = None
     record_truncated: bool = False
     #: Re-ship only: the segment this replaces, which the lease key alone cannot distinguish.
     supersedes: str | None = None

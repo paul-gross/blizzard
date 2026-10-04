@@ -678,6 +678,8 @@ transcript_segments = Table(
     # throughout, unset for a segment opened before this pair existed. NULL means unknown.
     Column("model", String, nullable=True),
     Column("effort", String, nullable=True),
+    # The worker's working directory, frozen at the segment's open; nullable, no backfill.
+    Column("spawn_cwd", String, nullable=True),
     # `truncated_reason` displays the WORST reason seen so far, by explicit severity;
     # `shipping_stopped_reason` is a separate field that latches on its first cause instead.
     Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
