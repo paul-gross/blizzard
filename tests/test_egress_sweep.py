@@ -16,7 +16,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 
-from blizzard.foundation.trace_export.cursor import BACKOFF_CAP
+from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.config import EgressConfig

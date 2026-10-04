@@ -8,10 +8,6 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol, Self
 
-#: The ceiling a failing export's retry delay doubles up to.
-BACKOFF_CAP = timedelta(minutes=10)
-_MAX_DOUBLINGS = 32
-
 
 class CursorPosition(Protocol):
     @property
@@ -57,13 +53,3 @@ def lag_cap_jump[K: CursorPosition](
     if oldest_unsent is None or oldest_unsent >= boundary:
         return None
     return CursorJump(JumpReason.LAG_CAP, type(cursor).opening(boundary), skipped_from=cursor)
-
-
-def backoff_delay(consecutive_failures: int, sweep_every: timedelta) -> timedelta:
-    """How long after a failed export the next attempt waits: ``sweep_every``, doubling per
-    consecutive failure, never past :data:`BACKOFF_CAP`."""
-    if consecutive_failures < 1:
-        return sweep_every
-    # Doubling stops long before timedelta's own range, which a long outage would otherwise reach.
-    doublings = min(consecutive_failures - 1, _MAX_DOUBLINGS)
-    return min(sweep_every * 2**doublings, BACKOFF_CAP)

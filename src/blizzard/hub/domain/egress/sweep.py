@@ -16,8 +16,8 @@ from datetime import date, datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.trace_export.cursor import backoff_delay
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, runner_step, step_partition
 from blizzard.hub.domain.egress.repository import EgressCursorRecord, IWriteEgressCursor, UsagePosition
@@ -81,12 +81,11 @@ class EgressSweep:
         self._clock = clock
         self._datasets = config.datasets
         self._settle = timedelta(seconds=config.settle_seconds)
-        self._sweep_every = timedelta(seconds=config.sweep_seconds)
         self._batch_limit = config.batch_limit
-        self._first_pass = True
-        self._failing = False
-        self._failures = 0
-        self._next_due: datetime | None = None
+        # A restart mid-outage must not announce the same failure again.
+        self._latch = OutageLatch(
+            timedelta(seconds=config.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
+        )
         self._pass_lock = pass_lock or threading.Lock()
 
     def sweep(self) -> None:
@@ -100,12 +99,8 @@ class EgressSweep:
 
     def _pass(self) -> None:
         now = self._clock.now()
-        if self._next_due is not None and now < self._next_due:
+        if not self._latch.is_due(now):
             return
-        if self._first_pass:
-            self._first_pass = False
-            # A restart mid-outage must not announce the same failure again.
-            self._failing = self._egress.newest_egress_latch() == _FAILED
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in self._datasets}
         if any(cursor is None for cursor in cursors.values()):
             self._anchor(cursors, now)
@@ -250,20 +245,17 @@ class EgressSweep:
     # --- failure latch ------------------------------------------------------------------
 
     def _failed(self, now: datetime, dataset: str, failure: EgressFailure) -> None:
-        self._failures += 1
-        delay = backoff_delay(self._failures, self._sweep_every)
-        self._next_due = now + delay
+        opens = self._latch.failed(now)
         _log.warning(
             "egress write failed",
             dataset=dataset,
             cause=failure.cause.value,
             message=failure.message,
-            failures=self._failures,
-            retry_in=delay.total_seconds(),
+            failures=self._latch.failures,
+            retry_in=self._latch.retry_in.total_seconds(),
         )
-        if self._failing:
+        if not opens:
             return
-        self._failing = True
         detail: dict[str, object] = {"dataset": dataset, "cause": failure.cause.value, "message": failure.message}
         if failure.free_bytes is not None:
             detail["free_bytes"] = failure.free_bytes
@@ -271,12 +263,8 @@ class EgressSweep:
         self._record(_FAILED, "fact egress write failed; the cursor holds and the sweep retries with backoff", detail)
 
     def _recovered(self) -> None:
-        self._failures = 0
-        self._next_due = None
-        if not self._failing:
-            return
-        self._failing = False
-        self._record(_RECOVERED, "fact egress recovered; held rows are being written", None)
+        if self._latch.succeeded():
+            self._record(_RECOVERED, "fact egress recovered; held rows are being written", None)
 
     def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(

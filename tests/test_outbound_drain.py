@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -15,6 +16,7 @@ from blizzard.runner.loop import drain as drain_module
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.outbound import COMPLETION_KIND
+from blizzard.runner.loop.steps import Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
@@ -164,3 +166,23 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
     # A contract rejection is not idempotency — the whole run, rejected fact included, is
     # still acked in one transaction so the FIFO drain never wedges on it.
     assert ctx.stores.outbound.pending_outbound() == []
+
+
+def test_run_contains_a_non_transport_failure_so_pull_returns_and_the_tick_goes_on() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    seqs = [_enqueue_generic(ctx) for _ in range(2)]
+
+    def explode(batch):  # type: ignore[no-untyped-def]
+        raise RuntimeError("not a transport failure")
+
+    hub.push_facts = explode  # type: ignore[method-assign]
+
+    with capture_logs() as logs:
+        OutboundDrain(ctx).run()
+        Pull(ctx).run()  # the drain's raise must not escape through PULL and skip FILL and ADVANCE
+
+    assert [f.seq for f in ctx.stores.outbound.pending_outbound()] == seqs  # nothing acked; retried next tick
+    assert [entry["event"] for entry in logs if entry["log_level"] == "error"].count(
+        "outbound drain failed — continuing the tick"
+    ) == 2

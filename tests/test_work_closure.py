@@ -27,7 +27,12 @@ from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
-from blizzard.hub.domain.work_closure import CLOSE_DRAIN_BACKOFF_BASE_SECONDS, CloseIntentDrainer, close_intent_is_due
+from blizzard.hub.domain.work_closure import (
+    CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
+    CLOSE_DRAIN_PASS_LIMIT,
+    CloseIntentDrainer,
+    close_intent_is_due,
+)
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
@@ -734,3 +739,17 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: P
     assert facts is not None
     assert facts.newest_transition_is_terminal()
     assert hub.services.chunks.delivery.pending_close_intents() == []
+
+
+def test_sweep_attempts_at_most_the_pass_limit_and_the_rest_drain_on_later_passes() -> None:
+    refs = [WorkRef(source="default", ref=str(n)) for n in range(CLOSE_DRAIN_PASS_LIMIT + 5)]
+    closer = FakeCloser()
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id=f"ch_{n}", ref=ref) for n, ref in enumerate(refs)])
+    drainer = _drainer(chunks, {"default": closer})
+
+    drainer.sweep()
+    assert closer.closed == refs[:CLOSE_DRAIN_PASS_LIMIT]  # in the read's order; the rest waits
+
+    chunks._candidates = [i for i in chunks._candidates if (i.chunk_id, i.ref) not in chunks.retired]
+    drainer.sweep()
+    assert closer.closed == refs  # the head moved, so nothing starves

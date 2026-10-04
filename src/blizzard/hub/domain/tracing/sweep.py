@@ -11,10 +11,11 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_export.cursor import CursorJump, backoff_delay, first_pass_jump, lag_cap_jump
+from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.domain.event_log import EventLogService
@@ -58,27 +59,25 @@ class TraceExportSweep:
         self._clock = clock
         self._settle = timedelta(seconds=config.settle_seconds)
         self._max_lag = timedelta(seconds=config.max_lag_seconds)
-        self._sweep_every = timedelta(seconds=config.sweep_seconds)
         self._batch_limit = config.batch_limit
-        self._first_pass = True
-        self._failing = False
-        self._failures = 0
-        self._next_due: datetime | None = None
+        # A restart mid-outage must not announce the same failure again.
+        self._latch = OutageLatch(
+            timedelta(seconds=config.sweep_seconds), lambda: steps.newest_export_latch() == _FAILED
+        )
+        self._cursor_started = False
 
     def sweep(self) -> None:
         now = self._clock.now()
-        if self._next_due is not None and now < self._next_due:
+        if not self._latch.is_due(now):
             return
         newest = self._steps.newest_cursor()
-        if self._first_pass:
-            # A restart mid-outage must not announce the same failure again.
-            self._failing = self._steps.newest_export_latch() == _FAILED
+        if not self._cursor_started:
             jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=CursorKey)
             if jump is not None:
                 self._jump(jump, now)
-                self._first_pass = False
+                self._cursor_started = True
                 return
-            self._first_pass = False
+            self._cursor_started = True
         assert newest is not None  # the first pass always leaves a cursor row behind
         cursor = newest.position
         window = read_window(self._steps, cursor, now - self._settle, self._batch_limit)
@@ -113,22 +112,21 @@ class TraceExportSweep:
             return False
 
     def _failed(self, now: datetime, items: int) -> None:
-        self._failures += 1
-        delay = backoff_delay(self._failures, self._sweep_every)
-        self._next_due = now + delay
-        _log.warning("trace export failed", items=items, failures=self._failures, retry_in=delay.total_seconds())
-        if self._failing:
-            return
-        self._failing = True
-        self._record(_FAILED, "fleet trace export failed; the cursor holds and the sweep retries with backoff", None)
+        opens = self._latch.failed(now)
+        _log.warning(
+            "trace export failed",
+            items=items,
+            failures=self._latch.failures,
+            retry_in=self._latch.retry_in.total_seconds(),
+        )
+        if opens:
+            self._record(
+                _FAILED, "fleet trace export failed; the cursor holds and the sweep retries with backoff", None
+            )
 
     def _recovered(self) -> None:
-        self._failures = 0
-        self._next_due = None
-        if not self._failing:
-            return
-        self._failing = False
-        self._record(_RECOVERED, "fleet trace export recovered; held steps are being told", None)
+        if self._latch.succeeded():
+            self._record(_RECOVERED, "fleet trace export recovered; held steps are being told", None)
 
     def _jump(self, jump: CursorJump[CursorKey], now: datetime) -> None:
         if (
