@@ -172,6 +172,32 @@ scope_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
+# --- Secrets (write-only credentials, sealed under a hub-key generation) ---
+
+secrets = Table(
+    "secrets",
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("ciphertext", Text, nullable=False),  # base64 AES-256-GCM output
+    Column("nonce", Text, nullable=False),  # base64 96-bit nonce, fresh per write
+    Column("key_id", String, nullable=False),  # the hub-key generation that sealed it
+    Column("revision", Integer, nullable=False),
+    Column("replaced_at", UtcDateTime, nullable=False),
+    Column("replaced_by", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+)
+
+# Secret retire/enable facts: append-only, newest wins.
+secret_lifecycle_facts = Table(
+    "secret_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, ForeignKey("secrets.name"), nullable=False),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Routines (mutable graph, scope and run defaults; surrogate id) ---
 
 routines = Table(

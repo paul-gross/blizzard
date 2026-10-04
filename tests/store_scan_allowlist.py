@@ -153,7 +153,7 @@ _DECISION_CLOSURE_REASON = (
 
 # Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
-    "an operator-created fleet entity (registered runner, scope, routine, graph, hub "
+    "an operator-created fleet entity (registered runner, scope, secret, routine, graph, hub "
     "user) or an auth event about one — bounded by how many of those entities exist "
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
@@ -199,6 +199,8 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("runner_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("scopes", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("scope_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("secrets", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("secret_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routines", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graphs", 200, _FLEET_CONFIG_REASON),

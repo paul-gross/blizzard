@@ -79,6 +79,7 @@ from blizzard.hub.domain.tracing.attributes import (
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.secrets import KeyCoverage, hub_key_provider
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -392,6 +393,8 @@ def build_hosted_app(
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
+    # Minted here on first start when no key source exists yet.
+    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
     oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
     forge_client = httpx.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
@@ -433,6 +436,7 @@ def build_hosted_app(
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
+        KeyCoverage.of(core.secrets, secret_keys).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)

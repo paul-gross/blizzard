@@ -144,6 +144,7 @@ from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -355,6 +356,8 @@ class HubCore:
     garden_proposal_closure_store: GardenProposalClosureStore
     work_item_edits: WorkItemEditService
     garden_proposal_resolution: GardenProposalDeliveryResolution
+    #: Sealed secret rows — composition-only, never a ``HubServices`` field.
+    secrets: SecretStore
     clock: IClock
 
 
@@ -391,6 +394,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         finding_exit=finding_exit,
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
+        secrets=SecretStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
