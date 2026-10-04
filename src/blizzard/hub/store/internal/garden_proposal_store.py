@@ -18,15 +18,16 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.domain.garden.proposals.closure import GardenProposalCountBucket, classify_proposal_count_bucket
 from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
     GardenProposalCounts,
     GardenProposalEdit,
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalPage,
+    GardenProposalState,
     IWriteGardenProposalRepository,
     RoutineProposalState,
+    garden_proposal_state,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
@@ -255,7 +256,7 @@ class GardenProposalStore:
     ) -> list[GardenProposalCounts]:
         """One `GROUP BY` query over a left join to `garden_proposal_closures` — a
         proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
-        shape), folded through :func:`classify_proposal_count_bucket` in Python rather
+        shape), folded through :func:`garden_proposal_state` in Python rather
         than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
         own shape). Grouped by `(origin, routine_name, class_)`: a
         routine named by both origins returns one row per origin."""
@@ -280,11 +281,11 @@ class GardenProposalStore:
         stmt = stmt.group_by(c.origin, c.routine_name, c.class_, closures_c.closure, closures_c.item_outcome)
         with self._store.read("counts_by_class") as conn:
             rows = conn.execute(stmt).all()
-        accumulator: dict[tuple[GardenProposalOrigin, str | None, str], dict[GardenProposalCountBucket, int]] = {}
+        accumulator: dict[tuple[GardenProposalOrigin, str | None, str], dict[GardenProposalState, int]] = {}
         for row in rows:
             key = (GardenProposalOrigin(row.origin), row.routine_name, row.class_)
-            buckets = accumulator.setdefault(key, dict.fromkeys(GardenProposalCountBucket, 0))
-            bucket = classify_proposal_count_bucket(
+            buckets = accumulator.setdefault(key, dict.fromkeys(GardenProposalState, 0))
+            bucket = garden_proposal_state(
                 GardenProposalClosureKind(row.closure) if row.closure is not None else None,
                 GardenProposalItemOutcome(row.item_outcome) if row.item_outcome is not None else None,
             )
@@ -294,10 +295,10 @@ class GardenProposalStore:
                 origin=origin_,
                 routine_name=routine_name_,
                 class_=class_,
-                open=buckets[GardenProposalCountBucket.OPEN],
-                passed=buckets[GardenProposalCountBucket.PASSED],
-                accepted_with_item=buckets[GardenProposalCountBucket.ACCEPTED_WITH_ITEM],
-                accepted_without_item=buckets[GardenProposalCountBucket.ACCEPTED_WITHOUT_ITEM],
+                open=buckets[GardenProposalState.OPEN],
+                passed=buckets[GardenProposalState.PASSED],
+                accepted_with_item=buckets[GardenProposalState.ACCEPTED_MINTED],
+                accepted_without_item=buckets[GardenProposalState.ACCEPTED_DECLINED],
             )
             for (origin_, routine_name_, class_), buckets in sorted(
                 accumulator.items(), key=lambda kv: (kv[0][0].value, kv[0][1] or "", kv[0][2])

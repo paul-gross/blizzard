@@ -1151,6 +1151,33 @@ def test_hub_domain_packages_import_only_what_their_layer_allows() -> None:
     assert not violations, f"a hub domain package may import only its own layer's dependencies: {violations}"
 
 
+def _domain_init_reexports(domain_dir: Path) -> list[str]:
+    """Every hub domain package ``__init__.py`` holding anything beyond a docstring and the
+    ``from __future__ import annotations`` line — a package re-exports nothing, so each name has
+    one import path."""
+    offenders: list[str] = []
+    for init in sorted(domain_dir.rglob("__init__.py")):
+        body = ast.parse(init.read_text()).body
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]
+        rest = [node for node in body if not (isinstance(node, ast.ImportFrom) and node.module == "__future__")]
+        if rest:
+            offenders.append(str(init.relative_to(domain_dir)))
+    return offenders
+
+
+def test_hub_domain_package_inits_re_export_nothing() -> None:
+    assert _domain_init_reexports(_HUB_DOMAIN_DIR) == []
+
+
+def test_a_domain_init_that_imports_a_name_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "chunk").mkdir()
+    (tmp_path / "chunk" / "__init__.py").write_text('"""Chunk."""\n\nfrom __future__ import annotations\n')
+    (tmp_path / "garden").mkdir()
+    (tmp_path / "garden" / "__init__.py").write_text('"""Garden."""\n\nfrom .model import Finding\n')
+    assert _domain_init_reexports(tmp_path) == ["garden/__init__.py"]
+
+
 def test_hub_domain_package_layers_are_acyclic() -> None:
     assert _layer_cycle(_DOMAIN_PACKAGE_LAYERS) == []
     assert all(dep in _DOMAIN_PACKAGE_LAYERS for deps in _DOMAIN_PACKAGE_LAYERS.values() for dep in deps)

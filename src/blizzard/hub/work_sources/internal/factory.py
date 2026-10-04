@@ -66,11 +66,13 @@ class WorkSourceEntry:
         ``instrument_client`` is applied to each configured source's client."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
+        label_clearers: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
         editors: dict[str, IWorkEditor] = {}
         for config in sources:
             adapter = cls.of(config, instrument_client).source()
             built[config.name] = adapter
+            label_clearers[config.name] = cast(IWorkAnnotator, adapter)
             if config.annotate:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if close_forge_writes_enabled:
@@ -84,7 +86,7 @@ class WorkSourceEntry:
             edits=edits,
             resolution=resolution,
         )
-        return WorkSourceRegistry(built, annotators, closers, editors)
+        return WorkSourceRegistry(built, annotators, closers, editors, label_clearers)
 
     @property
     def token(self) -> str:  # ast-grep-ignore: bzh:property-delegates

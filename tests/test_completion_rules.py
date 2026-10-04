@@ -34,6 +34,7 @@ from blizzard.hub.domain.execution.completion import (
     CompletionPlan,
     CompletionRefused,
     GateDecisionOpen,
+    GateResolutionUnapplied,
     HubExecutedNode,
     Landing,
     MigrationTargets,
@@ -259,7 +260,19 @@ def test_a_human_judged_node_is_left_only_by_its_resolving_transition() -> None:
 def test_an_open_runner_config_gate_refuses_the_plain_completion() -> None:
     with pytest.raises(GateDecisionOpen):
         _plain(_submission("ship"), gate=_gate(node_id="nd_build"))
-    assert _plain(_submission("ship"), gate=_gate(node_id="nd_build", resolved="yes")).to_node_id == RESERVED_TERMINAL
+
+
+def test_a_resolved_but_uncarried_runner_config_gate_refuses_the_plain_completion() -> None:
+    gate = _gate(node_id="nd_build", resolved="yes")
+    with pytest.raises(GateResolutionUnapplied, match="resolved to `yes` — submit its resolving transition"):
+        _plain(_submission("ship"), gate=gate)
+    with pytest.raises(GateResolutionUnapplied):
+        _plain(_submission("yes"), gate=gate)
+
+
+def test_a_runner_config_gate_a_transition_carried_no_longer_refuses() -> None:
+    gate = replace(_gate(node_id="nd_build", resolved="yes"), transitioned=True)
+    assert _plain(_submission("ship"), gate=gate).to_node_id == RESERVED_TERMINAL
 
 
 def test_an_unknown_choice_or_destination_is_refused() -> None:

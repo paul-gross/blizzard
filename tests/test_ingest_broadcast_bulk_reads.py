@@ -237,6 +237,34 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
     assert migrated.status_code == 200, migrated.text
     assert migrated.json()["outcome"] == "migrated"
 
+    # An earlier question on Q, already answered by a person, so its delivery applies in the batch.
+    asked = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "fleet-batch",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "question.asked",
+                    "payload": {
+                        "question_id": "qn_0",
+                        "chunk_id": chunk_q,
+                        "node_id": "nd_build",
+                        "session_id": "sess-0",
+                        "runner_id": "fleet-batch",
+                        "epoch": 1,
+                        "question": "Which base?",
+                        "options": ["main", "dev"],
+                        "asked_at": "2026-07-13T00:00:00+00:00",
+                    },
+                }
+            ],
+        },
+    )
+    assert asked.status_code == 200 and asked.json()["applied"] == [1], asked.text
+    answered = hub.client.post("/api/questions/qn_0/answers", json={"answer": "main"})
+    assert answered.status_code == 201, answered.text
+
     l_status_before = _status_of(hub, chunk_l)
     q_status_before = _status_of(hub, chunk_q)
     m_status_before = _status_of(hub, chunk_m)
@@ -247,14 +275,14 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
         json={
             "runner_id": "fleet-batch",
             "facts": [
-                {"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 2}},
+                {"seq": 2, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 2}},
                 {
-                    "seq": 2,
+                    "seq": 3,
                     "kind": "escalation.recorded",
                     "payload": {"chunk_id": chunk_q, "epoch": 1, "takeover_command": "cd wd && q"},
                 },
                 {
-                    "seq": 3,
+                    "seq": 4,
                     "kind": "question.asked",
                     "payload": {
                         "question_id": "qn_1",
@@ -268,18 +296,20 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
                         "asked_at": "2026-07-13T00:00:00+00:00",
                     },
                 },
-                {"seq": 4, "kind": "answer.delivered", "payload": {"question_id": "qn_1", "chunk_id": chunk_q}},
+                {"seq": 5, "kind": "answer.delivered", "payload": {"question_id": "qn_0", "chunk_id": chunk_q}},
                 {
-                    "seq": 5,
+                    "seq": 6,
                     "kind": "escalation.recorded",
                     "payload": {"chunk_id": chunk_m, "epoch": 1, "takeover_command": "cd wd && m"},
                 },
+                # Delivery of a question nobody has answered yet is refused, alone.
+                {"seq": 7, "kind": "answer.delivered", "payload": {"question_id": "qn_1", "chunk_id": chunk_q}},
             ],
         },
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["applied"] == [1, 2, 3, 5]
-    assert resp.json()["rejected"] == [4]
+    assert resp.json()["applied"] == [2, 3, 4, 5, 6]
+    assert resp.json()["rejected"] == [7]
 
     frames = _all_frames(hub, since=since)
     kinds = [f["event"] for f in frames]
@@ -289,9 +319,10 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
         HubEventType.QUESTION_ASKED,
         HubEventType.CHUNK_CHANGED,
         HubEventType.CHUNK_CHANGED,
+        HubEventType.CHUNK_CHANGED,
     ]
 
-    lease_frame, escalate_q_frame, question_asked_frame, question_frame, escalate_m_frame = frames
+    lease_frame, escalate_q_frame, question_asked_frame, question_frame, answer_frame, escalate_m_frame = frames
 
     assert lease_frame["chunk_id"] == chunk_l
     assert lease_frame["cause"] == "claimed"
@@ -311,10 +342,15 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
     assert question_frame["key"] == "questions:qn_1"
     assert question_frame["prev_status"] == q_status_before
 
-    # publish() only runs after every fact in the batch has already landed, so Q's two
-    # frames both reload the same final post-batch state — differing only in cause/key.
+    assert answer_frame["chunk_id"] == chunk_q
+    assert answer_frame["cause"] == "question-answered"
+    assert answer_frame["key"] == "question_answers:qn_0"
+    assert answer_frame["prev_status"] == q_status_before
+
+    # publish() only runs after every fact in the batch has already landed, so Q's three
+    # frames all reload the same final post-batch state — differing only in cause/key.
     for field in ("status", "node", "prev_node", "runner_id", "graph_id"):
-        assert escalate_q_frame.get(field) == question_frame.get(field)
+        assert escalate_q_frame.get(field) == question_frame.get(field) == answer_frame.get(field)
 
     assert escalate_m_frame["chunk_id"] == chunk_m
     assert escalate_m_frame["cause"] == "escalated"
@@ -332,15 +368,15 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
         json={
             "runner_id": "fleet-batch",
             "facts": [
-                {"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 2}},
-                {"seq": 5, "kind": "escalation.recorded", "payload": {"chunk_id": chunk_m, "epoch": 1}},
-                {"seq": 6, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 3}},
+                {"seq": 2, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 2}},
+                {"seq": 6, "kind": "escalation.recorded", "payload": {"chunk_id": chunk_m, "epoch": 1}},
+                {"seq": 8, "kind": "lease.minted", "payload": {"chunk_id": chunk_l, "epoch": 3}},
             ],
         },
     )
     assert replay.status_code == 200, replay.text
-    assert replay.json()["applied"] == [6]
-    assert replay.json()["already_applied"] == [1, 5]
+    assert replay.json()["applied"] == [8]
+    assert replay.json()["already_applied"] == [2, 6]
     replay_frames = _chunk_changed_frames(hub, since=since_replay)
     assert len(replay_frames) == 1
     assert replay_frames[0]["chunk_id"] == chunk_l

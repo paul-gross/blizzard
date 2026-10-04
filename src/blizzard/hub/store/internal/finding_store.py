@@ -6,7 +6,7 @@ no-stored-column contract this reads over is `schema.py`'s own."""
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, and_, desc, exists, func, insert, or_, select
@@ -139,15 +139,27 @@ class FindingStore:
             ]
         )
 
-    def record_facts(self, entries: Sequence[FactEntry]) -> None:
+    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
-        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. With ``expect``, each
+        named finding's state is re-derived under its row lock first; any that moved off its
+        expected state is returned and nothing is written."""
         for entry in entries:
             if entry.kind not in FACT_KINDS:
                 raise UnknownFactKindError(entry.kind)
         if not entries:
-            return
+            return []
         with self._store.write("record_facts") as conn:
+            if expect:
+                guarded = sorted(expect)
+                for batch in id_batches(guarded):
+                    conn.execute(
+                        select(findings.c.finding_id).where(findings.c.finding_id.in_(batch)).with_for_update()
+                    )
+                current = self._facts_for_many(conn, guarded)
+                moved = [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
+                if moved:
+                    return moved
             conn.execute(
                 insert(finding_facts),
                 [
@@ -163,6 +175,7 @@ class FindingStore:
                     for entry in entries
                 ],
             )
+        return []
 
     def get(self, finding_id: str) -> Finding | None:
         with self._store.read("get") as conn:

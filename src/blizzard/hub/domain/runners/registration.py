@@ -61,13 +61,13 @@ class RunnerVerb(StrEnum):
 
 _ACTIVE_VERBS = frozenset({RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.ENROLL, RunnerVerb.CONTACT})
 
-#: Which verbs are legal from which state. A plain retire is legal from an active state only
-#: while the runner holds no claim (:meth:`RunnerRegistration.retire`); from ``retired`` it is the
-#: re-run that finishes the release pass. The brake is independent of retirement.
+#: Which verbs are legal from which state; :class:`RunnerRegistration` refuses what the state alone cannot.
 RUNNER_VERBS: Mapping[RunnerState, frozenset[RunnerVerb]] = {
     RunnerState.UNENROLLED: _ACTIVE_VERBS,
     RunnerState.ENROLLED: _ACTIVE_VERBS | {RunnerVerb.REVOKE_TOKEN},
-    RunnerState.RETIRED: frozenset({RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.REINSTATE}),
+    RunnerState.RETIRED: frozenset(
+        {RunnerVerb.BRAKE, RunnerVerb.RETIRE, RunnerVerb.REINSTATE, RunnerVerb.REVOKE_TOKEN}
+    ),
 }
 
 
@@ -172,9 +172,10 @@ class RunnerRegistration:
         return TokenRotation(runner_id=self.runner_id, token_hash=token_hash, at=at, by=by)
 
     def revoke_token(self, *, by: str, at: datetime) -> TokenRevocation:
-        """Revoke the enrolled token, leaving the runner registered. Raises
-        :class:`RunnerNotEnrolled` when it holds none — a retired runner's was revoked at retire."""
-        if not self.permits(RunnerVerb.REVOKE_TOKEN):
+        """Revoke the held token, leaving the runner registered. Raises :class:`RunnerNotEnrolled`
+        when it holds none — a retired runner's is normally revoked at retire, but one an enroll
+        racing the retire left behind is still revocable."""
+        if not self.permits(RunnerVerb.REVOKE_TOKEN) or self.token_hash is None:
             raise RunnerNotEnrolled(self.runner_id)
         return TokenRevocation(runner_id=self.runner_id, at=at, by=by)
 

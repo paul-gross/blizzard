@@ -6,9 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE, RUNNER_AUTH_WARN
+from blizzard.hub.store.internal.runner_registry_store import locked_token_hash
 from tests.support import build_hub
 
 pytestmark = pytest.mark.component
@@ -45,3 +47,19 @@ def test_a_rotated_out_token_is_revoked_and_refused_under_every_mode(tmp_path: P
     assert not hub.services.registry.is_token_revoked(TokenHash(new).hex)
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(old)).status_code == 401
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(new)).status_code == 200
+
+
+@pytest.mark.unit
+def test_rotation_and_revocation_read_the_hash_under_the_registration_row_lock() -> None:
+    sql = str(locked_token_hash("runner-a").compile(dialect=postgresql.dialect()))
+    assert sql.rstrip().endswith("FOR UPDATE")
+
+
+def test_every_token_three_enrollments_mint_is_current_or_revoked(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).is_success
+
+    *rotated_out, current = [_enroll(hub) for _ in range(3)]
+
+    assert all(hub.services.registry.is_token_revoked(TokenHash(t).hex) for t in rotated_out)
+    assert not hub.services.registry.is_token_revoked(TokenHash(current).hex)

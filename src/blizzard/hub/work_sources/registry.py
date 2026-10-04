@@ -19,8 +19,8 @@ from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 class WorkSourceRegistry:
     """The hub's configured work sources, keyed by their declared ``name``.
 
-    ``annotators``/``closers``/``editors`` are each a subset of ``sources``: an absent
-    name has no write half, making "never written to" a property of the object graph."""
+    ``annotators``/``closers``/``editors`` are each a subset of ``sources``, so an absent name has no
+    write half; ``label_clearers`` holds every forge source's annotator, reached only to clear labels."""
 
     def __init__(
         self,
@@ -28,11 +28,13 @@ class WorkSourceRegistry:
         annotators: Mapping[str, IWorkAnnotator] | None = None,
         closers: Mapping[str, IWorkCloser] | None = None,
         editors: Mapping[str, IWorkEditor] | None = None,
+        label_clearers: Mapping[str, IWorkAnnotator] | None = None,
     ) -> None:
         self._sources = dict(sources or {})
         self._annotators = dict(annotators or {})
         self._closers = dict(closers or {})
         self._editors = dict(editors or {})
+        self._label_clearers = {**dict(label_clearers or {}), **self._annotators}
 
     def get(self, name: str) -> IWorkSource | None:
         return self._sources.get(name)
@@ -45,6 +47,9 @@ class WorkSourceRegistry:
 
     def annotating_names(self) -> list[str]:
         return list(self._annotators.keys())
+
+    def label_clearer(self, name: str) -> IWorkAnnotator | None:
+        return self._label_clearers.get(name)
 
     def closer(self, name: str) -> IWorkCloser | None:
         return self._closers.get(name)

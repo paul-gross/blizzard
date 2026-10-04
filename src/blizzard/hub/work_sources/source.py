@@ -128,6 +128,12 @@ class IWorkSourceRegistry(Protocol):
         :meth:`names`."""
         ...
 
+    def label_clearer(self, name: str) -> IWorkAnnotator | None:
+        """The write half of the source configured under ``name`` whether or not it annotates,
+        used only to clear the labels it carries once it leaves annotation; ``None`` when no
+        configured source carries ``name`` or the source has no forge labels."""
+        ...
+
     def closer(self, name: str) -> IWorkCloser | None:
         """The binding declared under ``name``'s close half, unconditional for every
         configured source — ``None`` only when ``name`` names no source

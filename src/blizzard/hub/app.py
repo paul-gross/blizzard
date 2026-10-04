@@ -140,7 +140,7 @@ class Sweep:
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
-        """The forge-status sweep a work source opts into, plus the always-on
+        """The forge-status sweep, plus the always-on
         event-derivation, delivery-materialization, and close-drain sweeps, plus the trace-export
         sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``

@@ -113,15 +113,22 @@ every live chunk's status onto its forge issue as `blizzard:ingested` (minted bu
 `blizzard:in-progress` (running, paused, waiting_on_human, needs_human, delivering); a chunk with no live holder or one
 that reached stopped/done carries neither.
 
-The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120, consulted
-only when a source opts in) and holds no state: each pass discovers the forge's actual labels afresh and writes only the
-difference from desired state, so hand-removed labels, mid-sweep crashes, and forge outages all self-heal on the next
-pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk
-transition, an ingest, or any other hub request.
+The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120). It keeps
+no label state: each pass discovers the forge's actual labels afresh and writes only the difference from desired state,
+so hand-removed labels, mid-sweep crashes, and forge outages all self-heal on the next pass. A forge that is down, slow,
+or rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk transition, an ingest, or any other
+hub request.
+
+The one thing the sweep remembers, in the hub store, is which sources it annotates. A source whose `annotate` is turned
+off across a restart has every blizzard label it carries cleared once on the next pass, through its still-configured
+binding; a clear that fails is retried each pass until it finishes. A source whose `[[work_source]]` block is removed
+entirely keeps its labels — no binding is left to clear through. A hub that never annotated a source never clears it.
 
 Set `annotate = true` on at most one hub per forge repo: two sweeps against one repo fight over the same labels with no
 coordination — only the canonical instance opts in; every dev, staging, or snapshot hub pointed at the repo leaves it
-false.
+false. A snapshot hub hosted on a copy of an annotating hub's store inherits that memory, so its first pass clears the
+copied sources' labels once (the canonical hub's next pass sets them again) unless their `[[work_source]]` blocks are
+removed.
 
 ## Delivered PRs
 

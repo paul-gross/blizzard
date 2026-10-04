@@ -3,13 +3,14 @@ closed undecided, or whose chunk is stopped or done, has left the open list (com
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionChoice, verb_legal_from
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -87,3 +88,25 @@ def test_a_gate_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tm
     _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
 
     assert _open_ids(store) == []
+
+
+def _stop(store: ChunkStores) -> None:
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+
+
+def _finish(store: ChunkStores) -> None:
+    _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
+
+
+@pytest.mark.parametrize("end", [None, _stop, _finish], ids=["live", "stopped", "done"])
+def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_resolve_window(
+    tmp_path: Path, end: Callable[[ChunkStores], None] | None
+) -> None:
+    store = _store_with_gate(tmp_path)
+    if end is not None:
+        end(store)
+
+    status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
+
+    assert ("dec_1" in _open_ids(store)) is verb_legal_from(ChunkVerb.RESOLVE_DECISION, status)

@@ -254,7 +254,7 @@ def derive_chunk_neighborhood(
     neighborhood."""
     prerequisites: list[ChunkNeighbor] = []
     dependents: list[ChunkNeighbor] = []
-    subject_done = statuses.get(chunk_id) is ChunkStatus.DONE
+    subject_done = DependencyEdge.met_by(statuses.get(chunk_id))
     for edge in edges:
         if edge.dependent_chunk_id == chunk_id:
             neighbor_status = statuses.get(edge.prerequisite_chunk_id)
@@ -262,7 +262,7 @@ def derive_chunk_neighborhood(
                 ChunkNeighbor(
                     chunk_id=edge.prerequisite_chunk_id,
                     status=neighbor_status,
-                    satisfied=neighbor_status is ChunkStatus.DONE,
+                    satisfied=DependencyEdge.met_by(neighbor_status),
                 )
             )
         if edge.prerequisite_chunk_id == chunk_id:

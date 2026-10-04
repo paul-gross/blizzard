@@ -593,10 +593,9 @@ def forge_state(double: TestClient) -> dict[str, object]:
 
 class RunnerFleetClient(TestClient):
     """The hub harness's client: before a claim through ``POST /api/fleet/routes`` it registers the
-    claiming runner when the hub holds no registration for it, as a live runner does every tick —
-    the hub refuses a claim from an unregistered runner. A registration already standing, a retired
-    one included, is left exactly as it is. A test pinning the unregistered refusal claims through
-    a plain ``TestClient(hub.app)``."""
+    claiming runner when unregistered, as a live runner does every tick; a standing registration, retired
+    included, is left as is. A test pinning the unregistered refusal passes
+    ``build_hub(..., auto_register_claimants=False)``."""
 
     def __init__(self, app: FastAPI, *, fleet: FleetService, registry: IReadRunnerRegistry) -> None:
         super().__init__(app)
@@ -696,12 +695,13 @@ def build_hub(
     tracing_settings: TracingSettings | None = None,
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
+    auto_register_claimants: bool = True,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
-    ``work_sources=None`` defaults to one fake source; an explicit ``work_sources={}`` is
-    a legal, deliberately **empty** registry — ``or`` would silently coerce it back to the
-    default. ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
+    ``auto_register_claimants`` (on by default) makes ``hub.client`` a :class:`RunnerFleetClient`.
+    ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
+    ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -770,7 +770,11 @@ def build_hub(
         egress_path_key=egress_path_key,
     )
     app = create_app(config, services=services)
-    client = RunnerFleetClient(app, fleet=services.fleet, registry=services.registry)
+    client = (
+        RunnerFleetClient(app, fleet=services.fleet, registry=services.registry)
+        if auto_register_claimants
+        else TestClient(app)
+    )
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
     client.get("/api/_route_cache_warm")

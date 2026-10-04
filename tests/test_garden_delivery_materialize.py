@@ -204,8 +204,8 @@ def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> 
     ]
 
 
-def test_deliver_a_gone_op_against_a_finding_absent_from_delivered_findings_stays_gone() -> None:
-    """A `gone` op targeting a finding `validated.delivered_findings` does not name — the
+def test_deliver_a_gone_op_against_a_finding_absent_from_gone_settlements_stays_gone() -> None:
+    """A `gone` op targeting a finding `validated.gone_settlements` does not name — the
     ordinary case, a merely-live finding the run could not find — records the flag as
     before, carrying no actor."""
     repo = _FakeGardenDeliveryRepo()
@@ -220,7 +220,7 @@ def test_deliver_a_gone_op_against_a_finding_absent_from_delivered_findings_stay
 
 
 def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too() -> None:
-    """The finding is present in `delivered_findings` mapped to `None` — membership
+    """The finding is present in `gone_settlements` settling to `resolved` with no actor — membership
     gates the settlement, not the actor being truthy, so this must still complete the
     exit rather than falling through to a plain `gone` flag."""
     repo = _FakeGardenDeliveryRepo()

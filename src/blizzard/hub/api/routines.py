@@ -23,7 +23,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.garden.findings.trend import InvalidTrendWindow, Trend, TrendWindow
+from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (
     Routine,
@@ -172,7 +172,7 @@ def routine_trend(
         window = TrendWindow.of(
             since=parsed_since, until=parsed_until, introduced_boundary=parsed_boundary, period_days=period_days
         )
-    except InvalidTrendWindow as exc:
+    except InvalidWindowError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _trend_view(services.garden_trend.trend(routine, window))
 

@@ -30,6 +30,7 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingNoteRequiredError,
     FindingSupersedesItself,
     FindingTransitionRefused,
+    FindingWriteContended,
     finding_exit,
 )
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
@@ -181,11 +182,12 @@ def _exit_verb(
 
 @contextmanager
 def _refusals_mapped() -> Iterator[None]:
-    """A finding verb's domain refusals, mapped: a state the verb is illegal from is 409; a
-    blank note, a duplicate id, a self-naming or non-live absorber is 422."""
+    """A finding verb's domain refusals, mapped: a state the verb is illegal from, or a write
+    that kept losing to concurrent ones, is 409; a blank note, a duplicate id, a self-naming or
+    non-live absorber is 422."""
     try:
         yield
-    except FindingTransitionRefused as exc:
+    except (FindingTransitionRefused, FindingWriteContended) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (FindingNoteRequiredError, DuplicateFindingError, FindingSupersedesItself, AbsorberNotLive) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

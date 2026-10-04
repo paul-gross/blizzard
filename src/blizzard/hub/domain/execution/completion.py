@@ -60,6 +60,11 @@ class GateDecisionOpen(CompletionRefused):
     """A runner-configured gate decision is open at this node-step; only its resolution moves on."""
 
 
+class GateResolutionUnapplied(CompletionRefused):
+    """A runner-configured gate at this node-step is resolved but no transition has carried it:
+    only the resolving transition, naming the decision, moves on — to the resolved choice."""
+
+
 def refuse_incoherent_attempt(facts: ChunkFacts, graph: Graph, *, from_node: Node, epoch: int) -> None:
     """Refuse a report the attempt at ``epoch`` cannot make — one epoch is one node-step attempt.
     At the current epoch the report must come from the current node (:class:`CompletionNotAtCurrentNode`);
@@ -145,13 +150,19 @@ class CompletionPlan:
         produces_mode: str,
     ) -> CompletionPlan:
         """A completion carrying no decision id. Refusals, in order: leaving a human-judged node
-        (only its resolving transition may), a runner-configured gate open at this node-step, an
+        (only its resolving transition may), a runner-configured gate at this node-step that no
+        transition has carried yet — open, or resolved and awaiting its resolving transition — an
         unknown choice, then — unless the edge crosses graphs — an unknown destination, the
         ``produces`` backstop, and a red check on a choice that requires green ones."""
         if from_node.judged_by is JudgedBy.HUMAN:
             raise CompletionRefused(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
         if open_gate is not None and open_gate.is_open:
             raise GateDecisionOpen(f"decision {open_gate.decision_id} is open at node `{from_node.name}` — resolve it")
+        if open_gate is not None and open_gate.resolved and not open_gate.transitioned:
+            raise GateResolutionUnapplied(
+                f"decision {open_gate.decision_id} at node `{from_node.name}` is resolved to "
+                f"`{open_gate.resolved_choice}` — submit its resolving transition with decision_id"
+            )
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             raise CompletionRefused(f"node {from_node.name} has no choice `{submission.choice}`")

@@ -63,6 +63,7 @@ from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
+from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerCapability, RunnerRetired
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
@@ -152,19 +153,20 @@ class FleetRequest:
 
 
 def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
-    """The lease-transcript read route's own ownership gate — **always**
-    raises on a mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode``
-    leaves inert by default. ``owning_runner_id=None`` is the "hub holds nothing"
-    branch, not a refusal — left for the caller to fall back on."""
-    if owning_runner_id is not None and owning_runner_id != principal.runner_id:
+    """The lease-transcript read route's ownership gate, mapped — **always** raises on a
+    mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode`` leaves inert by
+    default; :func:`refuse_foreign_lease_read` decides."""
+    try:
+        refuse_foreign_lease_read(owning_runner_id, requesting_runner_id=principal.runner_id)
+    except LeaseSegmentsNotOwned as exc:
         # The owning runner's id stays out of the response — logged server-side instead,
         # where an operator, not another runner, can see it.
         _log.warning(
             "lease-transcript ownership mismatch",
-            owning_runner_id=owning_runner_id,
-            requesting_runner_id=principal.runner_id,
+            owning_runner_id=exc.owning_runner_id,
+            requesting_runner_id=exc.requesting_runner_id,
         )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="lease segments belong to another runner")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 def _migration_targets(
@@ -521,11 +523,11 @@ def hub_advance(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step (#65), running that node's
-    hub-side command once under the fleet-wide serialization
-    slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
-    ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
-    at all — ``detail`` names which. The request declares no ``runner_id`` to confine against."""
+    """Drive a chunk parked at a generic hub command node one step, running that node's
+    hub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an
+    error: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``
+    elapsed, or the chunk is not parked at a hub command node it may drive — ``detail`` names which.
+    The request declares no ``runner_id`` to confine against."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -533,12 +535,10 @@ def hub_advance(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = facts.current_node_id()
-    node = graph.node_by_id(node_id) if node_id is not None else None
-    if node is None or not node.is_hub_command_node:
-        derived = facts.status()
+    node = facts.hub_advance_node(graph)
+    if node is None:
         return HubAdvanceResponse(
-            chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
+            chunk_id=chunk_id, status=facts.status(), ran=False, detail="not parked at a hub command node"
         )
     change = chunk_events.ChunkChanged.of(services, chunk_id, prev_status=facts.status().value)
     epoch = facts.latest_epoch() or 0
@@ -552,7 +552,7 @@ def hub_advance(
     if result is None:
         pending = facts.hub_node_pending()
         next_poll_at = pending.polled_at + PollPolicy.of(node).interval if pending is not None else None
-        # A future `next_poll_at` distinguishes "not yet due to poll" (#66) from a genuinely busy slot;
+        # A future `next_poll_at` distinguishes "not yet due to poll" from a genuinely busy slot;
         # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
         if next_poll_at is not None and next_poll_at > services.clock.now():
             detail = f"pending — next poll at {iso_utc(next_poll_at)}"

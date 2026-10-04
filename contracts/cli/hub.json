@@ -1685,7 +1685,7 @@
           "short_help": "List open decisions awaiting a human (gate surfacing)."
         },
         "resolve": {
-          "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA pure client of ``POST /api/decisions/{id}/resolutions`` (the pluralized\nresolution route).",
+          "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA racing second resolution loses and is told who already resolved; a decision closed undecided \u2014 by a\nrestart, or by its chunk ending \u2014 is refused with the hub's reason. A pure client of\n``POST /api/decisions/{id}/resolutions``.",
           "params": [
             {
               "hidden": false,
@@ -3734,7 +3734,7 @@
     "question": {
       "commands": {
         "answer": {
-          "help": "Answer an open question (first-write-wins CAS at the hub).\n\nA racing second answer loses and is told who already answered. A pure client of\n``POST /api/questions/{id}/answers``.",
+          "help": "Answer an open question (first-write-wins CAS at the hub).\n\nA racing second answer loses and is told who already answered; a question whose chunk\nhas ended is refused with the hub's reason. A pure client of\n``POST /api/questions/{id}/answers``.",
           "params": [
             {
               "hidden": false,

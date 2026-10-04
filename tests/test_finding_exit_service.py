@@ -5,6 +5,7 @@ refused before the repository is ever touched, every verb records the right fact
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import cast
@@ -48,8 +49,9 @@ def _finding(finding_id: str, *, state: str = "live") -> Finding:
 class _FakeFindingRepo:
     batches: list[list[FactEntry]] = field(default_factory=list)
 
-    def record_facts(self, entries: list[FactEntry]) -> None:
+    def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         self.batches.append(list(entries))
+        return []
 
 
 def _as_write_repo(repo: _FakeFindingRepo) -> IWriteFindingRepository:

@@ -18,7 +18,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from tests.support import HubHarness, build_hub, hub_store_connections, ingest, make_ready, seed_session, seed_user
+from tests.support import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
 from tests.test_decisions_api import _GATE_YAML
 from tests.test_questions_api import _asked
 
@@ -161,7 +161,6 @@ def test_answer_question_resolves_the_session_exactly_once_under_oauth(tmp_path:
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}, headers=cookie)
     assert graph.status_code == 201, graph.text
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=cookie).json()["chunk_id"]
-    make_ready(hub, chunk_id)
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=cookie).status_code == 202
     claim = hub.client.post(
         "/api/fleet/routes",
@@ -213,7 +212,6 @@ def _open_decision_under_oauth(hub: HubHarness, cookie: dict[str, str]) -> str:
     assert graph.status_code == 201, graph.text
     build_node_id = next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:2"]}, headers=cookie).json()["chunk_id"]
-    make_ready(hub, chunk_id)
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=cookie).status_code == 202
     claim = hub.client.post(
         "/api/fleet/routes",
