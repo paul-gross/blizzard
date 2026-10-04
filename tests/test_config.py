@@ -29,7 +29,11 @@ from blizzard.runner.config import (
     WorkspaceRepo,
 )
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.workspace_prompts import PACKAGED
+from tests.harness_sections import claude_code, opencode, sections, with_claude_code, with_opencode
+from tests.runner_config_legacy_emitted import LEGACY_EMITTED
 
 
 @pytest.mark.unit
@@ -77,7 +81,7 @@ def test_runner_loop_seams_scaffold_from_the_winter_injected_env(
     config = RunnerConfig.scaffold(tmp_path)
     assert config.workspace_root == "/tmp/fixture/workspace"
     assert config.workspace_envs == ("e1", "e2", "e3")
-    assert config.harness_binary == "/opt/mock-claude-code"
+    assert claude_code(config).binary == "/opt/mock-claude-code"
     assert config.base_branch == "main"
 
 
@@ -86,7 +90,7 @@ def test_runner_loop_seams_fall_back_to_defaults_without_env(tmp_path: Path) -> 
     config = RunnerConfig.scaffold(tmp_path)
     assert config.workspace_root == ""
     assert config.workspace_envs == ("e1",)
-    assert config.harness_binary == "claude"
+    assert claude_code(config).binary == "claude"
 
 
 @pytest.mark.unit
@@ -531,7 +535,7 @@ def test_external_usage_credentials_path_round_trips_through_to_toml_and_load(tm
 def test_claude_code_credentials_path_defaults_none(tmp_path: Path) -> None:
     # Absent means the health probe's own default (`~/.claude/.credentials.json`),
     # distinct from `external_usage_credentials_path`.
-    assert RunnerConfig.scaffold(tmp_path).claude_code_credentials_path is None
+    assert claude_code(RunnerConfig.scaffold(tmp_path)).credentials_path is None
 
 
 @pytest.mark.unit
@@ -542,17 +546,17 @@ def test_claude_code_credentials_path_round_trips_through_to_toml_and_load(tmp_p
     edited = RunnerConfig(
         root=root,
         db_url=RunnerConfig.default_db_url(root),
-        claude_code_credentials_path=scratch,
+        harness_sections=sections(ClaudeCodeSection(credentials_path=scratch)),
     )
     (root / "blizzard-runner.toml").write_text(edited.to_toml())
     reloaded = RunnerConfig.load(root)
-    assert reloaded.claude_code_credentials_path == scratch
+    assert claude_code(reloaded).credentials_path == scratch
 
 
 @pytest.mark.unit
 def test_opencode_auth_path_defaults_none(tmp_path: Path) -> None:
     # Absent means the health probe's own default discovery path.
-    assert RunnerConfig.scaffold(tmp_path).opencode_auth_path is None
+    assert opencode(RunnerConfig.scaffold(tmp_path)).auth_path is None
 
 
 @pytest.mark.unit
@@ -563,11 +567,11 @@ def test_opencode_auth_path_round_trips_through_to_toml_and_load(tmp_path: Path)
     edited = RunnerConfig(
         root=root,
         db_url=RunnerConfig.default_db_url(root),
-        opencode_auth_path=scratch,
+        harness_sections=sections(OpenCodeSection(auth_path=scratch)),
     )
     (root / "blizzard-runner.toml").write_text(edited.to_toml())
     reloaded = RunnerConfig.load(root)
-    assert reloaded.opencode_auth_path == scratch
+    assert opencode(reloaded).auth_path == scratch
 
 
 @pytest.mark.unit
@@ -1849,11 +1853,11 @@ def _write_runner_config(root: Path, body: str) -> None:
 @pytest.mark.unit
 def test_runner_harness_enabled_flags_default_true(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    assert config.claude_code_enabled is True
-    assert config.opencode_enabled is True
+    assert claude_code(config).enabled is True
+    assert opencode(config).enabled is True
     _write_runner_config(tmp_path / "runner", "")
     loaded = RunnerConfig.load(tmp_path / "runner")
-    assert (loaded.claude_code_enabled, loaded.opencode_enabled) == (True, True)
+    assert (claude_code(loaded).enabled, opencode(loaded).enabled) == (True, True)
 
 
 @pytest.mark.unit
@@ -1863,14 +1867,14 @@ def test_runner_harness_enabled_flags_round_trip_through_the_scaffold(
 ) -> None:
     root = tmp_path / "runner"
     root.mkdir()
-    scaffold = dataclasses.replace(
-        RunnerConfig.scaffold(root), claude_code_enabled=claude_code_enabled, opencode_enabled=opencode_enabled
+    scaffold = with_opencode(
+        with_claude_code(RunnerConfig.scaffold(root), enabled=claude_code_enabled), enabled=opencode_enabled
     )
     scaffold.config_path.write_text(scaffold.to_toml())
     loaded = RunnerConfig.load(root)
-    assert loaded.claude_code_enabled is claude_code_enabled
-    assert loaded.opencode_enabled is opencode_enabled
-    assert loaded.harness_binary == scaffold.harness_binary
+    assert claude_code(loaded).enabled is claude_code_enabled
+    assert opencode(loaded).enabled is opencode_enabled
+    assert claude_code(loaded).binary == claude_code(scaffold).binary
 
 
 @pytest.mark.unit
@@ -1885,7 +1889,7 @@ def test_runner_scaffold_honors_the_harness_binary_env_and_round_trips(
     assert "\nharness_binary =" not in text
     assert '[claude_code]\nenabled = true\nbinary = "/opt/mock-claude-code"\n' in text
     scaffold.config_path.write_text(text)
-    assert RunnerConfig.load(root).harness_binary == "/opt/mock-claude-code"
+    assert claude_code(RunnerConfig.load(root)).binary == "/opt/mock-claude-code"
 
 
 @pytest.mark.unit
@@ -1905,13 +1909,13 @@ def test_runner_legacy_harness_binary_with_claude_code_binary_is_a_config_error(
 @pytest.mark.unit
 def test_runner_claude_code_binary_is_honored_without_the_legacy_key(tmp_path: Path) -> None:
     _write_runner_config(tmp_path, '[claude_code]\nbinary = "/opt/claude"\n')
-    assert RunnerConfig.load(tmp_path).harness_binary == "/opt/claude"
+    assert claude_code(RunnerConfig.load(tmp_path)).binary == "/opt/claude"
 
 
 @pytest.mark.unit
 def test_runner_legacy_harness_binary_alone_is_still_honored(tmp_path: Path) -> None:
     _write_runner_config(tmp_path, 'harness_binary = "/opt/legacy-claude"\n')
-    assert RunnerConfig.load(tmp_path).harness_binary == "/opt/legacy-claude"
+    assert claude_code(RunnerConfig.load(tmp_path)).binary == "/opt/legacy-claude"
 
 
 @pytest.mark.unit
@@ -2273,3 +2277,95 @@ def test_runner_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value:
     _write_runner_config(tmp_path / "runner", f"\n[tracing]\n{key} = {value}\n")
     with pytest.raises(ConfigError, match=f"tracing.{key}"):
         RunnerConfig.load(tmp_path / "runner")
+
+
+_LEGACY_SHAPED_RUNNER_TOML = """db_url = "sqlite:///legacy.db"
+harness_binary = "/opt/claude"
+harness_permission_mode = "acceptEdits"
+worker_settings_path = "/w/worker-settings.json"
+claude_code_credentials_path = "/c/credentials.json"
+
+[models.aliases]
+"blizzard:frontier" = "opus"
+
+[effort.aliases]
+"blizzard:deep" = "high"
+
+[opencode]
+enabled = false
+binary = "/opt/opencode"
+worker_config_path = "/w/opencode-worker-config.json"
+auth_path = "/a/auth.json"
+
+[opencode.models.aliases]
+"blizzard:frontier" = "openai/gpt"
+
+[opencode.effort.aliases]
+"high" = "max"
+"""
+
+
+@pytest.mark.unit
+def test_a_legacy_shaped_runner_toml_loads_into_each_harness_section(tmp_path: Path) -> None:
+    (tmp_path / "blizzard-runner.toml").write_text(_LEGACY_SHAPED_RUNNER_TOML)
+    loaded = RunnerConfig.load(tmp_path)
+
+    assert claude_code(loaded) == ClaudeCodeSection(
+        binary="/opt/claude",
+        enabled=True,
+        permission_mode="acceptEdits",
+        worker_settings_path="/w/worker-settings.json",
+        credentials_path="/c/credentials.json",
+        model_aliases=(("blizzard:frontier", "opus"),),
+        effort_aliases=(("blizzard:deep", "high"),),
+    )
+    assert opencode(loaded) == OpenCodeSection(
+        binary="/opt/opencode",
+        enabled=False,
+        model_aliases=(("blizzard:frontier", "openai/gpt"),),
+        effort_aliases=(("high", "max"),),
+        worker_config_path="/w/opencode-worker-config.json",
+        auth_path="/a/auth.json",
+    )
+
+
+@pytest.mark.unit
+def test_a_legacy_shaped_runner_toml_emits_back_unchanged_through_a_round_trip(tmp_path: Path) -> None:
+    (tmp_path / "blizzard-runner.toml").write_text(_LEGACY_SHAPED_RUNNER_TOML)
+    emitted = RunnerConfig.load(tmp_path).to_toml()
+    (tmp_path / "blizzard-runner.toml").write_text(emitted)
+
+    assert RunnerConfig.load(tmp_path).to_toml() == emitted
+    # The operator-facing shape, byte for byte, whichever harness section owns each key.
+    assert emitted == LEGACY_EMITTED
+    # The legacy root keys keep their place among the root keys; each binding's tables follow the shared ones.
+    assert 'worker_settings_path = "/w/worker-settings.json"\n' in emitted
+    assert 'claude_code_credentials_path = "/c/credentials.json"\n' in emitted
+    assert emitted.index("worker_settings_path =") < emitted.index("max_agents =") < emitted.index("[harness]")
+    claude_table = '[claude_code]\nenabled = true\nbinary = "/opt/claude"\n'
+    assert emitted.index("[auth.users]") < emitted.index(claude_table) < emitted.index("[opencode]\nenabled = false\n")
+    assert '[models.aliases]\n"blizzard:frontier" = "opus"\n' in emitted
+    assert '[opencode.effort.aliases]\n"high" = "max"\n' in emitted
+
+
+@pytest.mark.unit
+def test_a_legacy_permission_mode_with_autonomy_is_a_config_error(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, 'harness_permission_mode = "auto"\n[harness]\nautonomy = "normal"\n')
+    with pytest.raises(ConfigError, match=r"'harness_permission_mode' and '\[harness\] autonomy' are both set"):
+        RunnerConfig.load(tmp_path)
+
+
+@pytest.mark.unit
+def test_every_harness_disabled_names_each_section_in_catalog_order(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, "[claude_code]\nenabled = false\n[opencode]\nenabled = false\n")
+    with pytest.raises(ConfigError) as raised:
+        RunnerConfig.load(tmp_path)
+    assert str(raised.value) == ("'[claude_code].enabled' and '[opencode].enabled' are both false; enable at least one")
+
+
+@pytest.mark.unit
+def test_the_harness_binary_set_twice_error_keeps_its_message(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, 'harness_binary = "/a/claude"\n[claude_code]\nbinary = "/b/claude"\n')
+    with pytest.raises(ConfigError) as raised:
+        RunnerConfig.load(tmp_path)
+    assert str(raised.value) == "set Claude Code's binary once: 'harness_binary' or '[claude_code].binary', not both"

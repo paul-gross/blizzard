@@ -50,6 +50,7 @@ from tests.e2e.fleet_traces import (
     whole_chunk_decision_wait,
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
+from tests.harness_sections import claude_code, opencode, sections
 from tests.support import (
     daemon_log_sink,
     free_port,
@@ -660,8 +661,8 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
     ``host``/``port`` bind to a free port rather than the base config's default, which
     can collide with this machine's live dogfood runner. Both mock
-    harness binaries are always wired: ``harness_binary`` keeps meaning Claude Code
-    (harness selection is per-node, never this function), ``opencode_binary`` lets a scenario opt in by naming ``opencode``."""
+    harness binaries are always wired: harness selection is per-node, never this function, so a
+    scenario opts in to OpenCode by naming ``opencode``."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     return dataclasses.replace(
@@ -672,15 +673,18 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         workspace_provider="winter",
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
-        harness_binary=str(bin_dir / "mock-claude-code"),
-        # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
-        # omitted (``None``).
-        harness_permission_mode=None,
-        # Both health probes read a fixture-written credential file — neither
-        # mock binary is a real, logged-in provider CLI.
-        claude_code_credentials_path=claude_credentials,
-        opencode_binary=str(bin_dir / "mock-opencode"),
-        opencode_auth_path=opencode_auth,
+        harness_sections=sections(
+            # The mock façade rejects any ``--permission-mode``, so ``None`` omits it; both health
+            # probes read a fixture credential file, since neither mock is a logged-in provider CLI.
+            dataclasses.replace(
+                claude_code(base),
+                binary=str(bin_dir / "mock-claude-code"),
+                permission_mode=None,
+                credentials_path=claude_credentials,
+            ),
+            dataclasses.replace(opencode(base), binary=str(bin_dir / "mock-opencode"), auth_path=opencode_auth),
+            base=base.harness_sections,
+        ),
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

@@ -18,6 +18,8 @@ from blizzard.runner.harness import bundle as bundle_module
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, plugin_identity
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from tests.harness_sections import sections
 
 pytestmark = pytest.mark.component
 
@@ -74,7 +76,7 @@ def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_pa
     first = publish_harness_bundle(bundle, runtime)
     missing = runtime / "missing-worker-config.json"
     with pytest.raises(HarnessBundleError) as raised:
-        publish_harness_bundle(bundle, runtime, worker_config_path=missing)
+        publish_harness_bundle(bundle, runtime, sections=sections(OpenCodeSection(worker_config_path=str(missing))))
     assert raised.value.path == missing
     assert published_snapshot(runtime) == first.path.resolve()
 

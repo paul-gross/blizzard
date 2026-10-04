@@ -6,7 +6,7 @@ Blizzard is coding-harness-agnostic: every harness sits behind one small adapter
 
 from __future__ import annotations
 
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     HarnessBinding,
     HarnessRegistry,
@@ -16,7 +16,6 @@ from blizzard.runner.harness.registry import (
 )
 
 __all__ = [
-    "CLAUDE_CODE_HARNESS_ID",
     "HarnessBinding",
     "HarnessRegistry",
     "IHarnessRegistry",

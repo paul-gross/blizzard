@@ -11,6 +11,9 @@ from unittest import mock
 import pytest
 
 from blizzard.runner.config import ENV_PUBLIC_URL, ConfigError, RunnerConfig
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
+from tests.harness_sections import claude_code, opencode, sections
 
 pytestmark = pytest.mark.unit
 
@@ -173,22 +176,26 @@ def test_model_and_effort_aliases_round_trip(tmp_path: Path) -> None:
     config = RunnerConfig(
         root=tmp_path,
         db_url="sqlite://",
-        model_aliases=(("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5")),
-        effort_aliases=(("max", "xhigh"),),
+        harness_sections=sections(
+            ClaudeCodeSection(
+                model_aliases=(("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5")),
+                effort_aliases=(("max", "xhigh"),),
+            )
+        ),
     )
 
     reloaded = _round_trip(tmp_path, config)
 
-    assert reloaded.model_aliases == (("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5"))
-    assert reloaded.effort_aliases == (("max", "xhigh"),)
+    assert claude_code(reloaded).model_aliases == (("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5"))
+    assert claude_code(reloaded).effort_aliases == (("max", "xhigh"),)
 
 
 def test_a_scaffold_declaring_no_aliases_reads_back_empty(tmp_path: Path) -> None:
     # The zero-config runner: the adapter's own built-in tier defaults stand.
     reloaded = _round_trip(tmp_path, RunnerConfig(root=tmp_path, db_url="sqlite://"))
 
-    assert reloaded.model_aliases == ()
-    assert reloaded.effort_aliases == ()
+    assert claude_code(reloaded).model_aliases == ()
+    assert claude_code(reloaded).effort_aliases == ()
 
 
 # --- OpenCode's own per-harness configuration ---------------------------
@@ -200,34 +207,40 @@ def test_opencode_binary_and_aliases_round_trip(tmp_path: Path) -> None:
     config = RunnerConfig(
         root=tmp_path,
         db_url="sqlite://",
-        opencode_binary="/usr/local/bin/opencode",
-        opencode_model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),),
-        opencode_effort_aliases=(("high", "xhigh"),),
+        harness_sections=sections(
+            OpenCodeSection(
+                binary="/usr/local/bin/opencode",
+                model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),),
+                effort_aliases=(("high", "xhigh"),),
+            )
+        ),
     )
 
     reloaded = _round_trip(tmp_path, config)
 
-    assert reloaded.opencode_binary == "/usr/local/bin/opencode"
-    assert reloaded.opencode_model_aliases == (("blizzard:frontier", "openai/gpt-5.6-luna"),)
-    assert reloaded.opencode_effort_aliases == (("high", "xhigh"),)
+    assert opencode(reloaded).binary == "/usr/local/bin/opencode"
+    assert opencode(reloaded).model_aliases == (("blizzard:frontier", "openai/gpt-5.6-luna"),)
+    assert opencode(reloaded).effort_aliases == (("high", "xhigh"),)
 
 
 def test_a_scaffold_declaring_no_opencode_config_reads_back_the_default_binary(tmp_path: Path) -> None:
     reloaded = _round_trip(tmp_path, RunnerConfig(root=tmp_path, db_url="sqlite://"))
 
-    assert reloaded.opencode_binary == "opencode"
-    assert reloaded.opencode_model_aliases == ()
-    assert reloaded.opencode_effort_aliases == ()
+    assert opencode(reloaded).binary == "opencode"
+    assert opencode(reloaded).model_aliases == ()
+    assert opencode(reloaded).effort_aliases == ()
 
 
 def test_opencode_worker_config_path_round_trips(tmp_path: Path) -> None:
     config = RunnerConfig(
-        root=tmp_path, db_url="sqlite://", opencode_worker_config_path=str(tmp_path / "opencode-worker-config.json")
+        root=tmp_path,
+        db_url="sqlite://",
+        harness_sections=sections(OpenCodeSection(worker_config_path=str(tmp_path / "opencode-worker-config.json"))),
     )
 
     reloaded = _round_trip(tmp_path, config)
 
-    assert reloaded.opencode_worker_config_path == str(tmp_path / "opencode-worker-config.json")
+    assert opencode(reloaded).worker_config_path == str(tmp_path / "opencode-worker-config.json")
 
 
 def test_an_upgraded_runner_with_no_opencode_table_still_resolves_a_worker_config_path(tmp_path: Path) -> None:
@@ -240,5 +253,5 @@ def test_an_upgraded_runner_with_no_opencode_table_still_resolves_a_worker_confi
     loaded = RunnerConfig.load(tmp_path)
     fresh = RunnerConfig.scaffold(tmp_path)
 
-    assert loaded.opencode_worker_config_path is not None
-    assert loaded.opencode_worker_config_path == fresh.opencode_worker_config_path
+    assert opencode(loaded).worker_config_path is not None
+    assert opencode(loaded).worker_config_path == opencode(fresh).worker_config_path

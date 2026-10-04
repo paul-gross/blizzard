@@ -1,31 +1,19 @@
 """The one neutral composition point over every coding harness the runner ships.
 
-Claude Code's own construction stays here — this module's one approved wiring site,
-symmetric with OpenCode's own factory (`opencode_registry.build_opencode_binding`), so
-neither adapter's concrete class escapes its approved module (`tests/test_layering.py`);
-the composition root reaches both only through this one function."""
+Iterates :data:`~blizzard.runner.harness.catalog.HARNESS_CATALOG`: each enabled declaration
+builds its own binding and probe, so no adapter's concrete class escapes its declaration
+(``tests/test_layering.py``) and the composition root reaches them only through this module."""
 
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from pathlib import Path
 
-from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
-from blizzard.runner.harness.ambient_conflicts import claude_code_ambient_sources, claude_code_permission_mode
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
-from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_paths import resolve_opencode_auth_path
-from blizzard.runner.harness.internal.opencode_registry import build_opencode_binding
+from blizzard.runner.harness.catalog import enabled, shared_inputs
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.loop.process import LinuxProcessProbe
 
 
@@ -34,53 +22,23 @@ def build_production_harness_registry(
 ) -> HarnessRegistry:
     """Build every enabled harness binding once for one graph, over one shared probe/
     launcher pair. The process graph owns the injected executor and probe for the
-    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup."""
-    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
-    transcript_source = ClaudeCodeTranscriptSource(
-        projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
-    )
+    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup.
+    Insertion follows the catalog order: the first binding is the runner's default harness."""
     launcher = ProcessLauncher(process, executor=executor)
-    # Insertion order is claude_code then opencode: the first binding is the runner's default harness.
-    bindings: dict[str, HarnessBinding] = {}
-    if config.claude_code_enabled:
-        adapter = ClaudeCodeAdapter(
-            binary=config.harness_binary,
-            settings_path=config.worker_settings_path,
-            bundle=ClaudeCodeBundleDelivery.of(bundle),
-            autonomy=config.autonomy,
-            permission_mode=config.harness_permission_mode,
-            worker_env=config.worker_env,
-            model_aliases=config.model_aliases,
-            effort_aliases=config.effort_aliases,
-            transcript_source=transcript_source,
-            process=process,
-            launcher=launcher,
-        )
-        bindings[CLAUDE_CODE_HARNESS_ID] = HarnessBinding(adapter=adapter, transcript_source=transcript_source)
-    if config.opencode_enabled:
-        bindings[OPENCODE_HARNESS_ID] = build_opencode_binding(config, process=process, launcher=launcher)
+    shared = shared_inputs(config, bundle=bundle)
+    bindings: dict[str, HarnessBinding] = {
+        declaration.harness_id: declaration.binding(section, shared, process=process, launcher=launcher)
+        for declaration, section in enabled(config.harness_sections)
+    }
     return HarnessRegistry(bindings)
 
 
 def build_production_harness_health_probes(config: RunnerConfig, *, spawn_root: str) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
-    IHarnessHealthProbe`, this module's own approved wiring site for the
-    health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
-    adapter construction — the composition root reaches both only through this module."""
-    probes: dict[str, IHarnessHealthProbe] = {}
-    if config.claude_code_enabled:
-        probes[CLAUDE_CODE_HARNESS_ID] = ClaudeCodeHealthProbe(
-            binary=config.harness_binary,
-            credentials_path=config.claude_code_credentials_path,
-            ambient_sources=claude_code_ambient_sources(config, spawn_root=spawn_root),
-            permission_mode=claude_code_permission_mode(config),
-        )
-    if config.opencode_enabled:
-        # The file a spawned worker would read: its allowlisted env, not the daemon's own.
-        auth_path = (
-            Path(config.opencode_auth_path)
-            if config.opencode_auth_path is not None
-            else resolve_opencode_auth_path(config.worker_env.variables)
-        )
-        probes[OPENCODE_HARNESS_ID] = OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=auth_path)
-    return probes
+    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — the
+    composition root reaches both only through this module."""
+    shared = shared_inputs(config)
+    return {
+        declaration.harness_id: declaration.health_probe(section, shared, spawn_root=spawn_root)
+        for declaration, section in enabled(config.harness_sections)
+    }

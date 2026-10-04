@@ -14,6 +14,7 @@ from blizzard.runner.cli.runtime import _publish_harness_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.catalog import shared_inputs
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_bundle import (
     _merge_plugins,
@@ -21,9 +22,12 @@ from blizzard.runner.harness.internal.opencode_bundle import (
     ambient_plugin_sources,
     content_with_snapshot_references,
 )
-from blizzard.runner.harness.internal.opencode_registry import build_opencode_binding
+from blizzard.runner.harness.internal.opencode_declaration import OPENCODE_DECLARATION
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.sections import HarnessSections
 from blizzard.runner.runtime import init_environment
+from tests.harness_sections import opencode, sections
 from tests.runner_fakes import FakeProbe
 
 pytestmark = pytest.mark.unit
@@ -77,17 +81,18 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
     config = init_environment(tmp_path / "runtime")
-    assert config.opencode_worker_config_path is not None
-    worker = Path(config.opencode_worker_config_path)
+    assert opencode(config).worker_config_path is not None
+    worker = opencode(config).worker_config_at(config.root)
     assert worker.is_file()
     bundle = tmp_path / "bundle"
     native = bundle / "opencode" / "opencode.json"
     native.parent.mkdir(parents=True)
     native.write_text(json.dumps({"permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
-    snapshot = publish_harness_bundle(bundle, config.root, worker_config_path=worker)
+    snapshot = publish_harness_bundle(bundle, config.root, sections=config.harness_sections)
     probe = FakeProbe()
     launcher = ProcessLauncher(probe, executor=spawn_executor)
-    binding = build_opencode_binding(replace(config, harness_config_dir=bundle), process=probe, launcher=launcher)
+    bundled = replace(config, harness_config_dir=bundle)
+    binding = OPENCODE_DECLARATION.binding(opencode(bundled), shared_inputs(bundled), process=probe, launcher=launcher)
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter._config_env()
     assert env["OPENCODE_CONFIG"] == str(snapshot.path / "opencode" / "opencode.json")
@@ -96,7 +101,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert composed["permission"] == {"bash": "deny", "question": "deny"}
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
     assert published_snapshot(config.root) == snapshot.path.resolve()
-    plain = build_opencode_binding(config, process=probe, launcher=launcher)
+    plain = OPENCODE_DECLARATION.binding(opencode(config), shared_inputs(config), process=probe, launcher=launcher)
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter._config_env()
     assert plain_env["OPENCODE_CONFIG"] == str(worker)
@@ -106,15 +111,20 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
 def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = tmp_path / "bundle"
     worker = tmp_path / "custom" / "worker.json"
-    observed: list[tuple[Path, Path, Path | None]] = []
+    observed: list[tuple[Path, Path, str | None]] = []
 
-    def publish(source: Path, root: Path, *, worker_config_path: Path | None = None, **_: object) -> SimpleNamespace:
-        observed.append((source, root, worker_config_path))
+    def publish(source: Path, root: Path, *, sections: HarnessSections, **_: object) -> SimpleNamespace:
+        section = sections.of(OPENCODE_DECLARATION.harness_id)
+        assert isinstance(section, OpenCodeSection)
+        observed.append((source, root, section.worker_config_path))
         return SimpleNamespace(summary=lambda: "published")
 
     monkeypatch.setattr("blizzard.runner.cli.runtime.publish_harness_bundle", publish)
     config = RunnerConfig(
-        root=tmp_path, db_url="sqlite://", harness_config_dir=bundle, opencode_worker_config_path=str(worker)
+        root=tmp_path,
+        db_url="sqlite://",
+        harness_config_dir=bundle,
+        harness_sections=sections(OpenCodeSection(worker_config_path=str(worker))),
     )
     _publish_harness_bundle(config)
-    assert observed == [(bundle, tmp_path, worker)]
+    assert observed == [(bundle, tmp_path, str(worker))]

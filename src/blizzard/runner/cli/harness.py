@@ -10,9 +10,9 @@ import click
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.harness.ambient_conflicts import claude_code_config_conflicts
 from blizzard.runner.harness.bundle import published_snapshot
-from blizzard.runner.harness.bundle_layouts import claude_code_delivery, inspect_harness_bundle
+from blizzard.runner.harness.bundle_layouts import inspect_harness_bundle
+from blizzard.runner.harness.catalog import HARNESS_CATALOG, declared, shared_inputs
 
 
 @click.group("harness")
@@ -21,8 +21,9 @@ def harness_group() -> None:
 
 
 def _autonomy_source(config: RunnerConfig) -> str:
-    if config.harness_permission_mode is not None:
-        return "legacy harness_permission_mode"
+    overrides = [override for s in config.harness_sections if (override := s.autonomy_override()) is not None]
+    if overrides:
+        return overrides[0]
     harness = tomllib.loads(config.config_path.read_text()).get("harness")
     return "[harness] autonomy" if isinstance(harness, dict) and "autonomy" in harness else "default"
 
@@ -43,15 +44,14 @@ def harness_status(directory: str) -> None:
     try:
         config = RunnerConfig.load(Path(directory))
         click.echo(f"autonomy: {config.autonomy} (from {_autonomy_source(config)})")
-        if config.claude_code_enabled:
-            for conflict in claude_code_config_conflicts(
-                config, spawn_root=build_workspace_provider(config).spawn_root()
-            ):
-                click.echo(f"claude-code config conflict: {conflict}")
+        shared = shared_inputs(config)
+        spawn_root = build_workspace_provider(config).spawn_root()
+        for declaration, section in declared(config.harness_sections):
+            _echo(declaration.diagnostics(section, shared, spawn_root=spawn_root))
         if config.harness_config_dir is None:
             click.echo("config_dir: none")
-            click.echo(f"worker settings file in effect: {config.worker_settings_path}")
-            click.echo(f"opencode worker config in effect: {config.opencode_worker_config_path}")
+            for declaration, section in declared(config.harness_sections):
+                _echo(declaration.unbundled_status(section))
             return
         click.echo(f"config_dir: {config.harness_config_dir}")
         sources = inspect_harness_bundle(config.harness_config_dir)
@@ -63,8 +63,10 @@ def harness_status(directory: str) -> None:
     if snapshot is None:
         raise click.ClickException("config_dir is configured but no snapshot is published; restart the runner")
     click.echo(f"snapshot: {snapshot}")
-    delivery = claude_code_delivery(snapshot, sources)
-    if delivery is not None:
-        settings, flags = delivery
-        click.echo(f"claude-code effective settings: {settings}")
-        click.echo(f"claude-code flags: {' '.join(flags)}")
+    for declaration in HARNESS_CATALOG:
+        _echo(declaration.snapshot_status(snapshot, sources))
+
+
+def _echo(lines: tuple[str, ...]) -> None:
+    for line in lines:
+        click.echo(line)

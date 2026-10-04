@@ -22,6 +22,7 @@ import httpx
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
+from tests.harness_sections import claude_code, opencode, sections
 from tests.support import daemon_log_sink, write_mock_harness_credentials, write_work_sources
 
 OWNER = "blizzard"
@@ -855,17 +856,19 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # classification, the transcript-summed usage fallback) fall back to the real
         # ``~/.claude/projects`` and silently find nothing.
         transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"),
-        harness_binary=str(bin_dir / "mock-claude-code"),
-        # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
-        # omitted here — ``None`` omits it.
-        harness_permission_mode=None,
-        # Both health probes read a fixture-written credential file — neither
-        # mock binary is a real, logged-in provider CLI.
-        claude_code_credentials_path=claude_credentials,
-        # Independent of `harness_binary` (still Claude Code's) — without this, no crash-tier
-        # scenario can spawn an OpenCode worker at all (bzh:crash-sweep).
-        opencode_binary=str(bin_dir / "mock-opencode"),
-        opencode_auth_path=opencode_auth,
+        harness_sections=sections(
+            # The mock façade rejects any ``--permission-mode``, so ``None`` omits it; both health
+            # probes read a fixture credential file, since neither mock is a logged-in provider CLI.
+            dataclasses.replace(
+                claude_code(base),
+                binary=str(bin_dir / "mock-claude-code"),
+                permission_mode=None,
+                credentials_path=claude_credentials,
+            ),
+            # Without this, no crash-tier scenario can spawn an OpenCode worker (bzh:crash-sweep).
+            dataclasses.replace(opencode(base), binary=str(bin_dir / "mock-opencode"), auth_path=opencode_auth),
+            base=base.harness_sections,
+        ),
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
