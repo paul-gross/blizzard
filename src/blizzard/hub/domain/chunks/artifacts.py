@@ -3,6 +3,7 @@ including the hub-node marker/log artifacts written outside a transition."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
@@ -26,6 +27,12 @@ class IReadChunkArtifactsRepository(Protocol):
     def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
         """The chunk's newest artifact row named ``name`` — highest epoch, then latest
         ``produced_at``. ``None`` when no artifact of that name exists."""
+        ...
+
+    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, ArtifactRow]:
+        """`latest_artifact`'s batched sibling (`bzh:bulk-reconstitution`) — each name's
+        newest row, keyed by name, the same row `latest_artifact` picks. A name with no
+        artifact is dropped."""
         ...
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:

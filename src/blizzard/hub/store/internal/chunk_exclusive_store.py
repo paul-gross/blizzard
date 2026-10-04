@@ -50,6 +50,9 @@ class LockedChunkTransaction:
     def record(self, chunk_id: str) -> Chunk | None:
         return self._record.get_conn(self.conn, chunk_id)
 
+    def records_for(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+        return self._record.get_many_conn(self.conn, chunk_ids)
+
     def route_of(self, chunk_id: str) -> Route | None:
         return route_of_conn(self.conn, chunk_id)
 

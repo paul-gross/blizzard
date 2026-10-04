@@ -141,7 +141,7 @@ class _FakeFactsRepo:
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``record``/``facts``/``standing_edges`` are live — see module docstring."""
+    """Only ``record``/``records_for``/``facts_for``/``standing_edges`` are live — see module docstring."""
 
     record_repo: _FakeRecordRepo
     facts_repo: _FakeFactsRepo
@@ -152,6 +152,12 @@ class _FakeLockedChunkRead:
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts_repo.load_facts(chunk_id)
+
+    def records_for(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+        return {cid: self.record_repo.chunks[cid] for cid in chunk_ids if cid in self.record_repo.chunks}
+
+    def facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return {cid: self.facts_repo.facts[cid] for cid in chunk_ids if cid in self.facts_repo.facts}
 
     def standing_edges(self) -> list[DependencyEdge]:
         return self.dependencies_repo.list_standing_edges()
@@ -393,3 +399,27 @@ def test_group_still_raises_chunk_not_found_for_an_unknown_target_and_writes_not
 
     assert dependencies.folds == []
     assert work_refs.added == []
+
+
+def test_the_first_bad_merge_id_in_input_order_raises() -> None:
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_running": _chunk("chk_running")}
+    facts = {"chk_survivor": _not_ready_facts(), "chk_running": _running_facts()}
+    service, _, _ = _service(chunks, facts)
+
+    with pytest.raises(ChunkNotGroupable) as running_first:
+        service.group("chk_survivor", ["chk_running", "chk_unknown"])
+    assert running_first.value.chunk_id == "chk_running"
+
+    with pytest.raises(ChunkNotFound) as unknown_first:
+        service.group("chk_survivor", ["chk_unknown", "chk_running"])
+    assert unknown_first.value.chunk_id == "chk_unknown"
+
+
+def test_a_record_without_facts_is_not_found_not_not_groupable() -> None:
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_bare": _chunk("chk_bare")}
+    facts = {"chk_survivor": _not_ready_facts()}
+    service, _, _ = _service(chunks, facts)
+
+    with pytest.raises(ChunkNotFound) as raised:
+        service.group("chk_survivor", ["chk_bare"])
+    assert raised.value.chunk_id == "chk_bare"

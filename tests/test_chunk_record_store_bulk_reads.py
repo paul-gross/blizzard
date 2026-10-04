@@ -52,6 +52,20 @@ def test_get_many_matches_get_across_a_normal_ephemeral_and_unknown_id(tmp_path:
     assert result["ch_live"] == store.record.get("ch_live")
 
 
+def test_records_for_on_a_locked_handle_matches_record_per_id(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _mint(store, "ch_live", work_refs=[WorkRef(source="default", ref="1")])
+    _mint(store, "ch_grouped")
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
+
+    with store.exclusive.locked(["ch_live", "ch_grouped"]) as handle:
+        result = handle.records_for(["ch_live", "ch_grouped", "ch_never_minted"])
+        assert set(result) == {"ch_live"}
+        assert result["ch_live"] == handle.record("ch_live")
+        assert handle.records_for([]) == {}
+
+
 def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
 

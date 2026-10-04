@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub, pointer_token, write_chunk_pause_facts
+from tests.support import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
 
@@ -388,3 +388,27 @@ def test_no_standing_edge_names_a_grouped_away_chunk_after_any_fold(tmp_path: Pa
     for edge in hub.services.chunks.dependencies.list_standing_edges():
         assert edge.dependent_chunk_id not in grouped_away
         assert edge.prerequisite_chunk_id not in grouped_away
+
+
+def test_group_reads_the_fold_in_a_bounded_number_of_statements(tmp_path: Path) -> None:
+    """The fold's guard reads are one plural read each for the whole set, so the count of
+    ``SELECT`` statements the route issues is the same for 1 merge id as for 4."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+    few_ids = [_ingest(few, n) for n in range(1, 3)]
+    many_ids = [_ingest(many, n) for n in range(1, 6)]
+
+    def reads(hub: HubHarness, ids: list[str]) -> int:
+        with capture_statements(hub.engine) as statements:
+            hub.services.group.group(ids[0], ids[1:])
+        # The guard reads (record + facts) only — the fold's writes and their own
+        # bookkeeping legitimately scale with the targets.
+        return sum(
+            1
+            for statement, _ in statements
+            if statement.lstrip().upper().startswith("SELECT") and "FROM chunks" in statement
+        )
+
+    assert reads(few, few_ids) == reads(many, many_ids)

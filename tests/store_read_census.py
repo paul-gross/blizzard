@@ -1802,6 +1802,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkArtifactsRepository, "latest_artifact"): lambda w: w.read.artifacts.latest_artifact(
         w.chunk_artifacts, "asset-1"
     ),
+    (IReadChunkArtifactsRepository, "latest_artifacts"): lambda w: w.read.artifacts.latest_artifacts(
+        w.chunk_artifacts, ["asset-1", "no-such-asset"]
+    ),
     (IReadChunkArtifactsRepository, "has_hub_artifact"): lambda w: w.read.artifacts.has_hub_artifact(
         w.chunk_artifacts, node_id=w.deliver_node_id, epoch=1, name="asset-1"
     ),

@@ -12,11 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.events.broker import CHUNK_CHANGED
 from blizzard.hub.events.broker import QUESTION_ASKED as QUESTION_ASKED_EVENT
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
-from tests.support import build_hub, count_queries, emitted_events, ingest
+from tests.support import build_hub, capture_statements, count_queries, emitted_events, ingest
 
 pytestmark = pytest.mark.component
 
@@ -383,3 +384,20 @@ def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) 
         assert resp.status_code == 202, resp.text
 
     assert count_queries(hub.engine, call) == 70
+
+
+def test_before_many_snapshots_carry_prev_status_only_and_read_fewer_statements(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ids = _seed_scale(hub, 3)
+
+    with capture_statements(hub.engine) as narrow:
+        snapshots = ChunkChanged.before_many(hub.services, [*ids, "ch_never_minted"])
+    with capture_statements(hub.engine) as wide:
+        hub.services.chunks.facts.load_facts_for(ids)
+
+    assert {chunk_id: snapshot.prev_status for chunk_id, snapshot in snapshots.items()} == {
+        **dict.fromkeys(ids, "running"),
+        "ch_never_minted": None,
+    }
+    assert all(snapshot.facts is None for snapshot in snapshots.values())
+    assert len(narrow) < len(wide)

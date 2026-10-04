@@ -101,15 +101,16 @@ class ChunkChanged:
     @classmethod
     def before_many(cls, services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
         """`before`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per
-        distinct requested id, through `load_facts_for`. An id the plural drops gets
-        ``prev_status=None``/``facts=None``, exactly as `before` does for a missing
-        chunk."""
+        distinct requested id, through the narrowed `status_facts_for`. A snapshot
+        carries ``prev_status`` only: ``facts`` stays ``None`` so a narrowed projection is
+        never reused as the wide one. An id the plural drops gets ``prev_status=None``,
+        exactly as `before` does for a missing chunk."""
         ids = list(dict.fromkeys(chunk_ids))
-        facts_by_id = services.chunks.facts.load_facts_for(ids)
+        facts_by_id = services.chunks.facts.status_facts_for(ids)
         result: dict[str, ChunkChanged] = {}
         for chunk_id in ids:
             facts = facts_by_id.get(chunk_id)
-            result[chunk_id] = cls(services, chunk_id, None if facts is None else facts.status().value, facts)
+            result[chunk_id] = cls(services, chunk_id, None if facts is None else facts.status().value)
         return result
 
     @classmethod
