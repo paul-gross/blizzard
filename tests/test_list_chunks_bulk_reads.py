@@ -21,7 +21,16 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, make_ready, seed_chunk, seed_graph
+from tests.support import (
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    make_ready,
+    report_lease,
+    seed_chunk,
+    seed_graph,
+)
 from tests.test_ingest_and_queue import _BUILD_REVIEW_DELIVER_YAML, _pass
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -325,10 +334,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     ]
     to_review = _pass(hub, old_holder_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
-    assert (
-        hub.client.post(f"/api/fleet/chunks/{old_holder_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code
-        == 202
-    )
+    assert report_lease(hub, old_holder_id, epoch=2, seq=1)["applied"] == [1]
     _pass(hub, old_holder_id, review_id, 2, artifacts=[])
     assert hub.client.get(f"/api/chunks/{old_holder_id}").json()["status"] == "done"
 

@@ -8,7 +8,15 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.chunk.model import WorkRef
-from tests.support import FakeWorkSource, build_hub, ingest, make_ready, pointer_token, write_chunk_pause_facts
+from tests.support import (
+    FakeWorkSource,
+    build_hub,
+    ingest,
+    make_ready,
+    pointer_token,
+    report_lease,
+    write_chunk_pause_facts,
+)
 
 pytestmark = pytest.mark.component
 
@@ -259,9 +267,7 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     to_review = _pass(hub, chunk_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
     # Report the review node-step's fresh lease so the hub's fence tracks it.
-    assert (
-        hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
-    )
+    assert report_lease(hub, chunk_id, epoch=2, seq=1)["applied"] == [1]
     _pass(hub, chunk_id, review_id, 2, artifacts=[])
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 

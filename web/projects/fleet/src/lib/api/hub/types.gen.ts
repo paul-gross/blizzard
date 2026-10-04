@@ -2228,44 +2228,6 @@ export type EnvelopeChoice = {
 };
 
 /**
- * EscalationReport
- *
- * A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
- * ``takeover_command`` may carry operator prose instead of a literal command, or be empty;
- * ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``.
- */
-export type EscalationReport = {
-    /**
-     * Cause
-     */
-    cause?: string | null;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-    /**
-     * Epoch
-     */
-    epoch: number;
-    /**
-     * Lease Id
-     */
-    lease_id?: string | null;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
-    /**
-     * Takeover Command
-     */
-    takeover_command?: string;
-    /**
-     * Wrapped Takeover Command
-     */
-    wrapped_takeover_command?: string;
-};
-
-/**
  * EventView
  *
  * One operational event on the wire — an ``event_log`` row or a projected open
@@ -3598,26 +3560,6 @@ export type LandedRepoView = {
      * Url
      */
     url?: string | null;
-};
-
-/**
- * LeaseMintReport
- *
- * A runner's ``lease.minted`` — one node-step attempt's fencing epoch.
- */
-export type LeaseMintReport = {
-    /**
-     * Epoch
-     */
-    epoch: number;
-    /**
-     * Lease Id
-     */
-    lease_id?: string | null;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
 };
 
 /**
@@ -9621,40 +9563,6 @@ export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses = {
 
 export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponse = GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses[keyof GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses];
 
-export type ReportEscalationApiFleetChunksChunkIdEscalationsPostData = {
-    body: EscalationReport;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/fleet/chunks/{chunk_id}/escalations';
-};
-
-export type ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ReportEscalationApiFleetChunksChunkIdEscalationsPostError = ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors[keyof ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors];
-
-export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses = {
-    /**
-     * Response Report Escalation Api Fleet Chunks  Chunk Id  Escalations Post
-     *
-     * Successful Response
-     */
-    202: {
-        [key: string]: string;
-    };
-};
-
-export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponse = ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses];
-
 export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetData = {
     body?: never;
     path: {
@@ -9816,40 +9724,6 @@ export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses = {
 };
 
 export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponse = HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses[keyof HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses];
-
-export type ReportLeaseApiFleetChunksChunkIdLeasesPostData = {
-    body: LeaseMintReport;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/fleet/chunks/{chunk_id}/leases';
-};
-
-export type ReportLeaseApiFleetChunksChunkIdLeasesPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ReportLeaseApiFleetChunksChunkIdLeasesPostError = ReportLeaseApiFleetChunksChunkIdLeasesPostErrors[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostErrors];
-
-export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponses = {
-    /**
-     * Response Report Lease Api Fleet Chunks  Chunk Id  Leases Post
-     *
-     * Successful Response
-     */
-    202: {
-        [key: string]: string;
-    };
-};
-
-export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponse = ReportLeaseApiFleetChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostResponses];
 
 export type PauseChunkApiFleetChunksChunkIdPausePostData = {
     body?: never;

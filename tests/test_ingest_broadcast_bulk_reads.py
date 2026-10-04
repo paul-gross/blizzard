@@ -213,9 +213,6 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
     )
     assert claim_m.status_code == 201, claim_m.text
     assess_node_id = claim_m.json()["envelope"]["node"]["node_id"]
-    # Reported on the direct route, so the batch below keeps its own seq numbering from 1.
-    minted = hub.client.post(f"/api/fleet/chunks/{chunk_m}/leases", json={"runner_id": "fleet-batch", "epoch": 1})
-    assert minted.status_code == 202, minted.text
     handoff = hub.client.post(
         f"/api/fleet/chunks/{chunk_m}/completions",
         json={
@@ -345,25 +342,6 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
 
 
 # --- singular sites keep their own statement counts ---------------------------------
-
-
-def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
-    """The single-chunk escalation route (``ChunkChanged.before``/``publish``, the
-    singular pair, still going through ``ChunkFrameState.load`` for its one chunk) issues
-    a pinned statement count, not a batch-size comparison, since this route takes no batch."""
-    hub = build_hub(tmp_path)
-    chunk_id = _claim(hub, "esc", runner_id="r1")
-
-    def call() -> None:
-        resp = hub.client.post(
-            f"/api/fleet/chunks/{chunk_id}/escalations",
-            json={"runner_id": "r1", "epoch": 1, "takeover_command": "cd wd && claude --resume"},
-        )
-        assert resp.status_code == 202, resp.text
-
-    # Includes the retired-runner guard's read of the claimant's registration (every claimant holds
-    # one) and the write fence's lock, guard, and claimant-ownership reads.
-    assert count_queries(hub.engine, call) == 85
 
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:

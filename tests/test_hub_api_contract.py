@@ -41,8 +41,6 @@ _NEW_PATHS = [
     "/api/fleet/chunks/{chunk_id}/envelope",
     "/api/fleet/chunks/{chunk_id}/completions",
     "/api/fleet/chunks/{chunk_id}/decisions",
-    "/api/fleet/chunks/{chunk_id}/leases",
-    "/api/fleet/chunks/{chunk_id}/escalations",
     "/api/fleet/questions/{question_id}",
     "/api/fleet/events",
     "/api/fleet/routes",

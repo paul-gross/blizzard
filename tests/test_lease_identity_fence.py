@@ -315,10 +315,20 @@ def test_a_second_mint_naming_another_lease_at_a_bound_epoch_is_refused(tmp_path
     hub, chunk_id, _ = _minted(tmp_path, lease_id="lease_owner")
 
     resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": 1, "runner_id": "rA", "lease_id": "lease_other"}
+        "/api/fleet/events",
+        json={
+            "runner_id": "rA",
+            "facts": [
+                {
+                    "seq": 99,
+                    "kind": "lease.minted",
+                    "payload": {"chunk_id": chunk_id, "epoch": 1, "lease_id": "lease_other"},
+                }
+            ],
+        },
     )
 
-    assert resp.status_code == 409, resp.text
+    assert resp.json()["rejected"] == [99], resp.text
     assert [r[2] for r in _lease_rows(hub, chunk_id)] == ["lease_owner"]
 
 

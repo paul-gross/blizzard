@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, ingest, report_lease
+from tests.support import build_hub, ingest, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -28,11 +28,7 @@ def _escalated_chunk(hub, tmp_path: Path) -> str:  # type: ignore[no-untyped-def
     )
     assert resp.status_code == 201, resp.text
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    esc = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/escalations",
-        json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
-    )
-    assert esc.status_code == 202, esc.text
+    assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
     hub.clock.advance(timedelta(seconds=1))
     return chunk_id

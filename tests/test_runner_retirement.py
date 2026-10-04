@@ -292,11 +292,6 @@ def test_a_retired_id_is_refused_on_every_runner_contact_route_with_no_token_und
                 ],
             },
         ),
-        "lease report": hub.client.post(f"/api/fleet/chunks/{held}/leases", json={"runner_id": "runner-a", "epoch": 2}),
-        "escalation report": hub.client.post(
-            f"/api/fleet/chunks/{held}/escalations",
-            json={"runner_id": "runner-a", "epoch": 1, "takeover_command": "claude --resume"},
-        ),
         "completion": hub.client.post(
             f"/api/fleet/chunks/{held}/completions",
             json={"choice": "pass", "epoch": 1, "runner_id": "runner-a", "from_node_id": node_id, "artifacts": []},

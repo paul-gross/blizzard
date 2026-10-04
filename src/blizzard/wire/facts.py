@@ -52,29 +52,6 @@ class ExternalSubscriptionUsageWindowFact(BaseModel):
     window_seconds: int = Field(gt=0, strict=True)
 
 
-class LeaseMintReport(BaseModel):
-    """A runner's ``lease.minted`` — one node-step attempt's fencing epoch."""
-
-    epoch: int
-    runner_id: str
-    # The minted lease — recorded as the epoch's owning lease when it is the first to name one.
-    lease_id: str | None = None
-
-
-class EscalationReport(BaseModel):
-    """A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
-    ``takeover_command`` may carry operator prose instead of a literal command, or be empty;
-    ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``."""
-
-    epoch: int
-    runner_id: str
-    lease_id: str | None = None
-    takeover_command: str = ""
-    wrapped_takeover_command: str = ""
-    cause: str | None = None
-    detail: str | None = None
-
-
 class RunnerFact(BaseModel):
     """One buffered runner fact: its per-runner seq, its kind, and its payload.
 

@@ -409,28 +409,6 @@ def test_an_intake_blocks_behind_a_restart_and_then_rejects(tmp_path: Path) -> N
     assert chunk.rows(s.escalations) == 0
 
 
-def _post_escalation(chunk: _Chunk, *, epoch: int):  # type: ignore[no-untyped-def]
-    return chunk.hub.client.post(
-        f"/api/fleet/chunks/{chunk.chunk_id}/escalations",
-        json={"runner_id": "r1", "epoch": epoch, "takeover_command": "cd wd && claude --resume"},
-    )
-
-
-def test_the_direct_escalation_route_answers_409_when_stale_or_stopped(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
-    chunk.restart()
-
-    stale = _post_escalation(chunk, epoch=1)
-    assert stale.status_code == 409 and stale.json()["detail"] == _STALE
-    chunk.lease(3)  # the restart took epoch 2; the reporting attempt must own the epoch it escalates at
-    assert _post_escalation(chunk, epoch=3).status_code == 202
-
-    chunk.stop()
-    stopped = _post_escalation(chunk, epoch=3)
-    assert stopped.status_code == 409 and stopped.json()["detail"] == _TERMINAL
-    assert chunk.rows(s.escalations) == 1
-
-
 def test_the_store_returns_the_refusal_and_writes_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk = _Chunk(hub)

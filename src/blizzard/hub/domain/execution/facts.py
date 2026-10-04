@@ -1,10 +1,9 @@
 """Runner-reported fact intake — lease mints, escalations, and the rest of the runner's outbound facts.
 
-:class:`RunnerFactsService` is the direct single-fact intake; :class:`FactIngestService` is the batched
-store-and-forward push, idempotent against a per-runner **high-water mark**. Landing each lease mint is
-what keeps the epoch fence in lockstep across a chunk's successive node-steps. Both hold the **write**
-chunk seams each fact lands on (``bzh:controller-read-only``) and stamp landing time from the injected
-clock."""
+:class:`FactIngestService` is the batched store-and-forward push — the one runner fact intake —
+idempotent against a per-runner **high-water mark**. Landing each lease mint is what keeps the epoch
+fence in lockstep across a chunk's successive node-steps. It holds the **write** chunk seams each fact
+lands on (``bzh:controller-read-only``) and stamps landing time from the injected clock."""
 
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
+from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -168,64 +167,6 @@ class LocalPause:
             at=fact.instant("at", now),
             by=fact.string("by", "operator"),
             reason=fact.text("reason"),
-        )
-
-
-class RunnerFactsService:
-    """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts."""
-
-    def __init__(
-        self,
-        *,
-        route: IWriteChunkRouteRepository,
-        escalations: IWriteChunkEscalationsRepository,
-        retired: RetiredRunnerGuard,
-        clock: IClock,
-    ) -> None:
-        self._route = route
-        self._escalations = escalations
-        self._retired = retired
-        self._clock = clock
-
-    def record_lease_minted(
-        self, chunk: Chunk, *, epoch: int, runner_id: str, lease_id: str | None = None
-    ) -> FenceRefusal | None:
-        """Land a runner's ``lease.minted`` — advances the fence's latest epoch. A retired
-        runner is refused with :class:`RunnerRetired` before anything lands; a mint its
-        admission refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`."""
-        self._retired.refuse_if_retired(runner_id, action="lease report")
-        return self._route.record_lease_minted(
-            chunk.chunk_id, epoch=epoch, claimant=Claimant(runner_id, lease_id), at=self._clock.now()
-        )
-
-    def record_escalation(
-        self,
-        chunk: Chunk,
-        *,
-        runner_id: str,
-        epoch: int,
-        takeover_command: str,
-        lease_id: str | None = None,
-        wrapped_takeover_command: str = "",
-        cause: str | None = None,
-        detail: str | None = None,
-    ) -> int | FenceRefusal:
-        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``. A retired
-        runner is refused with :class:`RunnerRetired` before anything lands; a write the fence
-        refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`, else the new
-        ``escalations.id`` (its activity-feed key). The reporting attempt is the claimant, as on
-        the batched path: a runner that does not own the epoch is refused."""
-        self._retired.refuse_if_retired(runner_id, action="escalation report")
-        return self._escalations.record_escalation(
-            chunk.chunk_id,
-            epoch=epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            claimant=Claimant(runner_id, lease_id),
-            takeover_command=takeover_command,
-            wrapped_takeover_command=wrapped_takeover_command,
-            cause=cause,
-            detail=detail,
-            at=self._clock.now(),
         )
 
 
