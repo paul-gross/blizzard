@@ -13,13 +13,54 @@ from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 
 
 class WorkSourceSummary(BaseModel):
-    """One work source's capability booleans — the ``GET /api/work-sources`` listing
-    row. ``readable`` is not a field: every source answers ``fetch``, so it carries no
-    information; ``edit`` is the "has browsable items" signal the item routes gate on."""
+    """One work source — the ``GET /api/work-sources`` listing row and every record verb's
+    view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
+    information; ``edit`` is the "has browsable items" signal the item routes gate on. The
+    built-in ``hub`` source is ``built_in`` and carries no record fields."""
 
     name: str
     annotate: bool
     edit: bool
+    provider: str | None = None
+    locator: str | None = None
+    api_base: str | None = None
+    web_base: str | None = None
+    secret: str | None = None
+    revision: int | None = None
+    created_at: str | None = None
+    created_by: str | None = None
+    retired: bool = False
+    built_in: bool = False
+
+
+class WorkSourceDocument(BaseModel):
+    """A work source as a document — the create body, and the model whose JSON Schema
+    ``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    provider: str
+    locator: str
+    api_base: str | None = None
+    web_base: str | None = None
+    annotate: bool = False
+    secret: str | None = None
+
+
+class WorkSourcePatchRequest(BaseModel):
+    """A sparse edit: an absent field is unchanged, a present one is set, and an explicit
+    ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.
+    ``name`` is immutable, so a body carrying it is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str | None = None
+    locator: str | None = None
+    api_base: str | None = None
+    web_base: str | None = None
+    annotate: bool | None = None
+    secret: str | None = None
 
 
 class WorkSourcesListView(BaseModel):

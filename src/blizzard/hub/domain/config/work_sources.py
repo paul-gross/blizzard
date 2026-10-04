@@ -48,9 +48,7 @@ class WorkSourceLocatorTaken(Exception):
     """``(provider, locator)`` already belongs to ``holder`` — retired holders keep their claim."""
 
     def __init__(self, provider: str, locator: str, *, holder: str) -> None:
-        super().__init__(
-            f"{provider} locator {locator} already belongs to work source {holder}; enable it instead"
-        )
+        super().__init__(f"{provider} locator {locator} already belongs to work source {holder}; enable it instead")
         self.holder = holder
 
 
