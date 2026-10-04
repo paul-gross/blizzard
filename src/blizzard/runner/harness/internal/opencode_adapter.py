@@ -353,9 +353,9 @@ class OpenCodeAdapter:
             auto=self._autonomy is not Autonomy.Normal,
         )
         env = self._spawn_env(envelope, preamble, resume_from or "")
-        if workdir is not None:
+        if workdir:
             self._check_plugins(workdir, env)
-            env = self._deny_unanswerable_asks(workdir, env)
+        env = self._deny_unanswerable_asks(workdir, env)
         # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
@@ -541,13 +541,15 @@ class OpenCodeAdapter:
         if self._effective_config_dir:
             check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
 
-    def _deny_unanswerable_asks(self, cwd: str, env: dict[str, str]) -> dict[str, str]:
+    def _deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
         Every reachable ask is composed to ``deny`` in ``OPENCODE_CONFIG_CONTENT``, then OpenCode re-resolves the
         result; a launch it cannot prove clean fails here, before any process starts. Takeover never comes through."""
         if self._autonomy is not Autonomy.Normal:
             return env
+        if not cwd:
+            raise HarnessSpawnError("no launch cwd can be resolved; refusing an unproven `normal` launch")
         resolver = self._permission_resolver
         if resolver is None:
             raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")

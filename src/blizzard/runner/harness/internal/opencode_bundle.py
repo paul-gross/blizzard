@@ -111,15 +111,15 @@ def _merge_plugins(found: dict[str, Path], incoming: Mapping[str, Path]) -> None
 def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]:
     home = Path(env.get("HOME", str(Path.home())))
     user = Path(env.get("XDG_CONFIG_HOME", str(home / ".config"))) / "opencode"
-    scopes = [user]
+    scopes = [(user, True)]
     for parent in reversed((cwd, *cwd.parents)):
         for config in (parent / "opencode.json", parent / "opencode.jsonc"):
             if config.is_file():
-                scopes.append(parent)
+                scopes.append((parent, False))
                 break
-        scopes.append(parent / ".opencode")
+        scopes.append((parent / ".opencode", True))
     found: dict[str, Path] = {}
-    for scope in scopes:
+    for scope, reads_plugin_dirs in scopes:
         for config in (scope / "opencode.json", scope / "opencode.jsonc"):
             if config.is_file():
                 try:
@@ -133,7 +133,9 @@ def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]
                 if not isinstance(document, dict):
                     raise HarnessBundleError(config, "must hold a JSON object")
                 _merge_plugins(found, _plugins(document, config))
-        _merge_plugins(found, _directory_plugins(scope / "plugins"))
+        if reads_plugin_dirs:
+            for name in ("plugin", "plugins"):
+                _merge_plugins(found, _directory_plugins(scope / name))
     return found
 
 
