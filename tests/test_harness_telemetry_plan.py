@@ -19,7 +19,7 @@ from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_tele
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
-from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.harness.wiring import claude_code_section, publish_harness_bundle
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import sections
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -52,7 +52,13 @@ def _settings(tmp_path: Path, env: Mapping[str, str]) -> str:
 def _plan(
     config: RunnerConfig, *, runner_environ: Mapping[str, str] = RUNNER_ENV, enabled: bool = True, bundle=None
 ) -> HarnessTelemetryPlan:  # type: ignore[no-untyped-def]
-    return plan_harness_telemetry(config, bundle=bundle, runner_environ=runner_environ, enabled=enabled)
+    return plan_harness_telemetry(
+        claude_code_section(config.harness_sections),
+        worker_env=config.worker_env,
+        bundle=bundle,
+        runner_environ=runner_environ,
+        enabled=enabled,
+    )
 
 
 def _all(outcome: HarnessTelemetryOutcome) -> HarnessTelemetryPlan:

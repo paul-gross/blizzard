@@ -19,6 +19,7 @@ files:
   - src/blizzard/runner/leases/escalations.py
   - src/blizzard/runner/leases/lease_auth.py
   - src/blizzard/runner/leases/liveness.py
+  - src/blizzard/runner/leases/operator_requests.py
   - src/blizzard/runner/leases/overload.py
   - src/blizzard/runner/leases/record.py
   - src/blizzard/runner/leases/resume_intent.py

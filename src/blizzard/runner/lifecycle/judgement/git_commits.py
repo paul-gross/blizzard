@@ -7,10 +7,9 @@ from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
-from blizzard.runner.environments.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.environments.worktree import IWorktreeGit
+from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
 from blizzard.runner.leases import Lease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (

@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import RunnerConfig, WorkspaceRepo
-from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, build_workspace_provider
-from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
+from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
 from tests.runner_fakes import FakeProvider
 
 
@@ -26,14 +26,15 @@ class _Case:
     pool: tuple[str, ...]
 
 
-def _config(tmp_path: Path, **fields: object) -> RunnerConfig:
-    return RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), **fields)  # type: ignore[arg-type]
+def _settings(tmp_path: Path, **fields: object) -> WorkspaceSettings:
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), **fields)  # type: ignore[arg-type]
+    return config.workspace_settings
 
 
 _CASES = {
     "basic": _Case(
         build=lambda tmp: build_workspace_provider(
-            _config(
+            _settings(
                 tmp,
                 workspace_provider="basic",
                 workspace_root="scratch",
@@ -47,7 +48,7 @@ _CASES = {
     ),
     "winter": _Case(
         build=lambda tmp: build_workspace_provider(
-            _config(tmp, workspace_provider="winter", workspace_root=str(tmp / "ws"), workspace_envs=("a", "b", "c"))
+            _settings(tmp, workspace_provider="winter", workspace_root=str(tmp / "ws"), workspace_envs=("a", "b", "c"))
         ),
         spawn_root=lambda tmp: str(tmp / "ws"),
         capacity=3,
@@ -56,7 +57,7 @@ _CASES = {
     # Unset, winter's spawn root stays unset rather than falling back to its working root.
     "winter-unset-root": _Case(
         build=lambda tmp: build_workspace_provider(
-            _config(tmp, workspace_provider="winter", workspace_root="", workspace_envs=("a",))
+            _settings(tmp, workspace_provider="winter", workspace_root="", workspace_envs=("a",))
         ),
         spawn_root=lambda _tmp: "",
         capacity=1,

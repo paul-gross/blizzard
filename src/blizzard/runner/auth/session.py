@@ -24,6 +24,9 @@ _COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
 #: Runner sessions are short: hours, not days — renewal is a silent bounce
 #: through the hub, so a short TTL costs nothing but an invisible round trip.
 SESSION_TTL = timedelta(hours=8)
+#: The federation callback route, owned here so the registered URI set and the URL the bounce
+#: presents cannot drift; the runner config and the federation router both import it.
+CALLBACK_PATH = "/api/auth/callback"
 
 
 @domain_model
@@ -83,7 +86,7 @@ class SessionCookie:
 
     def read(self, cookie: str, *, now: datetime) -> RunnerSession | None:
         """The signed cookie's contents, or ``None`` on a bad signature, malformed payload,
-        or an expired session — the caller (``runner/auth/federation.py``'s
+        or an expired session — the caller (``runner/api/federation.py``'s
         ``require_human_session``) treats every one of these as "no session"."""
         try:
             encoded, signature = cookie.split(".", 1)

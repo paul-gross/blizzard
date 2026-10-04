@@ -26,6 +26,7 @@ __all__ = [
     "ISubscriptionSampler",
     "SampleMiss",
     "SampleMissReason",
+    "SubscriptionSource",
 ]
 
 # The Anthropic provider-sampler binding's own selector value — distinct
@@ -95,6 +96,17 @@ class SampleMiss:
     or an unparseable body at every surface that reads a sampler's result."""
 
     reason: SampleMissReason
+
+
+class SubscriptionSource(Protocol):
+    """What a binding selector reads off one declared subscription: the ``provider`` it binds
+    to and the ``credentials_path`` override, if any."""
+
+    @property
+    def provider(self) -> str: ...
+
+    @property
+    def credentials_path(self) -> str | None: ...
 
 
 class ISubscriptionSampler(Protocol):

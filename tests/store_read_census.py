@@ -131,13 +131,12 @@ from blizzard.runner.leases import (
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
 from blizzard.runner.leases.overload import IReadOverloadRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
-from blizzard.runner.operator.attachments import IReadAttachmentRepository
-from blizzard.runner.operator.requeue import IReadRequeueRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import IReadPauseRepository

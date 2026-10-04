@@ -27,9 +27,9 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
-    WorkspaceRepo,
 )
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
+from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.workspace_prompts import PACKAGED

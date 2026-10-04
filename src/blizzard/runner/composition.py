@@ -46,6 +46,7 @@ from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
+    claude_code_section,
     configured_tiers,
 )
 from blizzard.runner.process.probe import LinuxProcessProbe
@@ -194,22 +195,25 @@ def build_runner_process(
         )
         clock = SystemClock()
         process = LinuxProcessProbe()
-        provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
+        provider = build_workspace_provider(
+            config.workspace_settings, held_ids=stores.environments.held_environment_ids
+        )
         plan = plan_harness_telemetry(
-            config,
+            claude_code_section(config.harness_sections),
+            worker_env=config.worker_env,
             bundle=bundle,
             runner_environ=os.environ if environ is None else environ,
             enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
         )
         harnesses = build_production_harness_registry(
-            config, executor=executor, process=process, bundle=bundle, harness_telemetry=plan
+            config.harness_settings, executor=executor, process=process, bundle=bundle, harness_telemetry=plan
         )
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
         health = HarnessHealthCache(
             clock=clock,
-            probes=build_production_harness_health_probes(config, spawn_root=provider.spawn_root()),
+            probes=build_production_harness_health_probes(config.harness_settings, spawn_root=provider.spawn_root()),
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),
         )

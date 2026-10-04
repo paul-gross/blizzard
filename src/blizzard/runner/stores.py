@@ -32,6 +32,12 @@ from blizzard.runner.leases import (
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.leases.operator_requests import (
+    IReadAttachmentRepository,
+    IReadRequeueRepository,
+    IWriteAttachmentRepository,
+    IWriteRequeueRepository,
+)
 from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverloadRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
@@ -40,8 +46,6 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     IWriteGitCommitDeclarationRepository,
 )
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
-from blizzard.runner.operator.attachments import IReadAttachmentRepository, IWriteAttachmentRepository
-from blizzard.runner.operator.requeue import IReadRequeueRepository, IWriteRequeueRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.tracing.repository import IReadLeaseTraces, IWriteLeaseTraces
 from blizzard.runner.transcripts.invocation_boundaries import (

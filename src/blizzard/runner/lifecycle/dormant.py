@@ -19,6 +19,7 @@ from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.leases.overload import OverloadExit
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
@@ -27,7 +28,6 @@ from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext, G
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
-from blizzard.runner.operator.attachments import IReadAttachmentRepository
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark

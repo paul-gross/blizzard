@@ -43,8 +43,8 @@ def harness_status(directory: str) -> None:
     try:
         config = RunnerConfig.load(Path(directory))
         click.echo(f"autonomy: {config.autonomy} (from {_autonomy_source(config)})")
-        shared = shared_inputs(config)
-        spawn_root = build_workspace_provider(config).spawn_root()
+        shared = shared_inputs(config.harness_settings)
+        spawn_root = build_workspace_provider(config.workspace_settings).spawn_root()
         for declaration, section in declared(config.harness_sections):
             _echo(declaration.diagnostics(section, shared, spawn_root=spawn_root))
         if config.harness_config_dir is None:

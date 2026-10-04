@@ -10,7 +10,6 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.runner.config import WorkspaceRepo
 from blizzard.runner.environments.internal.git import EnvGitError, SubprocessEnvGit
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -18,6 +17,7 @@ from blizzard.runner.environments.provider import (
     IWorkspaceProvider,
     RepoBinding,
     WorkspaceAcquisitionError,
+    WorkspaceRepo,
 )
 
 _MANAGED = ".blizzard-basic-env"

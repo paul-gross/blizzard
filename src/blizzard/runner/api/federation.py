@@ -22,14 +22,14 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
+from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.auth.roles import LocalRole
-from blizzard.runner.auth.session import SESSION_TTL, CookieNames, RunnerSession, SessionCookie
+from blizzard.runner.auth.roles import LocalRole, RolePolicy
+from blizzard.runner.auth.session import CALLBACK_PATH, SESSION_TTL, CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
-from blizzard.runner.config import CALLBACK_PATH, RunnerConfig
 
 _log = get_logger("blizzard.runner.auth")
 
@@ -47,6 +47,19 @@ _IMPLICIT_SESSION = RunnerSession(
     issued_at=datetime.fromtimestamp(0, tz=UTC),
     expires_at=datetime.fromtimestamp(2**31 - 1, tz=UTC),
 )
+
+
+@dto
+@dataclass(frozen=True)
+class FederationSettings:
+    """What the bounce and its callback read off this runner's config: the declared browser
+    origins, the hub it federates with, its own client id, and the role policy a federated
+    identity resolves against. The composition root sets it as ``app.state.federation``."""
+
+    public_origins: PublicOrigins
+    hub_url: str
+    runner_id: str
+    role_policy: RolePolicy
 
 
 class NeedsFederationBounce(Exception):
@@ -195,11 +208,11 @@ def require_human_api(request: Request) -> RunnerSession:
     return HumanLane(request).demand_api()
 
 
-def _callback_url(request: Request, config: RunnerConfig) -> str:
+def _callback_url(request: Request, settings: FederationSettings) -> str:
     """The callback this bounce presents: the declared origin the browser actually reached, so the hub's
     cross-site ``form_post`` lands where the bounce cookies live. Selection is membership in the declared
     set, never construction from the request; `docs/deployment/human-auth.md` §Runner-side federation owns why."""
-    origins = config.public_origins
+    origins = settings.public_origins
     arrived = request.headers.get("host")
     chosen = origins.select(arrived)
     if chosen is None:
@@ -219,8 +232,8 @@ def login(
     return_to: str = "/",
     rehomed: Annotated[bool, Query(include_in_schema=False)] = False,
 ) -> Response:
-    config: RunnerConfig = request.app.state.config
-    origins = config.public_origins
+    settings: FederationSettings = request.app.state.federation
+    origins = settings.public_origins
     arrived = request.headers.get("host")
     # Bounce cookies set on an undeclared origin (`localhost` for `127.0.0.1`) never reach the callback.
     if origins.canonical and not rehomed and origins.select(arrived) is None:
@@ -233,10 +246,10 @@ def login(
         safe_return = quote(ReturnTo(return_to).safe, safe="")
         return RedirectResponse(f"{origins.canonical}/api/auth/login?return_to={safe_return}&rehomed=true")
     state = secrets.token_urlsafe(24)
-    callback_url = _callback_url(request, config)
+    callback_url = _callback_url(request, settings)
     target = (
-        f"{config.hub_url.rstrip('/')}/api/auth/authorize"
-        f"?client={quote(config.runner_id, safe='')}"
+        f"{settings.hub_url.rstrip('/')}/api/auth/authorize"
+        f"?client={quote(settings.runner_id, safe='')}"
         f"&redirect_uri={quote(callback_url, safe='')}"
         f"&state={quote(state, safe='')}"
         "&response_mode=form_post"
@@ -257,19 +270,19 @@ async def callback(request: Request) -> Response:
     if not token or not bounce.matches(state):
         return bounce.refuse("bad or expired state")
 
-    config: RunnerConfig = request.app.state.config
+    settings: FederationSettings = request.app.state.federation
     jwks: JwksCache = request.app.state.jwks_cache
     jti_cache: IJtiCache = request.app.state.jti_cache
     clock: IClock = request.app.state.clock
     try:
         identity = FederationToken(
-            token, runner_id=config.runner_id, jwks=jwks, jti_cache=jti_cache, clock=clock
+            token, runner_id=settings.runner_id, jwks=jwks, jti_cache=jti_cache, clock=clock
         ).identity()
     except FederationTokenError as exc:
         _log.warning("federation token refused", detail=str(exc))
         return bounce.refuse("token refused")
 
-    role = LocalRole(config, username=identity.username, hub_role=identity.role).role
+    role = LocalRole(settings.role_policy, username=identity.username, hub_role=identity.role).role
     now = clock.now()
     session = RunnerSession(username=identity.username, role=role, issued_at=now, expires_at=now + SESSION_TTL)
     cookie_value = SessionCookie(request.app.state.session_secret).mint(session)

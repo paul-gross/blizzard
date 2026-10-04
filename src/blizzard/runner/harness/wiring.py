@@ -9,7 +9,7 @@ from collections.abc import Iterator, Mapping
 from concurrent.futures import Executor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from blizzard.foundation.roles import dto
 from blizzard.runner.config_table import ConfigError
@@ -17,22 +17,20 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource, inspect_bundle, publish_bundle
 from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, ClaudeCodeSection
 from blizzard.runner.harness.declaration import (
     IHarnessDeclaration,
     IHarnessSection,
     IHarnessSectionKind,
     SharedHarnessInputs,
 )
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.probe import LinuxProcessProbe
-
-if TYPE_CHECKING:
-    from blizzard.runner.config import RunnerConfig
 
 #: The catalog order: Claude Code first, so it is the default harness whenever it is enabled.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
@@ -86,6 +84,28 @@ def with_section(sections: HarnessSections, section: IHarnessSection) -> Harness
     )
 
 
+def claude_code_section(sections: HarnessSections) -> ClaudeCodeSection:
+    """The Claude Code binding's section, as its telemetry plan reads it."""
+    section = section_of(sections, CLAUDE_CODE_SECTION.harness_id)
+    assert isinstance(section, ClaudeCodeSection)
+    return section
+
+
+@dto
+@dataclass(frozen=True)
+class HarnessSettings:
+    """The runner-wide values every binding is built from: the runner ``root``, the worker
+    ``autonomy``, the operator bundle's ``config_dir``, the allowlisted ``worker_env``, the
+    ``transcripts_root``, and every binding's parsed ``sections``."""
+
+    root: Path
+    autonomy: Autonomy
+    config_dir: Path | None
+    worker_env: AllowlistedEnv
+    transcripts_root: str
+    sections: HarnessSections
+
+
 def harness_cli_groups() -> dict[str, str]:
     """Every binding's mounted verb group, as ``blizzard runner``'s lazy command map takes it."""
     return dict(kind.cli_group for kind in HARNESS_SECTION_KINDS if kind.cli_group is not None)
@@ -130,25 +150,25 @@ def bundle_layouts() -> tuple[HarnessLayout, ...]:
 
 
 def shared_inputs(
-    config: RunnerConfig,
+    settings: HarnessSettings,
     *,
     bundle: BundleSnapshot | None = None,
     harness_telemetry: HarnessTelemetryPlan | None = None,
 ) -> SharedHarnessInputs:
-    """The runner-wide inputs ``config`` hands every binding."""
+    """The runner-wide inputs ``settings`` hands every binding."""
     return SharedHarnessInputs(
-        root=config.root,
-        autonomy=config.autonomy,
-        config_dir=config.harness_config_dir,
-        worker_env=config.worker_env,
-        transcripts_root=config.transcripts_root,
+        root=settings.root,
+        autonomy=settings.autonomy,
+        config_dir=settings.config_dir,
+        worker_env=settings.worker_env,
+        transcripts_root=settings.transcripts_root,
         bundle=bundle,
         harness_telemetry=harness_telemetry or HarnessTelemetryPlan(),
     )
 
 
 def build_production_harness_registry(
-    config: RunnerConfig,
+    settings: HarnessSettings,
     *,
     executor: Executor,
     process: LinuxProcessProbe,
@@ -161,22 +181,24 @@ def build_production_harness_registry(
     ``harness_telemetry`` is the plan the composition root derived for Claude Code's exporters.
     Insertion follows the catalog order: the first binding is the runner's default harness."""
     launcher = ProcessLauncher(process, executor=executor)
-    shared = shared_inputs(config, bundle=bundle, harness_telemetry=harness_telemetry or HarnessTelemetryPlan())
+    shared = shared_inputs(settings, bundle=bundle, harness_telemetry=harness_telemetry or HarnessTelemetryPlan())
     bindings: dict[str, HarnessBinding] = {
         declaration.harness_id: declaration.binding(section, shared, process=process, launcher=launcher)
-        for declaration, section in enabled(config.harness_sections)
+        for declaration, section in enabled(settings.sections)
     }
     return HarnessRegistry(bindings)
 
 
-def build_production_harness_health_probes(config: RunnerConfig, *, spawn_root: str) -> dict[str, IHarnessHealthProbe]:
+def build_production_harness_health_probes(
+    settings: HarnessSettings, *, spawn_root: str
+) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — the
     composition root reaches both only through this module."""
-    shared = shared_inputs(config)
+    shared = shared_inputs(settings)
     return {
         declaration.harness_id: declaration.health_probe(section, shared, spawn_root=spawn_root)
-        for declaration, section in enabled(config.harness_sections)
+        for declaration, section in enabled(settings.sections)
     }
 
 
@@ -211,9 +233,11 @@ __all__ = [
     "HARNESS_CATALOG",
     "HARNESS_SECTION_KINDS",
     "HarnessSections",
+    "HarnessSettings",
     "build_production_harness_health_probes",
     "build_production_harness_registry",
     "bundle_layouts",
+    "claude_code_section",
     "configured_tiers",
     "declared",
     "declared_normalizer_versions",

@@ -14,7 +14,8 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
-from blizzard.runner.config import RunnerConfig, WorkspaceRepo
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd

@@ -42,6 +42,14 @@ from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.events import router as events_router
 from blizzard.runner.api.facts import router as facts_router
+from blizzard.runner.api.federation import (
+    FederationSettings,
+    HubAuthModeCache,
+    NeedsFederationBounce,
+    require_human_api,
+    require_human_session,
+)
+from blizzard.runner.api.federation import router as auth_router
 from blizzard.runner.api.finding import router as finding_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
@@ -64,13 +72,6 @@ from blizzard.runner.api.transcript_segments import router as transcript_segment
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
-from blizzard.runner.auth.federation import (
-    HubAuthModeCache,
-    NeedsFederationBounce,
-    require_human_api,
-    require_human_session,
-)
-from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.auth.session import CookieNames
@@ -242,6 +243,12 @@ def create_app(
         telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded),
     )
     app.state.config = config
+    app.state.federation = FederationSettings(
+        public_origins=config.public_origins,
+        hub_url=config.hub_url,
+        runner_id=config.runner_id,
+        role_policy=config.role_policy,
+    )
     app.state.readiness = readiness
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider

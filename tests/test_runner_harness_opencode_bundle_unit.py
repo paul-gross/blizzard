@@ -95,7 +95,9 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     probe = FakeProbe()
     launcher = ProcessLauncher(probe, executor=spawn_executor)
     bundled = replace(config, harness_config_dir=bundle)
-    binding = OPENCODE_DECLARATION.binding(opencode(bundled), shared_inputs(bundled), process=probe, launcher=launcher)
+    binding = OPENCODE_DECLARATION.binding(
+        opencode(bundled), shared_inputs(bundled.harness_settings), process=probe, launcher=launcher
+    )
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter._config_env()
     assert env["OPENCODE_CONFIG"] == str(snapshot.path / "opencode" / "opencode.json")
@@ -104,7 +106,9 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert composed["permission"] == {"bash": "deny", "question": "deny"}
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
     assert published_snapshot(config.root) == snapshot.path.resolve()
-    plain = OPENCODE_DECLARATION.binding(opencode(config), shared_inputs(config), process=probe, launcher=launcher)
+    plain = OPENCODE_DECLARATION.binding(
+        opencode(config), shared_inputs(config.harness_settings), process=probe, launcher=launcher
+    )
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter._config_env()
     assert plain_env["OPENCODE_CONFIG"] == str(worker)

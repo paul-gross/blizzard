@@ -9,6 +9,10 @@ from __future__ import annotations
 from typing import Protocol
 
 
+class WorktreeGitError(RuntimeError):
+    """A git operation against a leased worktree failed."""
+
+
 class IWorktreeGit(Protocol):
     """Read-only confirmation of a worker's git-commit declaration."""
 
