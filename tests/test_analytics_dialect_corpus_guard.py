@@ -13,16 +13,14 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.analytics.dialects import DIALECTS
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION as _CLAUDE_CODE_VERSION
-from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERSION as _OPENCODE_VERSION
+from blizzard.runner.harness.catalog import declared_normalizer_versions
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
-#: Every dialect with pinned captures — Claude Code has none. A dialect's captures are the
-#: admitted corpus plus every live supplement, one directory per recorded version.
+#: Dialects with pinned captures; Claude Code has none.
 _CORPUS_DIRS: dict[str, Path] = {
     "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode",
 }
@@ -75,11 +73,14 @@ def test_every_corpus_backed_dialect_is_registered() -> None:
     assert set(_CORPUS_DIRS) <= set(DIALECTS)
 
 
-def test_every_runner_normalizer_version_is_registered() -> None:
-    """The hub's `DIALECTS` keys are string literals, deliberately not imported from
-    `blizzard.runner` — this test is the one place that still ties them to the
-    runner's own normalizer stamps, so the two can drift apart only silently past here."""
-    assert {_CLAUDE_CODE_VERSION, _OPENCODE_VERSION} <= set(DIALECTS)
+@pytest.mark.parametrize("normalizer_version", declared_normalizer_versions())
+def test_every_runner_normalizer_version_is_registered(normalizer_version: str) -> None:
+    """The hub's `DIALECTS` keys are literals, deliberately not imported from `blizzard.runner`;
+    this test ties them to every normalizer stamp the harness catalog declares, so a newly
+    declared harness with no dialect entry fails here."""
+    assert normalizer_version in DIALECTS, (
+        f"the harness catalog declares normalizer version {normalizer_version!r}, which has no DIALECTS entry"
+    )
 
 
 @pytest.mark.parametrize("normalizer_version", sorted(_CORPUS_DIRS))

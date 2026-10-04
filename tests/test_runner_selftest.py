@@ -31,7 +31,9 @@ from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPr
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -43,6 +45,7 @@ from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
+from tests.harness_sections import sections
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
@@ -751,8 +754,10 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
     config = RunnerConfig(
         root=tmp_path / "runner",
         db_url="sqlite://",
-        harness_binary=_fake_binary(tmp_path / "claude-bin"),
-        opencode_binary=_fake_opencode_binary(tmp_path / "opencode-bin"),
+        harness_sections=sections(
+            ClaudeCodeSection(binary=_fake_binary(tmp_path / "claude-bin")),
+            OpenCodeSection(binary=_fake_opencode_binary(tmp_path / "opencode-bin")),
+        ),
     )
     harnesses = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
     client = TestClient(create_app(config, harnesses=harnesses))

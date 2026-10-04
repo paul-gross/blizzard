@@ -54,11 +54,15 @@ class WinterWorkspaceProvider:
         *,
         env_pool: Sequence[str],
         base_branch: str = "main",
+        spawn_root: str = "",
         winter: _WinterCli | None = None,
         git: _EnvGit | None = None,
     ) -> None:
         self._workspace_root = Path(workspace_root)
         self._pool = tuple(env_pool)
+        # The configured workspace-wide spawn cwd, verbatim — ``""`` when unset, which
+        # differs from ``workspace_root``, the directory winter itself is driven from.
+        self._spawn_root = spawn_root
         self._base_branch = base_branch
         self._winter = winter if winter is not None else SubprocessWinterCli()
         self._git = git if git is not None else SubprocessEnvGit()
@@ -70,6 +74,15 @@ class WinterWorkspaceProvider:
         # Per-env repo manifests, memoized: a miss costs a `winter` invocation plus a git
         # call per repo. `_prepare` is the one place an entry is dropped.
         self._repos: dict[str, list[RepoBinding]] = {}
+
+    def spawn_root(self) -> str:
+        return self._spawn_root
+
+    def capacity(self) -> int:
+        return len(self._pool)
+
+    def pool(self) -> tuple[str, ...]:
+        return self._pool
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         with self._lock:

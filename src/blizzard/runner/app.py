@@ -413,6 +413,7 @@ def _wire_hosted_app(
     connections = graph.connections
     harness_health = graph.health
     workspace_provider = graph.provider
+    spawn_root = workspace_provider.spawn_root()
     harnesses = graph.harnesses
     clock = graph.clock
     process = graph.process
@@ -440,7 +441,7 @@ def _wire_hosted_app(
         environments=runner_stores.environments,
         transcripts=HarnessTranscriptRepositories(harnesses),
         archived=archived_transcripts,
-        workspace_root=config.provider_workspace_root,
+        workspace_root=spawn_root,
     )
     runner_status = RunnerStatusService(
         stores=RunnerReadStores.of(runner_stores),
@@ -449,9 +450,9 @@ def _wire_hosted_app(
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
-        env_pool=config.workspace_envs if config.workspace_provider == "winter" else (),
+        env_pool=workspace_provider.pool(),
         harnesses=harnesses,
-        workspace_root=config.provider_workspace_root,
+        workspace_root=spawn_root,
         gates=config.gates,
         runner_dir=str(config.root),
     )
@@ -462,7 +463,7 @@ def _wire_hosted_app(
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
-        workspace_root=config.provider_workspace_root,
+        workspace_root=spawn_root,
         events=events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)

@@ -27,7 +27,8 @@ from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins
-from blizzard.runner.harness.opencode_scaffold import scaffold_opencode_worker_config
+from blizzard.runner.harness.internal.opencode_declaration import OPENCODE_DECLARATION
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.wire.envelope import NodeConfig, NodeEnvelope
@@ -72,7 +73,9 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
     (source / "opencode.json").write_text(
         json.dumps({"permission": {"bash": "deny"}, "agent": {"explore": {"prompt": "{file:./prompts/explore.txt}"}}})
     )
-    scaffold_opencode_worker_config(runtime, runtime / "opencode-worker-config.json")
+    OPENCODE_DECLARATION.scaffold_runtime(
+        OpenCodeSection(worker_config_path=str(runtime / "opencode-worker-config.json")), runtime
+    )
     snapshot = publish_harness_bundle(source.parent, runtime)
     previous = published_snapshot(runtime)
     assert previous == snapshot.path.resolve()

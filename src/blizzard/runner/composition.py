@@ -46,8 +46,8 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
+from blizzard.runner.harness.catalog import configured_tiers
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
     build_production_harness_registry,
@@ -172,12 +172,9 @@ def build_runner_process(
             harnesses.transcript_source(default_id)
         health = HarnessHealthCache(
             clock=clock,
-            probes=build_production_harness_health_probes(config),
+            probes=build_production_harness_health_probes(config, spawn_root=provider.spawn_root()),
             selftest_results=stores.selftest_results,
-            configured_tiers={
-                CLAUDE_CODE_HARNESS_ID: config.model_aliases,
-                OPENCODE_HARNESS_ID: config.opencode_model_aliases,
-            },
+            configured_tiers=configured_tiers(config.harness_sections),
         )
         tracing = TracingSettings.of(os.environ if environ is None else environ)
         exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None

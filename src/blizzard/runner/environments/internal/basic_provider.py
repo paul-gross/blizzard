@@ -213,6 +213,16 @@ class BasicWorkspaceProvider:
             and (env / repo["name"]).is_dir()
         ]
 
+    def spawn_root(self) -> str:
+        # Each worker runs in its acquired workdir, away from the shared clones.
+        return ""
+
+    def capacity(self) -> int:
+        return self._cap
+
+    def pool(self) -> tuple[str, ...]:
+        return ()
+
 
 def _conforms_workspace_provider(provider: BasicWorkspaceProvider) -> IWorkspaceProvider:
     return provider

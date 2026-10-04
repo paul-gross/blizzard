@@ -72,3 +72,17 @@ class IWorkspaceProvider(Protocol):
         is outside the lease. An unknown or released env answers ``[]``, not a raise —
         an empty manifest authorizes nothing, the safe reading."""
         ...
+
+    def spawn_root(self) -> str:
+        """The directory every worker spawns in, or ``""`` when each worker spawns in
+        its own environment's workdir. Every later operation on a session — resume,
+        takeover, transcript lookup — runs from the same answer."""
+        ...
+
+    def capacity(self) -> int:
+        """How many environments this binding can hold at once."""
+        ...
+
+    def pool(self) -> tuple[str, ...]:
+        """The standing environment ids, or ``()`` when environments are minted on acquire."""
+        ...

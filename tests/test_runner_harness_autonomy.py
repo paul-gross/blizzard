@@ -14,8 +14,6 @@ import pytest
 
 from blizzard.runner.config import (
     CONFIG_FILENAME,
-    OPENCODE_WORKER_CONFIG_FILENAME,
-    WORKER_SETTINGS_FILENAME,
     ConfigError,
     RunnerConfig,
 )
@@ -26,14 +24,17 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
+from blizzard.runner.harness.internal.claude_code_section import WORKER_SETTINGS_FILENAME
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_permission_resolver import (
     OpenCodeEffectivePermissions,
     OpenCodePermissionResolveError,
 )
+from blizzard.runner.harness.internal.opencode_section import OPENCODE_WORKER_CONFIG_FILENAME
 from blizzard.runner.harness.internal.opencode_shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.runtime import Runtime
+from tests.harness_sections import claude_code
 from tests.runner_fakes import FakeProbe, make_envelope
 
 pytestmark = pytest.mark.unit
@@ -301,25 +302,25 @@ def test_each_autonomy_value_parses(tmp_path: Path, autonomy: Autonomy) -> None:
     config = _load(tmp_path, f'[harness]\nautonomy = "{autonomy.value}"\n')
 
     assert config.autonomy is autonomy
-    assert config.harness_permission_mode is None
+    assert claude_code(config).permission_mode is None
 
 
 def test_neither_key_resolves_to_dangerous(tmp_path: Path) -> None:
     config = _load(tmp_path, "")
 
     assert config.autonomy is Autonomy.Dangerous
-    assert config.harness_permission_mode is None
+    assert claude_code(config).permission_mode is None
 
 
 def test_legacy_only_keeps_the_override_and_resolves_dangerous(tmp_path: Path) -> None:
     config = _load(tmp_path, 'harness_permission_mode = "acceptEdits"\n')
 
     assert config.autonomy is Autonomy.Dangerous
-    assert config.harness_permission_mode == "acceptEdits"
+    assert claude_code(config).permission_mode == "acceptEdits"
 
 
 def test_legacy_empty_stays_distinguishable_from_absent(tmp_path: Path) -> None:
-    assert _load(tmp_path, 'harness_permission_mode = ""\n').harness_permission_mode == ""
+    assert claude_code(_load(tmp_path, 'harness_permission_mode = ""\n')).permission_mode == ""
 
 
 @pytest.mark.parametrize("legacy", ["bypassPermissions", ""])

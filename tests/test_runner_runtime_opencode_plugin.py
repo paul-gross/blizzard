@@ -5,7 +5,6 @@ still written under the runner's own runtime root, never inside a project reposi
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +13,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.internal.opencode_plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
 from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
 from blizzard.runner.runtime import Runtime, init_environment
+from tests.harness_sections import opencode, with_opencode
 
 pytestmark = pytest.mark.unit
 
@@ -24,8 +24,8 @@ def test_init_scaffolds_the_plugin_and_references_it_from_the_worker_config(tmp_
     plugin_path = tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME
     assert plugin_path.read_text(encoding="utf-8") == render_plugin_source()
 
-    assert config.opencode_worker_config_path is not None
-    document = json.loads(Path(config.opencode_worker_config_path).read_text())
+    assert opencode(config).worker_config_path is not None
+    document = json.loads(opencode(config).worker_config_at(config.root).read_text())
     parsed = parse_worker_config(document)
     assert parsed.plugins == (f"file://{plugin_path}",)
 
@@ -36,12 +36,12 @@ def test_init_scaffolds_a_repointed_worker_config_path_not_the_default(tmp_path:
     default_config = RunnerConfig.scaffold(tmp_path)
     custom_path = tmp_path / "custom" / "opencode-config.json"
     custom_path.parent.mkdir(parents=True)
-    repointed = replace(default_config, opencode_worker_config_path=str(custom_path))
+    repointed = with_opencode(default_config, worker_config_path=str(custom_path))
     default_config.config_path.write_text(repointed.to_toml())
 
     config = Runtime(tmp_path).init()
 
-    assert config.opencode_worker_config_path == str(custom_path)
+    assert opencode(config).worker_config_path == str(custom_path)
     document = json.loads(custom_path.read_text())
     parsed = parse_worker_config(document)
     assert parsed.plugins == (f"file://{tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME}",)

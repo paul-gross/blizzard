@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:binding-name-selection
+language: Python
+severity: error
+message: >-
+  A binding's config name is compared only at its selection point — the workspace-provider
+  factory registry or the harness catalog. Ask the seam for the fact instead
+  (IWorkspaceProvider, the harness catalog's declarations).
+files:
+  - src/blizzard/**
+ignores:
+  # The selection points.
+  - src/blizzard/runner/environments/factory.py
+  - src/blizzard/runner/harness/catalog.py
+  # The bindings' own modules.
+  - src/blizzard/runner/harness/internal/**
+  - src/blizzard/runner/harness/identity.py
+  - src/blizzard/runner/environments/internal/**
+  # Migrations record historical data shapes.
+  - src/blizzard/**/migrations/**
+rule:
+  kind: comparison_operator
+  has:
+    any:
+      - kind: identifier
+        regex: ^workspace_provider$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^workspace_provider$
+      - kind: string
+        has:
+          kind: string_content
+          regex: ^(claude_code|opencode)$
+      # A membership test against a literal collection of harness ids.
+      - any:
+          - kind: set
+          - kind: tuple
+          - kind: list
+        has:
+          kind: string
+          has:
+            kind: string_content
+            regex: ^(claude_code|opencode)$

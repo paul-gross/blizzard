@@ -1,0 +1,114 @@
+id: bzh:binding-name-selection
+snapshots:
+  ? |
+    env_capacity = (
+        config.max_environments if config.workspace_provider == "basic" else len(config.workspace_envs)
+    )
+  : labels:
+    - source: config.workspace_provider == "basic"
+      style: primary
+      start: 48
+      end: 84
+    - source: workspace_provider
+      style: secondary
+      start: 55
+      end: 73
+    - source: config.workspace_provider
+      style: secondary
+      start: 48
+      end: 73
+  ? |
+    if "opencode" != owner.harness_id:
+        pass
+  : labels:
+    - source: '"opencode" != owner.harness_id'
+      style: primary
+      start: 3
+      end: 33
+    - source: opencode
+      style: secondary
+      start: 4
+      end: 12
+    - source: '"opencode"'
+      style: secondary
+      start: 3
+      end: 13
+  ? |
+    if config.workspace_provider in ("basic",):
+        pass
+  : labels:
+    - source: config.workspace_provider in ("basic",)
+      style: primary
+      start: 3
+      end: 42
+    - source: workspace_provider
+      style: secondary
+      start: 10
+      end: 28
+    - source: config.workspace_provider
+      style: secondary
+      start: 3
+      end: 28
+  ? |
+    if harness_id == "claude_code":
+        pass
+  : labels:
+    - source: harness_id == "claude_code"
+      style: primary
+      start: 3
+      end: 30
+    - source: claude_code
+      style: secondary
+      start: 18
+      end: 29
+    - source: '"claude_code"'
+      style: secondary
+      start: 17
+      end: 30
+  ? |
+    if owner in {'claude_code', 'opencode'}:
+        pass
+  : labels:
+    - source: owner in {'claude_code', 'opencode'}
+      style: primary
+      start: 3
+      end: 39
+    - source: claude_code
+      style: secondary
+      start: 14
+      end: 25
+    - source: '''claude_code'''
+      style: secondary
+      start: 13
+      end: 26
+    - source: '{''claude_code'', ''opencode''}'
+      style: secondary
+      start: 12
+      end: 39
+  ? |
+    if workspace_provider != "winter":
+        pass
+  : labels:
+    - source: workspace_provider != "winter"
+      style: primary
+      start: 3
+      end: 33
+    - source: workspace_provider
+      style: secondary
+      start: 3
+      end: 21
+  ? |
+    workspace_root = "" if config.workspace_provider == "basic" else config.workspace_root
+  : labels:
+    - source: config.workspace_provider == "basic"
+      style: primary
+      start: 23
+      end: 59
+    - source: workspace_provider
+      style: secondary
+      start: 30
+      end: 48
+    - source: config.workspace_provider
+      style: secondary
+      start: 23
+      end: 48

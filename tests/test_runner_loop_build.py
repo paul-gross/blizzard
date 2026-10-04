@@ -33,12 +33,15 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.harness_sections import sections
 from tests.runner_fakes import FakeHub, FakeProbe, loop_context, loop_graph, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -220,8 +223,7 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),
         workspace_root=str(tmp_path / "workspace"),
-        worker_settings_path=settings,
-        harness_permission_mode="acceptEdits",
+        harness_sections=sections(ClaudeCodeSection(worker_settings_path=settings, permission_mode="acceptEdits")),
     )
 
     with loop_context(config) as ctx:
@@ -242,7 +244,7 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),
         workspace_root=str(tmp_path / "workspace"),
-        worker_settings_path=str(tmp_path / "worker-settings.json"),
+        harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(tmp_path / "worker-settings.json"))),
     )
     snapshot = publish_harness_bundle(bundle, tmp_path)
 
@@ -597,8 +599,9 @@ def test_both_roots_boot_with_a_single_enabled_harness(
         workspace_provider="basic",
         workspace_root="scratch",
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
-        claude_code_enabled=claude_code_enabled,
-        opencode_enabled=opencode_enabled,
+        harness_sections=sections(
+            ClaudeCodeSection(enabled=claude_code_enabled), OpenCodeSection(enabled=opencode_enabled)
+        ),
     )
 
     build_hosted_app(config)

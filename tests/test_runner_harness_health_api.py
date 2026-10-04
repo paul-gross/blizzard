@@ -29,12 +29,15 @@ from blizzard.runner.harness.internal.claude_code_health import (
     ADMITTED_CLAUDE_CODE_RANGE_DISPLAY,
     ClaudeCodeHealthProbe,
 )
+from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE_DISPLAY
+from blizzard.runner.harness.internal.opencode_section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
+from tests.harness_sections import claude_code, opencode, sections
 
 pytestmark = pytest.mark.component
 
@@ -70,18 +73,22 @@ class _HealthyWithDegradationProbe:
 
 
 def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Path, spawn_executor: Executor) -> None:
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", harness_binary=str(tmp_path / "no-such-claude-binary"))
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        harness_sections=sections(ClaudeCodeSection(binary=str(tmp_path / "no-such-claude-binary"))),
+    )
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
-        binary=config.harness_binary,
+        binary=claude_code(config).binary,
         process=probe,
         launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     health = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
-        probes={CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=config.harness_binary)},
+        probes={CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=claude_code(config).binary)},
         selftest_results=None,
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=adapter.observe_version())
@@ -102,7 +109,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path, spawn_exe
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
-        binary=config.harness_binary,
+        binary=claude_code(config).binary,
         process=probe,
         launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
@@ -134,14 +141,18 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
     this hermetic — no dependency on whether an `opencode` binary happens to be on this
     machine's own `PATH`; the exact cause matters less here than construction, the shared
     cache, and the route all surviving the corpus defect intact."""
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_binary=str(tmp_path / "no-such-opencode-binary"))
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        harness_sections=sections(OpenCodeSection(binary=str(tmp_path / "no-such-opencode-binary"))),
+    )
     process = LinuxProcessProbe()
     launcher = ProcessLauncher(process, executor=spawn_executor)
     claude_adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=process, launcher=launcher
+        worker_env=AllowlistedEnv.of(()), binary=claude_code(config).binary, process=process, launcher=launcher
     )
     opencode_adapter = OpenCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.opencode_binary, process=process, launcher=launcher
+        worker_env=AllowlistedEnv.of(()), binary=opencode(config).binary, process=process, launcher=launcher
     )
     harnesses = HarnessRegistry(
         {
@@ -156,7 +167,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
         probes={
             CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe(),
             OPENCODE_HARNESS_ID: OpenCodeHealthProbe(
-                binary=config.opencode_binary, auth_path=None, corpus_root=tmp_path
+                binary=opencode(config).binary, auth_path=None, corpus_root=tmp_path
             ),
         },
         selftest_results=None,
@@ -182,10 +193,10 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
     process = LinuxProcessProbe()
     launcher = ProcessLauncher(process, executor=spawn_executor)
     claude_adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=process, launcher=launcher
+        worker_env=AllowlistedEnv.of(()), binary=claude_code(config).binary, process=process, launcher=launcher
     )
     opencode_adapter = OpenCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.opencode_binary, process=process, launcher=launcher
+        worker_env=AllowlistedEnv.of(()), binary=opencode(config).binary, process=process, launcher=launcher
     )
     harnesses = HarnessRegistry(
         {
@@ -196,8 +207,8 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
     health = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={
-            CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=config.harness_binary),
-            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=None),
+            CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=claude_code(config).binary),
+            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=opencode(config).binary, auth_path=None),
         },
         selftest_results=None,
     )

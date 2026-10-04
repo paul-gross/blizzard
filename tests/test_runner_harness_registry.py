@@ -26,6 +26,7 @@ from blizzard.runner.harness.registry import (
 )
 from blizzard.runner.loop.capability_snapshot import default_harness_id
 from blizzard.runner.loop.process import LinuxProcessProbe
+from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 
 
@@ -163,7 +164,7 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
 def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_opencode(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", claude_code_enabled=False)
+    config = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
     assert default_harness_id(registry) == OPENCODE_HARNESS_ID
@@ -176,7 +177,7 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
 @pytest.mark.unit
 def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
     registry = build_production_harness_registry(
-        RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False),
+        with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
     )
@@ -200,15 +201,18 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
 @pytest.mark.unit
 def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    assert list(build_production_harness_health_probes(base)) == [CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID]
-    no_claude = RunnerConfig(root=tmp_path, db_url="sqlite://", claude_code_enabled=False)
-    assert list(build_production_harness_health_probes(no_claude)) == [OPENCODE_HARNESS_ID]
-    no_opencode = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False)
-    assert list(build_production_harness_health_probes(no_opencode)) == [CLAUDE_CODE_HARNESS_ID]
+    assert list(build_production_harness_health_probes(base, spawn_root="")) == [
+        CLAUDE_CODE_HARNESS_ID,
+        OPENCODE_HARNESS_ID,
+    ]
+    no_claude = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
+    assert list(build_production_harness_health_probes(no_claude, spawn_root="")) == [OPENCODE_HARNESS_ID]
+    no_opencode = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
+    assert list(build_production_harness_health_probes(no_opencode, spawn_root="")) == [CLAUDE_CODE_HARNESS_ID]
 
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:
-    probe = build_production_harness_health_probes(config)[OPENCODE_HARNESS_ID]
+    probe = build_production_harness_health_probes(config, spawn_root="")[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)
     return vars(probe)["_auth_path"]
 
@@ -240,6 +244,6 @@ def test_production_opencode_probe_prefers_an_explicit_auth_path(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     explicit = tmp_path / "elsewhere" / "auth.json"
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_auth_path=str(explicit))
+    config = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), auth_path=str(explicit))
 
     assert _probe_auth_path(config) == explicit

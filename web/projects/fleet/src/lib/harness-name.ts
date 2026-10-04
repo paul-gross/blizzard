@@ -1,4 +1,4 @@
-/** Operator-facing name for a harness identity, independent of its build version. */
+/** Operator-facing name for a harness identity, independent of its build version: the id with its underscores read as spaces. */
 export function harnessName(id: string): string {
-  return id === 'claude_code' || id === 'claude' ? 'claude code' : id;
+  return id.replaceAll('_', ' ');
 }

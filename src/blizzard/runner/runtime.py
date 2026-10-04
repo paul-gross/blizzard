@@ -11,15 +11,8 @@ from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
-from blizzard.runner.config import (
-    CONFIG_FILENAME,
-    OPENCODE_WORKER_CONFIG_FILENAME,
-    WORKER_SETTINGS_FILENAME,
-    ConfigError,
-    RunnerConfig,
-)
-from blizzard.runner.harness.opencode_scaffold import scaffold_opencode_worker_config
-from blizzard.runner.harness.worker_settings import WorkerSettings
+from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.harness.catalog import declared
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard runner migrate"
@@ -67,13 +60,10 @@ class Runtime:
                 config.config_path.write_text(config.to_toml())
                 _log.info("runner config scaffolded", path=str(config.config_path))
 
-            # Written idempotently: the content is versioned with the runner, so re-running
-            # `init` refreshes it to head.
-            (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
-            # The runner-owned OpenCode plugin and permission document, never inside a
-            # project repository; through `harness/`'s public surface, not `internal/` directly.
-            worker_config_path = config.opencode_worker_config_path or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
-            scaffold_opencode_worker_config(root, Path(worker_config_path))
+            # Every binding's runner-owned files, versioned with the runner, so re-running
+            # `init` refreshes them to head.
+            for declaration, section in declared(config.harness_sections):
+                declaration.scaffold_runtime(section, root)
         except OSError as exc:
             raise ConfigError(f"cannot write the runner runtime at {root}: {exc}") from exc
 

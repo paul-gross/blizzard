@@ -14,14 +14,16 @@ import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.config_table import ConfigError, Table
+from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.sections import HarnessSections
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
@@ -37,10 +39,6 @@ CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned directory the published harness-config snapshots live under.
 HARNESS_CONFIG_DIRNAME = "harness-config"
-# The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
-WORKER_SETTINGS_FILENAME = "worker-settings.json"
-# The runner-owned OpenCode permission/plugin document `init` scaffolds.
-OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"
 # The local API's unix socket, under the state dir beside the store; filesystem
 # permissions are its access control.
 SOCKET_FILENAME = "runner.sock"
@@ -55,7 +53,6 @@ ENV_HUB_URL = "BZ_HUB_URL"
 # hand-editing of the toml.
 ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
-ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
@@ -75,9 +72,6 @@ CALLBACK_PATH = "/api/auth/callback"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
-DEFAULT_HARNESS_BINARY = "claude"
-# OpenCode's own binary path — independent of `harness_binary`'s Claude Code meaning.
-DEFAULT_OPENCODE_BINARY = "opencode"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 # The env var NAMING this runner's hub bearer token — the toml round-trips the
@@ -105,10 +99,6 @@ DEFAULT_AUTH_HUB_ROLE = "mirror"
 # sweep prunes them — long enough to investigate a stalled or rate-limited
 # invocation days after the fact.
 DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
-
-
-class ConfigError(RuntimeError):
-    """A runtime directory is missing its config — it was never initialized."""
 
 
 def resolve_session_secret(env_name: str) -> bytes:
@@ -201,68 +191,6 @@ def _cap_line(key: str, value: int | None, default: int) -> str:
     """One ``[transcripts]`` ceiling: live once overridden, commented at its default so the
     scaffolded file always shows an operator what the ceiling IS."""
     return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
-
-
-@dataclass(frozen=True)
-class Table:
-    """One parsed toml table, read through the coercions the config fields share.
-
-    A value that is not a table reads as empty, so an absent section and an absent key
-    behave alike."""
-
-    body: dict[str, Any]
-
-    @classmethod
-    def of(cls, value: object) -> Table:
-        return cls(value if isinstance(value, dict) else {})
-
-    def text(self, key: str) -> str | None:
-        value = self.body.get(key)
-        return None if value is None else str(value)
-
-    def word(self, key: str) -> str | None:
-        """A string read whose empty value counts as absent."""
-        value = self.body.get(key)
-        return str(value) if value else None
-
-    def real(self, key: str) -> float | None:
-        value = self.body.get(key)
-        return None if value is None else float(value)
-
-    def count(self, key: str, default: int) -> int:
-        value = self.body.get(key)
-        return default if value is None else int(value)
-
-    def boolean(self, key: str, default: bool) -> bool:
-        """A real TOML boolean, or ``default`` when ``key`` is absent. Raises on anything
-        else: ``bool()`` on a non-empty string is truthy regardless of its
-        text, so a typo'd ``ship = "false"`` must never silently turn a switch on."""
-        value = self.body.get(key)
-        if value is None:
-            return default
-        if not isinstance(value, bool):
-            raise ConfigError(f"{key!r} must be a boolean, got {value!r}")
-        return value
-
-    def names(self, key: str) -> tuple[str, ...]:
-        """Every entry at ``key`` as a string; an absent key is empty."""
-        value = self.body.get(key)
-        return () if value is None else tuple(str(entry) for entry in value)
-
-    def listed(self, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
-        """Every entry at ``key`` as a string, falling back to ``default`` unless it is a list."""
-        value = self.body.get(key)
-        if not isinstance(value, (list, tuple)):
-            return default
-        return tuple(str(entry) for entry in value)
-
-    def pairs(self, key: str) -> tuple[tuple[str, str], ...]:
-        """The nested table at ``key`` as key/value pairs — a frozen dataclass field must
-        stay hashable. Absent, or present but empty, means none."""
-        nested = self.body.get(key)
-        if not isinstance(nested, dict):
-            return ()
-        return tuple((str(name), str(value)) for name, value in nested.items())
 
 
 @dataclass(frozen=True)
@@ -532,19 +460,12 @@ class RunnerConfig:
     workspace_repos: tuple[WorkspaceRepo, ...] = ()
     max_environments: int = DEFAULT_MAX_ENVIRONMENTS
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
-    harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
-    #: `[claude_code].enabled` — false leaves Claude Code unbound, unprobed, and unadvertised.
-    claude_code_enabled: bool = True
     #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
     autonomy: Autonomy = Autonomy.Dangerous
     #: `[harness] config_dir`, the operator-owned harness-config bundle; `None` is no bundle.
     harness_config_dir: Path | None = None
-    #: Legacy Claude Code-only `--permission-mode` override. `None` is absent (autonomy maps);
-    #: empty is present-but-empty (no flag); never set together with `[harness] autonomy`.
-    harness_permission_mode: str | None = None
-    worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
-    #: Override for the Claude Code health probe's own credential file; `None` is its own default.
-    claude_code_credentials_path: str | None = None
+    #: Every harness binding's own config section, in catalog order.
+    harness_sections: HarnessSections = field(default_factory=HarnessSections.defaults)
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
     #: Node NAMES this runner imposes a human gate on; reloaded every tick.
@@ -614,24 +535,6 @@ class RunnerConfig:
     #: Per-username role overrides, keyed on the JWT's `username` claim only,
     #: never `email`, which is mutable and may be null.
     auth_users: tuple[tuple[str, str], ...] = ()
-    #: Model tier-alias mappings onto the names *this* runner's harness
-    #: understands; an alias mapped by neither this nor the adapter is skipped, never fatal.
-    model_aliases: tuple[tuple[str, str], ...] = ()
-    #: Effort alias mappings onto the `low|medium|high|max` ordinal; the
-    #: well-known four need no entry.
-    effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's own binary path, independent of `harness_binary` (still Claude Code's).
-    opencode_binary: str = DEFAULT_OPENCODE_BINARY
-    #: `[opencode].enabled` — false leaves OpenCode unbound, unprobed, and unadvertised.
-    opencode_enabled: bool = True
-    #: OpenCode's tier -> `provider/model` mapping; an unmapped tier skips this binding.
-    opencode_model_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's effort -> `--variant` mapping; unmapped drops to `None` and logs once.
-    opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: The runner-owned OpenCode permission/plugin document's path; `None` predates the binding.
-    opencode_worker_config_path: str | None = None
-    #: Override for the OpenCode health probe's own auth file; `None` is its own default.
-    opencode_auth_path: str | None = None
     #: The reverse-proxy trust set — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
@@ -708,10 +611,6 @@ class RunnerConfig:
         """An absolute root shared by the hosted app and loop, independent of their cwd."""
         path = Path(self.workspace_root) if self.workspace_root else self.root / "workspace"
         return str((path if path.is_absolute() else self.root / path).resolve())
-
-    @property
-    def provider_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        return self.effective_workspace_root if self.workspace_provider == "basic" else self.workspace_root
 
     @property
     def socket_path(self) -> Path:
@@ -835,13 +734,9 @@ class RunnerConfig:
             workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
             workspace_provider="basic" if not os.environ.get(ENV_WORKSPACE_ROOT) else "winter",
             workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
-            harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
             gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
-            # The worker hook file `init` writes alongside the config; the adapter
-            # delivers it as `--settings` so a spawned worker heartbeats.
-            worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
-            opencode_worker_config_path=str(root / OPENCODE_WORKER_CONFIG_FILENAME),
+            harness_sections=HarnessSections.scaffold(root, os.environ),
             # Empty on a fresh scaffold; seeded from the environment so `init` can inject
             # a default without hand-editing.
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
@@ -863,7 +758,6 @@ class RunnerConfig:
             if len(self.public_urls) > 1
             else f'"{self.public_url}"'
         )
-        settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
         # `json.dumps` emits a valid TOML basic string: TOML shares JSON's escapes
         # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
         workspace_prompt = json.dumps(self.workspace_prompt)
@@ -905,12 +799,7 @@ class RunnerConfig:
             "# Released folders remain for inspection until the cap needs room; oldest\n"
             "# unheld folders are evicted first. Reacquisition resets all repo worktrees.\n"
             "# A commented [[workspace_repo]] example is at the end of this file.\n"
-            f"worker_settings_path = {settings}\n"
-            + (
-                f'claude_code_credentials_path = "{self.claude_code_credentials_path}"\n'
-                if self.claude_code_credentials_path is not None
-                else '# claude_code_credentials_path = "~/.claude/.credentials.json"  # this is the default\n'
-            )
+            + "".join(section.root_toml() for section in self.harness_sections)
             + f"max_agents = {self.max_agents}\n"
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name; empty = none.\n"
@@ -1047,38 +936,7 @@ class RunnerConfig:
             + f'hub_role_default = "{self.auth_hub_role_default}"\n'
             + "\n[auth.users]\n"
             + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
-            + "\n# The Claude Code binding: `enabled = false` leaves it unbound and unadvertised.\n"
-            + "[claude_code]\n"
-            + f"enabled = {'true' if self.claude_code_enabled else 'false'}\n"
-            + f'binary = "{self.harness_binary}"\n'
-            + "\n# Model and effort tier aliases — how THIS runner's harness resolves the\n"
-            + "# harness-agnostic names a graph's `sessions:` declaration (or a chunk default) uses.\n"
-            + "# The Claude Code adapter ships built-in defaults for the three standard tiers\n"
-            + "# (blizzard:frontier/advanced/basic), so a zero-config runner needs no entry here;\n"
-            + "# an entry overrides the built-in. An unmapped alias is skipped at resolution, never\n"
-            + "# a spawn failure. Effort maps onto the low|medium|high|max ordinal.\n"
-            + "[models.aliases]\n"
-            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
-            + "\n[effort.aliases]\n"
-            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.effort_aliases)
-            + "\n# The OpenCode binding's own configuration — fully independent of the flat\n"
-            + "# Claude Code fields above, which keep their existing meaning unchanged. OpenCode\n"
-            + "# ships no built-in tier mapping, so an unmapped tier makes this binding unable to\n"
-            + "# satisfy a session demanding it; a multi-harness selection skips it rather than\n"
-            + "# spawn it under a model it cannot provide.\n"
-            + "[opencode]\n"
-            + f"enabled = {'true' if self.opencode_enabled else 'false'}\n"
-            + f'binary = "{self.opencode_binary}"\n'
-            + f"worker_config_path = {json.dumps(self.opencode_worker_config_path or '')}\n"
-            + (
-                f'auth_path = "{self.opencode_auth_path}"\n'
-                if self.opencode_auth_path is not None
-                else '# auth_path = "/path/to/auth.json"  # defaults to the path resolved from the worker env\n'
-            )
-            + "\n[opencode.models.aliases]\n"
-            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_model_aliases)
-            + "\n[opencode.effort.aliases]\n"
-            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_effort_aliases)
+            + "".join(section.table_toml() for section in self.harness_sections)
             + "".join(
                 f"\n[[workspace_repo]]\nname = {json.dumps(repo.name)}\nurl = {json.dumps(repo.url)}\n"
                 for repo in self.workspace_repos
@@ -1111,26 +969,14 @@ class RunnerConfig:
         # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
         # actually happens, from this config's own resolved fields.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
-        opencode = Table.of(raw.get("opencode"))
-        claude_code = Table.of(raw.get("claude_code"))
-        if "harness_binary" in raw and "binary" in claude_code.body:
-            raise ConfigError("set Claude Code's binary once: 'harness_binary' or '[claude_code].binary', not both")
+        harness_sections = HarnessSections.parse(raw, root=root, path=path)
         harness = Table.of(raw.get("harness"))
-        legacy_permission_mode = None if "harness_permission_mode" not in raw else str(raw["harness_permission_mode"])
-        if legacy_permission_mode is not None and "autonomy" in harness.body:
-            raise ConfigError(
-                f"set the approval posture once in {path}: 'harness_permission_mode' and '[harness] autonomy' "
-                "are both set; keep only '[harness] autonomy'"
-            )
         autonomy = _parse_autonomy(harness.body.get("autonomy"), path)
         harness_config_dir = _parse_harness_config_dir(harness.body.get("config_dir"), root, path)
-        claude_code_enabled = claude_code.boolean("enabled", True)
-        opencode_enabled = opencode.boolean("enabled", True)
-        if not claude_code_enabled and not opencode_enabled:
-            raise ConfigError("'[claude_code].enabled' and '[opencode].enabled' are both false; enable at least one")
         provider = raw.get("workspace_provider", "winter")
-        if provider not in ("basic", "winter"):
-            raise ConfigError(f"workspace_provider must be 'basic' or 'winter', got {provider!r}")
+        if provider not in WORKSPACE_PROVIDERS:
+            names = " or ".join(repr(name) for name in WORKSPACE_PROVIDERS)
+            raise ConfigError(f"workspace_provider must be {names}, got {provider!r}")
         cap = raw.get("max_environments", DEFAULT_MAX_ENVIRONMENTS)
         if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
             raise ConfigError(f"max_environments must be a positive integer, got {cap!r}")
@@ -1152,17 +998,9 @@ class RunnerConfig:
             workspace_repos=repos,
             max_environments=cap,
             workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
-            harness_binary=str(raw.get("harness_binary", claude_code.body.get("binary", DEFAULT_HARNESS_BINARY))),
-            claude_code_enabled=claude_code_enabled,
+            harness_sections=harness_sections,
             autonomy=autonomy,
             harness_config_dir=harness_config_dir,
-            harness_permission_mode=legacy_permission_mode,
-            worker_settings_path=(str(raw["worker_settings_path"]) or None)
-            if raw.get("worker_settings_path")
-            else None,
-            claude_code_credentials_path=(str(raw["claude_code_credentials_path"]) or None)
-            if raw.get("claude_code_credentials_path")
-            else None,
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
             gates=tuple(str(g) for g in raw.get("gates", ())),
@@ -1190,19 +1028,7 @@ class RunnerConfig:
             auth_superuser=auth.superuser,
             auth_hub_role_default=auth.hub_role_default,
             auth_users=auth.users,
-            model_aliases=Table.of(raw.get("models")).pairs("aliases"),
-            effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             worker_stdout_retention_days=worker_stdout.retention_days,
             tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
-            opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
-            opencode_enabled=opencode_enabled,
-            opencode_auth_path=opencode.word("auth_path"),
-            opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
-            opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
-            # A pre-`[opencode]` config carries no `worker_config_path`; default to the
-            # same path a fresh `Runtime.init` scaffolds rather than `None`.
-            opencode_worker_config_path=(
-                opencode.word("worker_config_path") or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
-            ),
         )
