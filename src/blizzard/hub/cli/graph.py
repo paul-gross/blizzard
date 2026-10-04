@@ -10,6 +10,7 @@ from typing import Any
 import click
 import httpx
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -33,6 +34,7 @@ class GraphSyncListing(Listing):
         return f"{row['name']}: {row['status']}{graph_id}{detail}"
 
 
+@dto
 @dataclass(frozen=True)
 class GraphDetail:
     body: dict[str, Any]
@@ -42,28 +44,28 @@ class GraphDetail:
         marker = "retired" if body.get("retired") else "enabled"
         yield f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}"
         for session in body.get("sessions", []):
-            yield f"  session {session['name']}  {self._session_summary(session)}"
+            yield f"  session {session['name']}  {_session_summary(session)}"
         for node in body.get("nodes", []):
             yield f"  node {node['node_id']}  name={node['name']}  executor={node.get('executor')}"
         for edge in body.get("edges", []):
             yield f"  edge {edge['from_node_id']} --[{edge.get('choice_id')}]--> {edge.get('to_node_name')}"
 
-    @staticmethod
-    def _session_summary(session: dict[str, Any]) -> str:
-        parts = []
-        if session.get("model"):
-            parts.append(f"model={','.join(session['model'])}")
-        if session.get("effort"):
-            parts.append(f"effort={session['effort']}")
-        if session.get("compaction_window"):
-            parts.append(f"compaction_window={session['compaction_window']}")
-        if session.get("harnesses"):
-            parts.append(f"harnesses={','.join(session['harnesses'])}")
-        rotate = session.get("rotate") or {}
-        bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
-        if bounds:
-            parts.append(f"rotate=({bounds})")
-        return "  ".join(parts) if parts else "(no pinning)"
+
+def _session_summary(session: dict[str, Any]) -> str:
+    parts = []
+    if session.get("model"):
+        parts.append(f"model={','.join(session['model'])}")
+    if session.get("effort"):
+        parts.append(f"effort={session['effort']}")
+    if session.get("compaction_window"):
+        parts.append(f"compaction_window={session['compaction_window']}")
+    if session.get("harnesses"):
+        parts.append(f"harnesses={','.join(session['harnesses'])}")
+    rotate = session.get("rotate") or {}
+    bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
+    if bounds:
+        parts.append(f"rotate=({bounds})")
+    return "  ".join(parts) if parts else "(no pinning)"
 
 
 @click.group("graph")

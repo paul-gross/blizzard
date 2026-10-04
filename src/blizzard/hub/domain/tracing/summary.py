@@ -10,15 +10,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.trace_ids import StepKey
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing.facts import (
-    MigrationRecord,
-    PauseRecord,
-    QuestionRecord,
-    RestartRecord,
     StepFacts,
-    TransitionRecord,
+    TracedMigration,
+    TracedPause,
+    TracedQuestion,
+    TracedRestart,
+    TracedTransition,
 )
 from blizzard.hub.domain.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.work import MigrationSource, UsageFact, UsageTotal
@@ -37,6 +38,7 @@ class IntervalKind(StrEnum):
     HUB_EXEC = "hub-exec"
 
 
+@domain_model
 @dataclass(frozen=True)
 class Interval:
     """One stretch of a step's time. ``answered`` is read only on an ask; ``clock_skew`` marks a clamped one."""
@@ -52,6 +54,7 @@ class Interval:
         return _ms(self.start, self.end)
 
 
+@dto
 @dataclass(frozen=True)
 class StepSummary:
     """One closed step. ``runner_id`` is the holder as a span reports it — a gate's holding runner included."""
@@ -156,12 +159,12 @@ def _node_name_of(facts: StepFacts, graph_id: str, node_id: str) -> str | None:
 
 def _led_to(facts: StepFacts, fact: object) -> tuple[str | None, str | None]:
     """``(to_node.name, choice)`` read from the closing fact."""
-    if isinstance(fact, TransitionRecord):
+    if isinstance(fact, TracedTransition):
         return _node_name_of(facts, fact.graph_id, fact.to_node_id), fact.choice_name
-    if isinstance(fact, MigrationRecord):
+    if isinstance(fact, TracedMigration):
         graph = facts.graphs.get(fact.to_graph_id)
         return (f"graph:{graph.name}" if graph is not None else None), fact.choice_name
-    if isinstance(fact, RestartRecord):
+    if isinstance(fact, TracedRestart):
         return _node_name_of(facts, fact.graph_id, fact.to_node_id), None
     return None, None
 
@@ -217,7 +220,7 @@ def _claim_intervals(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ..
     return intervals
 
 
-def _ask_interval(question: QuestionRecord, end: datetime) -> Interval:
+def _ask_interval(question: TracedQuestion, end: datetime) -> Interval:
     finish = question.answered_at if question.answered_at is not None else end
     skewed = finish < question.asked_at
     return Interval(
@@ -230,7 +233,7 @@ def _ask_interval(question: QuestionRecord, end: datetime) -> Interval:
     )
 
 
-def _pause_intervals(pauses: tuple[PauseRecord, ...], start: datetime, end: datetime) -> list[Interval]:
+def _pause_intervals(pauses: tuple[TracedPause, ...], start: datetime, end: datetime) -> list[Interval]:
     ordered = sorted(pauses, key=lambda p: p.set_at)
     intervals: list[Interval] = []
     for pause in ordered:

@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.escalations import EscalationRecord, IWriteEscalationRepository
+from blizzard.runner.domain.escalations import IWriteEscalationRepository, ParkedEscalation
 from blizzard.runner.domain.leases.closure import ESCALATION_MINT, ESCALATION_REASONS, NO_ACCEPTABLE_HARNESS_MINT
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
@@ -28,7 +28,7 @@ class EscalationStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def open_escalations(self) -> list[EscalationRecord]:
+    def open_escalations(self) -> list[ParkedEscalation]:
         stmt = (
             self._escalation_select()
             .where(LIVE_ESCALATION.clause)
@@ -37,7 +37,7 @@ class EscalationStore:
         )
         return [self._row_to_escalation(r) for r in self._store.all(stmt)]
 
-    def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
+    def open_escalation_for_chunk(self, chunk_id: str) -> ParkedEscalation | None:
         stmt = (
             self._escalation_select()
             .where(lease_closures.c.chunk_id == chunk_id)
@@ -92,8 +92,8 @@ class EscalationStore:
         )
 
     @staticmethod
-    def _row_to_escalation(r) -> EscalationRecord:  # type: ignore[no-untyped-def]
-        return EscalationRecord(
+    def _row_to_escalation(r) -> ParkedEscalation:  # type: ignore[no-untyped-def]
+        return ParkedEscalation(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             node_id=str(r.node_id),

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -24,9 +25,9 @@ from blizzard.hub.domain.ingest import require_no_live_holder
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
+    HubWorkItem,
     IWriteWorkItemRepository,
     WorkItemAuthor,
-    WorkItemRecord,
     WorkRef,
     mint_chunk,
 )
@@ -71,6 +72,7 @@ class WorkItemNotEditable(Exception):
         self.closure = closure
 
 
+@dto
 @dataclass(frozen=True)
 class WorkItemEdit:
     """The fields a single all-or-nothing item edit request supplies,
@@ -82,15 +84,17 @@ class WorkItemEdit:
     stated_priority: WorkItemPriority | None | UnsetType = field(default=UNSET)
 
 
+@dto
 @dataclass(frozen=True)
 class CreatedWorkItem:
     """The result of filing a hub-owned work item — the item plus the
     id of the ``not_ready`` chunk its creation mints in the same transaction."""
 
-    item: WorkItemRecord
+    item: HubWorkItem
     chunk_id: str
 
 
+@dto
 @dataclass(frozen=True)
 class WithdrawnWorkItem:
     """The result of withdrawing a hub-owned work item — the item itself,
@@ -98,7 +102,7 @@ class WithdrawnWorkItem:
     ``chunk_deleted.id`` when withdrawal cascaded into deleting an unacquired holder;
     all three ``None`` when it did not."""
 
-    item: WorkItemRecord
+    item: HubWorkItem
     deleted_chunk_id: str | None = None
     deleted_chunk_status: str | None = None
     deleted_chunk_fact_id: int | None = None
@@ -243,7 +247,7 @@ class WorkItemEditService:
             return None
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
-    def edit(self, item: WorkItemRecord, edit: WorkItemEdit) -> WorkItemRecord:
+    def edit(self, item: HubWorkItem, edit: WorkItemEdit) -> HubWorkItem:
         """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this
         call itself guards — and replace them in place; raises :class:`WorkItemNotEditable`
         when ``item`` already carries a closure, checked here and re-checked by the store's
@@ -264,7 +268,7 @@ class WorkItemEditService:
             raise WorkItemNotEditable(current.work_item_id, current.closure)
         return updated
 
-    def withdraw(self, item: WorkItemRecord, *, by: str) -> WithdrawnWorkItem:
+    def withdraw(self, item: HubWorkItem, *, by: str) -> WithdrawnWorkItem:
         """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
         closed. An unacquired holder is deleted via
         :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing;
@@ -292,13 +296,13 @@ class WorkItemEditService:
             item=updated, deleted_chunk_id=holder, deleted_chunk_status=prev_status, deleted_chunk_fact_id=deleted_id
         )
 
-    def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
+    def deliver(self, item: HubWorkItem) -> HubWorkItem:
         """Close ``item`` as delivered — the close-intent drainer's own
         write path. No business rule beyond the store's own idempotency
         guard: a live chunk holding the pointer is the expected caller, not a conflict
         to block."""
         return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())
 
-    def _require_open(self, item: WorkItemRecord) -> None:
+    def _require_open(self, item: HubWorkItem) -> None:
         if item.closure is not None:
             raise WorkItemNotEditable(item.work_item_id, item.closure)

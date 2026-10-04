@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkRef
@@ -20,6 +21,7 @@ from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
 
 
+@dto
 @dataclass(frozen=True)
 class AuthorView:
     """A work item's author, resolved legible for display — a login for
@@ -48,6 +50,7 @@ def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository | Map
     )
 
 
+@dto
 @dataclass(frozen=True)
 class WorkItem:
     """A pass-through work item — title, body, and comment bodies, vendor-native, plus

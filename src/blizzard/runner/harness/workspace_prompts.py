@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model
 
 WORKSPACE_PROMPT_FILENAME = "workspace-prompt.md"
 
@@ -20,6 +21,7 @@ class UnknownWorkspacePromptSample(LookupError):
     """A sample name the packaged corpus does not carry."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class PackagedWorkspacePrompts:
     """The workspace-prompt sample set shipped in this package — one directory per sample."""

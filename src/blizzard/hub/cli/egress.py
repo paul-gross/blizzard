@@ -10,6 +10,7 @@ import click
 import httpx
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -18,6 +19,7 @@ from blizzard.hub.cli.context import CliContext
 _BACKFILL_TIMEOUT = 600.0
 
 
+@dto
 @dataclass(frozen=True)
 class StatusView:
     status: dict[str, Any]

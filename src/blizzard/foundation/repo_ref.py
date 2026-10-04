@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
+
 __all__ = ["RepoRef", "repo_identity"]
 
 # `scp`-style ssh remotes lack the `//` a URL parser needs.
@@ -18,6 +20,7 @@ _SCP_LIKE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>.+)$")
 _WITH_SCHEME = re.compile(r"^(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*)://(?P<netloc>[^/]*)(?P<path>/.*)?$")
 
 
+@domain_model
 @dataclass(frozen=True)
 class RepoRef:
     """A repo's forge coordinate: the host it lives on and its ``owner/name`` path."""

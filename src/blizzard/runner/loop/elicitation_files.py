@@ -12,7 +12,10 @@ import contextlib
 import os
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 
+
+@domain_model
 @dataclass(frozen=True)
 class ElicitationFiles:
     """One runner's elicitation-output file layout, rooted at ``root`` — created once at

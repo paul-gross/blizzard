@@ -20,12 +20,13 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.repo_ref import repo_identity
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
@@ -83,6 +84,7 @@ _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
 _MARKER_PREFIX = "merged/"
 
 
+@dto
 @dataclass(frozen=True)
 class HubRunResult:
     """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran.
@@ -130,6 +132,7 @@ class UnconvergedDeliveryError(RuntimeError):
     other was checked against."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class GitCommits:
     """A chunk's ``git_commit`` artifacts resolved to one row per repository **identity**.
@@ -137,13 +140,13 @@ class GitCommits:
     A rewritten branch supersedes its orphaned pointer, but the same name under two owners
     stays two repositories."""
 
-    rows: list[ArtifactRow]
+    rows: list[StoredArtifact]
 
     @classmethod
-    def of(cls, artifacts: list[ArtifactRow]) -> GitCommits:
+    def of(cls, artifacts: list[StoredArtifact]) -> GitCommits:
         """Newest epoch wins; a tie at one epoch resolves to the later row unless the two
         name different branches, which raises :class:`UnconvergedDeliveryError`."""
-        latest: dict[str, ArtifactRow] = {}
+        latest: dict[str, StoredArtifact] = {}
         for row in artifacts:
             if row.kind is not ArtifactKind.GIT_COMMIT:
                 continue
@@ -172,10 +175,11 @@ class GitCommits:
         ]
 
     @staticmethod
-    def _identity(row: ArtifactRow) -> str:
+    def _identity(row: StoredArtifact) -> str:
         return repo_identity(row.forge, row.repo or row.name)
 
 
+@dto
 @dataclass(frozen=True)
 class HubEnv:
     """A hub command node's injected env, assembled from already-loaded domain inputs."""
@@ -184,7 +188,7 @@ class HubEnv:
     node: Node
     workdir: str
     epoch: int
-    artifacts: list  # list[ArtifactRow] — untyped here to avoid a domain->storage import cycle
+    artifacts: list  # list[StoredArtifact] — untyped here to avoid a domain->storage import cycle
     base_branch: str
     marker_callback_url: str
     garden_delivery_url: str = ""
@@ -238,6 +242,7 @@ class HubEnv:
         return env
 
 
+@domain_model
 @dataclass(frozen=True)
 class PollPolicy:
     """A hub command node's pending-poll cadence and give-up bound (#66)."""
@@ -262,6 +267,7 @@ class PollPolicy:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class PrintedChoice:
     """The choice a step explicitly selected, read off its stdout."""
@@ -281,6 +287,7 @@ class PrintedChoice:
         return cls(last if last == HUB_PENDING_CHOICE or last in known_names else None)
 
 
+@domain_model
 @dataclass(frozen=True)
 class _NoopStep:
     command: str = ""
@@ -554,7 +561,7 @@ class HubNodeExecutor:
                 wrote_transition=False,
                 detail=f"poll_timeout exceeded — {crossed}, escalated",
             )
-        artifact = ArtifactRow(
+        artifact = StoredArtifact(
             kind=ArtifactKind.ASSET,
             name="bounce-envelope",
             data=envelope_payload,
@@ -578,7 +585,7 @@ class HubNodeExecutor:
         *,
         epoch: int,
         choice: str,
-        extra_artifacts: list[ArtifactRow] | None = None,
+        extra_artifacts: list[StoredArtifact] | None = None,
         commits: list[dict[str, str]] | None = None,
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
@@ -667,7 +674,7 @@ class HubNodeExecutor:
                         wrote_transition=False,
                         detail=f"{crossed}, escalated",
                     )
-                envelope_artifact = ArtifactRow(
+                envelope_artifact = StoredArtifact(
                     kind=ArtifactKind.ASSET,
                     name="bounce-envelope",
                     data=envelope_payload,

@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import ClosedLeaseRecord, IWriteLeaseRecordRepository, LeaseRecord, NewLease, closure
+from blizzard.runner.domain.leases import ClosedLease, IWriteLeaseRecordRepository, Lease, NewLease, closure
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     Unclosed,
@@ -45,7 +45,7 @@ class LeaseRecordStore:
 
     # --- reads --------------------------------------------------------------
 
-    def list_active_leases(self) -> list[LeaseRecord]:
+    def list_active_leases(self) -> list[Lease]:
         stmt = lease_select().where(_OPEN_LEASE.clause)
         return [row_to_lease(r) for r in self._store.all(stmt)]
 
@@ -54,7 +54,7 @@ class LeaseRecordStore:
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
-    def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def active_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = (
             lease_select()
             .where(leases.c.chunk_id == chunk_id)
@@ -64,17 +64,17 @@ class LeaseRecordStore:
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def active_lease(self, lease_id: str) -> LeaseRecord | None:
+    def active_lease(self, lease_id: str) -> Lease | None:
         stmt = lease_select().where(leases.c.lease_id == lease_id).where(_OPEN_LEASE.clause)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def latest_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def latest_lease_with_session_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def latest_lease_with_session_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = (
             lease_select()
             .where(leases.c.chunk_id == chunk_id)
@@ -84,12 +84,12 @@ class LeaseRecordStore:
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def lease(self, lease_id: str) -> LeaseRecord | None:
+    def lease(self, lease_id: str) -> Lease | None:
         stmt = lease_select().where(leases.c.lease_id == lease_id)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
+    def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         stmt = (
             lease_select()
             .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
@@ -98,7 +98,7 @@ class LeaseRecordStore:
             .limit(limit)
         )
         return [
-            ClosedLeaseRecord(lease=row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
+            ClosedLease(lease=row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
             for r in self._store.all(stmt)
         ]
 

@@ -27,6 +27,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_section import ClaudeCodeSection
 from blizzard.runner.harness.internal.claude_code_telemetry import RUNNER_OWNED_NAMES, operator_configured
+from blizzard.runner.harness.sections import section_of
 
 __all__ = [
     "CLAUDE_CODE_LOGS_SCOPE",
@@ -50,7 +51,7 @@ def plan_harness_telemetry(
     together with platform tracing. The operator's destination is read from the worker's allowlisted env and
     from the ``env`` of the settings document the adapter passes. Every signal is off where the runner has no
     enabled Claude Code binding."""
-    if not enabled or not config.harness_sections.of(CLAUDE_CODE_HARNESS_ID).enabled:
+    if not enabled or not section_of(config.harness_sections, CLAUDE_CODE_HARNESS_ID).enabled:
         return HarnessTelemetryPlan()
     spawn_env = {k: v for k, v in config.worker_env.variables.items() if k not in RUNNER_OWNED_NAMES}
     visible = {**spawn_env, **_settings_env(_effective_settings_path(config, bundle))}
@@ -74,7 +75,7 @@ def _effective_settings_path(config: RunnerConfig, bundle: BundleSnapshot | None
     delivery = ClaudeCodeBundleDelivery.of(bundle)
     if delivery is not None:
         return str(delivery.settings)
-    section = config.harness_sections.of(CLAUDE_CODE_HARNESS_ID)
+    section = section_of(config.harness_sections, CLAUDE_CODE_HARNESS_ID)
     assert isinstance(section, ClaudeCodeSection)
     return section.worker_settings_path
 

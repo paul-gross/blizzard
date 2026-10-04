@@ -9,16 +9,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
 from blizzard.foundation.transcripts import TranscriptProvenance
-from blizzard.runner.domain.leases import IReadLeaseRecordRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseRecordRepository, Lease
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
-from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentState
 from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript, Turn
 
 
+@dto
 @dataclass(frozen=True)
 class ResolvedTranscript:
     """A lease's transcript, resolved to a home. ``provenance`` and
@@ -30,6 +32,7 @@ class ResolvedTranscript:
     hub_unreachable: bool
 
 
+@dto
 @dataclass(frozen=True)
 class ResolvedSegmentContent:
     """One segment's resolved content, read straight from its session file — never
@@ -108,7 +111,7 @@ class TranscriptService:
         hub_unreachable = archived.status == "unreachable" and local.reason == "not_found"
         return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=hub_unreachable)
 
-    def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+    def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         """The chunk's segment ledger rows, straight off the store — open or
         finalized, superseded or not. A chunk this store holds no lease for returns
         ``[]``, which is also this method's whole ownership-exclusion behavior:
@@ -138,7 +141,7 @@ class TranscriptService:
                 truncated = truncated or tail.truncated
         return ResolvedSegmentContent(final=final, available=True, truncated=truncated, turns=turns)
 
-    def _session_start(self, chunk_id: str, segment: TranscriptSegmentLedgerRow) -> str | None:
+    def _session_start(self, chunk_id: str, segment: TranscriptSegmentState) -> str | None:
         """This segment's own read start within its session file — a same-session resume
         (``record_spawn``'s cursor carry-forward) chains several segments over one file, so
         the window starts where the chronologically preceding sibling left off; the first
@@ -149,7 +152,7 @@ class TranscriptService:
         index = next(i for i, s in enumerate(siblings) if s.segment_id == segment.segment_id)
         return siblings[index - 1].cursor if index > 0 else None
 
-    def _read_local(self, lease: LeaseRecord) -> Transcript:
+    def _read_local(self, lease: Lease) -> Transcript:
         assert lease.session_id is not None
         session = lease.session
         assert session is not None

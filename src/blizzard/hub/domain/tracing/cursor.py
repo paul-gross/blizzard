@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.tracing.steps import NodeStep
 
 _CHUNK_EPOCH = -1
@@ -12,6 +13,7 @@ _COMPLETED = "completed"
 _ONE_MICROSECOND = timedelta(microseconds=1)
 
 
+@domain_model
 @dataclass(frozen=True, order=True)
 class CursorKey:
     """A position in the total order of closed steps and finished chunks: time, chunk, epoch, decision.

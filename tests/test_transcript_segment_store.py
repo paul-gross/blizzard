@@ -18,7 +18,7 @@ from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
@@ -31,7 +31,7 @@ pytestmark = pytest.mark.unit
 _NOW = datetime(2026, 8, 9, tzinfo=UTC)
 
 
-def _record(**overrides: object) -> SegmentRecord:
+def _record(**overrides: object) -> TranscriptSlice:
     values: dict[str, object] = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
@@ -48,7 +48,7 @@ def _record(**overrides: object) -> SegmentRecord:
         "turns_json": '[{"index": 0, "kind": "asst"}]',
     }
     values.update(overrides)
-    return SegmentRecord(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)  # type: ignore[arg-type]
 
 
 def _migrated_engine(tmp_path: Path):  # type: ignore[no-untyped-def]

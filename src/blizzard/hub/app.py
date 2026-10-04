@@ -32,6 +32,7 @@ from blizzard.foundation.platform_tracing.handle import (
     build_platform_tracing,
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
@@ -524,6 +525,7 @@ def _egress_path_key(egress: EgressConfig) -> bytes | None:
     return value.encode() if value else None
 
 
+@domain_model
 @dataclass(frozen=True)
 class OrphanedProviders:
     """Provider names stored identities reference that ``[[auth.oauth.provider]]`` no longer declares."""

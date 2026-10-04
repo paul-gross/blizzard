@@ -8,14 +8,14 @@ from decimal import Decimal
 import pytest
 
 from blizzard.hub.egress.writer import (
+    ColumnSpec,
     ColumnType,
-    DatasetColumn,
     DatasetSchema,
     EgressBatch,
     EgressFailure,
     EgressFailureCause,
     EgressPass,
-    EgressRow,
+    EgressValues,
     FilesWritten,
     ManifestCommitted,
     mint_process_token,
@@ -28,18 +28,18 @@ SCHEMA = DatasetSchema(
     "things",
     1,
     (
-        DatasetColumn("id", ColumnType.STRING, False, "the id"),
-        DatasetColumn("n", ColumnType.INT64, True, "a count"),
-        DatasetColumn("ok", ColumnType.BOOL, True, "a flag"),
-        DatasetColumn("at", ColumnType.TIMESTAMP, True, "a time"),
-        DatasetColumn("cost", ColumnType.MONEY, True, "money"),
-        DatasetColumn("tags", ColumnType.STRING_LIST, True, "labels"),
+        ColumnSpec("id", ColumnType.STRING, False, "the id"),
+        ColumnSpec("n", ColumnType.INT64, True, "a count"),
+        ColumnSpec("ok", ColumnType.BOOL, True, "a flag"),
+        ColumnSpec("at", ColumnType.TIMESTAMP, True, "a time"),
+        ColumnSpec("cost", ColumnType.MONEY, True, "money"),
+        ColumnSpec("tags", ColumnType.STRING_LIST, True, "labels"),
     ),
 )
 PASS = EgressPass(datetime(2026, 10, 1, 6, 15, tzinfo=UTC))
 
 
-def row(position: str = "p1", /, **overrides: object) -> EgressRow:
+def row(position: str = "p1", /, **overrides: object) -> EgressValues:
     values: dict[str, object] = {
         "id": "a",
         "n": 1,
@@ -49,10 +49,10 @@ def row(position: str = "p1", /, **overrides: object) -> EgressRow:
         "tags": ["x"],
     }
     values.update(overrides)
-    return EgressRow(position, values)
+    return EgressValues(position, values)
 
 
-def batch(*rows: EgressRow) -> EgressBatch:
+def batch(*rows: EgressValues) -> EgressBatch:
     return EgressBatch(SCHEMA, date(2026, 10, 1), PASS, rows)
 
 
@@ -93,7 +93,7 @@ def test_a_value_a_format_could_not_hold_exactly_is_an_invalid_row(overrides: di
 
 def test_a_row_with_missing_or_extra_columns_is_invalid() -> None:
     writer = InMemoryEgressWriter()
-    assert isinstance(writer.write(batch(EgressRow("p", {"id": "a"}))), EgressFailure)
+    assert isinstance(writer.write(batch(EgressValues("p", {"id": "a"}))), EgressFailure)
     assert isinstance(writer.write(batch(row(extra=1))), EgressFailure)
     assert writer.batches == []
 

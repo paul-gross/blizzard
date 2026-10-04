@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import blizzard
+from blizzard.foundation.roles import domain_model
 
 _STATIC_ROOT = Path(blizzard.__file__).resolve().parent / "static"
 
 
+@domain_model
 @dataclass(frozen=True)
 class EmbeddedFrontend:
     """The wheel-embedded static-assets directory for one compiled app."""

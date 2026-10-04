@@ -7,23 +7,23 @@ from datetime import UTC, datetime, timedelta
 
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.tracing.facts import (
-    BoundaryRow,
-    CheckResultRow,
-    ChecksRanRow,
-    ContextSampleRow,
-    LeaseClosureRow,
-    LeaseContextRow,
-    LeaseRow,
+    BoundaryFact,
+    CheckResultFact,
+    ChecksRanFact,
+    ContextSampleFact,
+    LeaseClosureFact,
+    LeaseContextFact,
+    LeaseGrantFact,
     LeaseTraceFacts,
-    NudgeRow,
-    OverloadRow,
-    ParkResumeRow,
-    ParkRow,
-    PauseParkRow,
-    SessionEndRow,
-    SpawnRow,
-    TakeoverRow,
-    UsageRow,
+    NudgeFact,
+    OverloadFact,
+    ParkFact,
+    ParkResumeFact,
+    PauseParkFact,
+    SessionEndFact,
+    SpawnFact,
+    TakeoverFact,
+    TokenUsageFact,
 )
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -36,8 +36,8 @@ def at(seconds: int) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-def spawn(row_id: int, seconds: int, *, session: str | None = None, identified: bool = True) -> SpawnRow:
-    return SpawnRow(
+def spawn(row_id: int, seconds: int, *, session: str | None = None, identified: bool = True) -> SpawnFact:
+    return SpawnFact(
         id=row_id,
         spawned_at=at(seconds),
         harness_id="claude-code",
@@ -49,11 +49,11 @@ def spawn(row_id: int, seconds: int, *, session: str | None = None, identified: 
 
 def boundary(
     row_id: int, generation: int, kind: InvocationBoundaryKind, opened: int, closed: int | None = None
-) -> BoundaryRow:
-    return BoundaryRow(row_id, generation, kind, at(opened), at(closed) if closed is not None else None)
+) -> BoundaryFact:
+    return BoundaryFact(row_id, generation, kind, at(opened), at(closed) if closed is not None else None)
 
 
-def usage(row_id: int, generation: int, kind: str, seconds: int, **kw: object) -> UsageRow:
+def usage(row_id: int, generation: int, kind: str, seconds: int, **kw: object) -> TokenUsageFact:
     fields: dict[str, object] = {
         "model": "claude-opus",
         "input_tokens": 100,
@@ -63,7 +63,7 @@ def usage(row_id: int, generation: int, kind: str, seconds: int, **kw: object) -
         "cost_usd": 0.5,
         **kw,
     }
-    return UsageRow(id=row_id, generation=generation, kind=kind, recorded_at=at(seconds), **fields)  # type: ignore[arg-type]
+    return TokenUsageFact(id=row_id, generation=generation, kind=kind, recorded_at=at(seconds), **fields)  # type: ignore[arg-type]
 
 
 def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: object) -> LeaseTraceFacts:
@@ -74,8 +74,8 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
     }
     defaults.update(kwargs)
     return LeaseTraceFacts(
-        lease=LeaseRow(LEASE_ID, CHUNK_ID, EPOCH, "r-1", at(0)),
-        context=LeaseContextRow(
+        lease=LeaseGrantFact(LEASE_ID, CHUNK_ID, EPOCH, "r-1", at(0)),
+        context=LeaseContextFact(
             graph_id="g1",
             node_id="g1-build",
             node_name="build",
@@ -85,7 +85,7 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
             resolved_model="opus",
             resolved_effort="high",
         ),
-        closure=LeaseClosureRow(reason, at(closed)),
+        closure=LeaseClosureFact(reason, at(closed)),
         **defaults,  # type: ignore[arg-type]
     )
 
@@ -99,14 +99,14 @@ def busy_facts() -> LeaseTraceFacts:
         spawns=(spawn(1, 1), spawn(2, 41)),
         boundaries=(boundary(1, 1, "spawn", 1, 100), boundary(2, 2, "resume", 41, 100)),
         usage=(usage(1, 1, "spawn", 30), usage(2, 2, "resume", 90, estimated_cost_usd=0.1)),
-        session_ends=(SessionEndRow(1, at(19)),),
-        context_samples=(ContextSampleRow(1, at(10), 500),),
-        parks=(ParkRow(1, "q1", at(20)),),
-        park_resumes=(ParkResumeRow(1, "q1", at(40)),),
-        pause_parks=(PauseParkRow(1, at(50)),),
-        overloads=(OverloadRow(1, 2, 1, at(60), at(70)),),
-        takeovers=(TakeoverRow("tko_1", at(80)),),
-        nudges=(NudgeRow(1, EPOCH, at(85)),),
-        check_results=(CheckResultRow(1, EPOCH, False),),
-        checks_ran=(ChecksRanRow(1, EPOCH, at(95)),),
+        session_ends=(SessionEndFact(1, at(19)),),
+        context_samples=(ContextSampleFact(1, at(10), 500),),
+        parks=(ParkFact(1, "q1", at(20)),),
+        park_resumes=(ParkResumeFact(1, "q1", at(40)),),
+        pause_parks=(PauseParkFact(1, at(50)),),
+        overloads=(OverloadFact(1, 2, 1, at(60), at(70)),),
+        takeovers=(TakeoverFact("tko_1", at(80)),),
+        nudges=(NudgeFact(1, EPOCH, at(85)),),
+        check_results=(CheckResultFact(1, EPOCH, False),),
+        checks_ran=(ChecksRanFact(1, EPOCH, at(95)),),
     )

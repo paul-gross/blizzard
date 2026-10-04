@@ -22,7 +22,7 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.egress.repository import EventsPosition, UsagePosition
-from blizzard.hub.domain.egress.rows import InvocationRow, StepRow
+from blizzard.hub.domain.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.egress.sweep import EgressSweep
 from blizzard.hub.domain.graph import Graph
@@ -588,7 +588,7 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
 
 @pytest.mark.parametrize(
     ("schema_", "row"),
-    [(STEPS_SCHEMA, StepRow), (INVOCATIONS_SCHEMA, InvocationRow)],
+    [(STEPS_SCHEMA, ExportedStep), (INVOCATIONS_SCHEMA, ExportedInvocation)],
     ids=["steps", "invocations"],
 )
 def test_each_dataset_schema_names_exactly_its_row_fields_in_order(schema_, row) -> None:  # type: ignore[no-untyped-def]

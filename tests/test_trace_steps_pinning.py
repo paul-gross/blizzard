@@ -8,17 +8,17 @@ import pytest
 
 from blizzard.foundation.trace_ids import StepKey
 from blizzard.hub.domain.tracing.facts import (
-    ChunkCompletedRecord,
-    ChunkStoppedRecord,
-    DecisionRecord,
-    EpochOwnerRecord,
-    EscalationRecord,
-    MigrationRecord,
-    RequeueRecord,
-    RestartRecord,
-    RouteReleasedRecord,
     StepFacts,
-    TransitionRecord,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedEpochOwner,
+    TracedEscalation,
+    TracedMigration,
+    TracedRequeue,
+    TracedRestart,
+    TracedRouteRelease,
+    TracedTransition,
 )
 from blizzard.hub.domain.tracing.position import (
     Position,
@@ -49,13 +49,13 @@ TIE = fx.at(30)
 
 RUNNER_CLOSERS: list[tuple[str, object, StepOutcome]] = [
     ("transitions", fx.to("g1", "review", 30, 1), StepOutcome.TRANSITIONED),
-    ("decisions", DecisionRecord("d1", "g1-review", 1, TIE, imposed_by_runner_id="r-1"), StepOutcome.GATED),
-    ("migrations", MigrationRecord(1, TIE, "g1", "g2", landed_node_id="g2-build"), StepOutcome.MIGRATED),
-    ("escalations", EscalationRecord(1, TIE), StepOutcome.ESCALATED),
-    ("route_released", RouteReleasedRecord(TIE), StepOutcome.RELEASED),
-    ("chunk_stopped", ChunkStoppedRecord(TIE), StepOutcome.STOPPED),
-    ("chunk_completed", ChunkCompletedRecord(TIE), StepOutcome.COMPLETED),
-    ("epoch_owners", EpochOwnerRecord(2, "r-2", TIE), StepOutcome.SUPERSEDED),
+    ("decisions", TracedDecision("d1", "g1-review", 1, TIE, imposed_by_runner_id="r-1"), StepOutcome.GATED),
+    ("migrations", TracedMigration(1, TIE, "g1", "g2", landed_node_id="g2-build"), StepOutcome.MIGRATED),
+    ("escalations", TracedEscalation(1, TIE), StepOutcome.ESCALATED),
+    ("route_released", TracedRouteRelease(TIE), StepOutcome.RELEASED),
+    ("chunk_stopped", TracedChunkStop(TIE), StepOutcome.STOPPED),
+    ("chunk_completed", TracedChunkCompletion(TIE), StepOutcome.COMPLETED),
+    ("epoch_owners", TracedEpochOwner(2, "r-2", TIE), StepOutcome.SUPERSEDED),
 ]
 
 
@@ -76,7 +76,7 @@ def test_runner_close_table_order_breaks_an_exact_tie(first: int) -> None:
 @pytest.mark.parametrize("index", range(len(RUNNER_CLOSERS)))
 def test_runner_close_earlier_fact_beats_table_order(index: int) -> None:
     table, fact, outcome = RUNNER_CLOSERS[index]
-    stopped = ChunkStoppedRecord(TIE + US) if table != "chunk_stopped" else ChunkCompletedRecord(TIE + US)
+    stopped = TracedChunkStop(TIE + US) if table != "chunk_stopped" else TracedChunkCompletion(TIE + US)
     extra = "chunk_stopped" if table != "chunk_stopped" else "chunk_completed"
     facts = fx.make_facts(**fx.merge({table: (fact,)}, {extra: (stopped,)}))
     close = _runner_close(facts, 1, START)
@@ -89,13 +89,13 @@ def test_runner_close_earlier_fact_beats_table_order(index: int) -> None:
     [
         ("transitions", fx.to("g1", "review", 30, 2)),
         ("transitions", fx.to("g1", "review", 30, 1, decision_id="d1")),
-        ("decisions", DecisionRecord("d1", "g1-review", 1, TIE)),
-        ("decisions", DecisionRecord("d1", "g1-review", 2, TIE, imposed_by_runner_id="r-1")),
-        ("migrations", MigrationRecord(2, TIE, "g1", "g2", landed_node_id="g2-build")),
-        ("migrations", MigrationRecord(1, TIE, "g1", "g2", landed_node_id="g2-build", source=MigrationSource.RESTART)),
-        ("escalations", EscalationRecord(2, TIE)),
-        ("epoch_owners", EpochOwnerRecord(1, "r-2", TIE)),
-        ("epoch_owners", EpochOwnerRecord(0, "r-2", TIE)),
+        ("decisions", TracedDecision("d1", "g1-review", 1, TIE)),
+        ("decisions", TracedDecision("d1", "g1-review", 2, TIE, imposed_by_runner_id="r-1")),
+        ("migrations", TracedMigration(2, TIE, "g1", "g2", landed_node_id="g2-build")),
+        ("migrations", TracedMigration(1, TIE, "g1", "g2", landed_node_id="g2-build", source=MigrationSource.RESTART)),
+        ("escalations", TracedEscalation(2, TIE)),
+        ("epoch_owners", TracedEpochOwner(1, "r-2", TIE)),
+        ("epoch_owners", TracedEpochOwner(0, "r-2", TIE)),
     ],
 )
 def test_runner_close_ignores_facts_not_closing_this_epoch(table: str, fact: object) -> None:
@@ -105,14 +105,14 @@ def test_runner_close_ignores_facts_not_closing_this_epoch(table: str, fact: obj
 @pytest.mark.parametrize(
     ("table", "fact", "closes"),
     [
-        ("chunk_stopped", ChunkStoppedRecord(START), False),
-        ("chunk_stopped", ChunkStoppedRecord(START + US), True),
-        ("chunk_completed", ChunkCompletedRecord(START), False),
-        ("chunk_completed", ChunkCompletedRecord(START + US), True),
-        ("route_released", RouteReleasedRecord(START), False),
-        ("route_released", RouteReleasedRecord(START + US), True),
-        ("epoch_owners", EpochOwnerRecord(2, "r-2", START - US), False),
-        ("epoch_owners", EpochOwnerRecord(2, "r-2", START), True),
+        ("chunk_stopped", TracedChunkStop(START), False),
+        ("chunk_stopped", TracedChunkStop(START + US), True),
+        ("chunk_completed", TracedChunkCompletion(START), False),
+        ("chunk_completed", TracedChunkCompletion(START + US), True),
+        ("route_released", TracedRouteRelease(START), False),
+        ("route_released", TracedRouteRelease(START + US), True),
+        ("epoch_owners", TracedEpochOwner(2, "r-2", START - US), False),
+        ("epoch_owners", TracedEpochOwner(2, "r-2", START), True),
     ],
 )
 def test_runner_close_start_bounds(table: str, fact: object, closes: bool) -> None:
@@ -124,25 +124,25 @@ def test_runner_close_start_bounds(table: str, fact: object, closes: bool) -> No
     ("later", "released"),
     [
         ({"transitions": (fx.to("g1", "review", 30, 1, decision_id="d1"),)}, False),
-        ({"decisions": (DecisionRecord("d1", "g1-review", 1, TIE),)}, False),
-        ({"migrations": (MigrationRecord(1, TIE, "g1", "g2", landed_node_id="g2-build"),)}, False),
-        ({"escalations": (EscalationRecord(1, TIE),)}, False),
-        ({"restarts": (RestartRecord(1, TIE, "g1", "g1-build"),)}, False),
-        ({"restarts": (RestartRecord(2, TIE, "g1", "g1-build"),)}, True),
-        ({"restarts": (RestartRecord(1, fx.at(20), "g1", "g1-build"),)}, True),
+        ({"decisions": (TracedDecision("d1", "g1-review", 1, TIE),)}, False),
+        ({"migrations": (TracedMigration(1, TIE, "g1", "g2", landed_node_id="g2-build"),)}, False),
+        ({"escalations": (TracedEscalation(1, TIE),)}, False),
+        ({"restarts": (TracedRestart(1, TIE, "g1", "g1-build"),)}, False),
+        ({"restarts": (TracedRestart(2, TIE, "g1", "g1-build"),)}, True),
+        ({"restarts": (TracedRestart(1, fx.at(20), "g1", "g1-build"),)}, True),
     ],
 )
 def test_runner_close_release_is_void_behind_a_later_fact_at_its_epoch(
     later: dict[str, tuple[object, ...]], released: bool
 ) -> None:
-    release = RouteReleasedRecord(fx.at(20))
+    release = TracedRouteRelease(fx.at(20))
     close = _runner_close(fx.make_facts(route_released=(release,), **later), 1, START)
     assert (close is not None and close.fact is release) is released
 
 
 def test_terminal_candidates_supersede_at_the_earliest_higher_owner() -> None:
-    first = EpochOwnerRecord(3, "r-3", fx.at(40))
-    facts = fx.make_facts(epoch_owners=(EpochOwnerRecord(2, "r-2", fx.at(50)), first, EpochOwnerRecord(1, "r", TIE)))
+    first = TracedEpochOwner(3, "r-3", fx.at(40))
+    facts = fx.make_facts(epoch_owners=(TracedEpochOwner(2, "r-2", fx.at(50)), first, TracedEpochOwner(1, "r", TIE)))
     (candidate,) = _terminal_candidates(facts, START, 1)
     assert (candidate.at, candidate.order, candidate.outcome, candidate.fact) == (
         fx.at(40),
@@ -153,8 +153,8 @@ def test_terminal_candidates_supersede_at_the_earliest_higher_owner() -> None:
 
 
 def test_terminal_candidates_orders() -> None:
-    stopped, completed = ChunkStoppedRecord(TIE), ChunkCompletedRecord(TIE)
-    owner = EpochOwnerRecord(2, "r-2", TIE)
+    stopped, completed = TracedChunkStop(TIE), TracedChunkCompletion(TIE)
+    owner = TracedEpochOwner(2, "r-2", TIE)
     facts = fx.make_facts(chunk_stopped=(stopped,), chunk_completed=(completed,), epoch_owners=(owner,))
     found = [(c.order, c.outcome, c.fact) for c in _terminal_candidates(facts, START, 1)]
     assert found == [
@@ -164,18 +164,18 @@ def test_terminal_candidates_orders() -> None:
     ]
 
 
-GATE = DecisionRecord("d1", "g1-gate", 1, fx.at(20))
+GATE = TracedDecision("d1", "g1-gate", 1, fx.at(20))
 
 GATE_CLOSERS: list[tuple[str, object, StepOutcome]] = [
     ("transitions", fx.to("g1", "build", 30, 2, decision_id="d1"), StepOutcome.DECIDED),
     (
         "migrations",
-        MigrationRecord(2, TIE, "g1", "g2", landed_node_id="g2-build", decision_id="d1"),
+        TracedMigration(2, TIE, "g1", "g2", landed_node_id="g2-build", decision_id="d1"),
         StepOutcome.MIGRATED,
     ),
-    ("escalations", EscalationRecord(2, TIE, decision_id="d1"), StepOutcome.ESCALATED),
-    ("restarts", RestartRecord(2, TIE, "g1", "g1-build", decision_id="d1"), StepOutcome.RESTARTED),
-    ("chunk_stopped", ChunkStoppedRecord(TIE), StepOutcome.STOPPED),
+    ("escalations", TracedEscalation(2, TIE, decision_id="d1"), StepOutcome.ESCALATED),
+    ("restarts", TracedRestart(2, TIE, "g1", "g1-build", decision_id="d1"), StepOutcome.RESTARTED),
+    ("chunk_stopped", TracedChunkStop(TIE), StepOutcome.STOPPED),
 ]
 
 
@@ -192,11 +192,11 @@ def test_gate_close_table_order_breaks_an_exact_tie(first: int) -> None:
     [
         ("transitions", fx.to("g1", "build", 30, 2, decision_id="d2")),
         ("transitions", fx.to("g1", "build", 30, 1)),
-        ("migrations", MigrationRecord(2, TIE, "g1", "g2", landed_node_id="g2-build", decision_id="d2")),
-        ("escalations", EscalationRecord(1, TIE)),
-        ("restarts", RestartRecord(2, TIE, "g1", "g1-build", decision_id="d2")),
-        ("chunk_stopped", ChunkStoppedRecord(GATE.submitted_at)),
-        ("epoch_owners", EpochOwnerRecord(2, "r-2", GATE.submitted_at - US)),
+        ("migrations", TracedMigration(2, TIE, "g1", "g2", landed_node_id="g2-build", decision_id="d2")),
+        ("escalations", TracedEscalation(1, TIE)),
+        ("restarts", TracedRestart(2, TIE, "g1", "g1-build", decision_id="d2")),
+        ("chunk_stopped", TracedChunkStop(GATE.submitted_at)),
+        ("epoch_owners", TracedEpochOwner(2, "r-2", GATE.submitted_at - US)),
     ],
 )
 def test_gate_close_ignores_facts_not_carrying_its_decision(table: str, fact: object) -> None:
@@ -204,7 +204,7 @@ def test_gate_close_ignores_facts_not_carrying_its_decision(table: str, fact: ob
 
 
 def test_gate_close_supersede_bound_is_inclusive_of_submission() -> None:
-    owner = EpochOwnerRecord(2, "r-2", GATE.submitted_at)
+    owner = TracedEpochOwner(2, "r-2", GATE.submitted_at)
     close = _gate_close(fx.make_facts(epoch_owners=(owner,)), GATE)
     assert close is not None
     assert (close.outcome, close.at, close.fact) == (StepOutcome.SUPERSEDED, GATE.submitted_at, owner)
@@ -225,7 +225,7 @@ MINTED = fx.at(10)
     ],
 )
 def test_hub_start_requeue_bounds(requeue: datetime, start: datetime) -> None:
-    facts = fx.make_facts(transitions=(fx.to("g1", "gate", 5, 1),), requeues=(RequeueRecord(requeue),))
+    facts = fx.make_facts(transitions=(fx.to("g1", "gate", 5, 1),), requeues=(TracedRequeue(requeue),))
     assert _hub_start(facts, MINTED) == start
 
 
@@ -234,20 +234,20 @@ def test_hub_start_requeue_bounds(requeue: datetime, start: datetime) -> None:
     [(MINTED - US, MINTED - US), (MINTED, fx.at(1)), (MINTED + US, fx.at(1))],
 )
 def test_hub_start_placement_must_precede_the_lease(placed: datetime, start: datetime) -> None:
-    gate = TransitionRecord(epoch=1, recorded_at=placed, graph_id="g1", to_node_id="g1-gate")
+    gate = TracedTransition(epoch=1, recorded_at=placed, graph_id="g1", to_node_id="g1-gate")
     facts = fx.make_facts(transitions=(fx.to("g1", "review", 1, 1), gate))
     assert _hub_start(facts, MINTED) == start
 
 
 def test_hub_start_without_placement_is_the_lease_and_ignores_requeues() -> None:
-    facts = fx.make_facts(requeues=(RequeueRecord(MINTED - US),))
+    facts = fx.make_facts(requeues=(TracedRequeue(MINTED - US),))
     assert _hub_start(facts, MINTED) == MINTED
 
 
 def test_hub_start_takes_the_latest_placement_and_latest_requeue() -> None:
     facts = fx.make_facts(
         transitions=(fx.to("g1", "review", 3, 1), fx.to("g1", "gate", 5, 1)),
-        requeues=(RequeueRecord(fx.at(6)), RequeueRecord(fx.at(8)), RequeueRecord(fx.at(7))),
+        requeues=(TracedRequeue(fx.at(6)), TracedRequeue(fx.at(8)), TracedRequeue(fx.at(7))),
     )
     assert _hub_start(facts, MINTED) == fx.at(8)
 
@@ -265,47 +265,47 @@ def _step(epoch: int, start: datetime, kind: StepKind = StepKind.RUNNER) -> Node
     ("extra", "preceded"),
     [
         ({}, None),
-        ({"requeues": (RequeueRecord(fx.at(19)),)}, PrecededBy.REQUEUE),
-        ({"requeues": (RequeueRecord(fx.at(20)),)}, None),
-        ({"requeues": (RequeueRecord(fx.at(10)),)}, None),
-        ({"requeues": (RequeueRecord(fx.at(10) + US),)}, PrecededBy.REQUEUE),
-        ({"epoch_owners": (EpochOwnerRecord(5, "r-1", fx.at(15)),)}, PrecededBy.RELEASED_CLAIM),
-        ({"epoch_owners": (EpochOwnerRecord(2, "r-1", fx.at(15)),)}, None),
-        ({"epoch_owners": (EpochOwnerRecord(1, "r-1", fx.at(15)),)}, None),
+        ({"requeues": (TracedRequeue(fx.at(19)),)}, PrecededBy.REQUEUE),
+        ({"requeues": (TracedRequeue(fx.at(20)),)}, None),
+        ({"requeues": (TracedRequeue(fx.at(10)),)}, None),
+        ({"requeues": (TracedRequeue(fx.at(10) + US),)}, PrecededBy.REQUEUE),
+        ({"epoch_owners": (TracedEpochOwner(5, "r-1", fx.at(15)),)}, PrecededBy.RELEASED_CLAIM),
+        ({"epoch_owners": (TracedEpochOwner(2, "r-1", fx.at(15)),)}, None),
+        ({"epoch_owners": (TracedEpochOwner(1, "r-1", fx.at(15)),)}, None),
         (
             {
-                "epoch_owners": (EpochOwnerRecord(5, None, fx.at(15)),),
-                "restarts": (RestartRecord(5, fx.at(15), "g1", "g1-build"),),
+                "epoch_owners": (TracedEpochOwner(5, None, fx.at(15)),),
+                "restarts": (TracedRestart(5, fx.at(15), "g1", "g1-build"),),
             },
             PrecededBy.RESTART,
         ),
         (
             {
-                "epoch_owners": (EpochOwnerRecord(5, None, fx.at(15)),),
-                "migrations": (MigrationRecord(5, fx.at(15), "g1", "g2", source=MigrationSource.RESTART),),
+                "epoch_owners": (TracedEpochOwner(5, None, fx.at(15)),),
+                "migrations": (TracedMigration(5, fx.at(15), "g1", "g2", source=MigrationSource.RESTART),),
             },
             PrecededBy.RESTART,
         ),
         (
             {
-                "epoch_owners": (EpochOwnerRecord(5, None, fx.at(15)),),
-                "migrations": (MigrationRecord(5, fx.at(15), "g1", "g2", landed_node_id="g2-build"),),
+                "epoch_owners": (TracedEpochOwner(5, None, fx.at(15)),),
+                "migrations": (TracedMigration(5, fx.at(15), "g1", "g2", landed_node_id="g2-build"),),
             },
             PrecededBy.RELEASED_CLAIM,
         ),
         (
             {
-                "epoch_owners": (EpochOwnerRecord(5, "r-1", fx.at(15)),),
-                "decisions": (DecisionRecord("d1", "g1-gate", 5, fx.at(12)),),
+                "epoch_owners": (TracedEpochOwner(5, "r-1", fx.at(15)),),
+                "decisions": (TracedDecision("d1", "g1-gate", 5, fx.at(12)),),
             },
             None,
         ),
         (
-            {"epoch_owners": (EpochOwnerRecord(5, "r-1", fx.at(15)),), "requeues": (RequeueRecord(fx.at(16)),)},
+            {"epoch_owners": (TracedEpochOwner(5, "r-1", fx.at(15)),), "requeues": (TracedRequeue(fx.at(16)),)},
             PrecededBy.REQUEUE,
         ),
         (
-            {"epoch_owners": (EpochOwnerRecord(5, "r-1", fx.at(16)),), "requeues": (RequeueRecord(fx.at(15)),)},
+            {"epoch_owners": (TracedEpochOwner(5, "r-1", fx.at(16)),), "requeues": (TracedRequeue(fx.at(15)),)},
             PrecededBy.RELEASED_CLAIM,
         ),
     ],
@@ -324,12 +324,12 @@ def test_with_preceded_by_nearest_fence_event_between_steps(
     [(fx.at(9), PrecededBy.REQUEUE), (fx.at(10), None), (fx.at(0), PrecededBy.REQUEUE)],
 )
 def test_with_preceded_by_first_step_has_no_lower_bound(requeue: datetime, preceded: PrecededBy | None) -> None:
-    (step,) = _with_preceded_by(fx.make_facts(requeues=(RequeueRecord(requeue),)), [_step(1, fx.at(10))])
+    (step,) = _with_preceded_by(fx.make_facts(requeues=(TracedRequeue(requeue),)), [_step(1, fx.at(10))])
     assert step.preceded_by is preceded
 
 
 def test_with_preceded_by_gate_epoch_is_not_a_step_epoch() -> None:
-    facts = fx.make_facts(epoch_owners=(EpochOwnerRecord(7, "r-1", fx.at(15)),))
+    facts = fx.make_facts(epoch_owners=(TracedEpochOwner(7, "r-1", fx.at(15)),))
     steps = [_step(1, fx.at(10)), _step(7, fx.at(12), StepKind.GATE), _step(2, fx.at(20))]
     out = _with_preceded_by(facts, steps)
     assert [s.preceded_by for s in out] == [None, None, PrecededBy.RELEASED_CLAIM]
@@ -344,34 +344,34 @@ def _starting(facts: StepFacts) -> str:
     ("extra", "graph_id"),
     [
         ({}, "g2"),
-        ({"migrations": (MigrationRecord(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),)}, "g1"),
+        ({"migrations": (TracedMigration(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),)}, "g1"),
         (
             {
-                "migrations": (MigrationRecord(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
+                "migrations": (TracedMigration(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
                 "transitions": (fx.to("g2", "review", 5, 1),),
             },
             "g2",
         ),
         (
             {
-                "migrations": (MigrationRecord(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
-                "restarts": (RestartRecord(1, fx.at(5), "g2", "g2-build"),),
+                "migrations": (TracedMigration(1, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
+                "restarts": (TracedRestart(1, fx.at(5), "g2", "g2-build"),),
             },
             "g1",
         ),
-        ({"restarts": (RestartRecord(1, fx.at(5), "g2", "g2-build", from_graph_id="g1"),)}, "g1"),
-        ({"restarts": (RestartRecord(1, fx.at(5), "g1", "g1-build"),)}, "g1"),
+        ({"restarts": (TracedRestart(1, fx.at(5), "g2", "g2-build", from_graph_id="g1"),)}, "g1"),
+        ({"restarts": (TracedRestart(1, fx.at(5), "g1", "g1-build"),)}, "g1"),
         (
             {
-                "restarts": (RestartRecord(1, fx.at(5), "g1", "g1-build"),),
-                "migrations": (MigrationRecord(2, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
+                "restarts": (TracedRestart(1, fx.at(5), "g1", "g1-build"),),
+                "migrations": (TracedMigration(2, fx.at(5), "g1", "g2", landed_node_id="g2-build"),),
             },
             "g1",
         ),
         (
             {
-                "restarts": (RestartRecord(2, fx.at(5), "g1", "g1-build"),),
-                "migrations": (MigrationRecord(1, fx.at(5), "g2", "g1", landed_node_id="g1-build"),),
+                "restarts": (TracedRestart(2, fx.at(5), "g1", "g1-build"),),
+                "migrations": (TracedMigration(1, fx.at(5), "g2", "g1", landed_node_id="g1-build"),),
             },
             "g2",
         ),

@@ -15,6 +15,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery, is_finding_id_shaped, single_repo_of
 from blizzard.hub.domain.graph import Node
@@ -33,6 +34,7 @@ class DeliveryOutcome(Enum):
     FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
+@dto
 @dataclass(frozen=True)
 class NewFinding:
     """A fully-formed ``findings`` row — id already minted (`bzh:domain-takes-objects`)."""
@@ -49,8 +51,9 @@ class NewFinding:
     introduced_at: datetime | None
 
 
+@dto
 @dataclass(frozen=True)
-class FindingFactRecord:
+class NewFindingFact:
     """A fully-formed ``finding_facts`` row, minus ``recorded_at`` — every fact in one
     delivery shares :attr:`DeliveryPlan.at` (`bzh:injected-clock`)."""
 
@@ -65,6 +68,7 @@ class FindingFactRecord:
     actor: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class NewFindingSet:
     """A fully-formed ``finding_sets`` row, minus ``chunk_id`` — every set in one delivery
@@ -78,6 +82,7 @@ class NewFindingSet:
     measurement: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class NewProposal:
     """A fully-formed ``garden_proposals`` row plus its ``garden_proposal_findings`` link
@@ -95,6 +100,7 @@ class NewProposal:
     finding_ids: list[str] = field(default_factory=list)
 
 
+@dto
 @dataclass(frozen=True)
 class DeltaMaterialization:
     """One delivered delta's own contribution to the plan — its `finding_sets` row and
@@ -104,9 +110,10 @@ class DeltaMaterialization:
 
     finding_set: NewFindingSet
     new_findings: list[NewFinding] = field(default_factory=list)
-    facts: list[FindingFactRecord] = field(default_factory=list)
+    facts: list[NewFindingFact] = field(default_factory=list)
 
 
+@dto
 @dataclass(frozen=True)
 class DeliveryPlan:
     """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes — every
@@ -183,7 +190,7 @@ class GardenDelivery:
             # attributes to the set that carried it.
             finding_set_id = Id.mint(FINDING_SET_PREFIX, self._clock).value
             new_findings: list[NewFinding] = []
-            facts: list[FindingFactRecord] = []
+            facts: list[NewFindingFact] = []
             single_repo = single_repo_of(delta)
             for op in delta.findings:
                 if isinstance(op, AddFindingOp):
@@ -208,18 +215,18 @@ class GardenDelivery:
                         )
                     )
                     facts.append(
-                        FindingFactRecord(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
+                        NewFindingFact(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
                     )
                 elif isinstance(op, ObservedFindingOp):
                     facts.append(
-                        FindingFactRecord(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
+                        NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
                     )
                 else:
                     assert isinstance(op, GoneFindingOp)
                     if op.id in validated.delivered_findings:
                         # Already delivered — this completes the exit rather than flagging it.
                         facts.append(
-                            FindingFactRecord(
+                            NewFindingFact(
                                 finding_id=op.id,
                                 kind="resolved",
                                 finding_set_id=finding_set_id,
@@ -229,9 +236,7 @@ class GardenDelivery:
                         )
                     else:
                         facts.append(
-                            FindingFactRecord(
-                                finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note
-                            )
+                            NewFindingFact(finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note)
                         )
             # One finding_set per delta, even an empty one (delta.findings == []).
             finding_set = NewFindingSet(

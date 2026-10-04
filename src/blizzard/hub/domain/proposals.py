@@ -7,12 +7,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from blizzard.foundation.roles import dto
+
 if TYPE_CHECKING:
     from blizzard.wire.completion import WorkItemProposal
 
 
+@dto
 @dataclass(frozen=True)
-class WorkItemProposalRow:
+class StampedWorkItemProposal:
     """One proposed work item's flat storage row — riding a node-step's completion
     (``create`` or ``update``). ``data`` is the kind-shaped payload as JSON: ``create``
     carries ``{title, body, stated_priority}``, ``update`` carries ``{source, ref,
@@ -42,7 +45,7 @@ class WorkItemProposalRow:
         epoch: int,
         ordinal: int,
         runner_id: str,
-    ) -> WorkItemProposalRow:
+    ) -> StampedWorkItemProposal:
         """Compress a wire proposal to its storage row. ``model_dump_json`` derives
         ``data`` from whichever variant this is, so a field added to either
         ``CreateWorkItemProposal`` or ``UpdateWorkItemProposal`` lands here automatically."""

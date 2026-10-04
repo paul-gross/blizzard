@@ -10,10 +10,10 @@ from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 
 
-def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
+def authorized_lease(lease_id: str, request: Request) -> Lease:
     """Resolve ``lease_id`` to its active lease — or the lease an open takeover names
     — and check the presented token, or raise the store-free ``503`` /
     unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an unauthorized
@@ -29,7 +29,7 @@ def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
     return lease
 
 
-def resolved_lease(lease_id: str, request: Request) -> LeaseRecord:
+def resolved_lease(lease_id: str, request: Request) -> Lease:
     """Resolve ``lease_id`` to its lease regardless of closure — the two hook-fired routes
     that must keep tolerating a replayed or already-closed lease (session-end, heartbeat).
 

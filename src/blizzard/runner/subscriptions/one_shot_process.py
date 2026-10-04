@@ -11,9 +11,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = ["IOneShotProcess", "OneShotResult"]
 
 
+@dto
 @dataclass(frozen=True)
 class OneShotResult:
     """One subprocess run's outcome. ``exit_code`` is ``None`` when the process never produced

@@ -24,9 +24,9 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.config.changes import RecordRef
 from blizzard.hub.domain.secrets import (
     SecretAlreadyExists,
+    SecretMetadata,
     SecretName,
     SecretNameError,
-    SecretRecord,
     SecretReferenced,
     SecretRetired,
     SecretRevisionConflict,
@@ -38,7 +38,7 @@ SECRETS_PREFIX = "/api/secrets"
 router = APIRouter(prefix=SECRETS_PREFIX, tags=["secrets"], dependencies=[Depends(reject_runner_principal)])
 
 
-def secret_view(record: SecretRecord, *, retired: bool, references: list[RecordRef] | None = None) -> SecretView:
+def secret_view(record: SecretMetadata, *, retired: bool, references: list[RecordRef] | None = None) -> SecretView:
     return SecretView(
         name=record.name,
         revision=record.revision,
@@ -67,7 +67,7 @@ def _parse_name(raw: str) -> SecretName:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
-def _existing(services: HubServices, raw: str) -> SecretRecord:
+def _existing(services: HubServices, raw: str) -> SecretMetadata:
     record = services.secret_catalog.get(_parse_name(raw).value)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown secret {raw}")

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Request
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
@@ -33,16 +34,18 @@ def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     return _rows(ChunkHistoryView.model_validate(upstream.json()))
 
 
+@dto
 @dataclass(frozen=True)
-class _HistoryRow:
+class _HistoryEntry:
     """One fact of a chunk's history as a timeline row — a subclass per source history."""
 
     def view(self) -> HistoryRowView:
         raise NotImplementedError
 
 
+@dto
 @dataclass(frozen=True)
-class _TransitionRow(_HistoryRow):
+class _TransitionEntry(_HistoryEntry):
     fact: TransitionView
 
     def view(self) -> HistoryRowView:
@@ -58,8 +61,9 @@ class _TransitionRow(_HistoryRow):
         )
 
 
+@dto
 @dataclass(frozen=True)
-class _MigrationRow(_HistoryRow):
+class _MigrationEntry(_HistoryEntry):
     fact: MigrationView
 
     def view(self) -> HistoryRowView:
@@ -77,8 +81,9 @@ class _MigrationRow(_HistoryRow):
         )
 
 
+@dto
 @dataclass(frozen=True)
-class _BounceRow(_HistoryRow):
+class _BounceEntry(_HistoryEntry):
     fact: BounceView
 
     def view(self) -> HistoryRowView:
@@ -91,9 +96,9 @@ def _rows(detail: ChunkHistoryView) -> list[HistoryRowView]:
     timeline, oldest-first by ``recorded_at``. Each input list already arrives oldest-first,
     so a stable sort on ``recorded_at`` alone preserves each kind's own order and only
     interleaves across kinds."""
-    facts: list[_HistoryRow] = [
-        *(_TransitionRow(t) for t in detail.history),
-        *(_MigrationRow(m) for m in detail.migrations),
-        *(_BounceRow(b) for b in detail.bounces),
+    facts: list[_HistoryEntry] = [
+        *(_TransitionEntry(t) for t in detail.history),
+        *(_MigrationEntry(m) for m in detail.migrations),
+        *(_BounceEntry(b) for b in detail.bounces),
     ]
     return sorted((f.view() for f in facts), key=lambda r: r.recorded_at)

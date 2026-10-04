@@ -14,11 +14,13 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.roles import domain_model, dto
 
 #: Keepalive cadence for an idle connection — shorter than typical proxy idle timeouts.
 DEFAULT_KEEPALIVE_SECONDS = 15.0
 
 
+@dto
 @dataclass(frozen=True)
 class Cursor:
     """A subscriber's resume point, read tolerantly: a missing, empty, or malformed
@@ -35,6 +37,7 @@ class Cursor:
             return cls(0)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Stream:
     """One subscriber's live connection — its broker, its request, its resume cursor,

@@ -30,7 +30,7 @@ from blizzard.foundation.platform_tracing.received import (
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.tracing.receiver import (
     MAX_BODY_BYTES,
     Admission,
@@ -151,7 +151,7 @@ async def receive_logs(request: Request) -> Response:
     return Response(content=rejected_log_records(admission.dropped, content_type), media_type=content_type)
 
 
-async def _harness_lease(request: Request, wiring: RunnerWiring) -> LeaseRecord:
+async def _harness_lease(request: Request, wiring: RunnerWiring) -> Lease:
     """The presenting lease, once the receiver is known to be on: 404 unless platform tracing and
     ``harness_telemetry`` both are."""
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
@@ -163,7 +163,7 @@ async def _harness_lease(request: Request, wiring: RunnerWiring) -> LeaseRecord:
 
 async def _forward[T: (ReceivedDataPoint, ReceivedLogRecord)](
     bounds: ReceiverBounds,
-    lease: LeaseRecord,
+    lease: Lease,
     admission: Admission[T],
     *,
     received: int,
@@ -212,7 +212,7 @@ def _by_service_name(spans: Sequence[ReceivedSpan], mapped: Mapping[str, str]) -
     return groups
 
 
-def _lease_for_token(wiring: RunnerWiring, token: str | None) -> LeaseRecord:
+def _lease_for_token(wiring: RunnerWiring, token: str | None) -> Lease:
     """The lease the token was minted for, still active or under an open takeover; every miss is the same 403."""
     refused = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="presented token does not authorize a lease")
     if token is None:

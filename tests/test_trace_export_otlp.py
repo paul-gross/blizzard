@@ -12,7 +12,7 @@ import pytest
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, lifetime_context
-from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord, SpanStatus
+from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink, SpanStatus
 from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.trace_hub import trace_hub, transitioned_and_stopped
@@ -30,8 +30,8 @@ def _nanos(at: datetime) -> int:
     return int(at.timestamp()) * 1_000_000_000 + at.microsecond * 1_000
 
 
-def _records() -> tuple[SpanRecord, SpanRecord]:
-    root = SpanRecord(
+def _records() -> tuple[FinishedSpan, FinishedSpan]:
+    root = FinishedSpan(
         context=DerivedContext.of(_KEY, SpanRole.STEP),
         parent_span_id=None,
         name="build",
@@ -39,10 +39,10 @@ def _records() -> tuple[SpanRecord, SpanRecord]:
         end=_START + timedelta(seconds=30),
         attributes={"blizzard.chunk.id": "ch_1", "blizzard.step.epoch": 2, "blizzard.work.refs": ("acme#1",)},
         status=SpanStatus.ERROR,
-        events=(EventRecord("gen_ai.invocation", _START + timedelta(seconds=10), {"gen_ai.usage.input_tokens": 7}),),
-        links=(LinkRecord(DerivedContext.of(_PREVIOUS, SpanRole.STEP), {"blizzard.link.reason": "retry"}),),
+        events=(SpanEvent("gen_ai.invocation", _START + timedelta(seconds=10), {"gen_ai.usage.input_tokens": 7}),),
+        links=(SpanLink(DerivedContext.of(_PREVIOUS, SpanRole.STEP), {"blizzard.link.reason": "retry"}),),
     )
-    child = SpanRecord(
+    child = FinishedSpan(
         context=DerivedContext.of(_KEY, SpanRole.QUEUE),
         parent_span_id=root.context.span_id,
         name="queue",

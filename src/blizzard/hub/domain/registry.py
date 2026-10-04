@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import ActivityRow, holds_claim
+from blizzard.hub.domain.work import ActivityEntry, holds_claim
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 if TYPE_CHECKING:  # the chunk seams import this module's RunnerRegistration
@@ -42,6 +43,7 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
 CREDENTIAL_LAPSED_CONDITION = CREDENTIAL_LAPSED_MISS_REASON
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunnerRegistration:
     """A fleet-registry row with its two **derived** brakes: ``hub_paused``, the fleet's own,
@@ -70,9 +72,9 @@ class RunnerRegistration:
     redirect_uris: tuple[str, ...] = ()
     #: Every declared subscription's newest reported sample, raw, one per slug —
     #: staleness is applied per slug at derive time, not here.
-    subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
+    subscription_usage: tuple[SubscriptionUsageSample, ...] = ()
     #: Every declared subscription's newest reported miss, one per slug — unioned with the samples at derive time.
-    subscription_usage_misses: tuple[SubscriptionUsageMissRecord, ...] = ()
+    subscription_usage_misses: tuple[SubscriptionUsageMiss, ...] = ()
     #: The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: tuple[RunnerCapability, ...] = ()
     #: The declared subscription roster — ``None`` for no roster, ``()`` for none declared.
@@ -97,6 +99,7 @@ class RunnerRegistration:
         return redirect_uri in self.redirect_uris
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunnerCapability:
     """One harness binding a registered runner reported it can execute —
@@ -111,6 +114,7 @@ class RunnerCapability:
     available: bool = True
 
 
+@domain_model
 @dataclass(frozen=True)
 class DeclaredSubscription:
     """One provider subscription a registered runner has declared — the hub-domain mirror
@@ -123,6 +127,7 @@ class DeclaredSubscription:
     provider: str
 
 
+@dto
 @dataclass(frozen=True)
 class RunnerLiveness:
     """A registration paired with its clock-relative liveness."""
@@ -139,6 +144,7 @@ class RunnerLiveness:
         return cls(registration, (as_utc(now) - as_utc(registration.last_seen_at)) <= threshold)
 
 
+@dto
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
     """One rate-limit window's utilization, read back off ``runner_external_usage``. A
@@ -152,8 +158,9 @@ class ExternalSubscriptionUsageWindow:
     window_seconds: int
 
 
+@dto
 @dataclass(frozen=True)
-class SubscriptionUsageRecord:
+class SubscriptionUsageSample:
     """One declared subscription's newest reported sample, raw —
     staleness is applied per record at derive time, never here, so one dead sampler's
     record cannot blank a healthy sibling's. ``name`` is the declaration's own
@@ -165,10 +172,11 @@ class SubscriptionUsageRecord:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
+@dto
 @dataclass(frozen=True)
-class SubscriptionUsageMissRecord:
+class SubscriptionUsageMiss:
     """One declared subscription's newest reported miss, raw — staleness
-    is applied at derive time, mirroring :class:`SubscriptionUsageRecord`. ``reason`` is the
+    is applied at derive time, mirroring :class:`SubscriptionUsageSample`. ``reason`` is the
     sampler's closed-set miss reason; no token, refresh token, or path ever crosses on a
     miss."""
 
@@ -178,6 +186,7 @@ class SubscriptionUsageMissRecord:
     reason: str
 
 
+@domain_model
 @dataclass(frozen=True)
 class PerSubscriptionUsageView:
     """One subscription's usage view — one view per declared slug with a roster, or the
@@ -211,8 +220,8 @@ class PerSubscriptionUsageView:
     def _roster_views(
         cls,
         roster: tuple[DeclaredSubscription, ...],
-        samples: dict[str, SubscriptionUsageRecord],
-        misses: dict[str, SubscriptionUsageMissRecord],
+        samples: dict[str, SubscriptionUsageSample],
+        misses: dict[str, SubscriptionUsageMiss],
     ) -> tuple[PerSubscriptionUsageView, ...]:
         """The roster-gated membership rule — one view per declared slug, no age gate on
         either the sample or the miss; a duplicate declared slug collapses, first wins."""
@@ -240,8 +249,8 @@ class PerSubscriptionUsageView:
     @classmethod
     def _rosterless_views(
         cls,
-        samples: dict[str, SubscriptionUsageRecord],
-        misses: dict[str, SubscriptionUsageMissRecord],
+        samples: dict[str, SubscriptionUsageSample],
+        misses: dict[str, SubscriptionUsageMiss],
         *,
         now: datetime,
     ) -> tuple[PerSubscriptionUsageView, ...]:
@@ -286,7 +295,7 @@ class PerSubscriptionUsageView:
         return tuple(views)
 
     @staticmethod
-    def _roster_lapsed(sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None) -> bool:
+    def _roster_lapsed(sample: SubscriptionUsageSample | None, miss: SubscriptionUsageMiss | None) -> bool:
         """``True`` iff this slug's newest miss is a ``credential_lapsed`` newer than its
         newest (or absent) sample, regardless of either record's age."""
         if miss is None or miss.reason != CREDENTIAL_LAPSED_CONDITION:
@@ -295,7 +304,7 @@ class PerSubscriptionUsageView:
 
     @staticmethod
     def _rosterless_lapsed(
-        sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None, *, now: datetime
+        sample: SubscriptionUsageSample | None, miss: SubscriptionUsageMiss | None, *, now: datetime
     ) -> bool:
         """``True`` iff this slug's newest miss is a non-stale ``credential_lapsed`` newer
         than its newest (or absent) sample — the one condition worth surfacing."""
@@ -325,7 +334,7 @@ class IReadRunnerRegistry(Protocol):
         uniformly readable off a request, so a principal resolves from the token alone."""
         ...
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
         """Every ``runner-changed`` activity row off the fleet's two pause-family fact tables, at or
         after ``since``; ``registered``/``heartbeat`` carry no fact table. On this seam,
         not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
@@ -467,6 +476,7 @@ class RunnerNotRetired(Exception):
         self.runner_id = runner_id
 
 
+@dto
 @dataclass(frozen=True)
 class ReleasedRoute:
     """One route the retire release pass released — the chunk and its ``route_released.id``."""
@@ -475,6 +485,7 @@ class ReleasedRoute:
     released_id: int
 
 
+@dto
 @dataclass(frozen=True)
 class RetireOutcome:
     """What one retire wrote: ``fact_id`` is ``None`` on a re-run over an already-retired

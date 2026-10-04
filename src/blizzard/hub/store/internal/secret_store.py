@@ -23,7 +23,7 @@ from blizzard.hub.domain.secrets import (
     SealedSecret,
     SealedValue,
     SecretAlreadyExists,
-    SecretRecord,
+    SecretMetadata,
     SecretReferenced,
     SecretRevisionConflict,
     SecretRotationConflict,
@@ -62,7 +62,7 @@ class SecretStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretRecord:
+    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
                 conn.execute(
@@ -78,11 +78,11 @@ class SecretStore:
                 append_change(conn, change)
         except IntegrityError as exc:
             raise SecretAlreadyExists(name) from exc
-        return SecretRecord(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at)
+        return SecretMetadata(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at)
 
     def replace(
         self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
-    ) -> SecretRecord:
+    ) -> SecretMetadata:
         with self._store.write("replace") as conn:
             moved = conn.execute(
                 update(secrets)
@@ -96,19 +96,19 @@ class SecretStore:
             raise SecretRevisionConflict(name, current=row.revision)
         return self._of(row)
 
-    def get(self, name: str) -> SecretRecord | None:
+    def get(self, name: str) -> SecretMetadata | None:
         with self._store.read("get") as conn:
             row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one_or_none()
         return self._of(row) if row is not None else None
 
-    def get_many(self, names: list[str]) -> dict[str, SecretRecord]:
+    def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
         if not names:
             return {}
         with self._store.read("get_many") as conn:
             rows = conn.execute(select(*_METADATA).where(secrets.c.name.in_(names))).all()
         return {row.name: self._of(row) for row in rows}
 
-    def list_all(self) -> list[SecretRecord]:
+    def list_all(self) -> list[SecretMetadata]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(*_METADATA).order_by(secrets.c.name)).all()
         return [self._of(row) for row in rows]
@@ -194,8 +194,8 @@ class SecretStore:
             append_change(conn, change)
 
     @staticmethod
-    def _of(row) -> SecretRecord:  # type: ignore[no-untyped-def]
-        return SecretRecord(
+    def _of(row) -> SecretMetadata:  # type: ignore[no-untyped-def]
+        return SecretMetadata(
             name=row.name,
             revision=row.revision,
             replaced_at=row.replaced_at,

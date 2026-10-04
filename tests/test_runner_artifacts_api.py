@@ -21,7 +21,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.artifacts import GraphArtifactRecord
+from blizzard.runner.domain.artifacts import PinnedGraphArtifact
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
@@ -436,7 +436,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
 def _seed_graph_artifacts(store, graph_id: str = "gr_1") -> None:  # type: ignore[no-untyped-def]
     store.record_graph_artifacts(
         graph_id=graph_id,
-        artifacts=[GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="the docket text")],
+        artifacts=[PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="the docket text")],
         recorded_at=_NOW,
     )
 

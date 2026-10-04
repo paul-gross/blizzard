@@ -8,12 +8,14 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.roles import dto
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
 from blizzard.runner.domain.tracing.facts import LeaseTraceFacts
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseCursorRecord:
+class LeaseTraceCheckpoint:
     """One ``trace_cursor`` row: where the cursor stood after a pass, and what that pass told."""
 
     position: LeaseCursorKey
@@ -21,8 +23,9 @@ class LeaseCursorRecord:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseFailureRecord:
+class LeaseTraceExportFailure:
     """One ``trace-export-failed`` latch row: when the outage began."""
 
     at: datetime
@@ -48,7 +51,7 @@ class IReadLeaseTraceCursor(Protocol):
         """The first lease :meth:`closed_leases_after` would read, or ``None``."""
         ...
 
-    def newest_trace_cursor(self) -> LeaseCursorRecord | None:
+    def newest_trace_cursor(self) -> LeaseTraceCheckpoint | None:
         """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
         ...
 
@@ -56,11 +59,11 @@ class IReadLeaseTraceCursor(Protocol):
         """The kind of the newest ``trace_export_latch`` row, or ``None``."""
         ...
 
-    def newest_export_cursor(self) -> LeaseCursorRecord | None:
+    def newest_export_cursor(self) -> LeaseTraceCheckpoint | None:
         """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""
         ...
 
-    def newest_export_failure(self) -> LeaseFailureRecord | None:
+    def newest_export_failure(self) -> LeaseTraceExportFailure | None:
         """The newest ``trace-export-failed`` latch row, or ``None``."""
         ...
 
@@ -70,7 +73,7 @@ class IReadLeaseTraces(IReadLeaseTraceFacts, IReadLeaseTraceCursor, Protocol):
 
 
 class IWriteLeaseTraces(IReadLeaseTraces, Protocol):
-    def append_trace_cursor(self, record: LeaseCursorRecord) -> None: ...
+    def append_trace_cursor(self, record: LeaseTraceCheckpoint) -> None: ...
 
     def record_trace_latch(self, kind: EventLogKind, *, at: datetime, report_kind: str, report_payload: str) -> int:
         """Append the latch row and its hub-bound report in one transaction; return the report's seq."""

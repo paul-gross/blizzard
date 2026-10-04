@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, NoReturn, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.findings import EXIT_KINDS, Finding
 
@@ -98,6 +99,7 @@ class RoutineProposalState(StrEnum):
     ALL = "all"
 
 
+@domain_model
 @dataclass(frozen=True)
 class GardenProposal:
     proposal_id: str
@@ -114,6 +116,7 @@ class GardenProposal:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
+@dto
 @dataclass(frozen=True)
 class GardenProposalCounts:
     """One origin/routine/class triple's garden-proposal counts over a window:
@@ -134,6 +137,7 @@ class GardenProposalCounts:
         return self.open + self.passed + self.accepted_with_item + self.accepted_without_item
 
 
+@dto
 @dataclass(frozen=True)
 class GardenProposalPage:
     """A bounded, keyset-paginated page of :meth:`IReadGardenProposalRepository.list_page`
@@ -228,6 +232,7 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         ...
 
 
+@dto
 @dataclass(frozen=True)
 class GardenProposalEdit:
     """The fields a single all-or-nothing garden-proposal edit request supplies,

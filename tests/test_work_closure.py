@@ -18,7 +18,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
@@ -519,8 +519,8 @@ def test_sweep_reads_the_clock_once_at_the_top_of_the_pass_for_every_intents_due
     assert closer.closed == []
 
 
-def _marker(chunk_id: str, name: str, data: str) -> ArtifactRow:
-    return ArtifactRow(
+def _marker(chunk_id: str, name: str, data: str) -> StoredArtifact:
+    return StoredArtifact(
         kind=ArtifactKind.ASSET,
         name=name,
         data=data,

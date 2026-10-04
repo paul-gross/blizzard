@@ -6,10 +6,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.findings import EXIT_KINDS, Finding, IReadFindingRepository
 from blizzard.hub.domain.run_context import RunContext
 
 
+@domain_model
 @dataclass(frozen=True)
 class FindingBucket:
     """What a run may cite: `citable` is every non-exited finding, the run's own scope

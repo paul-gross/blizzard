@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
 
 #: The command a worker's PostToolUse hook runs — a pure client of the local API.
@@ -18,6 +19,7 @@ HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
 SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
 
 
+@dto
 @dataclass(frozen=True)
 class WorkerSettings:
     """The worker hook set as a Claude Code settings document (the ``--settings`` file)."""

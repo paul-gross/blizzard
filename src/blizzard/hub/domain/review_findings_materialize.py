@@ -14,6 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.review_findings import ValidatedReviewFindings
@@ -31,6 +32,7 @@ class ReviewFindingsOutcome(Enum):
     FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
+@dto
 @dataclass(frozen=True)
 class NewReviewFinding:
     """A fully-formed ``findings`` row — id already minted (`bzh:domain-takes-objects`).
@@ -46,8 +48,9 @@ class NewReviewFinding:
     raised_by_chunk_id: str
 
 
+@dto
 @dataclass(frozen=True)
-class ReviewFindingFactRecord:
+class NewReviewFindingFact:
     """A fully-formed ``finding_facts`` row, minus ``recorded_at`` — every fact in one
     delivery shares :attr:`ReviewFindingsPlan.at` (`bzh:injected-clock`). Always an
     `add` fact: only a `deferred` entry reaches materialization."""
@@ -56,6 +59,7 @@ class ReviewFindingFactRecord:
     ref: str
 
 
+@dto
 @dataclass(frozen=True)
 class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every
@@ -70,7 +74,7 @@ class ReviewFindingsPlan:
     at: datetime
     new_scope_description: str = ""
     new_findings: list[NewReviewFinding] = field(default_factory=list)
-    facts: list[ReviewFindingFactRecord] = field(default_factory=list)
+    facts: list[NewReviewFindingFact] = field(default_factory=list)
 
     @property
     def scope_slugs(self) -> list[str]:
@@ -124,7 +128,7 @@ class ReviewFindingsMaterialize:
         idempotence key itself is `chunk_id` alone."""
         at = self._clock.now()
         new_findings: list[NewReviewFinding] = []
-        facts: list[ReviewFindingFactRecord] = []
+        facts: list[NewReviewFindingFact] = []
         for entry in validated.deferred:
             finding_id = Id.mint(FINDING_PREFIX, self._clock).value
             new_findings.append(
@@ -138,7 +142,7 @@ class ReviewFindingsMaterialize:
                     raised_by_chunk_id=chunk.chunk_id,
                 )
             )
-            facts.append(ReviewFindingFactRecord(finding_id=finding_id, ref=entry.ref))
+            facts.append(NewReviewFindingFact(finding_id=finding_id, ref=entry.ref))
 
         plan = ReviewFindingsPlan(
             chunk_id=chunk.chunk_id,

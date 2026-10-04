@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.environments.repository import EnvBindingRecord, IWriteEnvironmentRepository
+from blizzard.runner.environments.repository import EnvBinding, IWriteEnvironmentRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import HELD_BINDING
 from blizzard.runner.store.schema import binding_releases, env_bindings, leases
@@ -25,7 +25,7 @@ class EnvironmentStore:
         stmt = select(env_bindings.c.environment_id).where(HELD_BINDING.clause).distinct()
         return [str(r.environment_id) for r in self._store.all(stmt)]
 
-    def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
+    def bindings_for_chunk(self, chunk_id: str) -> list[EnvBinding]:
         stmt = (
             select(env_bindings)
             .where(env_bindings.c.chunk_id == chunk_id)
@@ -38,7 +38,7 @@ class EnvironmentStore:
         stmt = select(env_bindings.c.chunk_id).where(HELD_BINDING.clause).distinct()
         return [str(r.chunk_id) for r in self._store.all(stmt)]
 
-    def held_bindings(self) -> list[EnvBindingRecord]:
+    def held_bindings(self) -> list[EnvBinding]:
         stmt = select(env_bindings).where(HELD_BINDING.clause).order_by(env_bindings.c.bound_at)
         return [self._row_to_binding(r) for r in self._store.all(stmt)]
 
@@ -65,8 +65,8 @@ class EnvironmentStore:
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)
 
     @staticmethod
-    def _row_to_binding(r) -> EnvBindingRecord:  # type: ignore[no-untyped-def]
-        return EnvBindingRecord(
+    def _row_to_binding(r) -> EnvBinding:  # type: ignore[no-untyped-def]
+        return EnvBinding(
             chunk_id=str(r.chunk_id),
             environment_id=str(r.environment_id),
             workdir=str(r.workdir),

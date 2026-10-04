@@ -16,31 +16,32 @@ from typing import Any, cast
 from sqlalchemy import Connection, Row, and_, func, insert, or_, select
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.roles import entity
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
 from blizzard.runner.domain.tracing.facts import (
-    BoundaryRow,
-    CheckResultRow,
-    ChecksRanRow,
-    ContextSampleRow,
-    LeaseClosureRow,
-    LeaseContextRow,
-    LeaseRow,
+    BoundaryFact,
+    CheckResultFact,
+    ChecksRanFact,
+    ContextSampleFact,
+    LeaseClosureFact,
+    LeaseContextFact,
+    LeaseGrantFact,
     LeaseTraceFacts,
-    NudgeRow,
-    OverloadRow,
-    ParkResumeRow,
-    ParkRow,
-    PauseParkRow,
-    PauseResumeRow,
-    SessionEndRow,
-    SpawnRow,
-    TakeoverEndRow,
-    TakeoverRow,
-    UsageRow,
+    NudgeFact,
+    OverloadFact,
+    ParkFact,
+    ParkResumeFact,
+    PauseParkFact,
+    PauseResumeFact,
+    SessionEndFact,
+    SpawnFact,
+    TakeoverEndFact,
+    TakeoverFact,
+    TokenUsageFact,
 )
-from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseCursorRecord, LeaseFailureRecord
+from blizzard.runner.domain.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint, LeaseTraceExportFailure
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs
 from blizzard.runner.store.schema import (
@@ -68,6 +69,7 @@ from blizzard.runner.store.schema import (
 )
 
 
+@entity
 @dataclass(frozen=True)
 class _FactRead:
     """One ``LeaseTraceFacts`` row-tuple field: the lease it keys on, the columns its row declares, and its builder.
@@ -99,7 +101,7 @@ _FACT_READS = (
             lease_spawns.c.session_id,
             lease_spawns.c.identified_at,
         ),
-        lambda r: SpawnRow(
+        lambda r: SpawnFact(
             id=r.id,
             spawned_at=r.spawned_at,
             harness_id=r.harness_id,
@@ -118,7 +120,7 @@ _FACT_READS = (
             invocation_boundaries.c.opened_at,
             invocation_boundaries.c.closed_at,
         ),
-        lambda r: BoundaryRow(
+        lambda r: BoundaryFact(
             id=r.id,
             generation=r.generation,
             kind=cast(InvocationBoundaryKind, r.kind),
@@ -144,7 +146,7 @@ _FACT_READS = (
             usage_facts.c.harness_id,
             usage_facts.c.harness_version,
         ),
-        lambda r: UsageRow(
+        lambda r: TokenUsageFact(
             id=r.id,
             generation=r.generation,
             kind=r.kind,
@@ -164,37 +166,37 @@ _FACT_READS = (
         "session_ends",
         session_ends.c.lease_id,
         (session_ends.c.id, session_ends.c.ended_at),
-        lambda r: SessionEndRow(id=r.id, ended_at=r.ended_at),
+        lambda r: SessionEndFact(id=r.id, ended_at=r.ended_at),
     ),
     _FactRead(
         "context_samples",
         context_samples.c.lease_id,
         (context_samples.c.id, context_samples.c.sampled_at, context_samples.c.context_tokens),
-        lambda r: ContextSampleRow(id=r.id, sampled_at=r.sampled_at, context_tokens=r.context_tokens),
+        lambda r: ContextSampleFact(id=r.id, sampled_at=r.sampled_at, context_tokens=r.context_tokens),
     ),
     _FactRead(
         "parks",
         park_facts.c.lease_id,
         (park_facts.c.id, park_facts.c.question_id, park_facts.c.parked_at),
-        lambda r: ParkRow(id=r.id, question_id=r.question_id, parked_at=r.parked_at),
+        lambda r: ParkFact(id=r.id, question_id=r.question_id, parked_at=r.parked_at),
     ),
     _FactRead(
         "park_resumes",
         park_resumes.c.lease_id,
         (park_resumes.c.id, park_resumes.c.question_id, park_resumes.c.resumed_at),
-        lambda r: ParkResumeRow(id=r.id, question_id=r.question_id, resumed_at=r.resumed_at),
+        lambda r: ParkResumeFact(id=r.id, question_id=r.question_id, resumed_at=r.resumed_at),
     ),
     _FactRead(
         "pause_parks",
         pause_parks.c.lease_id,
         (pause_parks.c.id, pause_parks.c.parked_at),
-        lambda r: PauseParkRow(id=r.id, parked_at=r.parked_at),
+        lambda r: PauseParkFact(id=r.id, parked_at=r.parked_at),
     ),
     _FactRead(
         "pause_resumes",
         pause_park_resumes.c.lease_id,
         (pause_park_resumes.c.id, pause_park_resumes.c.resumed_at),
-        lambda r: PauseResumeRow(id=r.id, resumed_at=r.resumed_at),
+        lambda r: PauseResumeFact(id=r.id, resumed_at=r.resumed_at),
     ),
     _FactRead(
         "overloads",
@@ -206,7 +208,7 @@ _FACT_READS = (
             overload_facts.c.observed_at,
             overload_facts.c.resume_after,
         ),
-        lambda r: OverloadRow(
+        lambda r: OverloadFact(
             id=r.id,
             generation=r.generation,
             streak_ordinal=r.streak_ordinal,
@@ -218,32 +220,32 @@ _FACT_READS = (
         "takeovers",
         takeovers.c.lease_id,
         (takeovers.c.opened_at, takeovers.c.takeover_id),
-        lambda r: TakeoverRow(takeover_id=r.takeover_id, opened_at=r.opened_at),
+        lambda r: TakeoverFact(takeover_id=r.takeover_id, opened_at=r.opened_at),
     ),
     _FactRead(
         "takeover_ends",
         takeovers.c.lease_id,
         (takeover_ends.c.id, takeover_ends.c.takeover_id, takeover_ends.c.ended_at),
-        lambda r: TakeoverEndRow(id=r.id, takeover_id=r.takeover_id, ended_at=r.ended_at),
+        lambda r: TakeoverEndFact(id=r.id, takeover_id=r.takeover_id, ended_at=r.ended_at),
         via=(takeovers, takeovers.c.takeover_id == takeover_ends.c.takeover_id),
     ),
     _FactRead(
         "nudges",
         nudge_facts.c.lease_id,
         (nudge_facts.c.id, nudge_facts.c.epoch, nudge_facts.c.nudged_at),
-        lambda r: NudgeRow(id=r.id, epoch=r.epoch, nudged_at=r.nudged_at),
+        lambda r: NudgeFact(id=r.id, epoch=r.epoch, nudged_at=r.nudged_at),
     ),
     _FactRead(
         "check_results",
         check_results.c.lease_id,
         (check_results.c.id, check_results.c.epoch, check_results.c.passed),
-        lambda r: CheckResultRow(id=r.id, epoch=r.epoch, passed=bool(r.passed)),
+        lambda r: CheckResultFact(id=r.id, epoch=r.epoch, passed=bool(r.passed)),
     ),
     _FactRead(
         "checks_ran",
         checks_ran.c.lease_id,
         (checks_ran.c.id, checks_ran.c.epoch, checks_ran.c.ran_at),
-        lambda r: ChecksRanRow(id=r.id, epoch=r.epoch, ran_at=r.ran_at),
+        lambda r: ChecksRanFact(id=r.id, epoch=r.epoch, ran_at=r.ran_at),
     ),
 )
 
@@ -298,14 +300,14 @@ def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
             rows[str(r.fact_lease_id)][read.field].append(read.build(r))
     return {
         str(r.lease_id): LeaseTraceFacts(
-            lease=LeaseRow(
+            lease=LeaseGrantFact(
                 lease_id=str(r.lease_id),
                 chunk_id=str(r.chunk_id),
                 epoch=int(r.epoch),
                 runner_id=str(r.runner_id),
                 created_at=r.created_at,
             ),
-            context=LeaseContextRow(
+            context=LeaseContextFact(
                 graph_id=str(r.graph_id),
                 node_id=str(r.node_id),
                 node_name=str(r.node_name),
@@ -315,7 +317,7 @@ def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
                 resolved_model=r.resolved_model,
                 resolved_effort=r.resolved_effort,
             ),
-            closure=LeaseClosureRow(reason=str(r.reason), closed_at=r.closed_at),
+            closure=LeaseClosureFact(reason=str(r.reason), closed_at=r.closed_at),
             **{field: tuple(found) for field, found in rows[str(r.lease_id)].items()},
         )
         for r in closed
@@ -362,14 +364,14 @@ class LeaseTraceFactsStore:
     def oldest_unsent_lease(self, since: LeaseCursorKey, until: datetime) -> LeaseCursorKey | None:
         return next(iter(self.closed_leases_after(since, until, 1)), None)
 
-    def newest_trace_cursor(self) -> LeaseCursorRecord | None:
+    def newest_trace_cursor(self) -> LeaseTraceCheckpoint | None:
         return self._newest_cursor()
 
-    def newest_export_cursor(self) -> LeaseCursorRecord | None:
+    def newest_export_cursor(self) -> LeaseTraceCheckpoint | None:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor(trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, *where) -> LeaseCursorRecord | None:  # type: ignore[no-untyped-def]
+    def _newest_cursor(self, *where) -> LeaseTraceCheckpoint | None:  # type: ignore[no-untyped-def]
         c = trace_cursor.c
         with self._store.connect() as conn:
             row = conn.execute(
@@ -377,7 +379,7 @@ class LeaseTraceFactsStore:
             ).first()
         if row is None:
             return None
-        return LeaseCursorRecord(LeaseCursorKey(row.position_at, row.lease_id), row.span_count, row.recorded_at)
+        return LeaseTraceCheckpoint(LeaseCursorKey(row.position_at, row.lease_id), row.span_count, row.recorded_at)
 
     def newest_trace_latch(self) -> EventLogKind | None:
         c = trace_export_latch.c
@@ -387,14 +389,14 @@ class LeaseTraceFactsStore:
             ).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 
-    def newest_export_failure(self) -> LeaseFailureRecord | None:
+    def newest_export_failure(self) -> LeaseTraceExportFailure | None:
         c = trace_export_latch.c
         stmt = select(c.recorded_at).where(c.kind == "trace-export-failed").order_by(c.recorded_at.desc(), c.id.desc())
         with self._store.connect() as conn:
             at = conn.execute(stmt.limit(1)).scalar_one_or_none()
-        return LeaseFailureRecord(at) if at is not None else None
+        return LeaseTraceExportFailure(at) if at is not None else None
 
-    def append_trace_cursor(self, record: LeaseCursorRecord) -> None:
+    def append_trace_cursor(self, record: LeaseTraceCheckpoint) -> None:
         with self._store.begin() as conn:
             conn.execute(
                 insert(trace_cursor).values(

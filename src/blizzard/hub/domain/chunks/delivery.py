@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
 
 
@@ -30,7 +30,7 @@ class IReadChunkDeliveryRepository(Protocol):
         this read's."""
         ...
 
-    def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
+    def unmaterialized_proposals(self) -> list[StampedWorkItemProposal]:
         """Every not-yet-judged proposal of a chunk that has delivered — a
         ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of whether
         a runner-node's own transition or a hub-node's ``release_route`` transition wrote

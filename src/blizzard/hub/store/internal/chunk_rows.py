@@ -16,15 +16,16 @@ from typing import Protocol, cast
 from sqlalchemy import Connection, Select, func, insert, select
 
 from blizzard.foundation.chunk_migration import MigrationMode
+from blizzard.foundation.roles import entity
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import (
     Chunk,
     IntendedMigration,
-    QuestionRow,
+    NodeQuestion,
     RouteCreatedFact,
     RouteHistory,
     RouteReleasedFact,
@@ -35,6 +36,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.store import schema as s
 
 
+@entity
 @dataclass(frozen=True)
 class MigrationColumn:
     """``chunks.intended_migration``'s JSON shape — ``None`` writes and reads ``NULL``."""
@@ -53,6 +55,7 @@ class MigrationColumn:
         )
 
 
+@entity
 @dataclass(frozen=True)
 class ModelColumn:
     """``chunks.default_model``'s column shape — a JSON ``list[str]``.
@@ -67,6 +70,7 @@ class ModelColumn:
         return [str(m) for m in json.loads(value)] if value else []
 
 
+@entity
 @dataclass(frozen=True)
 class QuestionQuery:
     """A question row with its derived answer and delivery state, in one query.
@@ -97,10 +101,10 @@ class QuestionQuery:
             .outerjoin(earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id)
         )
 
-    def of(self, q) -> QuestionRow:  # type: ignore[no-untyped-def]
+    def of(self, q) -> NodeQuestion:  # type: ignore[no-untyped-def]
         """One :attr:`select` row as its domain shape — every derived state read off the
         joined columns, so the three question reads cannot disagree."""
-        return QuestionRow(
+        return NodeQuestion(
             question_id=q.question_id,
             chunk_id=q.chunk_id,
             node_id=q.node_id,
@@ -502,7 +506,7 @@ def _reached_terminal_at(conn: Connection, chunk_id: str, newest: int) -> bool:
     )
 
 
-def insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, at: datetime) -> None:
+def insert_proposals(conn: Connection, proposals: list[StampedWorkItemProposal], *, at: datetime) -> None:
     for row in proposals:
         conn.execute(
             insert(s.work_item_proposals).values(
@@ -559,8 +563,8 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
         )
 
 
-def proposal_row(row) -> WorkItemProposalRow:  # type: ignore[no-untyped-def]
-    return WorkItemProposalRow(
+def proposal_row(row) -> StampedWorkItemProposal:  # type: ignore[no-untyped-def]
+    return StampedWorkItemProposal(
         proposal_id=row.proposal_id,
         chunk_id=row.chunk_id,
         node_id=row.node_id,

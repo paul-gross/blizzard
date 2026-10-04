@@ -15,8 +15,8 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import LeaseRecord, NewLease
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.domain.leases import Lease, NewLease
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -267,7 +267,7 @@ class _RecordWorkerSpy:
     inner: UsageRecorder
     calls: list[str] = field(default_factory=list)
 
-    def record_worker(self, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
+    def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         self.calls.append(lease.lease_id)
         self.inner.record_worker(lease, bindings)
 

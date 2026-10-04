@@ -12,15 +12,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = [
     "IReadSelfTestResultRepository",
     "IWriteSelfTestResultRepository",
-    "SelfTestResultRecord",
+    "LatestSelfTestResult",
 ]
 
 
+@dto
 @dataclass(frozen=True)
-class SelfTestResultRecord:
+class LatestSelfTestResult:
     """A harness's most recently completed selftest run. ``status`` is one of
     :data:`~blizzard.runner.selftest.model.SelfTestStatus`'s terminal values
     (``"passed"``/``"failed"``) — a still-``"running"`` run is never recorded."""
@@ -35,7 +38,7 @@ class IReadSelfTestResultRepository(Protocol):
     """Read-only selftest-result queries (held by the harness-health evaluator's own
     evidence-gathering seam)."""
 
-    def latest_selftest_result(self, harness_id: str) -> SelfTestResultRecord | None:
+    def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         """``harness_id``'s most recently recorded selftest result, or ``None`` when it has
         never completed one on this runner — unresolved, never itself a failure
         (:mod:`blizzard.runner.harness.health`'s own evaluator draws that distinction)."""

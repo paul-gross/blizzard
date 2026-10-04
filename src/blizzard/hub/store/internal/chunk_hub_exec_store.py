@@ -17,7 +17,7 @@ from sqlalchemy import func, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import HUB_EXEC_SLOT_PREFIX, Id
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
@@ -97,7 +97,7 @@ class ChunkHubExecStore:
         runner_id: str,
         transition_id: str,
         at: datetime,
-        artifacts: list[ArtifactRow],
+        artifacts: list[StoredArtifact],
         release_route: bool,
     ) -> bool:
         """Record a generic hub command node's exit transition **atomically and idempotently**

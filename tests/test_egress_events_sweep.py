@@ -19,7 +19,7 @@ from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEv
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.event_rows import derivation_id
 from blizzard.hub.domain.egress.repository import EventsPosition
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
@@ -61,7 +61,7 @@ class _Events:
         sweep.sweep()
 
     def segment(self, segment_id: str, chunk_id: str | None = None) -> None:
-        record = SegmentRecord(
+        record = TranscriptSlice(
             segment_id=segment_id,
             chunk_id=chunk_id or self.chunk_id,
             node_id=_node_id(self.graph),

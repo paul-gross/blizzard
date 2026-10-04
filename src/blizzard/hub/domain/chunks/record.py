@@ -9,10 +9,12 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import Chunk, IntendedMigration
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkPage:
     """A bounded, keyset-paginated page of :meth:`IReadChunkRecordRepository.list_page`

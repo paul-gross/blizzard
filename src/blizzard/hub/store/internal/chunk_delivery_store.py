@@ -16,7 +16,7 @@ from sqlalchemy import func, insert, select, update
 
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -100,7 +100,7 @@ class ChunkDeliveryStore:
                 insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="skipped")
             )
 
-    def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
+    def unmaterialized_proposals(self) -> list[StampedWorkItemProposal]:
         """Every not-yet-judged proposal of a delivered, non-ephemeral chunk — all four
         exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
         subqueries the engine plans once, rather than re-fetching and re-filtering every

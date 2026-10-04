@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import Table
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 
@@ -18,6 +19,7 @@ DEFAULT_OPENCODE_BINARY = "opencode"
 OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeSection:
     """OpenCode's parsed section."""
@@ -76,6 +78,7 @@ class OpenCodeSection:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeSectionKind:
     """Reads, defaults, and scaffolds :class:`OpenCodeSection`."""

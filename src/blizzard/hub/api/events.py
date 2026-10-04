@@ -20,6 +20,7 @@ from blizzard.auth_core import FLEET_VIEW
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -27,7 +28,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT
-from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventFeed, EventRow
+from blizzard.hub.domain.work import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
 
@@ -53,26 +54,28 @@ async def events_stream(
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 
+def _event_view(row: OperationalEvent) -> EventView:
+    return EventView(
+        id=row.id,
+        recorded_at=iso_utc(row.recorded_at),
+        severity=row.severity,
+        kind=row.kind,
+        runner_id=row.runner_id,
+        chunk_id=row.chunk_id,
+        lease_id=row.lease_id,
+        node_name=row.node_name,
+        message=row.message,
+        detail=row.detail,
+    )
+
+
+@dto
 @dataclass(frozen=True)
 class Events:
-    rows: Sequence[EventRow]
+    rows: Sequence[OperationalEvent]
 
     def response(self) -> EventsResponse:
-        return EventsResponse(events=[self._view(row) for row in self.rows])
-
-    def _view(self, row: EventRow) -> EventView:
-        return EventView(
-            id=row.id,
-            recorded_at=iso_utc(row.recorded_at),
-            severity=row.severity,
-            kind=row.kind,
-            runner_id=row.runner_id,
-            chunk_id=row.chunk_id,
-            lease_id=row.lease_id,
-            node_name=row.node_name,
-            message=row.message,
-            detail=row.detail,
-        )
+        return EventsResponse(events=[_event_view(row) for row in self.rows])
 
 
 @router.get(
@@ -111,31 +114,33 @@ def list_events(
     return Events(EventFeed.of(events, escalations).rows[:limit]).response()
 
 
+def _activity_view(row: ActivityEntry) -> ActivityView:
+    return ActivityView(
+        type=row.type,
+        key=row.key,
+        at=iso_utc(row.at),
+        chunk_id=row.chunk_id,
+        status=row.status,
+        prev_status=row.prev_status,
+        node=row.node,
+        prev_node=row.prev_node,
+        runner_id=row.runner_id,
+        cause=row.cause,
+        graph_id=row.graph_id,
+        severity=row.severity,
+        kind=row.kind,
+        by=row.by,
+        reason=row.reason,
+    )
+
+
+@dto
 @dataclass(frozen=True)
 class Activity:
-    rows: Sequence[ActivityRow]
+    rows: Sequence[ActivityEntry]
 
     def response(self) -> ActivityResponse:
-        return ActivityResponse(activity=[self._view(row) for row in self.rows])
-
-    def _view(self, row: ActivityRow) -> ActivityView:
-        return ActivityView(
-            type=row.type,
-            key=row.key,
-            at=iso_utc(row.at),
-            chunk_id=row.chunk_id,
-            status=row.status,
-            prev_status=row.prev_status,
-            node=row.node,
-            prev_node=row.prev_node,
-            runner_id=row.runner_id,
-            cause=row.cause,
-            graph_id=row.graph_id,
-            severity=row.severity,
-            kind=row.kind,
-            by=row.by,
-            reason=row.reason,
-        )
+        return ActivityResponse(activity=[_activity_view(row) for row in self.rows])
 
 
 @router.get(

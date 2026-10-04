@@ -8,15 +8,17 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 
-__all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseParkRecord", "PauseService"]
+__all__ = ["IReadPauseRepository", "IWritePauseRepository", "PausePark", "PauseService"]
 
 
+@dto
 @dataclass(frozen=True)
-class PauseParkRecord:
+class PausePark:
     """One open pause park: a lease dormant on an operator pause,
     its interrupt's own facts."""
 
@@ -75,7 +77,7 @@ class IReadPauseRepository(Protocol):
         :meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids`'s union."""
         ...
 
-    def open_pause_parks(self) -> dict[str, PauseParkRecord]:
+    def open_pause_parks(self) -> dict[str, PausePark]:
         """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
         its ``parked_at`` and the elicitation its interrupt signalled. Hoisted once
         per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later

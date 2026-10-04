@@ -15,12 +15,12 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.elicitation import ElicitationRecord
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.elicitation import PendingElicitation
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.overload import (
     BACKOFF_CAP_SECONDS,
     BACKOFF_LIMIT,
-    OverloadFactRecord,
+    OverloadExit,
     backing_off_facts,
     backoff_delay,
 )
@@ -61,12 +61,12 @@ def test_backoff_delay_never_reaches_the_cap_within_the_limit() -> None:
 
 @dataclass
 class _FakeOverloadReads:
-    facts: list[OverloadFactRecord]
+    facts: list[OverloadExit]
 
     def overload_streak(self, lease_id: str, epoch: int) -> int:
         raise NotImplementedError  # unused by backing_off_facts
 
-    def open_overload_facts(self) -> list[OverloadFactRecord]:
+    def open_overload_facts(self) -> list[OverloadExit]:
         return self.facts
 
 
@@ -83,22 +83,22 @@ class _FakeLeaseGeneration:
 
 @dataclass
 class _FakeElicitations:
-    records: dict[tuple[str, int], ElicitationRecord]
+    records: dict[tuple[str, int], PendingElicitation]
 
-    def in_flight_elicitation(self, lease_id: str, epoch: int) -> ElicitationRecord | None:
+    def in_flight_elicitation(self, lease_id: str, epoch: int) -> PendingElicitation | None:
         return self.records.get((lease_id, epoch))
 
-    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], PendingElicitation]:
         return {pair: self.records[pair] for pair in pairs if pair in self.records}
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         raise NotImplementedError  # unused by backing_off_facts
 
-    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+    def in_flight_elicitations_by_lease(self) -> dict[str, PendingElicitation]:
         raise NotImplementedError  # unused by backing_off_facts
 
 
-def _worker_fact(**overrides: object) -> OverloadFactRecord:
+def _worker_fact(**overrides: object) -> OverloadExit:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -111,7 +111,7 @@ def _worker_fact(**overrides: object) -> OverloadFactRecord:
         "resume_after": _NOW + timedelta(seconds=60),
     }
     fields.update(overrides)
-    return OverloadFactRecord(**fields)  # type: ignore[arg-type]
+    return OverloadExit(**fields)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -133,7 +133,7 @@ def test_a_worker_fact_closes_once_the_generation_moves_past_it() -> None:
     assert backing_off_facts(facts, liveness, elicitations) == {}
 
 
-def _judge_fact(**overrides: object) -> OverloadFactRecord:
+def _judge_fact(**overrides: object) -> OverloadExit:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -146,11 +146,11 @@ def _judge_fact(**overrides: object) -> OverloadFactRecord:
         "resume_after": _NOW + timedelta(seconds=60),
     }
     fields.update(overrides)
-    return OverloadFactRecord(**fields)  # type: ignore[arg-type]
+    return OverloadExit(**fields)  # type: ignore[arg-type]
 
 
-def _elicitation(*, first_launched_at: datetime) -> ElicitationRecord:
-    return ElicitationRecord(
+def _elicitation(*, first_launched_at: datetime) -> PendingElicitation:
+    return PendingElicitation(
         id=1,
         lease_id="lease_1",
         epoch=1,
@@ -205,7 +205,7 @@ def test_multiple_open_facts_key_the_result_by_lease_id() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("classify", [classify_worker_overload, classify_judge_overload])
 def test_overload_is_classified_by_the_sessions_own_harness(
-    classify: Callable[[LoopContext, LeaseRecord, str, Sequence[str]], ProviderOverload | None],
+    classify: Callable[[LoopContext, Lease, str, Sequence[str]], ProviderOverload | None],
 ) -> None:
     overload = ProviderOverload(detail="529")
     handle = WorkerHandle(session_id="s", pid=1, process_start_time="start", pgid=1)
@@ -217,8 +217,8 @@ def test_overload_is_classified_by_the_sessions_own_harness(
     )
     ctx = cast(LoopContext, SimpleNamespace(harnesses=registry))
 
-    def on(harness_id: str) -> LeaseRecord:
-        return cast(LeaseRecord, SimpleNamespace(session=SessionReference(harness_id, "s")))
+    def on(harness_id: str) -> Lease:
+        return cast(Lease, SimpleNamespace(session=SessionReference(harness_id, "s")))
 
     assert classify(ctx, on(CLAUDE_CODE_HARNESS_ID), "out", ["line"]) == overload
     assert classify(ctx, on(OPENCODE_HARNESS_ID), "out", ["line"]) is None

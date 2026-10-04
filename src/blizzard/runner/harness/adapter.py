@@ -14,6 +14,7 @@ from typing import Protocol
 
 from packaging.specifiers import SpecifierSet
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.overload import ProviderOverload
@@ -38,6 +39,7 @@ class WorkerIdentityError(RuntimeError):
     caller must kill its group, never treat it as "nothing started"."""
 
 
+@dto
 @dataclass(frozen=True)
 class WorkerPreamble:
     """The runner's machine-local preamble prepended to the envelope: held
@@ -57,6 +59,7 @@ class WorkerPreamble:
     traceparent: str = ""  # the step root's W3C traceparent; empty (tracing off) sets no trace variable
 
 
+@domain_model
 @dataclass(frozen=True)
 class WorkerHandle:
     """The facts a launch is authoritative on once identified — this IS a
@@ -77,6 +80,7 @@ class WorkerHandle:
         return self
 
 
+@dto
 @dataclass(frozen=True)
 class ResumeHandle:
     """The OS facts a resume launch is authoritative on: its pid and the REAL

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.egress.assembly import add_step, guarded, invocation_entry, step_partition
@@ -32,13 +33,13 @@ from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
     EgressPass,
-    EgressRow,
+    EgressValues,
     IEgressWriter,
     PlacedFile,
 )
 
 _ONE_MICROSECOND = timedelta(microseconds=1)
-_Rows = list[tuple[date, EgressRow]]
+_Rows = list[tuple[date, EgressValues]]
 
 
 class BackfillWindowRefused(ValueError):
@@ -49,6 +50,7 @@ class BackfillUnavailable(Exception):
     """The export is off or rejected, so there is no writer to backfill through."""
 
 
+@dto
 @dataclass(frozen=True)
 class DatasetCount:
     """What a backfill wrote, or with ``dry_run`` would have written, of one dataset: rows and data files."""
@@ -58,6 +60,7 @@ class DatasetCount:
     files: int
 
 
+@dto
 @dataclass(frozen=True)
 class BackfillResult:
     """The per-dataset counts. ``failure`` is set when the writer refused or raised: the counts are then what was
@@ -68,6 +71,7 @@ class BackfillResult:
     failure: EgressFailure | None = None
 
 
+@domain_model
 @dataclass
 class _Tally:
     rows: int = 0
@@ -159,7 +163,7 @@ class EgressBackfill:
         while True:
             # The window is half-open: read_window's own bound is inclusive.
             window = read_window(self._steps, position, run.until - _ONE_MICROSECOND, self._batch_limit)
-            batch: dict[str, tuple[CursorKey, EgressRow]] = {}
+            batch: dict[str, tuple[CursorKey, EgressValues]] = {}
             for closed in window.closed_steps():
                 add_step(batch, closed.facts, closed.steps, closed.step, closed.key, run.now)
             rows = [(step_partition(row), row) for _, row in sorted(batch.values(), key=lambda entry: entry[0])]
@@ -224,7 +228,7 @@ class EgressBackfill:
         self, run: _Run, schema: DatasetSchema, rows: _Rows, extractor_version: str | None = None
     ) -> EgressFailure | None:
         """One page is one backfill pass with its own manifest; a dry run only counts the files it would place."""
-        by_partition: dict[date, list[EgressRow]] = defaultdict(list)
+        by_partition: dict[date, list[EgressValues]] = defaultdict(list)
         for partition, row in rows:
             by_partition[partition].append(row)
         tally = run.tallies[schema.name]
@@ -251,7 +255,7 @@ class EgressBackfill:
         return None
 
 
-def _step_started_at(row: EgressRow) -> datetime:
+def _step_started_at(row: EgressValues) -> datetime:
     value = row.values["step_started_at"]
     assert isinstance(value, datetime)
     return value

@@ -17,10 +17,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import IWriteTraceCursor, TraceCursorRecord
+from blizzard.hub.domain.tracing.repository import IWriteTraceCursor, TraceCheckpoint
 from blizzard.hub.domain.tracing.window import assemble_window, oldest_unsent, read_window
 
 _log = get_logger("blizzard.hub.trace_export")
@@ -88,14 +88,14 @@ class TraceExportSweep:
             return
         if not window.items:
             if window.position != cursor:
-                self._steps.append_cursor(TraceCursorRecord(window.position, 0, now))
+                self._steps.append_cursor(TraceCheckpoint(window.position, 0, now))
             return
         spans = assemble_window(window)
         if not self._export(spans):
             self._failed(now, len(window.items))
             return
         _CP_TRACE_AFTER_EXPORT_BEFORE_CURSOR.reached()
-        self._steps.append_cursor(TraceCursorRecord(window.position, len(spans), self._clock.now()))
+        self._steps.append_cursor(TraceCheckpoint(window.position, len(spans), self._clock.now()))
         self._recovered()
         _log.info(
             "trace export sweep completed",
@@ -104,7 +104,7 @@ class TraceExportSweep:
             spans=len(spans),
         )
 
-    def _export(self, spans: tuple[SpanRecord, ...]) -> bool:
+    def _export(self, spans: tuple[FinishedSpan, ...]) -> bool:
         try:
             return self._exporter.export(spans)
         except Exception:
@@ -138,7 +138,7 @@ class TraceExportSweep:
                 f"fleet trace cursor jumped ({jump.reason.value}); the skipped window is told only by replay",
                 {"reason": jump.reason.value, "since": _key_detail(jump.skipped_from), "until": iso_utc(jump.to.at)},
             )
-        self._steps.append_cursor(TraceCursorRecord(jump.to, 0, now))
+        self._steps.append_cursor(TraceCheckpoint(jump.to, 0, now))
 
     def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(

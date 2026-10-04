@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 
+
+@dto
 @dataclass(frozen=True)
 class CommandResult:
     """One command's outcome — the runner's raw report, before outcome mapping."""

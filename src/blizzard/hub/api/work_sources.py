@@ -28,17 +28,17 @@ from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.config.work_sources import (
     ConfigFieldError,
     ConfigRevisionConflict,
+    ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceLocatorTaken,
     WorkSourceNameTaken,
-    WorkSourceRecord,
 )
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemHeldByDependents,
@@ -86,9 +86,7 @@ def _stripped(value: str, field_name: str) -> str:
     return text
 
 
-def _view(
-    item: WorkItemRecord, source_obj: IWorkSource, author: AuthorView, *, live_holder: str | None
-) -> WorkItemView:
+def _view(item: HubWorkItem, source_obj: IWorkSource, author: AuthorView, *, live_holder: str | None) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
     return WorkItemView(
         source=item.source,
@@ -113,7 +111,7 @@ def _view(
     )
 
 
-def _summary(record: WorkSourceRecord, services: HubServices) -> WorkSourceSummary:
+def _summary(record: ConfiguredWorkSource, services: HubServices) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
         name=record.name,
@@ -151,7 +149,7 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _writable(source: str, services: HubServices) -> WorkSourceRecord:
+def _writable(source: str, services: HubServices) -> ConfiguredWorkSource:
     """The stored record for a write: 409 for the built-in ``hub``, 404 for an unknown name."""
     if source == RESERVED_HUB_SOURCE_NAME:
         raise HTTPException(

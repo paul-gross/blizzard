@@ -16,6 +16,7 @@ from typing import Protocol
 from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.roles import domain_model, dto
 
 
 class GraphParseError(ValueError):
@@ -30,6 +31,7 @@ RESERVED_TERMINAL = "done"
 GRAPH_TARGET_PREFIX = "graph:"
 
 
+@domain_model
 @dataclass(frozen=True)
 class ChoiceTarget:
     """What a choice's ``to:`` value points at — pure syntax.
@@ -66,6 +68,7 @@ SESSION_FRESH_TARGET_PREFIX = "fresh:"
 SESSION_LEGAL_FORMS = "`fresh`, `resume`, `resume:<node>`, `fresh:<session>`, or `resume:<session>`"
 
 
+@domain_model
 @dataclass(frozen=True)
 class SessionRef:
     """What an authored ``session:`` value names — pure syntax.
@@ -112,6 +115,7 @@ HUB_PENDING_CHOICE = "pending"
 DEFAULT_BOUNCE_CAP = 5
 
 
+@domain_model
 @dataclass(frozen=True)
 class Parser:
     """One authored mapping, read through the coercions the doc types share.
@@ -156,6 +160,7 @@ class Parser:
 # --- Authoring doc (parsed from a YAML body, pre-mint) ----------------------
 
 
+@domain_model
 @dataclass(frozen=True)
 class ChoiceDoc:
     """One fused choice/edge entry as authored.
@@ -188,6 +193,7 @@ class ChoiceDoc:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class JudgementDoc:
     prompt: str | None
@@ -212,6 +218,7 @@ class JudgementDoc:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunStepDoc:
     """One command a hub command node executes, in authored order (#65).
@@ -235,6 +242,7 @@ class RunStepDoc:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class ProducesSpec:
     """One ``produces:`` entry, kind-carrying.
@@ -276,6 +284,7 @@ class NodeShape[StepT]:
         return self.executor is Executor.HUB and bool(self.run)
 
 
+@domain_model
 @dataclass(frozen=True)
 class NodeDoc(NodeShape[RunStepDoc]):
     name: str
@@ -353,6 +362,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class RotatePolicy:
     """One declared session's rotation bounds.
@@ -378,6 +388,7 @@ class RotatePolicy:
 SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window", "harnesses"})
 
 
+@domain_model
 @dataclass(frozen=True)
 class SessionDecl:
     """One graph-level named session declaration.
@@ -428,6 +439,7 @@ class SessionDecl:
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class GraphDoc:
     """A whole graph definition as authored — the validator's input."""
@@ -490,6 +502,7 @@ class GraphDoc:
 # --- Reified graph (post-mint, id-carrying, immutable) ----------------------
 
 
+@domain_model
 @dataclass(frozen=True)
 class Choice:
     """One selectable outcome of one node's judgement."""
@@ -501,6 +514,7 @@ class Choice:
     requires_checks: bool = False
 
 
+@domain_model
 @dataclass(frozen=True)
 class Edge:
     """A directed, choice-keyed connection out of one node.
@@ -516,6 +530,7 @@ class Edge:
     model: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunStep:
     """One reified command a hub command node executes, in authored order (#65)."""
@@ -525,6 +540,7 @@ class RunStep:
     produces: str | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class Node(NodeShape[RunStep]):
     """One station in one immutable graph."""
@@ -558,6 +574,7 @@ class Node(NodeShape[RunStep]):
     proposes_work_items: bool = False
 
 
+@domain_model
 @dataclass(frozen=True)
 class GraphArtifact:
     """One graph-scoped artifact baked into the mint — its authored name, the
@@ -568,6 +585,7 @@ class GraphArtifact:
     ordinal: int
 
 
+@domain_model
 @dataclass(frozen=True)
 class Graph:
     graph_id: str
@@ -608,6 +626,7 @@ class Graph:
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
 
 
+@dto
 @dataclass(frozen=True)
 class GraphSummary:
     """One minted graph's listing-shape fields — :meth:`IReadGraphRepository.list_summaries`'s
@@ -622,6 +641,7 @@ class GraphSummary:
 # --- Mint selection (which mint of a name a chunk sees) ---------------------
 
 
+@domain_model
 @dataclass(frozen=True)
 class Mint:
     """One minted graph, ordered by when it was minted. Holds only a
@@ -651,6 +671,7 @@ class Mint:
         return self.order > other.order
 
 
+@domain_model
 @dataclass(frozen=True)
 class Mints:
     """Every mint of every name, with the retired ones out of contention."""
@@ -683,6 +704,7 @@ class Mints:
         return {m.graph.graph_id: m.graph.graph_id in effective_ids for m in self.mints}
 
 
+@domain_model
 @dataclass(frozen=True)
 class FollowLatest:
     """Whether a chunk pinned to a graph follows the newest mint of its name.

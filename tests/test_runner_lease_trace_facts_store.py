@@ -5,24 +5,24 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.domain.checks import CheckResultRecord
+from blizzard.runner.domain.checks import ExecutedCheck
 from blizzard.runner.domain.leases import NewLease, WorkRefStamp
 from blizzard.runner.domain.tracing.assembly import assemble_lease
 from blizzard.runner.domain.tracing.facts import (
-    CheckResultRow,
-    ChecksRanRow,
-    ContextSampleRow,
+    CheckResultFact,
+    ChecksRanFact,
+    ContextSampleFact,
     LeaseTraceFacts,
-    NudgeRow,
-    OverloadRow,
-    ParkResumeRow,
-    ParkRow,
-    PauseParkRow,
-    PauseResumeRow,
-    SessionEndRow,
-    SpawnRow,
-    TakeoverEndRow,
-    TakeoverRow,
+    NudgeFact,
+    OverloadFact,
+    ParkFact,
+    ParkResumeFact,
+    PauseParkFact,
+    PauseResumeFact,
+    SessionEndFact,
+    SpawnFact,
+    TakeoverEndFact,
+    TakeoverFact,
 )
 from blizzard.runner.domain.usage import InvocationCost
 from blizzard.runner.harness.identity import SessionReference
@@ -132,7 +132,7 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
         **keys,
         node_id=_NODE_ID,
         epoch=fx.EPOCH,
-        results=[CheckResultRecord(command="make test", passed=True, output_tail="ok")],
+        results=[ExecutedCheck(command="make test", passed=True, output_tail="ok")],
         at=fx.at(85),
     )
     store.record_checks_ran(lease_id=lease_id, epoch=fx.EPOCH, at=fx.at(85))
@@ -157,8 +157,8 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
 def _expected() -> LeaseTraceFacts:
     """The Phase-3 fixture equivalent of :func:`_write_lease` for :data:`fx.LEASE_ID`, row ids as first written."""
 
-    def spawn(row_id: int, seconds: int) -> SpawnRow:
-        return SpawnRow(
+    def spawn(row_id: int, seconds: int) -> SpawnFact:
+        return SpawnFact(
             id=row_id,
             spawned_at=fx.at(seconds),
             harness_id=_HARNESS,
@@ -171,18 +171,18 @@ def _expected() -> LeaseTraceFacts:
         spawns=(spawn(1, 1), spawn(2, 40)),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 100), fx.boundary(2, 2, "resume", 40, 100)),
         usage=(fx.usage(1, 1, "spawn", 20),),
-        session_ends=(SessionEndRow(1, fx.at(80)),),
-        context_samples=(ContextSampleRow(1, fx.at(10), 5000),),
-        parks=(ParkRow(1, "q-1", fx.at(30)),),
-        park_resumes=(ParkResumeRow(1, "q-1", fx.at(40)),),
-        pause_parks=(PauseParkRow(1, fx.at(50)),),
-        pause_resumes=(PauseResumeRow(1, fx.at(55)),),
-        overloads=(OverloadRow(1, 2, 1, fx.at(60), fx.at(65)),),
-        takeovers=(TakeoverRow(f"tko_{fx.LEASE_ID}", fx.at(88)),),
-        takeover_ends=(TakeoverEndRow(1, f"tko_{fx.LEASE_ID}", fx.at(90)),),
-        nudges=(NudgeRow(1, fx.EPOCH, fx.at(70)),),
-        check_results=(CheckResultRow(1, fx.EPOCH, True),),
-        checks_ran=(ChecksRanRow(1, fx.EPOCH, fx.at(85)),),
+        session_ends=(SessionEndFact(1, fx.at(80)),),
+        context_samples=(ContextSampleFact(1, fx.at(10), 5000),),
+        parks=(ParkFact(1, "q-1", fx.at(30)),),
+        park_resumes=(ParkResumeFact(1, "q-1", fx.at(40)),),
+        pause_parks=(PauseParkFact(1, fx.at(50)),),
+        pause_resumes=(PauseResumeFact(1, fx.at(55)),),
+        overloads=(OverloadFact(1, 2, 1, fx.at(60), fx.at(65)),),
+        takeovers=(TakeoverFact(f"tko_{fx.LEASE_ID}", fx.at(88)),),
+        takeover_ends=(TakeoverEndFact(1, f"tko_{fx.LEASE_ID}", fx.at(90)),),
+        nudges=(NudgeFact(1, fx.EPOCH, fx.at(70)),),
+        check_results=(CheckResultFact(1, fx.EPOCH, True),),
+        checks_ran=(ChecksRanFact(1, fx.EPOCH, fx.at(85)),),
     )
 
 

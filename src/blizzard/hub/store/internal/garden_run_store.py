@@ -18,8 +18,8 @@ from blizzard.hub.domain.garden_run import (
     DeliveredSet,
     DeliveredSetRaw,
     IReadGardenRunRepository,
+    RunDeliveries,
     RunIdentity,
-    RunRecord,
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import (
@@ -82,7 +82,7 @@ class GardenRunStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunRecord]:
+    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
         with self._store.read("runs_in_window") as conn:
             rows = conn.execute(
                 select(*_IDENTITY_COLUMNS)
@@ -92,7 +92,8 @@ class GardenRunStore:
             ).all()
             delivered_by_chunk = self._delivered_sets_by_chunk(conn, [row.chunk_id for row in rows])
         return [
-            RunRecord(identity=_identity_of(row), delivered=delivered_by_chunk.get(row.chunk_id, [])) for row in rows
+            RunDeliveries(identity=_identity_of(row), delivered=delivered_by_chunk.get(row.chunk_id, []))
+            for row in rows
         ]
 
     def run_identity(self, chunk_id: str) -> RunIdentity | None:

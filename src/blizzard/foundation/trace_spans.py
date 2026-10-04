@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import DerivedContext
 
 AttributeValue = str | int | float | bool | tuple[str, ...]
@@ -26,23 +27,26 @@ class SpanStatus(StrEnum):
     ERROR = "ERROR"
 
 
+@dto
 @dataclass(frozen=True)
-class EventRecord:
+class SpanEvent:
     name: str
     time: datetime
     attributes: Attributes = field(default_factory=dict)
 
 
+@dto
 @dataclass(frozen=True)
-class LinkRecord:
+class SpanLink:
     """A link to another span's root; ``context`` is derived, never looked up."""
 
     context: DerivedContext
     attributes: Attributes = field(default_factory=dict)
 
 
+@dto
 @dataclass(frozen=True)
-class SpanRecord:
+class FinishedSpan:
     context: DerivedContext
     #: ``None`` for a trace's root; a child carries its parent's span id.
     parent_span_id: int | None
@@ -52,7 +56,7 @@ class SpanRecord:
     attributes: Attributes
     kind: SpanKind = SpanKind.INTERNAL
     status: SpanStatus = SpanStatus.UNSET
-    events: tuple[EventRecord, ...] = ()
-    links: tuple[LinkRecord, ...] = ()
+    events: tuple[SpanEvent, ...] = ()
+    links: tuple[SpanLink, ...] = ()
     #: Replaces the exporter's resource ``service.name`` for this span alone.
     service_name: str | None = None

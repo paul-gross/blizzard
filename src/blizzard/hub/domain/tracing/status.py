@@ -10,12 +10,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tracing.window import oldest_unsent
 
 
+@dto
 @dataclass(frozen=True)
 class TraceStatus:
     """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed step or finished

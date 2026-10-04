@@ -52,7 +52,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import LeaseRecord, NewLease
+from blizzard.runner.domain.leases import Lease, NewLease
 from blizzard.runner.domain.tracing.attributes import RUNNER_ID
 from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
@@ -700,7 +700,7 @@ def _lease(epoch: int) -> NewLease:
     )
 
 
-def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, LeaseRecord], None]) -> None:
+def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, Lease], None]) -> None:
     ctx.stores.lease_record.record_lease(_lease(epoch))
     lease = ctx.stores.lease_record.active_lease(f"lease_{epoch}")
     assert lease is not None

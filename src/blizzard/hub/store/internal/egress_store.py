@@ -14,13 +14,13 @@ from sqlalchemy import and_, insert, or_, select
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.hub.config import EGRESS_DATASETS
 from blizzard.hub.domain.egress.repository import (
-    EgressCursorRecord,
-    EgressFailureRecord,
+    EgressCheckpoint,
+    EgressWriteFailure,
     EventsPosition,
     IWriteEgressCursor,
     UsagePosition,
 )
-from blizzard.hub.domain.egress.rows import UsageRow
+from blizzard.hub.domain.egress.rows import AttributedUsage
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.work import UsageFact
 from blizzard.hub.store import schema as s
@@ -37,17 +37,17 @@ class EgressStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
-    def newest_cursor(self, dataset: str) -> EgressCursorRecord | None:
+    def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
         c = s.egress_cursor.c
         stmt = select(s.egress_cursor).where(c.dataset == dataset).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
         with self._store.read("egress_newest_cursor") as conn:
             row = conn.execute(stmt).first()
         return _cursor(row) if row is not None else None
 
-    def newest_cursor_with_files(self) -> EgressCursorRecord | None:
+    def newest_cursor_with_files(self) -> EgressCheckpoint | None:
         """The newest row that placed files across the datasets — one indexed read per dataset."""
         c = s.egress_cursor.c
-        newest: list[EgressCursorRecord] = []
+        newest: list[EgressCheckpoint] = []
         for dataset in EGRESS_DATASETS:
             stmt = (
                 select(s.egress_cursor)
@@ -61,7 +61,7 @@ class EgressStore:
                 newest.append(_cursor(row))
         return max(newest, key=lambda record: record.recorded_at, default=None)
 
-    def newest_egress_failure(self) -> EgressFailureRecord | None:
+    def newest_egress_failure(self) -> EgressWriteFailure | None:
         """Walks the latch events newest-first — one per outage edge, so a few — to the first failure."""
         c = s.event_log.c
         stmt = (
@@ -71,9 +71,9 @@ class EgressStore:
         )
         with self._store.read("egress_newest_failure") as conn:
             row = next((r for r in conn.execute(stmt) if r.kind == _FAILED), None)
-        return EgressFailureRecord(row.recorded_at, row.message) if row is not None else None
+        return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
 
-    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[UsageRow]:
+    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
         u = s.usage_facts.c
         past = or_(
             u.recorded_at > position.recorded_at, and_(u.recorded_at == position.recorded_at, u.id > position.usage_id)
@@ -81,7 +81,7 @@ class EgressStore:
         stmt = select(s.usage_facts).where(past, u.recorded_at <= until).order_by(u.recorded_at, u.id).limit(limit)
         with self._store.read("egress_usage_after") as conn:
             rows = conn.execute(stmt).all()
-        return [UsageRow(r.id, r.chunk_id, r.runner_id, _fact(r)) for r in rows]
+        return [AttributedUsage(r.id, r.chunk_id, r.runner_id, _fact(r)) for r in rows]
 
     def newest_egress_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
@@ -91,7 +91,7 @@ class EgressStore:
             kind = conn.execute(stmt).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 
-    def append_cursor(self, record: EgressCursorRecord) -> None:
+    def append_cursor(self, record: EgressCheckpoint) -> None:
         step = record.step
         events = record.events
         with self._store.write("egress_append_cursor") as conn:
@@ -113,7 +113,7 @@ class EgressStore:
             )
 
 
-def _cursor(row) -> EgressCursorRecord:  # type: ignore[no-untyped-def]
+def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
     events = (
         EventsPosition(row.position_at, row.segment_id, row.extractor_version or "")
         if row.segment_id is not None
@@ -124,7 +124,7 @@ def _cursor(row) -> EgressCursorRecord:  # type: ignore[no-untyped-def]
         if row.position_at is not None and events is None
         else None
     )
-    return EgressCursorRecord(
+    return EgressCheckpoint(
         dataset=row.dataset,
         step=step,
         usage=UsagePosition(row.usage_recorded_at, row.usage_id),

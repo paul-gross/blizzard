@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import Graph, GraphDoc
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import (
     IWriteWorkItemRepository,
     WorkItemAuthor,
@@ -97,7 +97,7 @@ class WorkItemMaterializationReconciler:
         )
 
     def _materialize_one(
-        self, row: WorkItemProposalRow, default_graph: Graph | None
+        self, row: StampedWorkItemProposal, default_graph: Graph | None
     ) -> WorkItemMaterializationOutcome | None:
         try:
             data = json.loads(row.data)
@@ -109,7 +109,7 @@ class WorkItemMaterializationReconciler:
             return self._record_unresolved(row.proposal_id, pointer=None, reason=f"malformed proposal data: {exc}")
 
     def _materialize_create(
-        self, row: WorkItemProposalRow, data: dict, default_graph: Graph | None
+        self, row: StampedWorkItemProposal, data: dict, default_graph: Graph | None
     ) -> WorkItemMaterializationOutcome | None:
         """Always the reserved hub source. ``None`` means a transient failure — the
         default graph was retired (resolved once for the whole pass), or
@@ -136,7 +136,7 @@ class WorkItemMaterializationReconciler:
             return None
         return WorkItemMaterializationOutcome.CREATED if minted else None
 
-    def _materialize_update(self, row: WorkItemProposalRow, data: dict) -> WorkItemMaterializationOutcome | None:
+    def _materialize_update(self, row: StampedWorkItemProposal, data: dict) -> WorkItemMaterializationOutcome | None:
         """Resolves only through a source that implements the editor capability —
         today the hub source alone. Every other unresolvable case (nonexistent, closed,
         withdrawn) is the work item's own three named cases."""

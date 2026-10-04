@@ -11,7 +11,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.leases.closure import FAILED, PARKED, TRANSITIONED
 from blizzard.runner.domain.outbound import BufferedFact
 from blizzard.runner.loop.attempt import Attempt
@@ -148,7 +148,7 @@ class OutboundDrain:
         _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
         return True
 
-    def _consume(self, lease: LeaseRecord, response: ApplyResponse) -> None:
+    def _consume(self, lease: Lease, response: ApplyResponse) -> None:
         """Record the closure and continue in place per the hub's apply-response.
 
         Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap
@@ -167,7 +167,7 @@ class OutboundDrain:
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         )
 
-    def _capped(self, lease: LeaseRecord) -> bool:
+    def _capped(self, lease: Lease) -> bool:
         """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
 
         Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is

@@ -17,7 +17,7 @@ from blizzard.hub.egress.writer import (
     MONEY_SCALE,
     ColumnType,
     DatasetSchema,
-    EgressRow,
+    EgressValues,
     EgressWriterSettings,
     IEgressWriter,
 )
@@ -39,7 +39,7 @@ def arrow_schema(schema: DatasetSchema) -> pa.Schema:
 class ParquetEncoder:
     extension = "parquet"
 
-    def encode(self, schema: DatasetSchema, rows: Sequence[EgressRow], out: BinaryIO) -> None:
+    def encode(self, schema: DatasetSchema, rows: Sequence[EgressValues], out: BinaryIO) -> None:
         arrays = [
             pa.array(
                 [list(v) if isinstance(v, tuple) else v for v in (row.values[c.name] for row in rows)],

@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import ast
+import builtins
+import functools
 import json
 import os
+import re
 import subprocess
 import sys
+import textwrap
+from collections import defaultdict
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -44,9 +51,9 @@ _MOVED_HOMES = {
     "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
     "PROVIDER_ANTHROPIC": "blizzard.runner.subscriptions.subscription_sampler",
     "PROVIDER_OPENAI": "blizzard.runner.subscriptions.subscription_sampler",
-    # ``EventRecord`` is left out: hub analytics owns an unrelated record by that name.
-    "SpanRecord": "blizzard.foundation.trace_spans",
-    "LinkRecord": "blizzard.foundation.trace_spans",
+    "SpanEvent": "blizzard.foundation.trace_spans",
+    "FinishedSpan": "blizzard.foundation.trace_spans",
+    "SpanLink": "blizzard.foundation.trace_spans",
     "SpanKind": "blizzard.foundation.trace_spans",
     "SpanStatus": "blizzard.foundation.trace_spans",
     "AttributeValue": "blizzard.foundation.trace_spans",
@@ -957,3 +964,678 @@ def test_configured_write_guard_catches_a_second_holder(tmp_path: Path) -> None:
         module = tmp_path / "rogue.py"
         module.write_text(statement + "\n")
         assert _configured_write_imports(module), statement
+
+
+# Data roles (``bzh:data-roles``). Every check reads source only — no scanned module is imported.
+
+_ROLE_MARKERS = frozenset({"domain_model", "entity", "dto"})
+_ROLES_MODULE = "blizzard.foundation.roles"
+_PORT_NAME = re.compile(r"^I[A-Z]")
+_EXCEPTION_NAMES = frozenset(
+    name for name, value in vars(builtins).items() if isinstance(value, type) and issubclass(value, BaseException)
+)
+_ENUM_BASES = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "ReprEnum"})
+_PYDANTIC_BASES = frozenset({"BaseModel", "RootModel", "BaseSettings"})
+_FUNCTIONAL_DATA_CLASSES = frozenset({"NamedTuple", "namedtuple", "make_dataclass"})
+_DIRECT_WRAPPERS = frozenset({"Optional", "Union", "Annotated", "InitVar", "Final"})
+_PROPERTY_DECORATORS = frozenset({"property", "cached_property"})
+_CONSTRUCTOR_DUNDERS = frozenset({"__init__", "__new__", "__post_init__"})
+
+
+def _terminal(expr: ast.AST | None) -> str | None:
+    """The last dotted name an expression spells, through any subscript or call."""
+    if isinstance(expr, ast.Name):
+        return expr.id
+    if isinstance(expr, ast.Attribute):
+        return expr.attr
+    if isinstance(expr, ast.Subscript):
+        return _terminal(expr.value)
+    if isinstance(expr, ast.Call):
+        return _terminal(expr.func)
+    return None
+
+
+def _annotation(expr: ast.AST | None) -> ast.AST | None:
+    """An annotation with its string (forward-reference) form parsed back into an expression."""
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        try:
+            return ast.parse(expr.value, mode="eval").body
+        except SyntaxError:
+            return None
+    return expr
+
+
+def _subscript_args(node: ast.Subscript) -> list[ast.expr]:
+    return list(node.slice.elts) if isinstance(node.slice, ast.Tuple) else [node.slice]
+
+
+def _direct_types(expr: ast.AST | None) -> Iterator[str]:
+    """The type names an annotation *is*: itself, or an arm of a union, ``Optional``,
+    ``Annotated``, ``InitVar``, or ``Final`` — never a name nested in a container's arguments."""
+    node = _annotation(expr)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        yield from _direct_types(node.left)
+        yield from _direct_types(node.right)
+    elif isinstance(node, ast.Subscript) and _terminal(node.value) in _DIRECT_WRAPPERS:
+        args = _subscript_args(node)
+        for arg in args[:1] if _terminal(node.value) == "Annotated" else args:
+            yield from _direct_types(arg)
+    elif isinstance(node, ast.Name | ast.Attribute):
+        yield node.id if isinstance(node, ast.Name) else node.attr
+
+
+def _mentioned_types(expr: ast.AST | None, aliases: Mapping[str, list[ast.expr]]) -> set[str]:
+    """Every type name an annotation mentions at any depth — generic arguments, unions, and
+    string forms included, ``Literal`` values and ``Annotated`` metadata excluded — with
+    module-level type aliases expanded by name."""
+    names: set[str] = set()
+    stack: list[ast.AST | None] = [expr]
+    while stack:
+        node = _annotation(stack.pop())
+        if node is None:
+            continue
+        if isinstance(node, ast.Subscript) and _terminal(node.value) in ("Literal", "Annotated"):
+            if _terminal(node.value) == "Annotated":
+                stack.append(_subscript_args(node)[0])
+            continue
+        if isinstance(node, ast.Name | ast.Attribute):
+            name = node.id if isinstance(node, ast.Name) else node.attr
+            if name not in names:
+                names.add(name)
+                stack.extend(aliases.get(name, ()))
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return names
+
+
+def _absolute_module(path: Path, src_root: Path, node: ast.ImportFrom) -> str:
+    if not node.level:
+        return node.module or ""
+    package = list(path.relative_to(src_root.parent).with_suffix("").parts)[:-1]
+    base = package[: len(package) - (node.level - 1)]
+    return ".".join([*base, *(node.module.split(".") if node.module else [])])
+
+
+def _marker_bindings(path: Path, src_root: Path, tree: ast.Module) -> tuple[dict[str, str], set[str]]:
+    """The module-level names bound to a role marker imported from ``blizzard.foundation.roles``,
+    and the dotted spellings bound to that module — in statement order, so a later rebinding of a
+    marker's name (a local ``def dto``, an import from elsewhere) unbinds it."""
+    markers: dict[str, str] = {}
+    modules: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            source = _absolute_module(path, src_root, node)
+            for alias in node.names:
+                local = alias.asname or alias.name
+                markers.pop(local, None)
+                if source == _ROLES_MODULE and alias.name in _ROLE_MARKERS:
+                    markers[local] = alias.name
+                elif f"{source}.{alias.name}" == _ROLES_MODULE:
+                    modules.add(local)
+        elif isinstance(node, ast.Import):
+            modules.update(alias.asname or alias.name for alias in node.names if alias.name == _ROLES_MODULE)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            markers.pop(node.name, None)
+        elif isinstance(node, ast.Assign | ast.AnnAssign):
+            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                if isinstance(target, ast.Name):
+                    markers.pop(target.id, None)
+    return markers, modules
+
+
+@dataclass(frozen=True)
+class _ClassSite:
+    path: Path
+    node: ast.ClassDef
+    markers: tuple[str, ...]
+
+    @property
+    def bases(self) -> list[str]:
+        return [name for base in self.node.bases if (name := _terminal(base)) is not None]
+
+    @property
+    def is_data(self) -> bool:
+        decorated = any(_terminal(d) == "dataclass" for d in self.node.decorator_list)
+        return decorated or "NamedTuple" in self.bases
+
+
+@dataclass(frozen=True)
+class _Param:
+    name: str
+    annotation: ast.expr | None
+    required: bool
+
+
+def _field_param(item: ast.AnnAssign) -> _Param | None:
+    """A data-class field as a constructor parameter: required unless it has a default, a
+    default factory, or ``init=False``. ``ClassVar`` and ``KW_ONLY`` declare no field."""
+    if not isinstance(item.target, ast.Name) or _terminal(_annotation(item.annotation)) in ("ClassVar", "KW_ONLY"):
+        return None
+    value = item.value
+    if value is None:
+        required = True
+    elif isinstance(value, ast.Call) and _terminal(value.func) == "field":
+        keywords = {k.arg: k.value for k in value.keywords}
+        init = keywords.get("init")
+        init_false = isinstance(init, ast.Constant) and init.value is False
+        required = not init_false and "default" not in keywords and "default_factory" not in keywords
+    else:
+        required = False
+    return _Param(item.target.id, item.annotation, required)
+
+
+def _self_reads(node: ast.ClassDef) -> set[str]:
+    """The attribute names the class's own methods read off ``self``."""
+    return {
+        sub.attr
+        for item in node.body
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+        for sub in ast.walk(item)
+        if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "self"
+    }
+
+
+class _RoleScan:
+    """Every class under one source root, its declared markers, and its inferred role."""
+
+    def __init__(self, src_root: Path) -> None:
+        self.src_root = src_root
+        self.sites: list[_ClassSite] = []
+        self.by_name: dict[str, list[_ClassSite]] = defaultdict(list)
+        self.aliases: dict[str, list[ast.expr]] = defaultdict(list)
+        self.functional: list[tuple[Path, int, str]] = []
+        self.imports: dict[Path, dict[str, tuple[str, str]]] = {}
+        for path in sorted(src_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(), filename=str(path))
+            names, modules = _marker_bindings(path, src_root, tree)
+            self.imports[path] = {
+                alias.asname or alias.name: (_absolute_module(path, src_root, node), alias.name)
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom)
+                for alias in node.names
+            }
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                    self.aliases[node.targets[0].id].append(node.value)
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+                    if _terminal(node.annotation) == "TypeAlias":
+                        self.aliases[node.target.id].append(node.value)
+                elif isinstance(node, ast.TypeAlias):
+                    self.aliases[node.name.id].append(node.value)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    markers = tuple(
+                        role for d in node.decorator_list if (role := self._marker_role(d, names, modules)) is not None
+                    )
+                    site = _ClassSite(path, node, markers)
+                    self.sites.append(site)
+                    self.by_name[node.name].append(site)
+                elif isinstance(node, ast.Call) and _terminal(node.func) in _FUNCTIONAL_DATA_CLASSES:
+                    self.functional.append((path, node.lineno, _terminal(node.func) or ""))
+        self.ports = frozenset(
+            name
+            for name, sites in self.by_name.items()
+            if _PORT_NAME.match(name) and any("Protocol" in site.bases for site in sites)
+        )
+        self.orchestration: set[int] = set()
+        changed = True
+        while changed:
+            changed = False
+            for site in self.sites:
+                if id(site.node) not in self.orchestration and self._shape_role(site) is None and self._holds(site):
+                    self.orchestration.add(id(site.node))
+                    changed = True
+
+    @staticmethod
+    def _marker_role(decorator: ast.expr, names: Mapping[str, str], modules: set[str]) -> str | None:
+        if isinstance(decorator, ast.Name):
+            return names.get(decorator.id)
+        if isinstance(decorator, ast.Attribute) and decorator.attr in _ROLE_MARKERS:
+            return decorator.attr if ast.unparse(decorator.value) in modules else None
+        return None
+
+    def _module(self, path: Path) -> str:
+        parts = list(path.relative_to(self.src_root.parent).with_suffix("").parts)
+        return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+
+    def declared(self, name: str, path: Path) -> list[_ClassSite]:
+        """The classes ``name`` can mean inside ``path``: its own declaration there, else the one
+        in the module it is imported from, else every class of that name under the root."""
+        local = [site for site in self.by_name.get(name, []) if site.path == path]
+        if local:
+            return local
+        module, original = self.imports.get(path, {}).get(name, ("", name))
+        candidates = self.by_name.get(original, [])
+        return [site for site in candidates if self._module(site.path) == module] or candidates
+
+    def _shape_role(self, site: _ClassSite, seen: frozenset[int] = frozenset()) -> str | None:
+        """port, error, enum, or pydantic — the roles a class's bases give it. A base declared
+        under the root counts only when every class it can mean has the role."""
+        if "Protocol" in site.bases:
+            return "port"
+        for base in site.bases:
+            declared = self.declared(base, site.path)
+            if declared and id(site.node) not in seen:
+                roles = {self._shape_role(other, seen | {id(site.node)}) for other in declared}
+                if len(roles) == 1 and (role := roles.pop()) in ("error", "enum", "pydantic"):
+                    return role
+            elif not declared and (base in _EXCEPTION_NAMES or base.endswith(("Error", "Exception", "Warning"))):
+                return "error"
+            elif not declared and base in _ENUM_BASES:
+                return "enum"
+            elif not declared and base in _PYDANTIC_BASES:
+                return "pydantic"
+        return None
+
+    def inferred_role(self, site: _ClassSite) -> str | None:
+        return "orchestration" if id(site.node) in self.orchestration else self._shape_role(site)
+
+    def is_collaborator(self, name: str, path: Path) -> bool:
+        """Whether ``name``, spelled in ``path``, is a port (an ``I[A-Z]…`` name a Protocol under
+        the root declares), a clock (a name ending in ``Clock``), or a class that infers
+        orchestration everywhere it can mean."""
+        if name in self.ports or name.endswith("Clock"):
+            return True
+        declared = self.declared(name, path)
+        return bool(declared) and all(id(site.node) in self.orchestration for site in declared)
+
+    def params(self, site: _ClassSite, seen: frozenset[int] = frozenset()) -> list[_Param]:
+        """A data class's fields, inherited ones first; any other class's ``__init__`` parameters,
+        inherited from a base declared under the root when it defines none."""
+        seen = seen | {id(site.node)}
+        inherited = [
+            param
+            for base in site.bases
+            for other in self.declared(base, site.path)
+            if id(other.node) not in seen and other.is_data == site.is_data
+            for param in self.params(other, seen)
+        ]
+        if site.is_data:
+            own = [p for item in site.node.body if isinstance(item, ast.AnnAssign) and (p := _field_param(item))]
+            return inherited + own
+        for item in site.node.body:
+            if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                args = item.args
+                positional = [*args.posonlyargs, *args.args][1:]
+                required = len(positional) - len(args.defaults)
+                kwonly = zip(args.kwonlyargs, args.kw_defaults, strict=True)
+                return [_Param(a.arg, a.annotation, i < required) for i, a in enumerate(positional)] + [
+                    _Param(a.arg, a.annotation, default is None) for a, default in kwonly
+                ]
+        return inherited
+
+    def _holds(self, site: _ClassSite) -> bool:
+        """Whether a class is orchestration: a parameter annotated directly as a collaborator — a
+        collaborator nested in a container's type arguments does not count. A data-class field
+        counts only when it is required by the constructor, read off ``self`` by the class's own
+        methods, or one of a bundle whose every field is a collaborator."""
+        params = self.params(site)
+        held = [p for p in params if any(self.is_collaborator(n, site.path) for n in _direct_types(p.annotation))]
+        if not held or not site.is_data:
+            return bool(held)
+        reads = _self_reads(site.node)
+        return len(held) == len(params) or any(p.required or p.name in reads for p in held)
+
+    def sites_in(self, paths: Iterable[Path] | None) -> list[_ClassSite]:
+        wanted = None if paths is None else {p.resolve() for p in paths}
+        return [s for s in self.sites if wanted is None or s.path.resolve() in wanted]
+
+    def where(self, site: _ClassSite) -> str:
+        return f"{site.path.relative_to(self.src_root.parent.parent)}:{site.node.lineno} {site.node.name}"
+
+
+@functools.cache
+def _role_scan(src_root: Path) -> _RoleScan:
+    return _RoleScan(src_root)
+
+
+def _role_marker_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every data class in ``paths`` (default: all under ``src_root``) without exactly one role
+    marker, every marker on a class whose role is inferred or that is no data class, and every
+    data class built by a call, which no marker can reach."""
+    scan = _role_scan(src_root)
+    violations: list[str] = []
+    for site in scan.sites_in(paths):
+        inferred = scan.inferred_role(site)
+        if site.markers and inferred is not None:
+            violations.append(f"{scan.where(site)} has the inferred role {inferred} yet carries {list(site.markers)}")
+        elif site.markers and not site.is_data:
+            violations.append(f"{scan.where(site)} is no @dataclass or NamedTuple yet carries {list(site.markers)}")
+        elif site.is_data and inferred is None and len(site.markers) != 1:
+            declared = f"carries {list(site.markers)}" if site.markers else "declares no role"
+            violations.append(f"{scan.where(site)} {declared}; a data class carries exactly one role marker")
+    wanted = None if paths is None else {p.resolve() for p in paths}
+    for path, lineno, call in scan.functional:
+        if wanted is None or path.resolve() in wanted:
+            violations.append(f"{path.relative_to(src_root.parent.parent)}:{lineno} builds a data class with {call}()")
+    return violations
+
+
+def _entity_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every ``@entity`` in ``paths`` outside a ``store/`` package, and every Protocol member in
+    ``paths`` whose annotations name an ``@entity`` declared anywhere under ``src_root``."""
+    scan = _role_scan(src_root)
+    entities = {site.node.name for site in scan.sites if "entity" in site.markers}
+    violations: list[str] = []
+    for site in scan.sites_in(paths):
+        if "entity" in site.markers and "store" not in site.path.relative_to(src_root).parts[:-1]:
+            violations.append(f"{scan.where(site)} is an @entity outside a store/ package")
+        if "Protocol" not in site.bases:
+            continue
+        for item in site.node.body:
+            if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                args = item.args
+                every = [*args.posonlyargs, *args.args, *args.kwonlyargs, *filter(None, (args.vararg, args.kwarg))]
+                annotations = [a.annotation for a in every] + [item.returns]
+                member = item.name
+            elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                annotations, member = [item.annotation], item.target.id
+            else:
+                continue
+            named = set().union(*(_mentioned_types(a, scan.aliases) for a in annotations)) & entities
+            if named:
+                violations.append(f"{scan.where(site)}.{member} names @entity {sorted(named)}")
+    return violations
+
+
+def _domain_model_collaborator_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every ``@domain_model`` in ``paths`` with a field — inherited, ``InitVar``, or
+    ``init=False`` included — whose annotation mentions a collaborator at any depth."""
+    scan = _role_scan(src_root)
+    violations: list[str] = []
+    for site in scan.sites_in(paths):
+        if "domain_model" not in site.markers:
+            continue
+        for param in scan.params(site):
+            held = sorted(
+                n for n in _mentioned_types(param.annotation, scan.aliases) if scan.is_collaborator(n, site.path)
+            )
+            if held:
+                violations.append(f"{scan.where(site)}.{param.name} holds collaborator {held}")
+    return violations
+
+
+def _mutates_self(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assign | ast.AugAssign | ast.AnnAssign | ast.Delete):
+            targets = node.targets if isinstance(node, ast.Assign | ast.Delete) else [node.target]
+            for target in targets:
+                while isinstance(target, ast.Attribute | ast.Subscript):
+                    target = target.value
+                    if isinstance(target, ast.Name) and target.id == "self":
+                        return True
+        elif isinstance(node, ast.Call) and ast.unparse(node.func) == "object.__setattr__":
+            return True
+    return False
+
+
+def _dto_method_kind(class_name: str, fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    """property: a ``property`` or ``cached_property`` getter. constructor: ``__init__``,
+    ``__new__``, ``__post_init__``, or a classmethod or staticmethod whose return annotation is the
+    class itself or ``Self`` (or a union arm of one). projection: a plain ``def`` taking only
+    ``self``, annotated to return a value, assigning nothing rooted at ``self``."""
+    decorators = {_terminal(d) for d in fn.decorator_list}
+    if decorators & _PROPERTY_DECORATORS:
+        return "property"
+    if fn.name in _CONSTRUCTOR_DUNDERS:
+        return "constructor"
+    if decorators & {"classmethod", "staticmethod"}:
+        return "constructor" if set(_direct_types(fn.returns)) & {class_name, "Self"} else None
+    args = fn.args
+    nullary = len([*args.posonlyargs, *args.args]) == 1 and not (args.kwonlyargs or args.vararg or args.kwarg)
+    returns = _annotation(fn.returns)
+    valued = returns is not None and not (isinstance(returns, ast.Constant) and returns.value is None)
+    pure = isinstance(fn, ast.FunctionDef) and not decorators and not _mutates_self(fn)
+    return "projection" if nullary and valued and pure else None
+
+
+def _dto_method_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every method of a ``@dto`` in ``paths`` that is not a constructor, a projection, or a property."""
+    scan = _role_scan(src_root)
+    return [
+        f"{scan.where(site)}.{item.name} is no constructor, projection, or property"
+        for site in scan.sites_in(paths)
+        if "dto" in site.markers
+        for item in site.node.body
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and _dto_method_kind(site.node.name, item) is None
+    ]
+
+
+def test_every_data_class_declares_exactly_one_role() -> None:
+    """Every ``@dataclass`` and ``NamedTuple`` carries exactly one of ``@domain_model``,
+    ``@entity``, ``@dto`` — unless its shape infers its role (port, error, enum, pydantic,
+    orchestration), which it then never annotates (``bzh:data-roles``)."""
+    violations = _role_marker_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} data class(es) misdeclare a role: {violations}"
+
+
+def test_an_entity_lives_in_a_store_package_and_crosses_no_protocol() -> None:
+    """An ``@entity`` is a persistence row private to its store adapter: it lives under a
+    ``store/`` package and no Protocol member's signature names it (``bzh:data-roles``)."""
+    violations = _entity_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} entity leak(s): {violations}"
+
+
+def test_a_domain_model_holds_no_port_or_clock() -> None:
+    """A ``@domain_model`` carries rules, not collaborators: no field mentions a port, a clock,
+    or an orchestration class (``bzh:data-roles``)."""
+    violations = _domain_model_collaborator_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} domain-model field(s) hold a collaborator: {violations}"
+
+
+def test_a_dto_has_only_constructors_projections_and_properties() -> None:
+    """A ``@dto`` is data crossing a boundary: its methods are constructors, projections, and
+    properties only (``bzh:data-roles``)."""
+    violations = _dto_method_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} dto method(s) carry behavior: {violations}"
+
+
+_ROLE_FIXTURE_HEADER = """\
+from collections.abc import Callable
+from dataclasses import InitVar, dataclass, field
+from functools import cached_property
+from ipaddress import IPv4Network
+from typing import Literal, NamedTuple, Optional, Protocol, Self
+
+from blizzard.foundation.roles import domain_model, dto, entity
+from blizzard.ports import AppError, IClock, IThing, Service, SystemClock
+"""
+
+_ROLE_FIXTURE_BASE = {
+    "__init__.py": "",
+    "foundation/__init__.py": "",
+    "foundation/roles.py": "",
+    "hub/__init__.py": "",
+    "hub/domain/__init__.py": "",
+    "hub/store/__init__.py": "",
+    "ports.py": (
+        "from typing import Protocol\n\n"
+        "class IThing(Protocol):\n    def go(self) -> None: ...\n\n"
+        "class IClock(Protocol):\n    def now(self) -> float: ...\n\n"
+        "class AppError(Exception):\n    pass\n\n"
+        "class SystemClock:\n    pass\n\n"
+        "class Service:\n    def __init__(self, thing: IThing) -> None:\n        self.thing = thing\n"
+    ),
+}
+
+
+def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
+    """A ``blizzard`` source tree holding the fixture ports plus ``files``, each under the fixture
+    header; the returned root is what every data-role check takes."""
+    src = tmp_path / "blizzard"
+    planted = {
+        **_ROLE_FIXTURE_BASE,
+        **{rel: _ROLE_FIXTURE_HEADER + textwrap.dedent(text) for rel, text in files.items()},
+    }
+    for rel, text in planted.items():
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text(text)
+    return src
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "@dataclass\nclass Bare:\n    x: int\n",
+        "class Pair(NamedTuple):\n    x: int\n",
+        "@dto\n@entity\n@dataclass\nclass Doubled:\n    x: int\n",
+        "@dto\n@dto\n@dataclass\nclass Twice:\n    x: int\n",
+        "@dto\n@dataclass\nclass Failure(AppError):\n    x: int\n",
+        "@dto\nclass IPort(Protocol):\n    def go(self) -> None: ...\n",
+        "@dto\nclass Plain:\n    pass\n",
+        "@dto\n@dataclass\nclass Wired:\n    x: int\n    thing: IThing\n",
+        "def dto(cls):\n    return cls\n\n@dto\n@dataclass\nclass Shadowed:\n    x: int\n",
+        "Pair = NamedTuple('Pair', [('x', int)])\n",
+        "@dataclass\nclass Disguised:\n    x: int\n    thing: IThing | None = None\n",
+        "@dataclass\nclass Netted:\n    net: IPv4Network\n",
+        "@dataclass\nclass Holder:\n    x: int\n    things: tuple[IThing, ...]\n",
+        "@dto\n@dataclass\nclass Base:\n    x: int\n\n@dataclass\nclass Child(Base):\n    y: int\n",
+        "@dto\n@dataclass\nclass ParseError:\n    x: int\n\n@dataclass\nclass Sub(ParseError):\n    y: int\n",
+    ],
+)
+def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, source: str) -> None:
+    violations = _role_marker_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source}))
+    assert len(violations) == 1, violations
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "@dto\n@dataclass(frozen=True)\nclass Page:\n    x: int\n",
+        "@entity\nclass Row(NamedTuple):\n    x: int\n",
+        "from blizzard.foundation import roles\n\n@roles.domain_model\n@dataclass\nclass Model:\n    x: int\n",
+        "import blizzard.foundation.roles\n\n@blizzard.foundation.roles.dto\n@dataclass\nclass Dotted:\n    x: int\n",
+        "from ...foundation.roles import dto as data\n\n@data\n@dataclass\nclass Relative:\n    x: int\n",
+        "@dataclass\nclass Failure(AppError):\n    x: int\n",
+        "@dataclass\nclass Wired:\n    x: int\n    thing: IThing\n",
+        "@dataclass\nclass Timed:\n    x: int\n    clock: SystemClock = field(default_factory=SystemClock)\n\n"
+        "    def stamp(self) -> object:\n        return self.clock\n",
+        "@dataclass\nclass Bundle:\n    a: IThing | None = None\n    b: Optional[IClock] = None\n",
+        "@dataclass\nclass UsesService:\n    x: int\n    service: Service\n",
+        "@dataclass\nclass Ctx:\n    thing: IThing\n\n@dataclass\nclass Step:\n    n: int\n    ctx: Ctx\n",
+        "@dataclass\nclass Starts:\n    x: int\n    clock: InitVar[IClock]\n",
+        "@dataclass\nclass Ctx:\n    thing: IThing\n\n@dataclass\nclass Narrower(Ctx):\n    n: int = 0\n",
+    ],
+)
+def test_role_marker_check_admits_a_declared_or_inferred_role(tmp_path: Path, source: str) -> None:
+    assert _role_marker_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source})) == []
+
+
+_ENTITY_ROW = "@entity\n@dataclass\nclass NodeRow:\n    x: int\n"
+_ENTITY_IMPORT = "from blizzard.hub.store.rows import NodeRow\n\n"
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "def get(self) -> NodeRow: ...",
+        "def put(self, row: NodeRow) -> None: ...",
+        "def put(self, *, row: NodeRow) -> None: ...",
+        "async def put(self, *rows: NodeRow) -> None: ...",
+        "def pairs(self) -> list[tuple[str, NodeRow]]: ...",
+        "def find(self) -> 'NodeRow | None': ...",
+        "def each(self, fn: Callable[[NodeRow], None]) -> None: ...",
+        "def all(self) -> Rows: ...",
+        "row: NodeRow",
+    ],
+)
+def test_entity_check_catches_an_entity_in_a_protocol_signature(tmp_path: Path, member: str) -> None:
+    protocol = f"{_ENTITY_IMPORT}Rows = list[NodeRow]\n\nclass IRepo(Protocol):\n    {member}\n"
+    src = _plant_roles(tmp_path, {"hub/store/rows.py": _ENTITY_ROW, "hub/domain/repo.py": protocol})
+    violations = _entity_violations(src)
+    assert len(violations) == 1, violations
+    assert "IRepo" in violations[0]
+
+
+def test_entity_check_catches_an_entity_outside_a_store_package(tmp_path: Path) -> None:
+    violations = _entity_violations(_plant_roles(tmp_path, {"hub/domain/rows.py": _ENTITY_ROW}))
+    assert len(violations) == 1, violations
+    assert "outside a store/ package" in violations[0]
+
+
+def test_entity_check_admits_an_entity_its_adapter_maps_to_a_dto(tmp_path: Path) -> None:
+    adapter = f"{_ENTITY_IMPORT}class Adapter:\n    def get(self) -> NodeRow: ...\n"
+    protocol = (
+        "@dto\n@dataclass\nclass Node:\n    x: int\n\n"
+        "class IRepo(Protocol):\n    def get(self) -> Node: ...\n    def kind(self) -> Literal['NodeRow']: ...\n"
+    )
+    src = _plant_roles(
+        tmp_path,
+        {"hub/store/rows.py": _ENTITY_ROW, "hub/store/adapter.py": adapter, "hub/domain/repo.py": protocol},
+    )
+    assert _entity_violations(src) == []
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        "thing: IThing",
+        "thing: IThing | None = None",
+        "things: list[IThing]",
+        "clock: 'IClock'",
+        "clock: SystemClock",
+        "clock: InitVar[IClock]",
+        "thing: IThing = field(init=False)",
+        "service: Service",
+        "things: Things",
+    ],
+)
+def test_domain_model_check_catches_a_collaborator_field(tmp_path: Path, fields: str) -> None:
+    source = f"Things = dict[str, IThing]\n\n@domain_model\n@dataclass\nclass Model:\n    x: int\n    {fields}\n"
+    violations = _domain_model_collaborator_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source}))
+    assert len(violations) == 1, violations
+
+
+def test_domain_model_check_catches_an_inherited_collaborator_field(tmp_path: Path) -> None:
+    source = "@dataclass\nclass Ctx:\n    thing: IThing\n\n@domain_model\n@dataclass\nclass Model(Ctx):\n    x: int\n"
+    violations = _domain_model_collaborator_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source}))
+    assert len(violations) == 1, violations
+    assert violations[0].endswith("Model.thing holds collaborator ['IThing']")
+
+
+def test_domain_model_check_admits_data_fields(tmp_path: Path) -> None:
+    source = (
+        "@domain_model\n@dataclass\nclass Model:\n    x: int\n    net: IPv4Network\n"
+        "    kind: Literal['IThing']\n    tags: tuple[str, ...] = ()\n"
+    )
+    assert _domain_model_collaborator_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source})) == []
+
+
+_DTO_PAGE = "@dto\n@dataclass(frozen=True)\nclass Page:\n    x: int\n"
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "def scaled(self, k: int) -> int:\n    return self.x * k",
+        "def touch(self) -> int:\n    object.__setattr__(self, 'x', 1)\n    return 1",
+        "def bump(self) -> int:\n    self.x[0] = 1\n    return 1",
+        "def log(self) -> None:\n    print(self.x)",
+        "def unannotated(self):\n    return self.x",
+        "async def fetch(self) -> int:\n    return self.x",
+        "@classmethod\ndef count(cls) -> int:\n    return 1",
+        "@staticmethod\ndef label() -> str:\n    return 'x'",
+        "@x.setter\ndef x(self, value: int) -> None:\n    pass",
+        "def __eq__(self, other: object) -> bool:\n    return True",
+    ],
+)
+def test_dto_check_catches_a_behavior_method(tmp_path: Path, method: str) -> None:
+    source = _DTO_PAGE + textwrap.indent(method, "    ") + "\n"
+    violations = _dto_method_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source}))
+    assert len(violations) == 1, violations
+
+
+def test_dto_check_admits_constructors_projections_and_properties(tmp_path: Path) -> None:
+    methods = [
+        "def __post_init__(self) -> None:\n    object.__setattr__(self, 'x', abs(self.x))",
+        "@classmethod\ndef of(cls, x: int) -> Page:\n    return cls(x)",
+        "@classmethod\ndef parse(cls, raw: str) -> 'Page | None':\n    return None",
+        "@classmethod\ndef empty(cls) -> Self:\n    return cls(0)",
+        "@staticmethod\ndef zero() -> Page:\n    return Page(0)",
+        "@property\ndef doubled(self) -> int:\n    return self.x * 2",
+        "@cached_property\ndef tripled(self) -> int:\n    return self.x * 3",
+        "def to_wire(self) -> dict[str, int]:\n    return {'x': self.x}",
+        "def __str__(self) -> str:\n    return str(self.x)",
+    ]
+    source = _DTO_PAGE + "".join(textwrap.indent(m, "    ") + "\n\n" for m in methods)
+    assert _dto_method_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source})) == []

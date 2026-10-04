@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter
 
 __all__ = ["EgressUnavailable", "build_egress_writer"]
 
 
+@dto
 @dataclass(frozen=True)
 class EgressUnavailable:
     reason: str

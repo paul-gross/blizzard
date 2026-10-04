@@ -9,14 +9,14 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.asks import AskRecord
-from blizzard.runner.domain.elicitation import ElicitationRecord
+from blizzard.runner.domain.asks import OpenAsk
+from blizzard.runner.domain.elicitation import PendingElicitation
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
-from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.domain.overload import OverloadFactRecord
+from blizzard.runner.domain.leases import Lease
+from blizzard.runner.domain.overload import OverloadExit
 from blizzard.runner.domain.owned_process import kill_owned_process, owned_process_alive
-from blizzard.runner.domain.pause import PauseParkRecord
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.domain.pause import PausePark
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -65,9 +65,9 @@ class DormantSession:
     session, so **no retry is consumed** by going dormant and coming back."""
 
     ctx: LoopContext
-    lease: LeaseRecord
+    lease: Lease
 
-    def resume_on_unmet_produces(self, message: str, bindings: list[EnvBindingRecord]) -> None:
+    def resume_on_unmet_produces(self, message: str, bindings: list[EnvBinding]) -> None:
         """Resume a session that exited with required ``produces:`` unattached, instead of
         judging it — no retry consumed, no epoch bumped. Owner resolution is
         checked **before** the generation's spend is recorded (the same "resolve before any
@@ -89,7 +89,7 @@ class DormantSession:
             pid=pid,
         )
 
-    def park_on_ask(self, ask: AskRecord) -> None:
+    def park_on_ask(self, ask: OpenAsk) -> None:
         """Park the chunk on a question: forward it to the hub and stop the reap clock; env
         bindings stay held so the session is warm for the resume. Parking itself needs no
         harness — only the generation's usage spend does, so an unresolvable owner there just
@@ -179,7 +179,7 @@ class DormantSession:
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
-    def on_unpause(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> None:
+    def on_unpause(self, park: PausePark, elicitation: PendingElicitation | None) -> None:
         """Finish a pause park's teardown, then poll its chunk; once the operator resumes it, restart
         its session. The teardown runs ahead of every gate below — brake, hub, the pause itself —
         since a kill is not a spawn and the interrupted envelope is owed its recording regardless.
@@ -235,7 +235,7 @@ class DormantSession:
             pid=pid,
         )
 
-    def _pause_park_settled(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> bool:
+    def _pause_park_settled(self, park: PausePark, elicitation: PendingElicitation | None) -> bool:
         """True once nothing of the lease's is alive after `park_paused`'s interrupt — the worker's
         group and the elicitation the park names. Alive within the drain budget of
         ``parked_at``: left alone, no wake. Past it: SIGKILLed. A named elicitation that has exited
@@ -301,7 +301,7 @@ class DormantSession:
         )
         return True if not leader_alive else not process.is_alive(pid, process_start_time)
 
-    def on_overload_backoff(self, fact: OverloadFactRecord) -> None:
+    def on_overload_backoff(self, fact: OverloadExit) -> None:
         """No-op until ``fact.resume_after`` has passed, then resume the same
         lease/epoch/session in place — no retry consumed, no epoch bumped.
 
@@ -515,7 +515,7 @@ class DormantSession:
     def _wake(
         self,
         message: str,
-        bindings: list[EnvBindingRecord],
+        bindings: list[EnvBinding],
         *,
         harness: IHarnessWorkerLifecycle,
         at: datetime | None = None,

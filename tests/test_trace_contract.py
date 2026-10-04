@@ -31,7 +31,7 @@ from blizzard.foundation.trace_ids import (
     span_id,
     trace_id,
 )
-from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing import platform as hub_platform
 from blizzard.hub.domain.tracing.assembly import assemble_step
@@ -43,25 +43,25 @@ from blizzard.hub.domain.tracing.chunk_spans import (
     completion_instant,
 )
 from blizzard.hub.domain.tracing.facts import (
-    BounceRecord,
-    ChunkCompletedRecord,
-    ChunkStoppedRecord,
-    DecisionRecord,
-    DecisionResolutionRecord,
-    EpochOwnerRecord,
-    EscalationRecord,
-    HubExecSlotRecord,
-    HubPollRecord,
-    LeaseRecord,
-    MigrationRecord,
-    PauseRecord,
-    PromotionRecord,
-    QuestionRecord,
-    RequeueRecord,
-    RestartRecord,
-    RouteCreatedRecord,
-    RouteReleasedRecord,
     StepFacts,
+    TracedBounce,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedDecisionResolution,
+    TracedEpochOwner,
+    TracedEscalation,
+    TracedHubExecSlot,
+    TracedHubPoll,
+    TracedLease,
+    TracedMigration,
+    TracedPause,
+    TracedPromotion,
+    TracedQuestion,
+    TracedRequeue,
+    TracedRestart,
+    TracedRouteCreation,
+    TracedRouteRelease,
 )
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
@@ -135,23 +135,23 @@ def _journey() -> StepFacts:
         pin_graph_id="g1",
         minted_at=fx.at(0),
         work_refs=("acme#42",),
-        promotions=(PromotionRecord(fx.at(2)),),
-        routes_created=(RouteCreatedRecord(fx.at(3)), RouteCreatedRecord(fx.at(32))),
+        promotions=(TracedPromotion(fx.at(2)),),
+        routes_created=(TracedRouteCreation(fx.at(3)), TracedRouteCreation(fx.at(32))),
         pauses=(
-            PauseRecord("p0", True, fx.at(4)),
-            PauseRecord("p0b", False, fx.at(6)),
-            PauseRecord("p1", True, fx.at(12)),
-            PauseRecord("p2", False, fx.at(15)),
-            PauseRecord("p3", True, fx.at(135)),
-            PauseRecord("p4", False, fx.at(138)),
+            TracedPause("p0", True, fx.at(4)),
+            TracedPause("p0b", False, fx.at(6)),
+            TracedPause("p1", True, fx.at(12)),
+            TracedPause("p2", False, fx.at(15)),
+            TracedPause("p3", True, fx.at(135)),
+            TracedPause("p4", False, fx.at(138)),
         ),
         questions=(
-            QuestionRecord("q1", 1, fx.at(16), fx.at(18)),
-            QuestionRecord("q2", 1, fx.at(20), fx.at(19)),
+            TracedQuestion("q1", 1, fx.at(16), fx.at(18)),
+            TracedQuestion("q2", 1, fx.at(20), fx.at(19)),
         ),
         usage=(_usage(1, 14), _usage(1, 22, cost_usd=None, estimated_cost_usd=None, harness_version=None)),
-        requeues=(RequeueRecord(fx.at(56)),),
-        bounces=(BounceRecord(2, "conflict", fx.at(50)), BounceRecord(4, "checks", fx.at(126))),
+        requeues=(TracedRequeue(fx.at(56)),),
+        bounces=(TracedBounce(2, "conflict", fx.at(50)), TracedBounce(4, "checks", fx.at(126))),
         transitions=(
             fx.to("g1", "review", 30, 1, choice_name="pass"),
             fx.to("g1", "build", 55, 2, choice_name="fail"),
@@ -159,26 +159,26 @@ def _journey() -> StepFacts:
             fx.to("g1", "verify", 120, 4, decision_id="d1", choice_name="approve"),
             fx.to("g1", "build", 130, 4),
         ),
-        decisions=(DecisionRecord("d1", "g1-gate", 3, fx.at(71)),),
-        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(100), choice="approve"),),
-        hub_polls=(HubPollRecord("hp1", "g1-verify", 4, fx.at(122)), HubPollRecord("hp2", "g1-verify", 4, fx.at(124))),
-        hub_exec_slots=(HubExecSlotRecord("s1", "g1-verify", fx.at(123), fx.at(125)),),
-        escalations=(EscalationRecord(5, fx.at(150)),),
-        chunk_stopped=(ChunkStoppedRecord(fx.at(160)),),
-        chunk_completed=(ChunkCompletedRecord(fx.at(170)),),
+        decisions=(TracedDecision("d1", "g1-gate", 3, fx.at(71)),),
+        decision_resolutions=(TracedDecisionResolution("d1", fx.at(100), choice="approve"),),
+        hub_polls=(TracedHubPoll("hp1", "g1-verify", 4, fx.at(122)), TracedHubPoll("hp2", "g1-verify", 4, fx.at(124))),
+        hub_exec_slots=(TracedHubExecSlot("s1", "g1-verify", fx.at(123), fx.at(125)),),
+        escalations=(TracedEscalation(5, fx.at(150)),),
+        chunk_stopped=(TracedChunkStop(fx.at(160)),),
+        chunk_completed=(TracedChunkCompletion(fx.at(170)),),
         epoch_owners=(
-            EpochOwnerRecord(1, "r-1", fx.at(9)),
-            EpochOwnerRecord(2, "r-1", fx.at(34)),
-            EpochOwnerRecord(3, "r-1", fx.at(59)),
-            EpochOwnerRecord(4, None, fx.at(120)),
-            EpochOwnerRecord(5, "r-1", fx.at(139)),
+            TracedEpochOwner(1, "r-1", fx.at(9)),
+            TracedEpochOwner(2, "r-1", fx.at(34)),
+            TracedEpochOwner(3, "r-1", fx.at(59)),
+            TracedEpochOwner(4, None, fx.at(120)),
+            TracedEpochOwner(5, "r-1", fx.at(139)),
         ),
         lease_facts=(
-            LeaseRecord(1, fx.at(10)),
-            LeaseRecord(2, fx.at(35)),
-            LeaseRecord(3, fx.at(60)),
-            LeaseRecord(4, fx.at(125)),
-            LeaseRecord(5, fx.at(140)),
+            TracedLease(1, fx.at(10)),
+            TracedLease(2, fx.at(35)),
+            TracedLease(3, fx.at(60)),
+            TracedLease(4, fx.at(125)),
+            TracedLease(5, fx.at(140)),
         ),
     )
 
@@ -186,19 +186,19 @@ def _journey() -> StepFacts:
 def _link_restart() -> StepFacts:
     return fx.make_facts(
         transitions=(fx.to("g1", "review", 30, 1), fx.to("g1", "gate", 90, 6)),
-        restarts=(RestartRecord(5, fx.at(35), "g1", "g1-review"),),
+        restarts=(TracedRestart(5, fx.at(35), "g1", "g1-review"),),
         epoch_owners=(
-            EpochOwnerRecord(1, "r-1", fx.at(9)),
-            EpochOwnerRecord(5, None, fx.at(35)),
-            EpochOwnerRecord(6, "r-1", fx.at(49)),
+            TracedEpochOwner(1, "r-1", fx.at(9)),
+            TracedEpochOwner(5, None, fx.at(35)),
+            TracedEpochOwner(6, "r-1", fx.at(49)),
         ),
-        lease_facts=(LeaseRecord(1, fx.at(10)), LeaseRecord(6, fx.at(50))),
+        lease_facts=(TracedLease(1, fx.at(10)), TracedLease(6, fx.at(50))),
     )
 
 
 def _link_migration() -> StepFacts:
     return fx.make_facts(
-        migrations=(MigrationRecord(1, fx.at(30), "g1", "g2", from_node_id="g1-build"),),
+        migrations=(TracedMigration(1, fx.at(30), "g1", "g2", from_node_id="g1-build"),),
         transitions=(fx.to("g1", "gate", 90, 2),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
     )
@@ -206,7 +206,7 @@ def _link_migration() -> StepFacts:
 
 def _link_retry() -> StepFacts:
     return fx.make_facts(
-        route_released=(RouteReleasedRecord(fx.at(30)),),
+        route_released=(TracedRouteRelease(fx.at(30)),),
         transitions=(fx.to("g1", "gate", 90, 2),),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
     )
@@ -275,11 +275,11 @@ def _attributes(attributes: Any) -> dict[str, object]:
     return {key: _value(attributes[key]) for key in sorted(attributes)}
 
 
-def _event(event: EventRecord) -> dict[str, object]:
+def _event(event: SpanEvent) -> dict[str, object]:
     return {"name": event.name, "time": _instant(event.time), "attributes": _attributes(event.attributes)}
 
 
-def _link(link: LinkRecord) -> dict[str, object]:
+def _link(link: SpanLink) -> dict[str, object]:
     ctx = link.context
     return {
         "trace_id": f"{ctx.trace_id:032x}",
@@ -288,7 +288,7 @@ def _link(link: LinkRecord) -> dict[str, object]:
     }
 
 
-def _span(span: SpanRecord) -> dict[str, object]:
+def _span(span: FinishedSpan) -> dict[str, object]:
     return {
         "trace_id": f"{span.context.trace_id:032x}",
         "span_id": f"{span.context.span_id:016x}",

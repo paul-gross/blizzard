@@ -7,21 +7,21 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
+from blizzard.hub.domain.work import AnswerOutcome, NodeQuestion
 
 
 class IReadChunkQuestionsRepository(Protocol):
     """Read-only chunk-questions access."""
 
-    def get_question(self, question_id: str) -> QuestionRow | None:
+    def get_question(self, question_id: str) -> NodeQuestion | None:
         """One question row with its derived answer state, or None."""
         ...
 
-    def list_open_questions(self) -> list[QuestionRow]:
+    def list_open_questions(self) -> list[NodeQuestion]:
         """Every unanswered question across the fleet — the ``hub status`` surface."""
         ...
 
-    def load_questions(self, chunk_id: str) -> list[QuestionRow]:
+    def load_questions(self, chunk_id: str) -> list[NodeQuestion]:
         """A chunk's questions, open and answered — the chunk-detail surface."""
         ...
 

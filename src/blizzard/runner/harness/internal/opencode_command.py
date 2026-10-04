@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from blizzard.foundation.roles import domain_model
+
 
 class OpenCodeInvocationKind(StrEnum):
     """The four non-interactive invocation kinds this one command builder composes.
@@ -23,6 +25,7 @@ class OpenCodeInvocationKind(StrEnum):
     NUDGE = "nudge"
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeCommand:
     """Composes every ``opencode`` invocation from one place — the binary path is the only

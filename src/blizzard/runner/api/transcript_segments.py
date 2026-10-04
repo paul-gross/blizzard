@@ -14,7 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import TranscriptSegmentState
 from blizzard.runner.transcripts.service import ResolvedSegmentContent
 from blizzard.wire.transcript_segment import (
     TranscriptSegmentContentView,
@@ -25,7 +25,7 @@ from blizzard.wire.transcript_segment import (
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-def _index_entry(row: TranscriptSegmentLedgerRow) -> TranscriptSegmentIndexEntry:
+def _index_entry(row: TranscriptSegmentState) -> TranscriptSegmentIndexEntry:
     # Segment-relative, gapless indexing restarts at 0 for every segment:
     # `shipped_turns` is this segment's own running count, so it doubles as `turn_range_end`.
     return TranscriptSegmentIndexEntry(

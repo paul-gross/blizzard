@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph
@@ -13,6 +14,7 @@ from blizzard.hub.domain.work import Chunk, ChunkChange, ChunkFacts
 from blizzard.hub.events.broker import ChunkChangeCause
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkFrameState:
     """One chunk's fully-loaded post-write state — everything a ``chunk-changed`` frame's
@@ -42,40 +44,40 @@ class ChunkFrameState:
         route = services.chunks.route.route_of(chunk_id)
         return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route)
 
-    @classmethod
-    def load_many(cls, services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
-        """`load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
-        requested id, through the four plurals. Reads every distinct chunk's facts and
-        record once, then the union of pinned and cross-graph newest-transition graph ids
-        once, then every chunk's route once — a bounded number of statements regardless of
-        how many ids or facts the batch names."""
-        ids = list(dict.fromkeys(chunk_ids))
-        facts_by_id = services.chunks.facts.load_facts_for(ids)
-        chunks_by_id = services.chunks.record.get_many(ids)
 
-        graph_ids: set[str] = {chunk.graph_id for chunk in chunks_by_id.values()}
-        for chunk_id in ids:
-            facts = facts_by_id.get(chunk_id)
-            transition = facts.newest_transition() if facts is not None else None
-            if transition is not None and transition.graph_id is not None:
-                graph_ids.add(transition.graph_id)
-        graphs_by_id = services.graphs.get_many(list(graph_ids))
-        routes_by_id = services.chunks.route.routes_for(ids)
+def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
+    """`ChunkFrameState.load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
+    requested id, through the four plurals. Reads every distinct chunk's facts and
+    record once, then the union of pinned and cross-graph newest-transition graph ids
+    once, then every chunk's route once — a bounded number of statements regardless of
+    how many ids or facts the batch names."""
+    ids = list(dict.fromkeys(chunk_ids))
+    facts_by_id = services.chunks.facts.load_facts_for(ids)
+    chunks_by_id = services.chunks.record.get_many(ids)
 
-        states: dict[str, ChunkFrameState] = {}
-        for chunk_id in ids:
-            facts = ChunkFacts.or_default(facts_by_id.get(chunk_id))
-            chunk = chunks_by_id.get(chunk_id)
-            graph = graphs_by_id.get(chunk.graph_id) if chunk is not None else None
-            from_graph = None
-            if chunk is not None and graph is not None:
-                transition = facts.newest_transition()
-                if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
-                    from_graph = graphs_by_id.get(transition.graph_id)
-            states[chunk_id] = cls(
-                facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=routes_by_id.get(chunk_id)
-            )
-        return states
+    graph_ids: set[str] = {chunk.graph_id for chunk in chunks_by_id.values()}
+    for chunk_id in ids:
+        facts = facts_by_id.get(chunk_id)
+        transition = facts.newest_transition() if facts is not None else None
+        if transition is not None and transition.graph_id is not None:
+            graph_ids.add(transition.graph_id)
+    graphs_by_id = services.graphs.get_many(list(graph_ids))
+    routes_by_id = services.chunks.route.routes_for(ids)
+
+    states: dict[str, ChunkFrameState] = {}
+    for chunk_id in ids:
+        facts = ChunkFacts.or_default(facts_by_id.get(chunk_id))
+        chunk = chunks_by_id.get(chunk_id)
+        graph = graphs_by_id.get(chunk.graph_id) if chunk is not None else None
+        from_graph = None
+        if chunk is not None and graph is not None:
+            transition = facts.newest_transition()
+            if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
+                from_graph = graphs_by_id.get(transition.graph_id)
+        states[chunk_id] = ChunkFrameState(
+            facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=routes_by_id.get(chunk_id)
+        )
+    return states
 
 
 @dataclass(frozen=True)
@@ -143,7 +145,7 @@ class ChunkChanged:
         key: str | None = None,
     ) -> ChunkFacts:
         """`publish`'s sibling for a caller already holding the post-write state — a batch
-        that loaded every touched chunk's state once through `ChunkFrameState.load_many`."""
+        that loaded every touched chunk's state once through `load_frame_states`."""
         facts = state.facts
         resolved_status = status if status is not None else facts.status().value
         if state.chunk is None or state.graph is None:

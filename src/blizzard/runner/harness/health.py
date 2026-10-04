@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.compatibility import CompatibilityClassification, CompatibilityProbe
 
 
@@ -30,6 +31,7 @@ class HarnessHealthCause(StrEnum):
     DECLARED_DEGRADATION = "declared_degradation"
 
 
+@dto
 @dataclass(frozen=True)
 class DeclaredDegradation:
     """One known, non-blocking compatibility gap a harness binding declares about
@@ -43,6 +45,7 @@ class DeclaredDegradation:
             raise ValueError(f"declared degradation for probe {self.probe.value!r} has no summary")
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessHealthEvidence:
     """The evaluator's whole input — every fact :func:`evaluate_harness_health` needs,
@@ -70,6 +73,7 @@ class HarnessHealthEvidence:
     config_conflicts: tuple[str, ...] = ()
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessHealthResult:
     """One evaluation's outcome: whether the binding is available, the single cause —

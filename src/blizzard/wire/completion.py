@@ -14,6 +14,7 @@ from typing import Annotated, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemPriority
 
 
@@ -70,6 +71,7 @@ class _ProducesLike(Protocol):
     def kind(self) -> ArtifactKind: ...
 
 
+@domain_model
 @dataclass(frozen=True)
 class Coverage:
     artifacts: list[SubmittedArtifact]
@@ -115,6 +117,7 @@ class _HasPassed(Protocol):
     def passed(self) -> bool: ...
 
 
+@domain_model
 @dataclass(frozen=True)
 class ChecksGate:
     requires_checks: bool

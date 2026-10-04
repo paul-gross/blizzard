@@ -12,7 +12,7 @@ from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.delivery_read import DeliveryTrace
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import IReadWorkItemRepository, WorkItemAuthor, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import HubWorkItem, IReadWorkItemRepository, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
@@ -91,10 +91,10 @@ class HubWorkSource:
 
     # -- IWorkEditor -------------------------------------------------------------
 
-    def list(self, *, limit: int = 200) -> list[WorkItemRecord]:
+    def list(self, *, limit: int = 200) -> list[HubWorkItem]:
         return self._items.list(RESERVED_HUB_SOURCE_NAME, limit=limit)
 
-    def get(self, pointer: WorkRef) -> WorkItemRecord:
+    def get(self, pointer: WorkRef) -> HubWorkItem:
         return self._resolve(pointer)
 
     def create(
@@ -109,7 +109,7 @@ class HubWorkSource:
             graph=graph,
         )
 
-    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:
+    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> HubWorkItem:
         item = self._resolve(pointer)
         return self._edits.edit(item, edit)
 
@@ -117,7 +117,7 @@ class HubWorkSource:
         item = self._resolve(pointer)
         return self._edits.withdraw(item, by=by)
 
-    def _resolve(self, pointer: WorkRef) -> WorkItemRecord:
+    def _resolve(self, pointer: WorkRef) -> HubWorkItem:
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
             raise WorkItemRefUnknownError(pointer)

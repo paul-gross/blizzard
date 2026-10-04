@@ -11,6 +11,8 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
+
 # SAFETY: `ANTHROPIC_MODEL` and family must stay absent — here and in `[worker]
 # env_passthrough` — they override the model a resumed session restores.
 BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR")
@@ -19,6 +21,7 @@ BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", 
 LOCALE_PREFIX = "LC_"
 
 
+@domain_model
 @dataclass(frozen=True)
 class AllowlistedEnv:
     """The child env built from the base allowlist + ``LC_*`` + the operator's passthrough,

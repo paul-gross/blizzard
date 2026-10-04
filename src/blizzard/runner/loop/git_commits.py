@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
-from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationRecord
-from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.domain.git_commit_declaration import GitCommitDeclaration
+from blizzard.runner.domain.leases import Lease
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.outbound import OutboundFacts
@@ -26,9 +26,9 @@ class DeclaredCommits:
     ``command-failed`` events."""
 
     ctx: LoopContext
-    lease: LeaseRecord
-    bindings: list[EnvBindingRecord]
-    _resolved: dict[Key, GitCommitDeclarationRecord] = field(default_factory=dict)
+    lease: Lease
+    bindings: list[EnvBinding]
+    _resolved: dict[Key, GitCommitDeclaration] = field(default_factory=dict)
     _confirmed: dict[Key, SubmittedArtifact] = field(default_factory=dict)
     _submitted: dict[str, list[SubmittedArtifact]] = field(default_factory=dict)
 
@@ -73,9 +73,7 @@ class DeclaredCommits:
             artifacts.extend(group)
         return artifacts
 
-    def _confirm(
-        self, key: Key, declared: GitCommitDeclarationRecord, origins: dict[Key, str]
-    ) -> SubmittedArtifact | None:
+    def _confirm(self, key: Key, declared: GitCommitDeclaration, origins: dict[Key, str]) -> SubmittedArtifact | None:
         env_id, repo = key
         origin_url = origins.get(key)
         if origin_url is None:

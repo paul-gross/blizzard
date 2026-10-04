@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.scopes import ScopeSlug, ScopeSlugError
 from blizzard.wire.finding import DeferredReviewFindingEntry, ReviewFindingDelta
 
@@ -20,6 +21,7 @@ class ReviewFindingsRejected(Exception):
     pydantic error."""
 
 
+@dto
 @dataclass(frozen=True)
 class ValidatedReviewFindings:
     """What a passing :func:`validate_review_findings` hands the materializer: only the

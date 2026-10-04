@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.internal.opencode_landlock import (
     LandlockPolicy,
     LandlockUnavailable,
@@ -31,6 +32,7 @@ _LINE_QUEUE_LIMIT_BYTES = 256 * 1024
 _DRAIN_AFTER_STOP_SECONDS = 0.5
 
 
+@dto
 @dataclass(frozen=True)
 class OpenCodeProcessResult:
     """Captured output from one attempted OpenCode command."""
@@ -208,6 +210,7 @@ class _PtyProcess:
         return b"", b""
 
 
+@domain_model
 @dataclass
 class _SubprocessStartedProcess:
     """A process-group handle so interruption does not leave OpenCode descendants behind."""

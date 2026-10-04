@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
 from blizzard.hub.secrets import hub_key_provider
@@ -21,6 +22,7 @@ MIGRATE_COMMAND = "blizzard hub migrate"
 _log = get_logger("blizzard.hub.runtime")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Migrations:
     """The hub's Alembic tree, bound to one resolved config."""
@@ -36,6 +38,7 @@ class Migrations:
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Runtime:
     """A hub runtime root, administered while the daemon is down."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState
+from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.facts import FactIngestResult
 from blizzard.hub.events.broker import ChunkChangeCause
@@ -80,7 +80,7 @@ class IngestBroadcast:
         applied = set(result.ack.applied)
         applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
         chunk_ids = [cid for fact in applied_facts if (cid := self._chunk_arm_id(fact)) is not None]
-        states = ChunkFrameState.load_many(self.services, chunk_ids)
+        states = load_frame_states(self.services, chunk_ids)
         for fact in applied_facts:
             self._publish_one(fact, result.row_id_by_seq.get(fact.seq), states)
 

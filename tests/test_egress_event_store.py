@@ -13,8 +13,8 @@ from sqlalchemy import Engine
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, EpochKey, EventsPosition, UsagePosition
-from blizzard.hub.domain.transcripts import SegmentRecord
+from blizzard.hub.domain.egress.repository import EgressCheckpoint, EpochKey, EventsPosition, UsagePosition
+from blizzard.hub.domain.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -48,7 +48,7 @@ def _engine(tmp_path: Path, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2")) -> En
 def _segment(
     engine: Engine, segment_id: str, chunk_id: str = "ch_1", *, epoch: int = 1, cwd: str | None = None
 ) -> None:
-    record = SegmentRecord(
+    record = TranscriptSlice(
         segment_id=segment_id,
         chunk_id=chunk_id,
         node_id="nd_build",
@@ -240,8 +240,8 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     store = EgressStore(hub_store_connections(engine))
     position = EventsPosition(_at(10), "sg_a", _V1)
 
-    store.append_cursor(EgressCursorRecord("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))
-    store.append_cursor(EgressCursorRecord("invocations", None, UsagePosition(_at(5), 7), 0, (), _at(11)))
+    store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))
+    store.append_cursor(EgressCheckpoint("invocations", None, UsagePosition(_at(5), 7), 0, (), _at(11)))
 
     events = store.newest_cursor("events")
     assert events is not None
@@ -250,7 +250,7 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     assert invocations is not None
     assert (invocations.events, invocations.step) == (None, None)
     store.append_cursor(
-        EgressCursorRecord("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1)))
+        EgressCheckpoint("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1)))
     )
     reset = store.newest_cursor("events")
     assert reset is not None

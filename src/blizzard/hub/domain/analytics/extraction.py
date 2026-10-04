@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
@@ -20,6 +21,7 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 EXTRACTOR_VERSION = "blizzard-analytics/5"
 
 
+@dto
 @dataclass(frozen=True)
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the

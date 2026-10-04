@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
@@ -106,6 +107,7 @@ class Check:
         raise NotImplementedError
 
 
+@domain_model
 @dataclass(frozen=True)
 class Spawn:
     """The gate check: it alone yields the handle the rest are driven from, so it is built

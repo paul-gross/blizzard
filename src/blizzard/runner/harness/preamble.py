@@ -12,10 +12,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 
 
+@domain_model
 @dataclass(frozen=True)
 class Prompts:
     """The packaged prompt directory — prose shipped as files rather than inline literals,
@@ -62,6 +64,7 @@ RESUME_WORKSPACE_WITHDRAWN = PROMPTS.text("resume_workspace_withdrawn.md")
 RESUME_UPDATED_NOTICE = PROMPTS.text("resume_updated_notice.md")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Preamble:
     """The spawn prefix prepended to the node envelope prompt, plus

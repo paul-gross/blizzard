@@ -5,15 +5,17 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.work import ChunkFacts
 
 pytestmark = pytest.mark.unit
 
 
-def marker(name: str, data: str, *, epoch: int = 1) -> ArtifactRow:
-    return ArtifactRow(ArtifactKind.ASSET, name, data, None, None, f"art_{epoch}_{name}", "ch", "nd", "deliver", epoch)
+def marker(name: str, data: str, *, epoch: int = 1) -> StoredArtifact:
+    return StoredArtifact(
+        ArtifactKind.ASSET, name, data, None, None, f"art_{epoch}_{name}", "ch", "nd", "deliver", epoch
+    )
 
 
 def test_partial_land_auto_prs_are_not_human_waits_and_use_each_repos_forge() -> None:
@@ -97,7 +99,7 @@ def test_old_external_merge_signal_does_not_label_a_later_auto_pr_as_human_wait(
 def test_same_epoch_replacement_follows_write_order_not_artifact_id() -> None:
     """The later-written reference carries the lexically smaller id, as two ids minted in
     one millisecond can; the markers' given order is the write order and it decides."""
-    earlier = ArtifactRow(
+    earlier = StoredArtifact(
         ArtifactKind.ASSET,
         "delivery-pr/acme/one/3",
         '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}',
@@ -109,7 +111,7 @@ def test_same_epoch_replacement_follows_write_order_not_artifact_id() -> None:
         "deliver",
         1,
     )
-    later = ArtifactRow(
+    later = StoredArtifact(
         ArtifactKind.ASSET,
         "delivery-pr/acme/one/4",
         '{"repo":"acme/one","number":4,"url":"http://forge/acme/one/pull/4"}',

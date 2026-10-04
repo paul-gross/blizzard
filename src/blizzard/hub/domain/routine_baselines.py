@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.ids import Id
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.routines import Routine
 
 
+@dto
 @dataclass(frozen=True)
 class RepoLandings:
     """One repo's baseline revision and how much has landed against it since —
@@ -25,6 +27,7 @@ class RepoLandings:
     landed_since: int
 
 
+@dto
 @dataclass(frozen=True)
 class RoutineBaseline:
     """One (routine, scope) pair's newest finding set."""

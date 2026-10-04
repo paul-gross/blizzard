@@ -10,8 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
-from blizzard.hub.domain.tracing.facts import MigrationRecord, StepFacts
+from blizzard.hub.domain.tracing.facts import StepFacts, TracedMigration
 from blizzard.hub.domain.work import MigrationFact, MigrationSource
 
 # Movement kinds rank as ``ChunkFacts.latest_movement`` ranks them on an exact tie.
@@ -23,6 +24,7 @@ _RESTART_RANK = 2
 _BEGINNING = datetime.min.replace(tzinfo=UTC)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Arrival:
     """One arrival of the chunk at a node; the implicit entry placement has rank ``-1``."""
@@ -38,6 +40,7 @@ class Arrival:
         return (self.recorded_at, self.epoch, self.rank)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Position:
     """A chunk's graph and node at an instant, and which arrival at that node's name it is."""
@@ -69,7 +72,7 @@ def _landed(facts: StepFacts, migration_from: str | None, from_graph_id: str, to
     return MigrationFact.landing_node(_graph(facts, to_graph_id), from_name)
 
 
-def _movement_migrations(facts: StepFacts) -> tuple[MigrationRecord, ...]:
+def _movement_migrations(facts: StepFacts) -> tuple[TracedMigration, ...]:
     """The migrations that arrive on their own — a restart-sourced one is folded into its restart row."""
     return tuple(m for m in facts.migrations if m.source is not MigrationSource.RESTART)
 

@@ -11,6 +11,7 @@ import subprocess
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 
@@ -21,6 +22,7 @@ _log = get_logger("blizzard.runner.checks")
 _TAIL_MAX_CHARS = 4000
 
 
+@domain_model
 @dataclass(frozen=True)
 class CheckOutput:
     """A check's combined stdout+stderr, plus whatever ``note`` the caller appends to it."""

@@ -13,11 +13,11 @@ from sqlalchemy import Select, func, select
 
 from blizzard.hub.domain.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.analytics.queries import (
-    CountRow,
     EventPage,
     EventQueryCriteria,
-    EventRecord,
     IReadAnalyticsEventQueries,
+    KeyedCount,
+    QueriedEvent,
 )
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
@@ -108,8 +108,8 @@ def _counts_by_node_stmt(criteria: EventQueryCriteria) -> Select[Any]:
     return stmt.order_by(func.count().desc(), t.c.node_id.asc())
 
 
-def _to_record(row: Any) -> EventRecord:
-    return EventRecord(
+def _to_record(row: Any) -> QueriedEvent:
+    return QueriedEvent(
         id=row.id,
         kind=row.kind,
         subject=row.subject,
@@ -145,27 +145,27 @@ class AnalyticsEventQueryStore:
         next_cursor = encode_cursor(page_rows[-1].id) if len(rows) > limit else None
         return EventPage(events=[_to_record(row) for row in page_rows], next_cursor=next_cursor)
 
-    def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_file(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         return self._counts(criteria, group_col=s.transcript_events.c.subject, kind=KIND_FILE_READ)
 
-    def counts_by_skill(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_skill(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         return self._counts(criteria, group_col=s.transcript_events.c.subject, kind=KIND_SKILL_INVOCATION)
 
-    def counts_by_agent_type(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_agent_type(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         return self._counts(criteria, group_col=s.transcript_events.c.agent_type, kind=None)
 
-    def counts_by_node(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_node(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         with self._store.read("counts_by_node") as conn:
             rows = conn.execute(_counts_by_node_stmt(criteria)).all()
         return [
-            CountRow(key=row.key, count=row.occurrences, graph_name=row.graph_name, node_name=row.node_name)
+            KeyedCount(key=row.key, count=row.occurrences, graph_name=row.graph_name, node_name=row.node_name)
             for row in rows
         ]
 
-    def _counts(self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> list[CountRow]:
+    def _counts(self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> list[KeyedCount]:
         with self._store.read("counts") as conn:
             rows = conn.execute(_counts_stmt(criteria, group_col=group_col, kind=kind)).all()
-        return [CountRow(key=row.key, count=row.occurrences) for row in rows]
+        return [KeyedCount(key=row.key, count=row.occurrences) for row in rows]
 
 
 def _conforms_analytics_event_query_store(x: AnalyticsEventQueryStore) -> IReadAnalyticsEventQueries:

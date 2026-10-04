@@ -21,8 +21,8 @@ from blizzard.hub.domain.registry import (
     RunnerCapability,
     RunnerLiveness,
     RunnerRegistration,
-    SubscriptionUsageMissRecord,
-    SubscriptionUsageRecord,
+    SubscriptionUsageMiss,
+    SubscriptionUsageSample,
 )
 from tests.support import assert_utc_iso
 
@@ -98,20 +98,20 @@ def test_every_renders_multiple_distinct_healthy_subscriptions() -> None:
     assert {v.name for v in views} == {"Anthropic", "OpenAI"}
 
 
-def _record(slug: str, sampled_at: datetime, *, name: str | None = None) -> SubscriptionUsageRecord:
-    return SubscriptionUsageRecord(slug=slug, name=name or slug.title(), sampled_at=sampled_at, windows=(_WINDOW,))
+def _record(slug: str, sampled_at: datetime, *, name: str | None = None) -> SubscriptionUsageSample:
+    return SubscriptionUsageSample(slug=slug, name=name or slug.title(), sampled_at=sampled_at, windows=(_WINDOW,))
 
 
 def _miss(
     slug: str, missed_at: datetime, *, name: str | None = None, reason: str = CREDENTIAL_LAPSED_CONDITION
-) -> SubscriptionUsageMissRecord:
-    return SubscriptionUsageMissRecord(slug=slug, name=name or slug.title(), missed_at=missed_at, reason=reason)
+) -> SubscriptionUsageMiss:
+    return SubscriptionUsageMiss(slug=slug, name=name or slug.title(), missed_at=missed_at, reason=reason)
 
 
 def _registration(
     *,
-    records: tuple[SubscriptionUsageRecord, ...] = (),
-    misses: tuple[SubscriptionUsageMissRecord, ...] = (),
+    records: tuple[SubscriptionUsageSample, ...] = (),
+    misses: tuple[SubscriptionUsageMiss, ...] = (),
     roster: tuple[DeclaredSubscription, ...] | None = None,
 ) -> RunnerRegistration:
     return RunnerRegistration(

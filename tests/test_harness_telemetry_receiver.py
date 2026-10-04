@@ -30,7 +30,7 @@ from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.tracing.receiver import (
     MAX_ATTRIBUTES,
     MAX_STRING_CHARS,
@@ -51,8 +51,8 @@ _ENCODINGS = [
 ]
 
 
-def _lease() -> LeaseRecord:
-    return LeaseRecord(
+def _lease() -> Lease:
+    return Lease(
         lease_id="lease_1",
         chunk_id="ch_1",
         graph_id="gr_1",

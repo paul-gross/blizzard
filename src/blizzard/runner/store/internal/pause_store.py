@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.pause import IWritePauseRepository, PauseParkRecord
+from blizzard.runner.domain.pause import IWritePauseRepository, PausePark
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import OPEN_PAUSE_PARK, PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import (
@@ -61,7 +61,7 @@ class PauseStore:
     def pause_parked_lease_ids(self) -> set[str]:
         return {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
 
-    def open_pause_parks(self) -> dict[str, PauseParkRecord]:
+    def open_pause_parks(self) -> dict[str, PausePark]:
         rows = self._store.all(
             select(
                 pause_parks.c.lease_id,
@@ -72,9 +72,9 @@ class PauseStore:
             .where(OPEN_PAUSE_PARK.clause)
             .order_by(pause_parks.c.id)
         )
-        parks: dict[str, PauseParkRecord] = {}
+        parks: dict[str, PausePark] = {}
         for r in rows:  # ascending id: a lease's newest open park overwrites an earlier re-park's
-            parks[str(r.lease_id)] = PauseParkRecord(
+            parks[str(r.lease_id)] = PausePark(
                 lease_id=str(r.lease_id),
                 chunk_id=str(r.chunk_id),
                 parked_at=r.parked_at,

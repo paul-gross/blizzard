@@ -10,11 +10,11 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.runner.domain.checks import CheckResultRecord
-from blizzard.runner.domain.elicitation import ElicitationRecord
-from blizzard.runner.domain.leases import LeaseRecord, as_utc
+from blizzard.runner.domain.checks import ExecutedCheck
+from blizzard.runner.domain.elicitation import PendingElicitation
+from blizzard.runner.domain.leases import Lease, as_utc
 from blizzard.runner.domain.leases.closure import FAILED
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -79,16 +79,16 @@ _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion b
 ELICITATION_STALENESS_THRESHOLD = timedelta(minutes=15)
 
 
-def _elicitation_stale(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+def _elicitation_stale(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
     return ctx.clock.now() - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD
 
 
-def _elicitation_alive(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+def _elicitation_alive(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
     pid, start_time = elicitation.pid, elicitation.process_start_time or ""
     return pid is not None and ctx.process.is_alive(pid, start_time)
 
 
-def elicitation_still_pending(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+def elicitation_still_pending(ctx: LoopContext, elicitation: PendingElicitation) -> bool:
     """Read-only mirror of `Judgement.collect`'s own early-return condition, for a caller that
     wants to know whether `collect` would trivially early-return WITHOUT paying for a
     `Judgement` — the hub envelope fetch and binding read `Judgement.of` unconditionally
@@ -108,12 +108,12 @@ class Judgement:
     run, a verdict elicited from the dead session, and the completion buffered."""
 
     ctx: LoopContext
-    lease: LeaseRecord
+    lease: Lease
     envelope: NodeEnvelope
-    bindings: list[EnvBindingRecord]
+    bindings: list[EnvBinding]
 
     @classmethod
-    def of(cls, ctx: LoopContext, lease: LeaseRecord) -> Judgement | None:
+    def of(cls, ctx: LoopContext, lease: Lease) -> Judgement | None:
         """This exit's judgement, or ``None`` when there is nothing to judge this tick — no
         bound environment, or a hub that could not hand over the envelope to judge against."""
         bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
@@ -187,7 +187,7 @@ class Judgement:
 
         self._launch()
 
-    def collect(self, elicitation: ElicitationRecord) -> None:
+    def collect(self, elicitation: PendingElicitation) -> None:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
         reply back and continue exactly where a launch's own reply would have.
 
@@ -274,7 +274,7 @@ class Judgement:
         self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
         self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
 
-    def _lost(self, elicitation: ElicitationRecord) -> None:
+    def _lost(self, elicitation: PendingElicitation) -> None:
         """The elicitation's process exited without writing anything usable. Relaunch —
         `collect` has already checked staleness unconditionally above, so reaching here means
         this attempt is still under the bound.
@@ -296,7 +296,7 @@ class Judgement:
         )
         self._relaunch(elicitation)
 
-    def _relaunch(self, elicitation: ElicitationRecord) -> None:
+    def _relaunch(self, elicitation: PendingElicitation) -> None:
         """Re-launch a lost elicitation into a fresh output file (never a second document
         appended to the lost attempt's own file) and record-before-launch as the first launch
         does — the narrow gap between the two is a self-healing accepted loss (no window
@@ -309,7 +309,7 @@ class Judgement:
         self.ctx.stores.elicitations.record_elicitation_relaunch(lease.lease_id, lease.epoch, output_path=output_path)
         self._elicit(output_path)
 
-    def checks(self) -> list[CheckResultRecord]:
+    def checks(self) -> list[ExecutedCheck]:
         """Run the node's ``checks:`` at worker exit, or read the results back.
 
         Rows are recorded before the marker, which is what makes them exactly-once across a
@@ -332,10 +332,10 @@ class Judgement:
         workdir = self.bindings[0].workdir
         cwd = os.path.join(workdir, node.checks_cwd) if node.checks_cwd else workdir
         timeout = node.checks_timeout or DEFAULT_CHECK_TIMEOUT
-        results: list[CheckResultRecord] = []
+        results: list[ExecutedCheck] = []
         for command in node.checks:
             outcome = self.ctx.check_runner.run(command, cwd, timeout)
-            results.append(CheckResultRecord(command=command, passed=outcome.passed, output_tail=outcome.output_tail))
+            results.append(ExecutedCheck(command=command, passed=outcome.passed, output_tail=outcome.output_tail))
         # Rows first, then the marker — what `runner:checks-recorded-when-marked` rests on.
         self.ctx.stores.checks.record_check_results(
             lease_id=lease.lease_id,
@@ -478,7 +478,7 @@ class Judgement:
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(choice, checks, artifacts)
 
-    def _gate_broken(self, choice: str, checks: list[CheckResultRecord]) -> bool:
+    def _gate_broken(self, choice: str, checks: list[ExecutedCheck]) -> bool:
         """The checks gate, evaluated BEFORE the nudge so it judges the exact
         checks the worker was shown — gate and worker can never diverge on "the tree"."""
         selected = next((c for c in self.envelope.node.choices if c.name == choice), None)
@@ -509,9 +509,7 @@ class Judgement:
         OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
 
-    def _buffer_completion(
-        self, choice: str, checks: list[CheckResultRecord], artifacts: list[SubmittedArtifact]
-    ) -> None:
+    def _buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[SubmittedArtifact]) -> None:
         """One atomic, epoch-fenced write. The entry names the lease, so ADVANCE skips it
         until the flush closes it."""
         lease = self.lease

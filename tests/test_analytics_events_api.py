@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
+from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, event_criteria, ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.pagination import encode_cursor
@@ -321,7 +321,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     """The batch boundary is the stream's only moving part, and the default 500 puts it
     out of reach of any fixture — so the body is served here one event per batch."""
     hub, token, _chunk_id = _seeded_hub(tmp_path)
-    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria()
+    criteria = event_criteria(EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None))
 
     body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
     lines = [json.loads(line) for line in body.splitlines()]

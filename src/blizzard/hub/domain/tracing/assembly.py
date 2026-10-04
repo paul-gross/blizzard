@@ -2,7 +2,7 @@
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace, §Span events,
 §Links, §Status, §Attributes, §GenAI usage and §What never leaves. Pure: a :class:`StepFacts` and a closed
-:class:`NodeStep` in, an ordered tuple of :class:`SpanRecord` out — root first — with no clock, env read or I/O.
+:class:`NodeStep` in, an ordered tuple of :class:`FinishedSpan` out — root first — with no clock, env read or I/O.
 Every dimension and measure is read off the step's :class:`StepSummary`; what stays here is span-shaped."""
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, chunk_span_id, step_root
 from blizzard.foundation.trace_spans import (
     AttributeValue,
-    EventRecord,
-    LinkRecord,
-    SpanRecord,
+    FinishedSpan,
+    SpanEvent,
+    SpanLink,
     SpanStatus,
 )
 from blizzard.hub.domain.tracing import attributes as attr
@@ -98,7 +98,7 @@ def _measures(summary: StepSummary) -> dict[str, AttributeValue]:
     return {**step_usage(summary), **step_waits(summary)}
 
 
-def _invocation(row: UsageFact, at: datetime) -> EventRecord:
+def _invocation(row: UsageFact, at: datetime) -> SpanEvent:
     attrs: dict[str, AttributeValue] = {
         shared.INVOCATION_KIND: row.kind,
         shared.GEN_AI_RESPONSE_MODEL: row.model,
@@ -116,34 +116,34 @@ def _invocation(row: UsageFact, at: datetime) -> EventRecord:
     if row.cost_usd is not None or row.estimated_cost_usd is not None:
         attrs[shared.INVOCATION_COST_USD] = invocation_cost_usd(row)
         attrs[shared.INVOCATION_COST_ESTIMATED] = row.estimated_cost_usd is not None
-    return EventRecord(attr.EVENT_INVOCATION, at, attrs)
+    return SpanEvent(attr.EVENT_INVOCATION, at, attrs)
 
 
-def _events(facts: StepFacts, step: NodeStep, summary: StepSummary) -> tuple[EventRecord, ...]:
+def _events(facts: StepFacts, step: NodeStep, summary: StepSummary) -> tuple[SpanEvent, ...]:
     """Root events, each clamped to the step's end. Hub steps match polls by node and window, never by epoch."""
     end = summary.ended_at
     events = [_invocation(u, min(u.recorded_at, end)) for u in summary.usage]
     if step.kind is StepKind.HUB:
         node_id = step.position.node_id
         events += [
-            EventRecord(attr.EVENT_HUB_POLL, min(p.polled_at, end))
+            SpanEvent(attr.EVENT_HUB_POLL, min(p.polled_at, end))
             for p in facts.hub_polls
             if p.node_id == node_id and step.start <= p.polled_at <= end
         ]
     bounce = next((b for b in facts.bounces if b.epoch == step.epoch), None)
     if bounce is not None and step.kind is not StepKind.GATE:
-        events.append(EventRecord(attr.EVENT_BOUNCE, min(bounce.recorded_at, end), {attr.BOUNCE_CAUSE: bounce.cause}))
+        events.append(SpanEvent(attr.EVENT_BOUNCE, min(bounce.recorded_at, end), {attr.BOUNCE_CAUSE: bounce.cause}))
     return tuple(sorted(events, key=lambda e: e.time))
 
 
-def _child(step: NodeStep, parent: SpanRecord, dims: dict[str, AttributeValue], interval: Interval) -> SpanRecord:
+def _child(step: NodeStep, parent: FinishedSpan, dims: dict[str, AttributeValue], interval: Interval) -> FinishedSpan:
     role, name, _ = _ROLES[interval.kind]
     extra: dict[str, AttributeValue] = {}
     if interval.kind is IntervalKind.ASK:
         extra[attr.ASK_ANSWERED] = bool(interval.answered)
         if interval.clock_skew:
             extra[attr.CLOCK_SKEW] = True
-    return SpanRecord(
+    return FinishedSpan(
         context=DerivedContext.of(step.key, role, interval.discriminator),
         parent_span_id=parent.context.span_id,
         name=name,
@@ -170,15 +170,15 @@ def _link_reason(facts: StepFacts, step: NodeStep, previous: NodeStep) -> str:
     return "next"
 
 
-def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[LinkRecord, ...]:
+def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[SpanLink, ...]:
     index = next((i for i, s in enumerate(steps) if s.key == step.key), None)
     if not index:
         return ()
     previous = steps[index - 1]
-    return (LinkRecord(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
+    return (SpanLink(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
 
 
-def assemble_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[SpanRecord, ...]:
+def assemble_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[FinishedSpan, ...]:
     """The finished spans of one closed step of ``steps`` — the chunk's identified steps — root first.
     An open step is refused: only closed steps are told."""
     if step.close is None:
@@ -186,7 +186,7 @@ def assemble_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...])
     summary = summarize_step(facts, step, steps)
     dims = step_dimensions(summary)
     gate = step.kind is StepKind.GATE
-    root = SpanRecord(
+    root = FinishedSpan(
         context=step_root(step.key),
         parent_span_id=chunk_span_id(facts.chunk_id),
         name=f"{'gate' if gate else 'step'} {summary.node_name}",

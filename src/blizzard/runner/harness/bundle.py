@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.config import HARNESS_CONFIG_DIRNAME, ConfigError
 
 SNAPSHOTS_DIRNAME = "snapshots"
@@ -35,6 +36,7 @@ class HarnessBundleError(ConfigError):
         self.cause = cause
 
 
+@domain_model
 @dataclass(frozen=True)
 class EntryPoint:
     """One top-level name a harness directory may hold: a JSON-object file or a directory.
@@ -47,6 +49,7 @@ class EntryPoint:
     companions: Callable[[Mapping[str, Any]], tuple[str, ...]] | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class HarnessLayout:
     """One harness's slice of the bundle: its directory name and recognized entry points."""
@@ -57,6 +60,7 @@ class HarnessLayout:
     compose: Callable[[HarnessComposition], None] | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessComposition:
     """What a layout's compose hook is given: the staged directory it may rewrite and the
@@ -66,6 +70,7 @@ class HarnessComposition:
     source_dir: Path
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessSource:
     """One harness directory found in the bundle and where its snapshot copy lives."""
@@ -76,6 +81,7 @@ class HarnessSource:
     entry_points: tuple[str, ...]
 
 
+@dto
 @dataclass(frozen=True)
 class BundleSnapshot:
     """The facts of a loaded bundle — names and paths only, never file contents."""
@@ -89,6 +95,7 @@ class BundleSnapshot:
         return f"harness config bundle {self.source_dir} -> snapshot {self.path} ({found or 'no harness directories'})"
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Plan:
     """A validated bundle: each harness's source dir, entry points present, and files to copy."""

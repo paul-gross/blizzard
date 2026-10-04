@@ -12,7 +12,8 @@ from collections import OrderedDict
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile, Record
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile, TranscriptEntry
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
     TranscriptBatch,
@@ -39,6 +40,7 @@ _CONTEXT_WIDEN = 8
 _RESOLVED_PATH_CACHE_MAX_ENTRIES = 2048
 
 
+@dto
 @dataclass(frozen=True)
 class Position:
     """A decoded read cursor: the main file's byte offset, plus one per known sidecar."""
@@ -75,6 +77,7 @@ class Position:
         return TranscriptPosition(token=json.dumps({"main": self.main, "sidecars": self.sidecars}, sort_keys=True))
 
 
+@domain_model
 @dataclass(frozen=True)
 class FileRead:
     """One file's whole lines, however far this call got, and how it stopped."""
@@ -378,7 +381,7 @@ class ClaudeCodeTranscriptSource:
             return None
 
     def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        """The last **main-chain** turn's :attr:`Record.context_tokens`, or ``None``.
+        """The last **main-chain** turn's :attr:`TranscriptEntry.context_tokens`, or ``None``.
 
         Subagents are excluded because a subagent's context never returns to the parent — only
         its closing report does — so counting it overstates what a resume pays for."""
@@ -416,7 +419,7 @@ class ClaudeCodeTranscriptSource:
             lines = lines[1:]  # a mid-file seek can land mid-line — drop the fragment
         # A record measuring nothing yields None (an API-error turn's all-zero `usage`, which
         # 1.3% of real sessions END on), so the walk continues rather than accepting it.
-        for record in reversed(Record.parse(lines)):
+        for record in reversed(TranscriptEntry.parse(lines)):
             # `is_sidechain` is the pre-sidecar shape's marker: current Claude Code writes a
             # subagent to its own file under `<session>/subagents/`, which this never opens.
             if record.type != "assistant" or record.is_sidechain:

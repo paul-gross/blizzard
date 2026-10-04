@@ -35,9 +35,9 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.work import (
     Chunk,
+    HubWorkItem,
     IWriteWorkItemRepository,
     WorkItemAuthor,
-    WorkItemRecord,
     WorkRef,
 )
 
@@ -155,9 +155,9 @@ class _FakeItems:
         self.next_ref += 1
         return ref
 
-    def create_run_with_chunk(self, **kwargs: Any) -> WorkItemRecord:
+    def create_run_with_chunk(self, **kwargs: Any) -> HubWorkItem:
         self.calls.append(kwargs)
-        record = WorkItemRecord(
+        record = HubWorkItem(
             work_item_id="wi_1",
             source=kwargs["pointer"].source,
             ref=kwargs["pointer"].ref,
@@ -234,7 +234,7 @@ class _RetiringItems(_FakeItems):
 
     routines: _FakeRoutines = field(default_factory=_FakeRoutines)
 
-    def create_run_with_chunk(self, **kwargs: Any) -> WorkItemRecord:
+    def create_run_with_chunk(self, **kwargs: Any) -> HubWorkItem:
         self.routines.retired.add(_ROUTINE.routine_id)
         return super().create_run_with_chunk(**kwargs)
 

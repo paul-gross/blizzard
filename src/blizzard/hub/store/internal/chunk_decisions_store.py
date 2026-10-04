@@ -16,11 +16,11 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.proposals import WorkItemProposalRow
-from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.work import DecisionChoice, DocketEntry, GateDecision
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -48,12 +48,12 @@ class ChunkDecisionsStore:
         self._store = store
         self._clock = clock
 
-    def get_decision(self, decision_id: str) -> DecisionRow | None:
+    def get_decision(self, decision_id: str) -> GateDecision | None:
         with self._store.read("get_decision") as conn:
             row = conn.execute(select(s.decisions).where(s.decisions.c.decision_id == decision_id)).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
-    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
+    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> GateDecision | None:
         with self._store.read("find_decision") as conn:
             row = conn.execute(
                 select(s.decisions).where(
@@ -64,7 +64,7 @@ class ChunkDecisionsStore:
             ).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
-    def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
+    def decision_for_chunk(self, chunk_id: str) -> GateDecision | None:
         """The newest not-yet-transitioned decision is live — filtered in SQL via
         :meth:`_not_closed_clause`, so only the one surviving row (if any) ever gets
         hydrated."""
@@ -152,7 +152,7 @@ class ChunkDecisionsStore:
             closed |= {r.decision_id for r in rows}
         return closed
 
-    def list_open_decisions(self) -> list[DecisionRow]:
+    def list_open_decisions(self) -> list[GateDecision]:
         """Unresolved (``resolved_choice is None``) filtered in SQL via a ``NOT EXISTS``
         against ``decision_resolutions``, then hydrated in one batched pass through
         :meth:`_hydrate`."""
@@ -235,8 +235,8 @@ class ChunkDecisionsStore:
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         imposed_by_runner_id: str | None,
     ) -> FenceRefusal | None:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
@@ -310,14 +310,14 @@ class ChunkDecisionsStore:
                     pass
             return True
 
-    def _decision_row(self, conn: Connection, row) -> DecisionRow:  # type: ignore[no-untyped-def]
+    def _decision_row(self, conn: Connection, row) -> GateDecision:  # type: ignore[no-untyped-def]
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         transitioned = row.decision_id in self._decision_closure_ids(conn, [row.decision_id])
         return self._build_row(row, resolution, transitioned, self._pending_proposals(conn, row.chunk_id))
 
-    def _hydrate(self, conn: Connection, rows: Sequence) -> list[DecisionRow]:  # type: ignore[no-untyped-def]
+    def _hydrate(self, conn: Connection, rows: Sequence) -> list[GateDecision]:  # type: ignore[no-untyped-def]
         """``rows``' resolution/closure/docket state, each read batched once across the
         whole list rather than once per row — :meth:`list_open_decisions`'s own
         hydration, sharing :meth:`_build_row`'s assembly with the single-row
@@ -351,12 +351,12 @@ class ChunkDecisionsStore:
         ]
 
     @staticmethod
-    def _build_row(row, resolution, transitioned: bool, docket: list[DocketEntry]) -> DecisionRow:  # type: ignore[no-untyped-def]
+    def _build_row(row, resolution, transitioned: bool, docket: list[DocketEntry]) -> GateDecision:  # type: ignore[no-untyped-def]
         """The one ``decisions`` row + resolution + transitioned flag + docket ->
-        :class:`DecisionRow` assembly, shared by :meth:`_decision_row` (one row) and
+        :class:`GateDecision` assembly, shared by :meth:`_decision_row` (one row) and
         :meth:`_hydrate` (batched) so neither keeps its own copy of the shape."""
         choices = [DecisionChoice(name=c["name"], description=c["description"]) for c in json.loads(row.choices)]
-        return DecisionRow(
+        return GateDecision(
             decision_id=row.decision_id,
             chunk_id=row.chunk_id,
             node_id=row.node_id,

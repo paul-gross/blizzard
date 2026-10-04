@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import dto
 
+
+@dto
 @dataclass(frozen=True)
 class PreambleFingerprint:
     """A digest of the two *standing* preamble layers a session was last sent.

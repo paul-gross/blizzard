@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.config import KNOWN_WORK_SOURCE_PROVIDERS, RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.config.changes import ConfigChange, FieldChange
 from blizzard.hub.domain.edit import UNSET, UnsetType
@@ -66,6 +67,7 @@ class BuiltInWorkSource(Exception):
         super().__init__(f"work source {RESERVED_HUB_SOURCE_NAME} is built in and cannot be changed")
 
 
+@dto
 @dataclass(frozen=True)
 class WorkSourceFields:
     """The mutable fields of a work source, by wire name."""
@@ -78,8 +80,9 @@ class WorkSourceFields:
     secret: str | None
 
 
+@dto
 @dataclass(frozen=True)
-class WorkSourceRecord:
+class ConfiguredWorkSource:
     """A stored work source. ``retired`` derives from the newest lifecycle fact."""
 
     name: str
@@ -90,6 +93,7 @@ class WorkSourceRecord:
     retired: bool = False
 
 
+@dto
 @dataclass(frozen=True)
 class WorkSourceEdit:
     """A sparse edit: :data:`UNSET` leaves a field, ``None`` clears a nullable one."""
@@ -154,13 +158,13 @@ def diff(old: WorkSourceFields | None, new: WorkSourceFields) -> tuple[FieldChan
 class IReadWorkSourceRepository(Protocol):
     """Work-source reads. Controllers depend on this variant."""
 
-    def get(self, name: str) -> WorkSourceRecord | None: ...
+    def get(self, name: str) -> ConfiguredWorkSource | None: ...
 
-    def get_many(self, names: list[str]) -> dict[str, WorkSourceRecord]:
+    def get_many(self, names: list[str]) -> dict[str, ConfiguredWorkSource]:
         """Every named source that exists, keyed by name (``bzh:bulk-reconstitution``)."""
         ...
 
-    def list_all(self, *, include_retired: bool) -> list[WorkSourceRecord]:
+    def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
         """Ordered by name; retired sources only when ``include_retired``."""
         ...
 
@@ -169,26 +173,26 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
     """Work-source writes. Only :class:`ConfigAuthoring` depends on this variant; each
     method commits ``change`` in the same transaction as the record write."""
 
-    def create(self, record: WorkSourceRecord, *, change: ConfigChange) -> WorkSourceRecord:
+    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
         """Insert. :class:`WorkSourceNameTaken` / :class:`WorkSourceLocatorTaken` on a
         collision; :class:`WorkSourceSecretUnavailable` when the secret is missing or retired."""
         ...
 
-    def update(self, record: WorkSourceRecord, *, from_revision: int, change: ConfigChange) -> WorkSourceRecord:
+    def update(self, record: ConfiguredWorkSource, *, from_revision: int, change: ConfigChange) -> ConfiguredWorkSource:
         """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
         :class:`ConfigRevisionConflict` when the stored revision has moved."""
         ...
 
     def record_lifecycle(
         self,
-        record: WorkSourceRecord,
+        record: ConfiguredWorkSource,
         *,
         retired: bool,
         from_revision: int,
         at: datetime,
         by: str,
         change: ConfigChange,
-    ) -> WorkSourceRecord:
+    ) -> ConfiguredWorkSource:
         """Append the lifecycle fact and move the revision to ``record.revision``, as one
         compare-and-set on ``from_revision``. Enabling re-checks the secret."""
         ...

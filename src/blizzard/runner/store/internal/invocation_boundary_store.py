@@ -8,8 +8,8 @@ from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.invocation_boundaries import (
+    InvocationBoundary,
     InvocationBoundaryKind,
-    InvocationBoundaryRecord,
     InvocationBoundaryStart,
     IWriteInvocationBoundaryRepository,
 )
@@ -25,7 +25,7 @@ class InvocationBoundaryStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundaryRecord | None:
+    def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundary | None:
         rows = self._store.all(
             select(invocation_boundaries).where(
                 and_(
@@ -39,7 +39,7 @@ class InvocationBoundaryStore:
             return None
         return self._row_to_boundary(rows[0])
 
-    def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
+    def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundary]:
         rows = self._store.all(
             select(invocation_boundaries)
             .where(and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None)))
@@ -182,8 +182,8 @@ class InvocationBoundaryStore:
         _log.info("invocation boundaries closed", lease_id=lease_id, reason=reason)
 
     @staticmethod
-    def _row_to_boundary(r) -> InvocationBoundaryRecord:  # type: ignore[no-untyped-def]
-        return InvocationBoundaryRecord(
+    def _row_to_boundary(r) -> InvocationBoundary:  # type: ignore[no-untyped-def]
+        return InvocationBoundary(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             node_id=str(r.node_id),

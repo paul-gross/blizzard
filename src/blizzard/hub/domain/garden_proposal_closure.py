@@ -14,6 +14,7 @@ from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed
 from blizzard.hub.domain.graph import Graph
@@ -51,6 +52,7 @@ def classify_proposal_count_bucket(
     raise ValueError(f"accepted closure carries no item_outcome: {closure!r}")
 
 
+@domain_model
 @dataclass(frozen=True)
 class GardenProposalClosure:
     """One garden proposal's closing record — a pass or an accept, either way terminal."""
@@ -65,6 +67,7 @@ class GardenProposalClosure:
     ref: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class AcceptedGardenProposal:
     """The result of accepting a garden proposal — the closure record, plus the minted

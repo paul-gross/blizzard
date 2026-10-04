@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.checks import CheckResultRecord
+from blizzard.runner.domain.checks import ExecutedCheck
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -37,7 +37,7 @@ _NOW = datetime(2026, 7, 25, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _prompt(results: list[CheckResultRecord]) -> JudgementPrompt:
+def _prompt(results: list[ExecutedCheck]) -> JudgementPrompt:
     return JudgementPrompt(make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES), results)
 
 
@@ -285,7 +285,7 @@ def test_record_check_results_round_trips_and_is_latest_wins_on_a_rerun(tmp_path
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        results=[CheckResultRecord(command="c1", passed=False, output_tail="red")],
+        results=[ExecutedCheck(command="c1", passed=False, output_tail="red")],
         at=_NOW,
     )
     assert [(r.command, r.passed) for r in store.check_results_for_lease("lease_b", 1)] == [("c1", False)]
@@ -296,7 +296,7 @@ def test_record_check_results_round_trips_and_is_latest_wins_on_a_rerun(tmp_path
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        results=[CheckResultRecord(command="c1", passed=True, output_tail="green")],
+        results=[ExecutedCheck(command="c1", passed=True, output_tail="green")],
         at=_NOW,
     )
     assert [(r.command, r.passed, r.output_tail) for r in store.check_results_for_lease("lease_b", 1)] == [
@@ -320,8 +320,8 @@ def test_checks_ran_marker_is_idempotent(tmp_path: Path) -> None:
 def test_checks_block_renders_pass_and_fail_and_shows_the_tail_only_on_failure() -> None:
     block = _prompt(
         [
-            CheckResultRecord(command="mise run lint", passed=True, output_tail="all good"),
-            CheckResultRecord(command="mise run test", passed=False, output_tail="assert 1 == 2\n1 failed"),
+            ExecutedCheck(command="mise run lint", passed=True, output_tail="all good"),
+            ExecutedCheck(command="mise run test", passed=False, output_tail="assert 1 == 2\n1 failed"),
         ]
     )._checks_block()
     # Harness-inert: every line is `#`-prefixed so a mock harness that execs the prompt

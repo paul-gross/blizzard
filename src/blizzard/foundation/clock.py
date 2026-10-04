@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
+
 
 class IClock(Protocol):
     """The time seam. Every timestamp comes from ``now()``."""
@@ -44,6 +46,7 @@ class SystemMonotonicClock:
         time.sleep(seconds)
 
 
+@domain_model
 @dataclass
 class ManualMonotonicClock:
     """Test monotonic clock — ``sleep`` advances its own reading and records the delay,
@@ -63,6 +66,7 @@ class ManualMonotonicClock:
         self.reading += seconds
 
 
+@domain_model
 @dataclass
 class FixedClock:
     """Test clock — returns a controllable instant that ``advance`` moves."""

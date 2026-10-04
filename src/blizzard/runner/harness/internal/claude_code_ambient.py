@@ -14,6 +14,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.roles import domain_model, dto
+
 BYPASS_PERMISSIONS = "bypassPermissions"
 MANAGED_SETTINGS_PATHS = (Path("/etc/claude-code/managed-settings.json"),)
 
@@ -25,6 +27,7 @@ class SettingsScope(StrEnum):
     LOCAL = "local"
 
 
+@domain_model
 @dataclass(frozen=True)
 class AmbientRule:
     """One forbidden key in one scope; ``applies`` narrows it by the resolved permission mode."""
@@ -44,6 +47,7 @@ class AmbientRule:
         return bool(value)
 
 
+@dto
 @dataclass(frozen=True)
 class AmbientConflict:
     """A forbidden key found in an ambient settings file."""
@@ -56,6 +60,7 @@ class AmbientConflict:
         return f"{self.scope.value} settings {self.path}: {self.key}"
 
 
+@dto
 @dataclass(frozen=True)
 class AmbientSources:
     """Where the settings files live, injected: nothing here reads the daemon's own environment."""

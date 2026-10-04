@@ -7,28 +7,28 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from blizzard.runner.domain.leases import ClosedLeaseRecord, LeaseRecord, NewLease
+    from blizzard.runner.domain.leases import ClosedLease, Lease, NewLease
 
 
 class IReadLeaseRecordRepository(Protocol):
     """Read-only lease-identity queries — mint, closure, and lookups by lease or chunk
     (held by read-path edges)."""
 
-    def list_active_leases(self) -> list[LeaseRecord]:
+    def list_active_leases(self) -> list[Lease]:
         """Leases with no closure fact — the attempts currently in flight."""
         ...
 
     def count_active_leases(self) -> int:
         """How many leases have no closure fact — a scalar probe, never reconstituting
-        every :class:`LeaseRecord` through the lease+context join just to take ``len()``
+        every :class:`Lease` through the lease+context join just to take ``len()``
         of the result (`bzh:bulk-reconstitution`)."""
         ...
 
-    def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def active_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         """The chunk's single active lease, if any (P6: at most one — MAX_AGENTS math)."""
         ...
 
-    def active_lease(self, lease_id: str) -> LeaseRecord | None:
+    def active_lease(self, lease_id: str) -> Lease | None:
         """The lease by id iff it is still active (no closure fact), else ``None``.
 
         The flusher's ack-idempotency check: an already-closed lease means the completion
@@ -36,25 +36,25 @@ class IReadLeaseRecordRepository(Protocol):
         """
         ...
 
-    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def latest_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         """The chunk's most-recently-minted lease, active or closed.
 
         Unlike :meth:`active_lease_for_chunk`, spans closed leases too — but, unlike
         :meth:`latest_lease_with_session_for_chunk`, may name a session-less mint."""
         ...
 
-    def latest_lease_with_session_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+    def latest_lease_with_session_for_chunk(self, chunk_id: str) -> Lease | None:
         """The chunk's most-recently-minted lease that carries a session, active or closed."""
         ...
 
-    def lease(self, lease_id: str) -> LeaseRecord | None:
+    def lease(self, lease_id: str) -> Lease | None:
         """The lease by id, regardless of closure — the transcript read.
 
         Distinct from :meth:`active_lease`: a transcript outlives its lease.
         """
         ...
 
-    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
+    def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         """The most recently closed leases, newest first — the panel's recent-history
         read.
 

@@ -20,7 +20,7 @@ from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump, resolve_record_max_bytes
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
-    TranscriptSegmentLedgerRow,
+    TranscriptSegmentState,
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
@@ -174,7 +174,7 @@ class TranscriptDrain:
         return True
 
     def _render(
-        self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentLedgerRow]
+        self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentState]
     ) -> TranscriptSegmentRecord:
         """A non-final row's ``payload`` already IS the wire body, built by
         :class:`TranscriptPump`. A final marker's is deliberately minimal — every field it
@@ -205,7 +205,7 @@ def _scrub_surrogates(value: Any) -> Any:
     return value
 
 
-def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSegmentRecord:
+def _final_record(seq: int, segment: TranscriptSegmentState) -> TranscriptSegmentRecord:
     record_truncated = segment.truncated_reason is not None or segment.shipping_stopped_reason is not None
     return TranscriptSegmentRecord(
         seq=seq,

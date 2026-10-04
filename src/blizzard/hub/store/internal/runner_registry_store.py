@@ -22,10 +22,10 @@ from blizzard.hub.domain.registry import (
     IWriteRunnerRegistry,
     RunnerCapability,
     RunnerRegistration,
-    SubscriptionUsageMissRecord,
-    SubscriptionUsageRecord,
+    SubscriptionUsageMiss,
+    SubscriptionUsageSample,
 )
-from blizzard.hub.domain.work import ActivityRow
+from blizzard.hub.domain.work import ActivityEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
@@ -111,7 +111,7 @@ class RunnerRegistryStore:
                 self._lifecycle(conn, row.runner_id),
             )
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
         with self._store.read("list_pause_facts_since") as conn:
             fleet_rows = conn.execute(
                 select(s.runner_pause_facts)
@@ -126,7 +126,7 @@ class RunnerRegistryStore:
                 .limit(limit)
             ).all()
         fleet = [
-            ActivityRow(
+            ActivityEntry(
                 type="runner-changed",
                 key=f"runner_pause_facts:{r.id}",
                 at=r.set_at,
@@ -137,7 +137,7 @@ class RunnerRegistryStore:
             for r in fleet_rows
         ]
         local = [
-            ActivityRow(
+            ActivityEntry(
                 type="runner-changed",
                 key=f"runner_local_pause_facts:{r.id}",
                 # `set_at` is the runner-machine's own clock, so a skewed one can float a
@@ -541,7 +541,7 @@ class RunnerRegistryStore:
         retired, retired_at, retired_by = lifecycle
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         subscription_usage = tuple(
-            SubscriptionUsageRecord(
+            SubscriptionUsageSample(
                 slug=slug,
                 name=name,
                 sampled_at=sampled_at,
@@ -550,7 +550,7 @@ class RunnerRegistryStore:
             for slug, name, sampled_at, windows_json in external_usage
         )
         subscription_usage_misses = tuple(
-            SubscriptionUsageMissRecord(slug=slug, name=name, missed_at=missed_at, reason=reason)
+            SubscriptionUsageMiss(slug=slug, name=name, missed_at=missed_at, reason=reason)
             for slug, name, missed_at, reason in external_usage_misses
         )
         capabilities = tuple(

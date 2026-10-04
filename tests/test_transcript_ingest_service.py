@@ -18,11 +18,11 @@ from blizzard.hub.domain.transcripts import (
     REJECTED_RECORD_TOO_LARGE,
     IWriteTranscriptSegments,
     NaturalKeyState,
-    SegmentIndexRow,
-    SegmentRecord,
     SegmentRecordContent,
+    SegmentSummary,
     TranscriptCaps,
     TranscriptIngestService,
+    TranscriptSlice,
 )
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
@@ -40,7 +40,7 @@ def _seed_chunk(hub, chunk_id: str = "ch_1") -> None:  # type: ignore[no-untyped
 
 def _record(
     seq: int, *, turn_range_start: int, turn_range_end: int, final: bool = False, **overrides: object
-) -> tuple[int, SegmentRecord]:
+) -> tuple[int, TranscriptSlice]:
     values: dict[str, object] = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
@@ -57,7 +57,7 @@ def _record(
         "turns_json": f'[{{"index": {turn_range_start}, "kind": "asst", "text": "turn"}}]',
     }
     values.update(overrides)
-    return seq, SegmentRecord(**values)  # type: ignore[arg-type]
+    return seq, TranscriptSlice(**values)  # type: ignore[arg-type]
 
 
 # --- lane idempotence and ordering -------------------------------------------
@@ -327,12 +327,12 @@ class _FakeTranscriptStore:
     store and its migrations."""
 
     def __init__(self) -> None:
-        self.accepted: list[tuple[SegmentRecord, int]] = []
-        self.rejected: list[tuple[SegmentRecord, int, str]] = []
+        self.accepted: list[tuple[TranscriptSlice, int]] = []
+        self.rejected: list[tuple[TranscriptSlice, int, str]] = []
         self.chunk_bytes = 0
         self.runner_bytes = 0
 
-    def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]:
+    def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]:
         raise NotImplementedError
 
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
@@ -364,23 +364,23 @@ class _FakeTranscriptStore:
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int:
         return self.runner_bytes
 
-    def insert_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+    def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         self.accepted.append((record, byte_count))
         self.chunk_bytes += byte_count
         self.runner_bytes += byte_count
 
-    def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+    def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         self.rejected.append((record, byte_count, reason))
         self.runner_bytes += byte_count  # rejected bytes count toward the daily rate only
 
-    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+    def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         key = (record.segment_id, record.turn_range_start)
         self.rejected = [r for r in self.rejected if (r[0].segment_id, r[0].turn_range_start) != key]
         self.accepted.append((record, byte_count))
         self.chunk_bytes += byte_count
         self.runner_bytes += byte_count
 
-    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+    def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         key = (record.segment_id, record.turn_range_start)
         self.rejected = [r for r in self.rejected if (r[0].segment_id, r[0].turn_range_start) != key]
         self.rejected.append((record, byte_count, reason))

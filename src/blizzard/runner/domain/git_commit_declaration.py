@@ -11,14 +11,15 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.roles import dto
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 
 __all__ = [
-    "GitCommitDeclarationRecord",
+    "GitCommitDeclaration",
     "GitCommitDeclarationRejected",
     "GitCommitDeclarationService",
     "GitCommitDeclarationUnknownRepo",
@@ -27,8 +28,9 @@ __all__ = [
 ]
 
 
+@dto
 @dataclass(frozen=True)
-class GitCommitDeclarationRecord:
+class GitCommitDeclaration:
     """A worker's explicit git-commit declaration for one repo in one environment.
 
     Carries no forge: the origin it is verified against is read from the environment's
@@ -43,7 +45,7 @@ class GitCommitDeclarationRecord:
 class IReadGitCommitDeclarationRepository(Protocol):
     """Read-only git-commit declaration queries (held by read-path edges)."""
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
         repo)``, keyed the same way.
 
@@ -116,7 +118,7 @@ class GitCommitDeclarationService:
 
     def declare(
         self,
-        lease: LeaseRecord,
+        lease: Lease,
         *,
         presented_token: str | None,
         repo: str,
@@ -153,7 +155,7 @@ class GitCommitDeclarationService:
         _CP_DECLARE_COMMIT_AFTER_RECORD.reached()
         return resolved_env
 
-    def _resolve_environment(self, lease: LeaseRecord, environment_id: str | None) -> str:
+    def _resolve_environment(self, lease: Lease, environment_id: str | None) -> str:
         """The env this declaration belongs to: the named one (checked against the
         chunk's bindings), or the sole bound one when the worker named none.
 

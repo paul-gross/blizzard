@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.spawn import Environments, Spawner
@@ -26,9 +26,7 @@ class HeldChunk:
     ctx: LoopContext
     chunk_id: str
 
-    def apply(
-        self, outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, bindings: list[EnvBindingRecord]
-    ) -> None:
+    def apply(self, outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, bindings: list[EnvBinding]) -> None:
         if outcome == ApplyOutcome.NEXT and next_envelope is not None:
             Spawner(self.ctx).enter_node(
                 self.chunk_id, next_envelope, Environments(bindings).acquired, via="apply-response"

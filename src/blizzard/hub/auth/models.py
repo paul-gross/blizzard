@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.auth_core import Permission, Role
+from blizzard.foundation.roles import domain_model, dto
 
 
+@domain_model
 @dataclass(frozen=True)
 class User:
     """A hub-local account row."""
@@ -24,6 +26,7 @@ class User:
     created_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class Identity:
     """One linked provider identity — ``(provider_name, subject)`` uniquely names it."""
@@ -35,6 +38,7 @@ class Identity:
     created_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class Session:
     """A resolved session row — ``id_hash`` is the sha256 hex digest of the plaintext
@@ -48,6 +52,7 @@ class Session:
     last_seen_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class ProviderIdentity:
     """What a provider conformer resolves a code exchange to. Lives here,
@@ -60,6 +65,7 @@ class ProviderIdentity:
     email_verified: bool
 
 
+@domain_model
 @dataclass(frozen=True)
 class AuthStateEntry:
     """A single-use ``state`` row — the anti-CSRF/replay token round-tripped
@@ -78,6 +84,7 @@ class AuthStateEntry:
     user_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class AuthFact:
     """One append-only row in ``auth_facts`` — the non-chunk-scoped
@@ -92,6 +99,7 @@ class AuthFact:
     recorded_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class SuperuserBootstrap:
     """The singleton row tracking the currently configured ``auth.superuser`` bootstrap
@@ -103,6 +111,7 @@ class SuperuserBootstrap:
     updated_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``hub/api/auth_session.py``'s

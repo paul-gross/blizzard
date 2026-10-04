@@ -15,8 +15,9 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -28,7 +29,7 @@ from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
     # Deferred: ``runner/stores.py`` composes this module's own Protocol.
-    from blizzard.runner.environments.repository import EnvBindingRecord
+    from blizzard.runner.environments.repository import EnvBinding
     from blizzard.runner.stores import RunnerStores
 
 # What a takeover forwards from the identity env. Nothing else leaves the
@@ -41,18 +42,19 @@ __all__ = [
     "IReadTakeoverRepository",
     "IWriteTakeoverRepository",
     "LiveWorkerConflict",
+    "OpenTakeover",
     "OpenedTakeover",
     "SubmissionPending",
     "TakeoverCloseScope",
     "TakeoverCommand",
     "TakeoverOpenScope",
-    "TakeoverRecord",
     "TakeoverService",
 ]
 
 
+@dto
 @dataclass(frozen=True)
-class TakeoverRecord:
+class OpenTakeover:
     """An open operator takeover — the human-in-session fact.
 
     ``lease_id`` always names the reference lease — active or already closed, never
@@ -76,6 +78,7 @@ class TakeoverRecord:
         return SessionReference(self.harness_id, self.session_id)
 
 
+@dto
 @dataclass(frozen=True)
 class TakeoverOpenScope:
     """The chunk-keyed facts :meth:`TakeoverService.open` reads, resolved at the edge
@@ -85,26 +88,27 @@ class TakeoverOpenScope:
     and the fence-epoch floor."""
 
     chunk_id: str
-    open_takeover: TakeoverRecord | None
-    bindings: list[EnvBindingRecord]
-    active_lease: LeaseRecord | None
-    latest_lease_with_session: LeaseRecord | None
+    open_takeover: OpenTakeover | None
+    bindings: list[EnvBinding]
+    active_lease: Lease | None
+    latest_lease_with_session: Lease | None
     latest_epoch: int
 
 
+@dto
 @dataclass(frozen=True)
 class TakeoverCloseScope:
     """The chunk-keyed fact :meth:`TakeoverService.close` reads, resolved at the edge
     (``bzh:domain-takes-objects``)."""
 
     chunk_id: str
-    open_takeover: TakeoverRecord | None
+    open_takeover: OpenTakeover | None
 
 
 class IReadTakeoverRepository(Protocol):
     """Read-only takeover queries (held by read-path edges)."""
 
-    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+    def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         """The lease by id iff an open takeover names it, regardless of the
         lease's own closure — the worker-authorization resolver's second half, alongside
         :meth:`~blizzard.runner.domain.leases.IReadLeaseRecordRepository.active_lease`. The
@@ -112,7 +116,7 @@ class IReadTakeoverRepository(Protocol):
         reference lease it names, not the lease's own activeness."""
         ...
 
-    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+    def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
         ``takeover_ends`` row for the same ``takeover_id``.
 
@@ -124,7 +128,7 @@ class IReadTakeoverRepository(Protocol):
         whose session the human holds, untouchable until the takeover closes."""
         ...
 
-    def open_takeovers(self) -> list[TakeoverRecord]:
+    def open_takeovers(self) -> list[OpenTakeover]:
         """Every open takeover, across every chunk.
 
         :meth:`open_takeover_for_chunk` widened to the fleet, mirroring
@@ -156,6 +160,7 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         ...
 
 
+@dto
 @dataclass(frozen=True)
 class TakeoverCommand:
     """The ``blizzard runner takeover`` CLI invocation an escalation composes when it can —
@@ -195,6 +200,7 @@ class TakeoverEndedElsewhere(TakeoverError):
     """No open takeover matches the given id — already closed, or never opened."""
 
 
+@dto
 @dataclass(frozen=True)
 class OpenedTakeover:
     """What :meth:`TakeoverService.open` returns — the CLI execs ``command`` verbatim."""
@@ -261,7 +267,7 @@ class TakeoverService:
         ):
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
-        reference: LeaseRecord | None = active if active is not None else scope.latest_lease_with_session
+        reference: Lease | None = active if active is not None else scope.latest_lease_with_session
         if reference is None or reference.session is None:
             raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
         session = reference.session

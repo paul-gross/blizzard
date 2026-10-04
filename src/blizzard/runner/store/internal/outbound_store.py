@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import and_, func, select
 
-from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactRecord
+from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactEntry
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
 
@@ -51,10 +51,10 @@ class OutboundStore:
         rows = self._store.all(stmt)
         return int(rows[0][0]) if rows else 0
 
-    def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
+    def recent_outbound(self, limit: int) -> list[OutboundFactEntry]:
         stmt = select(outbound_buffer).order_by(outbound_buffer.c.seq.desc()).limit(limit)
         return [
-            OutboundFactRecord(
+            OutboundFactEntry(
                 seq=int(r.seq),
                 kind=str(r.kind),
                 chunk_id=str(r.chunk_id) if r.chunk_id is not None else None,

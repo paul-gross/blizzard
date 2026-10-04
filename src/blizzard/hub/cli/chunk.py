@@ -2,32 +2,35 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
 import click
 import httpx
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import ChunkRow, Cost, Listing
+from blizzard.hub.cli.views import ChunkLine, Cost, Listing
 
 
 class ChunkListing(Listing):
     empty = "no chunks"
 
     def line(self, row: Any) -> str:
-        return ChunkRow(row).line()
+        return ChunkLine(row).line()
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkDetail:
     body: dict[str, Any]
 
-    def lines(self):
+    def lines(self) -> Iterator[str]:
         body = self.body
         yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
-        yield f"  node: {ChunkRow(body).node}"
+        yield f"  node: {ChunkLine(body).node}"
         # Both defaults on their own line: `chunk set` can write either, so a text-mode
         # read-back exists for both. `-` is "express no preference", not unknown.
         models = ", ".join(body.get("default_model") or []) or "-"
@@ -59,13 +62,14 @@ def _neighbor_label(neighbor: dict[str, Any]) -> str:
     return f"{neighbor['chunk_id']} ({marker})"
 
 
+@dto
 @dataclass(frozen=True)
 class MigrationIntent:
     chunk_id: str
     body: dict[str, Any]
     cancelled: bool
 
-    def lines(self):
+    def lines(self) -> Iterator[str]:
         if self.cancelled:
             yield f"cleared {self.chunk_id}'s standing migration intent"
             return

@@ -6,7 +6,10 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from blizzard.foundation.roles import domain_model, dto
 
+
+@dto
 @dataclass(frozen=True)
 class Cost:
     """The one CLI cost formatter; markers per docs/deployment/spend.md, renderings pinned by
@@ -34,8 +37,9 @@ class Cost:
         return f"{prefix}${amount:.2f}{suffix}"
 
 
+@dto
 @dataclass(frozen=True)
-class ChunkRow:
+class ChunkLine:
     row: dict[str, Any]
     #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
@@ -52,8 +56,9 @@ class ChunkRow:
         return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
 
 
+@dto
 @dataclass(frozen=True)
-class RunnerRow:
+class RunnerLine:
     row: dict[str, Any]
 
     @property
@@ -86,8 +91,9 @@ class RunnerRow:
         )
 
 
+@dto
 @dataclass(frozen=True)
-class QuestionRow:
+class QuestionLine:
     row: dict[str, Any]
 
     def line(self) -> str:
@@ -96,6 +102,7 @@ class QuestionRow:
         return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
 
 
+@domain_model
 @dataclass(frozen=True)
 class Listing:
     rows: Sequence[Any]
@@ -113,6 +120,7 @@ class Listing:
             yield self.line(row)
 
 
+@dto
 @dataclass(frozen=True)
 class ProposalOrigin:
     """A garden proposal's origin tokens: `origin=` always, `routine=` when named,

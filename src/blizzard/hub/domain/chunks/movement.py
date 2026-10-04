@@ -7,10 +7,10 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.work import MigrationSource
 
 
@@ -46,8 +46,8 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """One node-step's transition and its artifacts and proposals, written atomically
@@ -70,8 +70,8 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,

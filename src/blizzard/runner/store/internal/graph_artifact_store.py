@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.artifacts import GraphArtifactRecord, IWriteGraphArtifactRepository
+from blizzard.runner.domain.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import graph_artifacts
 
@@ -21,20 +21,20 @@ class GraphArtifactStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def graph_artifacts_for_graph(self, graph_id: str) -> list[GraphArtifactRecord]:
+    def graph_artifacts_for_graph(self, graph_id: str) -> list[PinnedGraphArtifact]:
         # Explicit order_by (`bzh:sql-portable`) — authored `artifacts:` position, not insert order.
         rows = self._store.all(
             select(graph_artifacts).where(graph_artifacts.c.graph_id == graph_id).order_by(graph_artifacts.c.ordinal)
         )
         return [
-            GraphArtifactRecord(
+            PinnedGraphArtifact(
                 name=str(r.name), ordinal=int(r.ordinal), kind=ArtifactKind(str(r.kind)), content=str(r.content)
             )
             for r in rows
         ]
 
     def record_graph_artifacts(
-        self, *, graph_id: str, artifacts: list[GraphArtifactRecord], recorded_at: datetime
+        self, *, graph_id: str, artifacts: list[PinnedGraphArtifact], recorded_at: datetime
     ) -> None:
         # A mint declaring nothing writes no row, so the presence check below would never
         # find one and every later lease off that mint would redo the check and re-log it.

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_proof_script import (
     CONFIG_PERMISSION_COMMAND,
@@ -74,6 +75,7 @@ class OpenCodeScratchError(RuntimeError):
     """The disposable scopes or the runner-owned config could not be established."""
 
 
+@dto
 @dataclass(frozen=True)
 class IsolationRoots:
     """Every disposable path one run owns, so no caller re-derives one by string."""
@@ -118,8 +120,9 @@ class IsolationRoots:
 _ISOLATION_FIELDS = tuple(IsolationRoots.__dataclass_fields__)
 
 
+@dto
 @dataclass(frozen=True)
-class RunnerConfig:
+class WrittenRunnerConfig:
     """The written runner-owned config and what the probe must remember about writing it."""
 
     path: Path
@@ -128,7 +131,7 @@ class RunnerConfig:
     evidence: dict[str, object]
 
 
-def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, variant: str) -> RunnerConfig:
+def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, variant: str) -> WrittenRunnerConfig:
     """Write runner-owned config outside the project and conflicting configs inside isolated scopes."""
 
     config_path = roots.runner_config
@@ -267,7 +270,7 @@ def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, var
         "default_permission": "deny",
         "model_tool_user": "same-user-landlock-layer",
     }
-    return RunnerConfig(config_path, (auth_marker, outside_marker), snapshots, evidence)
+    return WrittenRunnerConfig(config_path, (auth_marker, outside_marker), snapshots, evidence)
 
 
 def prepare_isolation(root: Path) -> IsolationRoots:
@@ -386,7 +389,7 @@ __all__ = [
     "USER_CONFIG_SENTINEL",
     "IsolationRoots",
     "OpenCodeScratchError",
-    "RunnerConfig",
+    "WrittenRunnerConfig",
     "child_env",
     "prepare_isolation",
     "provision_disposable_auth",

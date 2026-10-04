@@ -9,6 +9,7 @@ from typing import Any
 import click
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Cost, Listing
@@ -25,8 +26,9 @@ def named_key(row: dict[str, Any], key_field: str = "key") -> str:
     return f"{key} ({name})"
 
 
+@dto
 @dataclass(frozen=True)
-class SpendRow:
+class SpendLine:
     """One grouping key's spend rollup — the key column varies (``key`` for
     node/graph, ``chunk_id`` for the per-chunk dataset), so the caller names it."""
 
@@ -73,14 +75,14 @@ class SpendListing(Listing):
     empty = "no spend rollups"
 
     def line(self, row: Any) -> str:
-        return SpendRow(row).line()
+        return SpendLine(row).line()
 
 
 class ChunkSpendListing(Listing):
     empty = "no chunk spend rollups"
 
     def line(self, row: Any) -> str:
-        return SpendRow(row, key_field="chunk_id").line()
+        return SpendLine(row, key_field="chunk_id").line()
 
 
 class OutcomesListing(Listing):
@@ -322,6 +324,7 @@ _FLAG_NAMES = {
 }
 
 
+@dto
 @dataclass(frozen=True)
 class _Dataset:
     """One ``summary`` choice: its route, the key its envelope carries the rows under,

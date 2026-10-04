@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.analytics.events import (
     CandidacyRead,
     DerivationSignature,
@@ -32,6 +33,7 @@ from blizzard.hub.domain.work import TransitionFact
 _log = get_logger("blizzard.hub.transcript_events")
 
 
+@domain_model
 @dataclass(frozen=True)
 class GraphPins:
     """Per chunk, its transitions and mint pin, pre-resolved once for a whole

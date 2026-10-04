@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.internal.claude_code_section import CLAUDE_CODE_SECTION
 from blizzard.runner.harness.internal.opencode_section import OPENCODE_SECTION
@@ -80,6 +81,7 @@ class IHarnessSectionKind(Protocol):
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessSections:
     """Every binding's parsed section, in catalog order."""
@@ -104,24 +106,27 @@ class HarnessSections:
             raise ConfigError(f"{tables} are {quantity} false; enable at least one")
         return parsed
 
-    def of(self, harness_id: str) -> IHarnessSection:
-        """The section for ``harness_id``; a binding absent here reads as its default section."""
-        for section in self.sections:
-            if section.harness_id == harness_id:
-                return section
-        return next(kind.default() for kind in HARNESS_SECTION_KINDS if kind.harness_id == harness_id)
-
-    def replaced(self, section: IHarnessSection) -> HarnessSections:
-        """These sections with ``section`` standing in for its binding's own."""
-        return HarnessSections(
-            tuple(
-                section if kind.harness_id == section.harness_id else self.of(kind.harness_id)
-                for kind in HARNESS_SECTION_KINDS
-            )
-        )
-
     def __iter__(self) -> Iterator[IHarnessSection]:
-        return iter(self.of(kind.harness_id) for kind in HARNESS_SECTION_KINDS)
+        return iter(section_of(self, kind.harness_id) for kind in HARNESS_SECTION_KINDS)
+
+
+def section_of(sections: HarnessSections, harness_id: str) -> IHarnessSection:
+    """The section for ``harness_id``; a binding absent from ``sections`` reads as its default
+    section."""
+    for section in sections.sections:
+        if section.harness_id == harness_id:
+            return section
+    return next(kind.default() for kind in HARNESS_SECTION_KINDS if kind.harness_id == harness_id)
+
+
+def with_section(sections: HarnessSections, section: IHarnessSection) -> HarnessSections:
+    """``sections`` with ``section`` standing in for its binding's own."""
+    return HarnessSections(
+        tuple(
+            section if kind.harness_id == section.harness_id else section_of(sections, kind.harness_id)
+            for kind in HARNESS_SECTION_KINDS
+        )
+    )
 
 
 def harness_cli_groups() -> dict[str, str]:
@@ -135,4 +140,6 @@ __all__ = [
     "IHarnessSection",
     "IHarnessSectionKind",
     "harness_cli_groups",
+    "section_of",
+    "with_section",
 ]

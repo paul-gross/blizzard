@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 
 # Crockford base32 alphabet (no I, L, O, U) — the canonical ULID encoding.
@@ -45,6 +46,7 @@ GARDEN_PROPOSAL_PREFIX = "gprop"  # a garden proposal — never confused with a 
 DEPENDENCY_EDGE_PREFIX = "dep"  # a chunk_dependencies row
 
 
+@domain_model
 @dataclass(frozen=True)
 class Id:
     """A prefixed ULID — the id *is* the creation record, so an entity storing no

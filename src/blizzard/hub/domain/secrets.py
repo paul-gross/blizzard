@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.config.changes import ConfigChange, RecordRef
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
@@ -79,6 +80,7 @@ class SecretRotationConflict(Exception):
         self.name = name
 
 
+@domain_model
 @dataclass(frozen=True)
 class SecretName:
     """A validated secret name — the only way to obtain one is :meth:`parse`."""
@@ -110,8 +112,9 @@ class SecretValue:
     __str__ = __repr__
 
 
+@dto
 @dataclass(frozen=True)
-class SecretRecord:
+class SecretMetadata:
     """A secret's metadata — never its value or ciphertext."""
 
     name: str
@@ -121,6 +124,7 @@ class SecretRecord:
     created_at: datetime
 
 
+@domain_model
 @dataclass(frozen=True)
 class KeyGeneration:
     """One hub-key generation: its fingerprint id and its 32 bytes of key material."""
@@ -129,6 +133,7 @@ class KeyGeneration:
     material: bytes = field(repr=False)
 
 
+@domain_model
 @dataclass(frozen=True)
 class SealedValue:
     """A value sealed under one key generation for one ``(name, revision)``."""
@@ -138,6 +143,7 @@ class SealedValue:
     nonce: bytes
 
 
+@domain_model
 @dataclass(frozen=True)
 class SealedSecret:
     name: str
@@ -152,13 +158,13 @@ class ISecretCatalog(Protocol):
     """Secret metadata. Controllers depend on this variant; it never yields a
     ciphertext or nonce."""
 
-    def get(self, name: str) -> SecretRecord | None: ...
+    def get(self, name: str) -> SecretMetadata | None: ...
 
-    def get_many(self, names: list[str]) -> dict[str, SecretRecord]:
+    def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
         """Every named secret that exists, keyed by name (``bzh:bulk-reconstitution``)."""
         ...
 
-    def list_all(self) -> list[SecretRecord]: ...
+    def list_all(self) -> list[SecretMetadata]: ...
 
     def is_retired(self, name: str) -> bool:
         """Whether ``name``'s newest lifecycle fact reads retired; ``False`` with none."""
@@ -177,6 +183,7 @@ class ISealedSecretRepository(Protocol):
     def get_sealed(self, name: str) -> SealedSecret | None: ...
 
 
+@dto
 @dataclass(frozen=True)
 class Reseal:
     """One row's value re-sealed under another key generation at the same revision."""
@@ -202,14 +209,14 @@ class IResealSecretRepository(ISealedSecretRepository, Protocol):
 class IWriteSecretRepository(ISecretCatalog, Protocol):
     """Secret writes. Only the domain services below depend on this variant."""
 
-    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretRecord:
+    def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
         """Insert at revision 1 and commit ``change`` with it;
         :class:`SecretAlreadyExists` when the name is taken."""
         ...
 
     def replace(
         self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
-    ) -> SecretRecord:
+    ) -> SecretMetadata:
         """Compare-and-set ``from_revision`` → ``from_revision + 1``, committing ``change``
         with it; :class:`SecretRevisionConflict` when the stored revision has moved."""
         ...

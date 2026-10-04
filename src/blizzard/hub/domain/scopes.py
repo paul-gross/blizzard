@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
 
@@ -21,6 +22,7 @@ class ScopeSlugError(ValueError):
     """A scope slug is empty or outside ``[a-z0-9-]+`` — names the offending value."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class ScopeSlug:
     """A validated scope slug — the only way to obtain one is :meth:`parse`."""
@@ -34,6 +36,7 @@ class ScopeSlug:
         return cls(raw)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Scope:
     slug: str

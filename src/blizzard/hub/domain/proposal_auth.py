@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.graph import Node
 from blizzard.wire.completion import WorkItemProposal
 
 
+@domain_model
 @dataclass(frozen=True)
 class ProposalPolicy:
     """A node's ``proposes_work_items`` policy judged against one submission's proposals —

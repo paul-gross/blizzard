@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifacts import is_valid_system_artifact_name
 
 #: Every packaged document's own extension — stripped to form the artifact's name.
@@ -29,6 +30,7 @@ class SystemArtifactNameInvalid(ValueError):
         self.path = path
 
 
+@domain_model
 @dataclass(frozen=True)
 class SystemArtifactFile:
     """One packaged system artifact on disk. Re-read on every access; nothing is cached."""
@@ -41,6 +43,7 @@ class SystemArtifactFile:
         return self.path.read_text()
 
 
+@domain_model
 @dataclass(frozen=True)
 class PackagedSystemArtifacts:
     """The system-artifact set shipped in this package — one ``.md`` file per name, named

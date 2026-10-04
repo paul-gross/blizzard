@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -23,6 +24,7 @@ from blizzard.wire.fleet import FleetSpendView
 router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
 
 
+@dto
 @dataclass(frozen=True)
 class SpendWindow:
     """One ``GET /api/spend`` request's parsed window; a malformed edge is the 422 it names."""
@@ -33,19 +35,19 @@ class SpendWindow:
     @classmethod
     def of(cls, since: str, until: str | None) -> SpendWindow:
         return cls(
-            cls._instant(since, field="since"),
-            cls._instant(until, field="until") if until is not None else None,
+            _instant(since, field="since"),
+            _instant(until, field="until") if until is not None else None,
         )
 
-    @staticmethod
-    def _instant(value: str, *, field: str) -> datetime:
-        try:
-            return as_utc(datetime.fromisoformat(value))
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"{field} {value!r} is not a valid ISO-8601 instant",
-            ) from exc
+
+def _instant(value: str, *, field: str) -> datetime:
+    try:
+        return as_utc(datetime.fromisoformat(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+        ) from exc
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(FLEET_VIEW))])

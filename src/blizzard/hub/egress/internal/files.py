@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -23,7 +24,7 @@ from blizzard.hub.egress.writer import (
     EgressFailure,
     EgressFailureCause,
     EgressPass,
-    EgressRow,
+    EgressValues,
     EgressWriterSettings,
     FilesWritten,
     ManifestCommitted,
@@ -40,9 +41,10 @@ _NO_HARD_LINKS = {errno.EPERM, errno.ENOTSUP, errno.EXDEV, errno.ENOSYS}
 class RowEncoder(Protocol):
     extension: str
 
-    def encode(self, schema: DatasetSchema, rows: Sequence[EgressRow], out: BinaryIO) -> None: ...
+    def encode(self, schema: DatasetSchema, rows: Sequence[EgressValues], out: BinaryIO) -> None: ...
 
 
+@dto
 @dataclass(frozen=True)
 class _Placed:
     sha256: str
@@ -92,7 +94,7 @@ class DirectoryEgressWriter:
             name = self._name(schema.name, batch.egress_pass, self._encoder.extension)
             path = relative / name
 
-            def body(out: BinaryIO, rows: Sequence[EgressRow] = rows) -> None:
+            def body(out: BinaryIO, rows: Sequence[EgressValues] = rows) -> None:
                 self._encoder.encode(schema, rows, out)
 
             result = self._place(path, body)

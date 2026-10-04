@@ -9,7 +9,7 @@ import pytest
 
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.egress.rows import step_row
-from blizzard.hub.domain.tracing.facts import EpochOwnerRecord, StepFacts
+from blizzard.hub.domain.tracing.facts import StepFacts, TracedEpochOwner
 from blizzard.hub.domain.tracing.steps import NodeStep, StepKind, identify_steps
 from blizzard.hub.domain.tracing.summary import _node_executor, _runner_id, summarize_step
 from tests import trace_fixtures as fx
@@ -78,10 +78,10 @@ def test_a_gate_without_a_runner_reports_its_epochs_latest_owner() -> None:
     facts, step = _gate()
     step = replace(step, runner_id=None)
     owners = (
-        EpochOwnerRecord(step.epoch, "r-early", fx.at(1)),
-        EpochOwnerRecord(step.epoch, "r-late", fx.at(5)),
-        EpochOwnerRecord(step.epoch, "r-middle", fx.at(3)),
-        EpochOwnerRecord(step.epoch + 1, "r-other-epoch", fx.at(9)),
+        TracedEpochOwner(step.epoch, "r-early", fx.at(1)),
+        TracedEpochOwner(step.epoch, "r-late", fx.at(5)),
+        TracedEpochOwner(step.epoch, "r-middle", fx.at(3)),
+        TracedEpochOwner(step.epoch + 1, "r-other-epoch", fx.at(9)),
     )
     assert _runner_id(replace(facts, epoch_owners=owners), step) == "r-late"
 
@@ -89,14 +89,14 @@ def test_a_gate_without_a_runner_reports_its_epochs_latest_owner() -> None:
 def test_a_gate_with_no_owner_of_its_epoch_has_no_runner() -> None:
     facts, step = _gate()
     step = replace(step, runner_id=None)
-    owners = (EpochOwnerRecord(step.epoch + 1, "r-other-epoch", fx.at(9)),)
+    owners = (TracedEpochOwner(step.epoch + 1, "r-other-epoch", fx.at(9)),)
     assert _runner_id(replace(facts, epoch_owners=owners), step) is None
 
 
 def test_a_gate_already_holding_a_runner_keeps_it() -> None:
     facts, step = _gate()
     step = replace(step, runner_id="r-held")
-    owners = (EpochOwnerRecord(step.epoch, "r-owner", fx.at(5)),)
+    owners = (TracedEpochOwner(step.epoch, "r-owner", fx.at(5)),)
     assert _runner_id(replace(facts, epoch_owners=owners), step) == "r-held"
 
 
@@ -104,7 +104,7 @@ def test_a_gate_already_holding_a_runner_keeps_it() -> None:
 def test_a_non_gate_step_passes_its_runner_through(runner: str | None) -> None:
     facts = fx.scenarios()["runner-step"]
     step = replace(_first(facts, StepKind.RUNNER), runner_id=runner)
-    owners = (EpochOwnerRecord(step.epoch, "r-owner", fx.at(50)),)
+    owners = (TracedEpochOwner(step.epoch, "r-owner", fx.at(50)),)
     assert _runner_id(replace(facts, epoch_owners=owners), step) == runner
 
 

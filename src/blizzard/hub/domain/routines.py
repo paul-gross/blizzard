@@ -14,6 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.graph import IReadGraphRepository
 from blizzard.hub.domain.harnesses import validated_harnesses
 from blizzard.hub.domain.scopes import Scope, ScopeRegistry, ScopeSlug
@@ -61,6 +62,7 @@ class RoutineDefaultScopeUnlinkError(ValueError):
         self.scope_slug = scope_slug
 
 
+@domain_model
 @dataclass(frozen=True)
 class Routine:
     routine_id: str

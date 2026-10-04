@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from blizzard.runner.harness.internal.opencode_cursor import CursorRecord, MessagePartIdentity
+from blizzard.foundation.roles import dto
+from blizzard.runner.harness.internal.opencode_cursor import MessagePartIdentity, MessagePartRevision
 from blizzard.runner.harness.internal.opencode_loopback import (
     ILoopbackTransport,
     LoopbackRequest,
@@ -40,6 +41,7 @@ RecordHttpOperation = Callable[[str, str, str, int | None], None]
 StopProcess = Callable[[OpenCodeStartedProcess], bool]
 
 
+@dto
 @dataclass(frozen=True)
 class OpenCodeCompactionResult:
     """The sanitized transcript samples collected around one compaction request."""
@@ -253,9 +255,9 @@ def _compaction_revisions(export: OpenCodeSessionExport) -> dict[MessagePartIden
     return {record.identity: record.fingerprint for record in _compaction_records(export)}
 
 
-def _compaction_records(export: OpenCodeSessionExport) -> tuple[CursorRecord, ...]:
+def _compaction_records(export: OpenCodeSessionExport) -> tuple[MessagePartRevision, ...]:
     return tuple(
-        CursorRecord.of(message.info.id, part.id, part.raw)
+        MessagePartRevision.of(message.info.id, part.id, part.raw)
         for message in export.messages
         for part in message.parts
         if part.type == "compaction"

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.artifacts import ArtifactRow, AssetArtifact, GitCommitArtifact, Provenance
+from blizzard.hub.domain.artifacts import AssetArtifact, GitCommitArtifact, Provenance, StoredArtifact
 
 pytestmark = pytest.mark.unit
 
@@ -29,7 +29,7 @@ def test_git_commit_round_trips_exactly_with_forge() -> None:
         commit_hash="9f3c2ab",
         forge="file:///origins/blizzard.git",
     )
-    row = ArtifactRow.of(art, node_name="build")
+    row = StoredArtifact.of(art, node_name="build")
     assert row.data == "feature/ask-timeout:9f3c2ab"
     assert row.repo == "blizzard"
     assert row.forge == "file:///origins/blizzard.git"
@@ -40,7 +40,7 @@ def test_git_commit_row_with_no_forge_reads_back_as_empty() -> None:
     """A pre-Phase-4 row this column predates carries ``forge=None`` — it reads back
     as ``""`` (`bzh:facts-not-status` — no separate "unknown" sentinel), the same
     tolerance a legacy-null ``repo`` already gets."""
-    row = ArtifactRow.of(
+    row = StoredArtifact.of(
         GitCommitArtifact(
             artifact_id="art_1",
             name="patch",
@@ -65,7 +65,7 @@ def test_asset_round_trips_exactly() -> None:
         produced_by=_PROV,
         content="two blocking issues",
     )
-    row = ArtifactRow.of(art, node_name="review")
+    row = StoredArtifact.of(art, node_name="review")
     assert row.data == "two blocking issues"
     assert row.repo is None
     assert row.artifact == art
@@ -73,5 +73,5 @@ def test_asset_round_trips_exactly() -> None:
 
 def test_store_key_uses_node_name_not_id() -> None:
     art = AssetArtifact(artifact_id="art_2", name="review-findings", produced_by=_PROV, content="x")
-    row = ArtifactRow.of(art, node_name="review")
+    row = StoredArtifact.of(art, node_name="review")
     assert row.store_key == "review.review-findings.7"

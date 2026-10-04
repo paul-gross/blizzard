@@ -15,7 +15,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
-from blizzard.runner.domain.asks import AskRecord, IReadAskRepository
+from blizzard.runner.domain.asks import IReadAskRepository, OpenAsk
 from blizzard.wire.runner_status import AskListResponse, AskView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -50,7 +50,7 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
     return AskResponse(recorded=True, question_id=question_id, lease_id=lease_id)
 
 
-def _ask_view(ask: AskRecord) -> AskView:
+def _ask_view(ask: OpenAsk) -> AskView:
     return AskView(
         question_id=ask.question_id,
         chunk_id=ask.chunk_id,

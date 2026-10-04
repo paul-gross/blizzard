@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.asks import AskRecord, IWriteAskRepository, ParkRecord
+from blizzard.runner.domain.asks import IWriteAskRepository, OpenAsk, QuestionPark
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS
@@ -29,7 +29,7 @@ class AskStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
+    def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
         stmt = (
             select(asks)
             .where(asks.c.lease_id == lease_id)
@@ -47,7 +47,7 @@ class AskStore:
         stmt = select(park_facts.c.lease_id).where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
-    def open_park(self, lease_id: str) -> ParkRecord | None:
+    def open_park(self, lease_id: str) -> QuestionPark | None:
         stmt = (
             select(park_facts)
             .where(park_facts.c.lease_id == lease_id)
@@ -58,14 +58,14 @@ class AskStore:
         if not rows:
             return None
         r = rows[0]
-        return ParkRecord(
+        return QuestionPark(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             question_id=str(r.question_id),
             parked_at=r.parked_at,
         )
 
-    def open_asks(self) -> list[AskRecord]:
+    def open_asks(self) -> list[OpenAsk]:
         # An ask whose lease has closed is never open — a backstop independent of which
         # path writes the retiring `park_resumes` row.
         stmt = (
@@ -119,8 +119,8 @@ class AskStore:
         _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
 
     @staticmethod
-    def _row_to_ask(r) -> AskRecord:  # type: ignore[no-untyped-def]
-        return AskRecord(
+    def _row_to_ask(r) -> OpenAsk:  # type: ignore[no-untyped-def]
+        return OpenAsk(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
             question_id=str(r.question_id),

@@ -10,9 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.domain.tracing.assembly import assemble_lease
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
 from blizzard.runner.domain.tracing.repository import IReadLeaseTraces
@@ -28,6 +29,7 @@ class ReplayUnavailable(Exception):
     """A wet replay with no exporter wired — tracing is off."""
 
 
+@dto
 @dataclass(frozen=True)
 class ReplayResult:
     """What a replay told, or with ``dry_run`` would have told. ``failed`` is set when the exporter refused
@@ -73,7 +75,7 @@ class LeaseTraceReplay:
             leases += sum(1 for k in keys if k.lease_id in facts)
             position = keys[-1]
 
-    def _export(self, spans: tuple[SpanRecord, ...]) -> bool:
+    def _export(self, spans: tuple[FinishedSpan, ...]) -> bool:
         assert self._exporter is not None
         try:
             return self._exporter.export(spans)

@@ -16,6 +16,7 @@ from blizzard.auth_core import Role, expand
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
@@ -82,6 +83,7 @@ CLI_CODE_TTL = timedelta(minutes=5)
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9-]+")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Slug:
     """A provider handle, reduced to the username base minting starts from."""

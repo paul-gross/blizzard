@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
@@ -66,7 +66,7 @@ def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nod
     ``tests/test_delivery_incomplete_routing.py`` uses for ``retrospective``), carrying
     one ``git_commit`` artifact for a repo with no ``merged/<repo>`` marker, so this
     reads as a genuine, unlanded delivery attempt."""
-    commit_artifact = ArtifactRow(
+    commit_artifact = StoredArtifact(
         kind=ArtifactKind.GIT_COMMIT,
         name="w",
         data=f"feat/thing:{'c' * 40}",

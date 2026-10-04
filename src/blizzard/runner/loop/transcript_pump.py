@@ -16,8 +16,9 @@ from typing import Any, Literal
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
+from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
@@ -31,7 +32,7 @@ from blizzard.runner.harness.transcript import (
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import TranscriptSegmentState
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -94,6 +95,7 @@ _NOT_ATTEMPTED: _PumpOutcome = "not_attempted"
 _STUCK: _PumpOutcome = "stuck"
 
 
+@domain_model
 @dataclass
 class _OutstandingBudget:
     """run()'s own local mirror of the buffer's outstanding-bytes total — read from the
@@ -106,6 +108,7 @@ class _OutstandingBudget:
         self.bytes += n
 
 
+@domain_model
 @dataclass
 class _ShippedBytesMirror:
     """This run's own local mirror of each chunk's ``shipped_bytes`` total — seeded from
@@ -196,7 +199,7 @@ class TranscriptPump:
         incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
-        bindings_by_chunk: dict[str, list[EnvBindingRecord]] | None = None,
+        bindings_by_chunk: dict[str, list[EnvBinding]] | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
@@ -233,7 +236,7 @@ class TranscriptPump:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
 
-    def _shipped_bytes_mirror(self, segments: list[TranscriptSegmentLedgerRow]) -> _ShippedBytesMirror:
+    def _shipped_bytes_mirror(self, segments: list[TranscriptSegmentState]) -> _ShippedBytesMirror:
         """Seed a fresh per-run mirror over exactly the chunks ``segments`` touch — never
         cross-tick, never cross-call: each ``run()``/``pump_lease()``/``drain_segment`` seeds
         its own, so ``crash-correctness/transcripts.md``'s "re-derived fresh every tick"
@@ -242,7 +245,7 @@ class TranscriptPump:
         totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(chunk_ids)
         return _ShippedBytesMirror(totals)
 
-    def _bindings_by_chunk(self, segments: list[TranscriptSegmentLedgerRow]) -> dict[str, list[EnvBindingRecord]]:
+    def _bindings_by_chunk(self, segments: list[TranscriptSegmentState]) -> dict[str, list[EnvBinding]]:
         """Every held binding this call's segments could need, grouped by chunk — skipped
         entirely with no segments to pump, the same short-circuit an empty chunk set already
         gets :meth:`_shipped_bytes_mirror`'s own read for free."""
@@ -252,11 +255,11 @@ class TranscriptPump:
 
     def _pump_one_safe(
         self,
-        segment: TranscriptSegmentLedgerRow,
+        segment: TranscriptSegmentState,
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: dict[str, list[EnvBindingRecord]],
+        bindings_by_chunk: dict[str, list[EnvBinding]],
     ) -> _PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``_NOT_ATTEMPTED`` on a caught exception — a raising segment must
@@ -274,11 +277,11 @@ class TranscriptPump:
 
     def _pump_one(
         self,
-        segment: TranscriptSegmentLedgerRow,
+        segment: TranscriptSegmentState,
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: dict[str, list[EnvBindingRecord]],
+        bindings_by_chunk: dict[str, list[EnvBinding]],
     ) -> _PumpOutcome:
         """Advance ``segment`` one read window forward. ``_NOT_ATTEMPTED``:
         nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
@@ -403,12 +406,12 @@ class TranscriptPump:
             self._warn_sidechains_dropped(segment, dropped_sidechains)
         return _CAUGHT_UP if batch.complete else _INCOMPLETE
 
-    def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
+    def _stop_shipping(self, segment: TranscriptSegmentState, reason: str) -> None:
         changed = self.ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)
 
-    def _mark_record_truncated(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
+    def _mark_record_truncated(self, segment: TranscriptSegmentState, reason: str) -> None:
         # Latched per (segment, reason) by the store — see its own docstring.
         changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
             segment.segment_id, reason=reason, severity=TRUNCATION_REASON_SEVERITY[reason]
@@ -416,12 +419,12 @@ class TranscriptPump:
         if changed:
             self._warn(segment, reason)
 
-    def _warn(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
+    def _warn(self, segment: TranscriptSegmentState, reason: str) -> None:
         OutboundFacts(self.ctx).transcript_truncated(
             chunk_id=segment.chunk_id, segment_id=segment.segment_id, reason=reason, at=self.ctx.clock.now()
         )
 
-    def _warn_sidechains_dropped(self, segment: TranscriptSegmentLedgerRow, agent_ids: list[str | None]) -> None:
+    def _warn_sidechains_dropped(self, segment: TranscriptSegmentState, agent_ids: list[str | None]) -> None:
         # Latched per (segment, agent_id) via the store — fires only the first time this
         # segment warns about a given agent, never once per tick it recurs.
         newly = [
@@ -556,7 +559,7 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
 
 
 def _record_envelope(
-    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, *, turn_range_start: int, turn_range_end: int
+    segment: TranscriptSegmentState, batch: TranscriptBatch, *, turn_range_start: int, turn_range_end: int
 ) -> dict[str, Any]:
     return {
         "segment_id": segment.segment_id,
@@ -580,7 +583,7 @@ def _record_envelope(
 
 
 def _record_overhead(
-    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, *, turn_range_start: int, turn_count: int
+    segment: TranscriptSegmentState, batch: TranscriptBatch, *, turn_range_start: int, turn_count: int
 ) -> int:
     """The envelope's serialized cost with BOTH range fields at the widest value any group
     here can claim — they are decimal integers, and one measurement budgets every group, so
@@ -610,6 +613,7 @@ def _linkable(batch: TranscriptBatch, parents: Mapping[str, str]) -> bool:
     return any(_parent_of(sc, parents) is not None for sc in batch.unlinked_sidechains)
 
 
+@dto
 @dataclass(frozen=True)
 class _BuiltRecords:
     """:func:`_build_records`'s return. ``turn_count`` is the SHIPPED count — real turns plus
@@ -622,7 +626,7 @@ class _BuiltRecords:
 
 
 def _build_records(
-    segment: TranscriptSegmentLedgerRow,
+    segment: TranscriptSegmentState,
     batch: TranscriptBatch,
     turn_range_start: int,
     *,

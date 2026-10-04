@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.roles import dto
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -89,6 +90,7 @@ class ClaimDeniedIncompatible(Exception):
         self.runner_id = runner_id
 
 
+@dto
 @dataclass(frozen=True)
 class ClaimResult:
     """A won claim — the route fact, its first node envelope, and the route's plaintext

@@ -43,8 +43,8 @@ from blizzard.runner.harness.internal.opencode_attach import (
 )
 from blizzard.runner.harness.internal.opencode_cursor import (
     CursorError,
-    CursorRecord,
     MessagePartCursor,
+    MessagePartRevision,
     records_for_export,
 )
 from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence
@@ -517,8 +517,8 @@ def test_granular_permission_rules_are_strictly_parsed() -> None:
 
 
 def test_cursor_admits_a_pending_to_complete_patch_once() -> None:
-    pending = CursorRecord.of("msg_tool", "part_tool", {"status": "running", "output": None})
-    complete = CursorRecord.of("msg_tool", "part_tool", {"status": "completed", "output": "done"})
+    pending = MessagePartRevision.of("msg_tool", "part_tool", {"status": "running", "output": None})
+    complete = MessagePartRevision.of("msg_tool", "part_tool", {"status": "completed", "output": "done"})
     cursor = MessagePartCursor.start()
 
     first = cursor.admit([pending])
@@ -534,14 +534,14 @@ def test_cursor_admits_a_pending_to_complete_patch_once() -> None:
 def test_cursor_uses_identity_not_array_position_after_compaction() -> None:
     first = MessagePartCursor.start().admit(
         [
-            CursorRecord.of("msg_old", "part_old", {"text": "retained"}),
-            CursorRecord.of("msg_known", "part_known", {"text": "known"}),
+            MessagePartRevision.of("msg_old", "part_old", {"text": "retained"}),
+            MessagePartRevision.of("msg_known", "part_known", {"text": "known"}),
         ]
     )
     after_compaction = first.cursor.admit(
         [
-            CursorRecord.of("msg_known", "part_known", {"text": "known"}),
-            CursorRecord.of("msg_new", "part_new", {"text": "after compaction"}),
+            MessagePartRevision.of("msg_known", "part_known", {"text": "known"}),
+            MessagePartRevision.of("msg_new", "part_new", {"text": "after compaction"}),
         ]
     )
 

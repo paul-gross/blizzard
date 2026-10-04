@@ -10,16 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = [
-    "EnvBindingRecord",
+    "EnvBinding",
     "IReadEnvironmentRepository",
     "IWriteEnvironmentRepository",
     "group_bindings_by_chunk",
 ]
 
 
+@dto
 @dataclass(frozen=True)
-class EnvBindingRecord:
+class EnvBinding:
     """A chunk→env binding fact."""
 
     chunk_id: str
@@ -28,11 +31,11 @@ class EnvBindingRecord:
     bound_at: datetime
 
 
-def group_bindings_by_chunk(bindings: Sequence[EnvBindingRecord]) -> dict[str, list[EnvBindingRecord]]:
+def group_bindings_by_chunk(bindings: Sequence[EnvBinding]) -> dict[str, list[EnvBinding]]:
     """``bindings`` grouped by chunk id, each group's own order preserved — the one shape
     every :meth:`~IReadEnvironmentRepository.held_bindings` caller needing a chunk-keyed
     lookup builds, rather than each rewriting the grouping loop itself."""
-    by_chunk: dict[str, list[EnvBindingRecord]] = {}
+    by_chunk: dict[str, list[EnvBinding]] = {}
     for binding in bindings:
         by_chunk.setdefault(binding.chunk_id, []).append(binding)
     return by_chunk
@@ -45,7 +48,7 @@ class IReadEnvironmentRepository(Protocol):
         """Every env id whose binding has no release fact (the provider's ``held_ids``)."""
         ...
 
-    def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
+    def bindings_for_chunk(self, chunk_id: str) -> list[EnvBinding]:
         """The chunk's unreleased env bindings (its held environments)."""
         ...
 
@@ -53,7 +56,7 @@ class IReadEnvironmentRepository(Protocol):
         """Chunks still held by this runner — those with an unreleased binding."""
         ...
 
-    def held_bindings(self) -> list[EnvBindingRecord]:
+    def held_bindings(self) -> list[EnvBinding]:
         """Every currently-held env binding, across every chunk.
 
         :meth:`bindings_for_chunk` widened from one chunk to the whole fleet this runner

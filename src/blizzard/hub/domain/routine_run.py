@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
@@ -25,7 +26,7 @@ from blizzard.hub.domain.routines import (
     RunMode,
 )
 from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
-from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
+from blizzard.hub.domain.work import HubWorkItem, IWriteWorkItemRepository, WorkItemAuthor
 from blizzard.hub.domain.work_items import prepare_mint
 
 
@@ -90,12 +91,13 @@ def compose_charge(
     return "\n".join(lines)
 
 
+@dto
 @dataclass(frozen=True)
 class RunResult:
     """The result of one routine run — the minted item, its chunk, and how the
     requested mode settled."""
 
-    item: WorkItemRecord
+    item: HubWorkItem
     chunk_id: str
     effective_mode: RunMode
     downgraded: bool

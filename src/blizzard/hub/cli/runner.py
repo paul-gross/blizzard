@@ -8,24 +8,26 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, RunnerRow
+from blizzard.hub.cli.views import Listing, RunnerLine
 
 
 class RunnerListing(Listing):
     empty = "no runners registered"
 
     def line(self, row: Any) -> str:
-        return RunnerRow(row).line()
+        return RunnerLine(row).line()
 
 
+@dto
 @dataclass(frozen=True)
 class RunnerDetail:
     body: dict[str, Any]
 
     def lines(self) -> Iterator[str]:
-        yield f"{self.body['runner_id']}  {RunnerRow(self.body).liveness}  ws={self.body.get('workspace_id', '-')}"
+        yield f"{self.body['runner_id']}  {RunnerLine(self.body).liveness}  ws={self.body.get('workspace_id', '-')}"
         yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"
         if self.body.get("retired"):
             yield f"  retired={self.body.get('retired_at')} by {self.body.get('retired_by')}"

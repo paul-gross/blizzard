@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import DependencyEdge
 
 
+@dto
 class FoldMint(NamedTuple):
     """One edge a fold mints: the remapped pair, carrying the instant the edge it replaces
     was first declared — the fold's own instant stamps only the release."""
@@ -21,6 +23,7 @@ class FoldMint(NamedTuple):
     declared_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class FoldTarget:
     """One folded chunk's own release/mint split for a single fold's dependency-edge

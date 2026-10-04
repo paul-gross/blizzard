@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.catalog import declared
@@ -20,6 +21,7 @@ MIGRATE_COMMAND = "blizzard runner migrate"
 _log = get_logger("blizzard.runner.runtime")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Migrations:
     """The runner's Alembic tree, bound to one resolved config."""
@@ -35,6 +37,7 @@ class Migrations:
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Runtime:
     """A runner runtime root, administered while the daemon is down."""

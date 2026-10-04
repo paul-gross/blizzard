@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.runner.domain.artifacts import GraphArtifactRecord
+from blizzard.runner.domain.artifacts import PinnedGraphArtifact
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill
 from blizzard.wire.envelope import GraphArtifact
@@ -53,8 +53,8 @@ def test_record_graph_artifacts_lands_rows_keyed_on_graph_id_in_authored_order(t
     store.record_graph_artifacts(
         graph_id="gr_a",
         artifacts=[
-            GraphArtifactRecord(name="zulu", ordinal=0, kind=ArtifactKind.ASSET, content="be zulu"),
-            GraphArtifactRecord(name="alpha", ordinal=1, kind=ArtifactKind.ASSET, content="be alpha"),
+            PinnedGraphArtifact(name="zulu", ordinal=0, kind=ArtifactKind.ASSET, content="be zulu"),
+            PinnedGraphArtifact(name="alpha", ordinal=1, kind=ArtifactKind.ASSET, content="be alpha"),
         ],
         recorded_at=_NOW,
     )
@@ -72,12 +72,12 @@ def test_record_graph_artifacts_is_a_no_op_for_an_already_recorded_graph_id(tmp_
     store = _store(tmp_path)
     store.record_graph_artifacts(
         graph_id="gr_a",
-        artifacts=[GraphArtifactRecord(name="rubric", ordinal=0, kind=ArtifactKind.ASSET, content="first mint")],
+        artifacts=[PinnedGraphArtifact(name="rubric", ordinal=0, kind=ArtifactKind.ASSET, content="first mint")],
         recorded_at=_NOW,
     )
     store.record_graph_artifacts(
         graph_id="gr_a",
-        artifacts=[GraphArtifactRecord(name="rubric", ordinal=0, kind=ArtifactKind.ASSET, content="unwritten")],
+        artifacts=[PinnedGraphArtifact(name="rubric", ordinal=0, kind=ArtifactKind.ASSET, content="unwritten")],
         recorded_at=_NOW,
     )
     assert [r.content for r in store.graph_artifacts_for_graph("gr_a")] == ["first mint"]
@@ -93,8 +93,8 @@ def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path
         store.record_graph_artifacts(
             graph_id="gr_a",
             artifacts=[
-                GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="landed"),
-                GraphArtifactRecord(name="docket", ordinal=1, kind=ArtifactKind.ASSET, content="collides"),
+                PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="landed"),
+                PinnedGraphArtifact(name="docket", ordinal=1, kind=ArtifactKind.ASSET, content="collides"),
             ],
             recorded_at=_NOW,
         )
@@ -102,7 +102,7 @@ def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path
 
     store.record_graph_artifacts(
         graph_id="gr_a",
-        artifacts=[GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="retried")],
+        artifacts=[PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="retried")],
         recorded_at=_NOW,
     )
     assert [r.content for r in store.graph_artifacts_for_graph("gr_a")] == ["retried"]
@@ -116,12 +116,12 @@ def test_a_superseded_mints_rows_survive_a_later_mints_write(tmp_path):  # type:
     store = _store(tmp_path)
     store.record_graph_artifacts(
         graph_id="gr_old",
-        artifacts=[GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="old docket")],
+        artifacts=[PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="old docket")],
         recorded_at=_NOW,
     )
     store.record_graph_artifacts(
         graph_id="gr_new",
-        artifacts=[GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="new docket")],
+        artifacts=[PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="new docket")],
         recorded_at=_NOW,
     )
     assert [r.content for r in store.graph_artifacts_for_graph("gr_old")] == ["old docket"]

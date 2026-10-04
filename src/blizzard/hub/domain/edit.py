@@ -13,6 +13,7 @@ from typing import Final
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.errors import ChunkNotFound
@@ -98,6 +99,7 @@ class ForcedNodeUnknown(Exception):
         self.graph_id = graph_id
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkEdit:
     """The fields a single all-or-nothing edit request supplies.

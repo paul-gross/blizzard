@@ -11,14 +11,14 @@ import pytest
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
-    ChunkStoppedRecord,
-    EpochOwnerRecord,
-    LeaseRecord,
-    RouteReleasedRecord,
     StepFacts,
-    TransitionRecord,
+    TracedChunkStop,
+    TracedEpochOwner,
+    TracedLease,
+    TracedRouteRelease,
+    TracedTransition,
 )
-from blizzard.hub.domain.tracing.repository import TraceCursorRecord
+from blizzard.hub.domain.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.tracing.window import read_window
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -48,10 +48,10 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
         chunk_id=moved,
         graphs=graphs,
         pin_graph_id=graph.graph_id,
-        lease_facts=(LeaseRecord(1, claimed),),
-        epoch_owners=(EpochOwnerRecord(1, "r1", claimed),),
+        lease_facts=(TracedLease(1, claimed),),
+        epoch_owners=(TracedEpochOwner(1, "r1", claimed),),
         transitions=(
-            TransitionRecord(
+            TracedTransition(
                 epoch=1,
                 recorded_at=at,
                 graph_id=graph.graph_id,
@@ -65,10 +65,10 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
         chunk_id=stopped,
         graphs=graphs,
         pin_graph_id=graph.graph_id,
-        lease_facts=(LeaseRecord(1, claimed),),
-        epoch_owners=(EpochOwnerRecord(1, "r1", claimed),),
-        route_released=(RouteReleasedRecord(at),),
-        chunk_stopped=(ChunkStoppedRecord(at),),
+        lease_facts=(TracedLease(1, claimed),),
+        epoch_owners=(TracedEpochOwner(1, "r1", claimed),),
+        route_released=(TracedRouteRelease(at),),
+        chunk_stopped=(TracedChunkStop(at),),
     )
     assert identify_steps(hydrated[moved]) == identify_steps(expected_moved)
     assert identify_steps(hydrated[stopped]) == identify_steps(expected_stopped)
@@ -157,9 +157,9 @@ def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> No
     now = hub.clock.now()
     assert store.newest_cursor() is None
 
-    start = TraceCursorRecord(CursorKey.opening(now), 0, now)
+    start = TraceCheckpoint(CursorKey.opening(now), 0, now)
     store.append_cursor(start)
-    advanced = TraceCursorRecord(CursorKey(now, "ch_1", 2, "dec_1"), 7, now + timedelta(seconds=5))
+    advanced = TraceCheckpoint(CursorKey(now, "ch_1", 2, "dec_1"), 7, now + timedelta(seconds=5))
     store.append_cursor(advanced)
 
     assert store.newest_cursor() == advanced

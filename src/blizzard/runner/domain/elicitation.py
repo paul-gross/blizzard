@@ -8,11 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-__all__ = ["ElicitationRecord", "IReadElicitationRepository", "IWriteElicitationRepository"]
+from blizzard.foundation.roles import dto
+
+__all__ = ["IReadElicitationRepository", "IWriteElicitationRepository", "PendingElicitation"]
 
 
+@dto
 @dataclass(frozen=True)
-class ElicitationRecord:
+class PendingElicitation:
     """A launched elicitation not yet collected. ``pid``/``process_start_time`` are unset
     only in the un-armable gap between the durable record and the process actually
     starting (``advance.after-elicit-record.before-launch``)."""
@@ -31,12 +34,12 @@ class ElicitationRecord:
 class IReadElicitationRepository(Protocol):
     """Read-only in-flight-elicitation queries (held by read-path edges)."""
 
-    def in_flight_elicitation(self, lease_id: str, epoch: int) -> ElicitationRecord | None:
+    def in_flight_elicitation(self, lease_id: str, epoch: int) -> PendingElicitation | None:
         """This lease's in-flight elicitation for ``epoch``, or ``None`` once collected,
         cleared on lease closure, or never launched."""
         ...
 
-    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], PendingElicitation]:
         """:meth:`in_flight_elicitation` for every ``(lease_id, epoch)`` pair in ``pairs``,
         keyed by that same pair (`bzh:bulk-reconstitution`). A pair with no record is
         absent, exactly as the singular getter answers ``None`` for it."""
@@ -48,7 +51,7 @@ class IReadElicitationRepository(Protocol):
         already-established ``parked_lease_ids``/``pending_submission_lease_ids`` shape."""
         ...
 
-    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+    def in_flight_elicitations_by_lease(self) -> dict[str, PendingElicitation]:
         """Every in-flight elicitation record, by lease id (regardless of epoch, matching
         :meth:`in_flight_elicitation_lease_ids`'s own shape). Hoisted once per tick
         (``bzh:bulk-reconstitution``) beside ``open_pause_parks`` for the pause park's

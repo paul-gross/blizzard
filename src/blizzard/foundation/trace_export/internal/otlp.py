@@ -17,7 +17,7 @@ from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, SpanContext, SpanKind, Status, StatusCode
 
 from blizzard.foundation.platform_tracing.span_context import span_context
-from blizzard.foundation.trace_spans import Attributes, SpanRecord
+from blizzard.foundation.trace_spans import Attributes, FinishedSpan
 from blizzard.foundation.trace_spans import SpanKind as RecordKind
 from blizzard.foundation.trace_spans import SpanStatus as RecordStatus
 
@@ -34,7 +34,7 @@ def _attributes(attributes: Attributes) -> dict[str, str | int | float | bool | 
 
 
 class OtlpTraceExporter:
-    """Maps each :class:`SpanRecord` to a finished ``ReadableSpan`` and hands the batch to ``OTLPSpanExporter``."""
+    """Maps each :class:`FinishedSpan` to a finished ``ReadableSpan`` and hands the batch to ``OTLPSpanExporter``."""
 
     def __init__(self, *, resource: Mapping[str, str], scope: str, scope_version: str) -> None:
         self._resource = Resource.create(dict(resource))
@@ -42,10 +42,10 @@ class OtlpTraceExporter:
         self._scope = InstrumentationScope(scope, scope_version)
         self._exporter = OTLPSpanExporter()
 
-    def export(self, spans: Sequence[SpanRecord]) -> bool:
+    def export(self, spans: Sequence[FinishedSpan]) -> bool:
         return self._exporter.export([self._readable(span) for span in spans]) is SpanExportResult.SUCCESS
 
-    def _resource_of(self, span: SpanRecord) -> Resource:
+    def _resource_of(self, span: FinishedSpan) -> Resource:
         if span.service_name is None:
             return self._resource
         if span.service_name not in self._named:
@@ -54,7 +54,7 @@ class OtlpTraceExporter:
             )
         return self._named[span.service_name]
 
-    def _readable(self, span: SpanRecord) -> ReadableSpan:
+    def _readable(self, span: FinishedSpan) -> ReadableSpan:
         context = span_context(span.context)
         parent = (
             None

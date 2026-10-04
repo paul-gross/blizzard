@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.foundation.roles import dto
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.proposals import WorkItemProposalRow
-from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
+from blizzard.hub.domain.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.work import DecisionChoice, DocketEntry, GateDecision
 
 
+@dto
 @dataclass(frozen=True)
 class LiveDecisionStatus:
     """A live gate decision's identity and resolution — no choices, no
@@ -29,20 +31,20 @@ class LiveDecisionStatus:
 class IReadChunkDecisionsRepository(Protocol):
     """Read-only chunk-decisions access."""
 
-    def get_decision(self, decision_id: str) -> DecisionRow | None:
+    def get_decision(self, decision_id: str) -> GateDecision | None:
         """One gate decision in full, with derived resolution/transition state."""
         ...
 
-    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
+    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> GateDecision | None:
         """The decision already open for a (chunk, node, epoch) — the idempotency probe
         for a re-submitted runner-config gate decision (a lost-ack replay)."""
         ...
 
-    def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
+    def decision_for_chunk(self, chunk_id: str) -> GateDecision | None:
         """The chunk's newest not-yet-transitioned decision."""
         ...
 
-    def list_open_decisions(self) -> list[DecisionRow]:
+    def list_open_decisions(self) -> list[GateDecision]:
         """Every unresolved decision across the fleet."""
         ...
 
@@ -74,8 +76,8 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         at: datetime,
-        artifacts: list[ArtifactRow],
-        proposals: list[WorkItemProposalRow],
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
         imposed_by_runner_id: str | None,
     ) -> FenceRefusal | None:
         """Open a gate decision, committing any step artifacts and proposals atomically, behind

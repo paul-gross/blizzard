@@ -6,9 +6,10 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.roles import dto
 from blizzard.runner.domain.leases import (
     IReadLeaseSessionRepository,
-    LeaseRecord,
+    Lease,
     PoolHead,
 )
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
@@ -20,6 +21,7 @@ from blizzard.wire.envelope import TIER_PREFIX, NodeConfig
 _log = get_logger("blizzard.runner.loop")
 
 
+@dto
 @dataclass(frozen=True)
 class ResumeTarget:
     """A node-entry spawn's resume target — the session to resume (``None`` for a fresh
@@ -33,13 +35,14 @@ class ResumeTarget:
     owner_unresolvable: tuple[SessionReference, UnknownHarnessError | UnavailableHarnessError] | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class ResumedSession:
     """The session a spawn resumes, bound to its newest recorded lease — one value, so no
     caller can pair one spawn's session with another's lease."""
 
     session: SessionReference
-    lease: LeaseRecord | None
+    lease: Lease | None
 
     @property
     def session_id(self) -> str:
@@ -221,6 +224,7 @@ class SessionResolver:
             return None
 
 
+@dto
 @dataclass(frozen=True)
 class SkippedHarness:
     """One acceptable-set member :class:`HarnessSelector` passed over, and why —
@@ -230,6 +234,7 @@ class SkippedHarness:
     reason: str  # "unknown" | "unavailable" | "unhealthy" | "no-authored-tier" | "not-a-member"
 
 
+@dto
 @dataclass(frozen=True)
 class HarnessSelection:
     """A fresh mint's resolved owner among a node's acceptable set, or ``None`` when nothing

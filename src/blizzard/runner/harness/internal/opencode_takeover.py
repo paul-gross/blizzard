@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.runner.harness.compatibility import CompatibilityProbe, ProbeObservation
 from blizzard.runner.harness.internal.opencode_attach import IAttachProxyFactory
 from blizzard.runner.harness.internal.opencode_facts import has_takeover_prompt
@@ -64,6 +65,7 @@ class ITakeoverHost(Protocol):
     ) -> tuple[OpenCodeSessionExport | None, str | None]: ...
 
 
+@dto
 @dataclass(frozen=True)
 class TakeoverOutcome:
     """What the attended attach concluded, and the evidence the probe retains for it."""

@@ -18,10 +18,10 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.transcripts import (
-    SegmentIndexRow,
-    SegmentRecord,
     SegmentRecordContent,
+    SegmentSummary,
     TranscriptIngestResult,
+    TranscriptSlice,
 )
 from blizzard.wire.transcript_segment import (
     LeaseTranscriptView,
@@ -39,11 +39,11 @@ router = APIRouter(prefix="/api", tags=["transcripts"], dependencies=[Depends(re
 # --- wire <-> domain rendering, shared with the fleet router's ingest route -----
 
 
-def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> SegmentRecord:
+def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> TranscriptSlice:
     """The wire ingest record, store-shaped — turns serialized once here (the byte
     count recorded elsewhere is measured off this same JSON text) rather than re-serialized per read."""
     turns_json = json.dumps([turn.model_dump(mode="json") for turn in record.turns])
-    return SegmentRecord(
+    return TranscriptSlice(
         segment_id=record.segment_id,
         chunk_id=record.chunk_id,
         node_id=record.node_id,
@@ -75,7 +75,7 @@ def to_ack(runner_id: str, result: TranscriptIngestResult) -> TranscriptSegmentA
     )
 
 
-def _index_entry(row: SegmentIndexRow) -> TranscriptSegmentIndexEntry:
+def _index_entry(row: SegmentSummary) -> TranscriptSegmentIndexEntry:
     return TranscriptSegmentIndexEntry(
         segment_id=row.segment_id,
         node_id=row.node_id,

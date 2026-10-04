@@ -7,8 +7,8 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.domain.takeover import IWriteTakeoverRepository, TakeoverRecord
+from blizzard.runner.domain.leases import Lease
+from blizzard.runner.domain.takeover import IWriteTakeoverRepository, OpenTakeover
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import Unclosed, lease_select, row_to_lease
@@ -25,7 +25,7 @@ class TakeoverStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+    def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         stmt = (
             lease_select()
             .join(takeovers, takeovers.c.lease_id == leases.c.lease_id)
@@ -35,7 +35,7 @@ class TakeoverStore:
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+    def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
         stmt = (
             select(takeovers)
             .where(takeovers.c.chunk_id == chunk_id)
@@ -49,7 +49,7 @@ class TakeoverStore:
         stmt = select(takeovers.c.chunk_id).where(_OPEN_TAKEOVER.clause).distinct()
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
-    def open_takeovers(self) -> list[TakeoverRecord]:
+    def open_takeovers(self) -> list[OpenTakeover]:
         stmt = select(takeovers).where(_OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
         return [self._row_to_takeover(r) for r in self._store.all(stmt)]
 
@@ -85,8 +85,8 @@ class TakeoverStore:
         _log.info("takeover ended", takeover_id=takeover_id)
 
     @staticmethod
-    def _row_to_takeover(r) -> TakeoverRecord:  # type: ignore[no-untyped-def]
-        return TakeoverRecord(
+    def _row_to_takeover(r) -> OpenTakeover:  # type: ignore[no-untyped-def]
+        return OpenTakeover(
             takeover_id=str(r.takeover_id),
             chunk_id=str(r.chunk_id),
             lease_id=str(r.lease_id) if r.lease_id is not None else None,

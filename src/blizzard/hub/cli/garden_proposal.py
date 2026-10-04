@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
@@ -37,6 +38,7 @@ def _closure_lines(closure: dict[str, Any] | None) -> Iterator[str]:
         yield f"  reason: {closure['reason']}"
 
 
+@dto
 @dataclass(frozen=True)
 class GardenProposalDetail:
     body: dict[str, Any]

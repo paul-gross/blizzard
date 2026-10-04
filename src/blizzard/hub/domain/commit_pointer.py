@@ -8,12 +8,14 @@ import re
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.roles import domain_model
 from blizzard.wire.completion import SubmittedArtifact
 
 # A full lowercase object name: SHA-1 (40) or SHA-256 (64).
 _FULL_OBJECT_NAME = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 
 
+@domain_model
 @dataclass(frozen=True)
 class CommitPointerPolicy:
     """One submission's ``git_commit`` artifacts judged for a complete pointer —

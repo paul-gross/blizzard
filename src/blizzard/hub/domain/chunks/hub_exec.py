@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 
 
@@ -45,7 +45,7 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         runner_id: str,
         transition_id: str,
         at: datetime,
-        artifacts: list[ArtifactRow],
+        artifacts: list[StoredArtifact],
         release_route: bool,
     ) -> bool:
         """Record a generic hub command node's exit transition, atomically and idempotently

@@ -10,6 +10,8 @@ from dataclasses import dataclass
 import click
 from click.core import ParameterSource
 
+from blizzard.foundation.roles import domain_model
+
 _SOURCE_RANK = {
     ParameterSource.COMMANDLINE: 2,
     ParameterSource.ENVIRONMENT: 1,
@@ -17,6 +19,7 @@ _SOURCE_RANK = {
 }
 
 
+@domain_model
 @dataclass(frozen=True, order=True)
 class ParamSource:
     """Where one click parameter's value came from, as a comparable rank."""

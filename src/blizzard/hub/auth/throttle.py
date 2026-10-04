@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model
 
 #: Requests a single IP may make before it starts being throttled.
 DEFAULT_CAPACITY = 10
@@ -16,6 +17,7 @@ DEFAULT_CAPACITY = 10
 DEFAULT_REFILL_PER_SECOND = 10 / 60  # one token every 6 seconds
 
 
+@domain_model
 @dataclass
 class _Bucket:
     tokens: float

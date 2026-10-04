@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
+
 __all__ = ["ICredentialRenewer", "RenewalFailureReason", "RenewalOutcome", "RenewalOutcomeKind"]
 
 
@@ -36,6 +38,7 @@ class RenewalFailureReason(StrEnum):
     PROTOCOL_ERROR = "protocol_error"
 
 
+@dto
 @dataclass(frozen=True)
 class RenewalOutcome:
     """One ``renew_if_due()`` call's result. ``failure_reason`` is set only when

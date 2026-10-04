@@ -18,34 +18,34 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, IReadManyGraphs
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
-    BounceRecord,
-    ChunkCompletedRecord,
-    ChunkStoppedRecord,
-    DecisionRecord,
-    DecisionResolutionRecord,
-    EpochOwnerRecord,
-    EscalationRecord,
-    HubExecSlotRecord,
-    HubPollRecord,
-    LeaseRecord,
-    MigrationRecord,
-    PauseRecord,
-    PrerequisiteMetRecord,
-    PromotionRecord,
-    QuestionRecord,
-    RequeueRecord,
-    RestartRecord,
-    RouteCreatedRecord,
-    RouteReleasedRecord,
     StepFacts,
-    TransitionRecord,
+    TracedBounce,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedDecisionResolution,
+    TracedEpochOwner,
+    TracedEscalation,
+    TracedHubExecSlot,
+    TracedHubPoll,
+    TracedLease,
+    TracedMigration,
+    TracedPause,
+    TracedPrerequisiteMet,
+    TracedPromotion,
+    TracedQuestion,
+    TracedRequeue,
+    TracedRestart,
+    TracedRouteCreation,
+    TracedRouteRelease,
+    TracedTransition,
 )
 from blizzard.hub.domain.tracing.repository import (
     ClosingCandidates,
     IReadTraceStatus,
     IWriteTraceCursor,
-    TraceCursorRecord,
-    TraceFailureRecord,
+    TraceCheckpoint,
+    TraceExportFailure,
     WorkRefLabel,
 )
 from blizzard.hub.domain.work import MigrationSource, UsageFact, WorkRef
@@ -163,30 +163,30 @@ class TraceStore:
                 chunk_id=chunk_id,
                 pin_graph_id=pin,
                 minted_at=chunk_rows[chunk_id].minted_at,
-                lease_facts=tuple(LeaseRecord(r.epoch, r.minted_at) for r in leases[chunk_id]),
-                epoch_owners=tuple(EpochOwnerRecord(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
+                lease_facts=tuple(TracedLease(r.epoch, r.minted_at) for r in leases[chunk_id]),
+                epoch_owners=tuple(TracedEpochOwner(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
                 transitions=tuple(_transition(r) for r in transitions[chunk_id]),
                 migrations=tuple(_migration(r) for r in migrations[chunk_id]),
                 restarts=tuple(_restart(r) for r in restarts[chunk_id]),
                 escalations=tuple(
-                    EscalationRecord(r.epoch, r.recorded_at, r.decision_id) for r in escalations[chunk_id]
+                    TracedEscalation(r.epoch, r.recorded_at, r.decision_id) for r in escalations[chunk_id]
                 ),
                 decisions=tuple(
-                    DecisionRecord(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id)
+                    TracedDecision(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id)
                     for r in decisions[chunk_id]
                 ),
                 decision_resolutions=tuple(resolutions[chunk_id]),
-                requeues=tuple(RequeueRecord(r.requeued_at) for r in requeues[chunk_id]),
-                route_released=tuple(RouteReleasedRecord(r.released_at) for r in released[chunk_id]),
-                chunk_stopped=tuple(ChunkStoppedRecord(r.stopped_at) for r in stopped[chunk_id]),
-                chunk_completed=tuple(ChunkCompletedRecord(r.completed_at) for r in completed[chunk_id]),
+                requeues=tuple(TracedRequeue(r.requeued_at) for r in requeues[chunk_id]),
+                route_released=tuple(TracedRouteRelease(r.released_at) for r in released[chunk_id]),
+                chunk_stopped=tuple(TracedChunkStop(r.stopped_at) for r in stopped[chunk_id]),
+                chunk_completed=tuple(TracedChunkCompletion(r.completed_at) for r in completed[chunk_id]),
                 questions=tuple(questions[chunk_id]),
-                pauses=tuple(PauseRecord(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
+                pauses=tuple(TracedPause(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
                 hub_exec_slots=tuple(slots[chunk_id]),
-                hub_polls=tuple(HubPollRecord(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
-                bounces=tuple(BounceRecord(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
-                routes_created=tuple(RouteCreatedRecord(r.created_at) for r in created[chunk_id]),
-                promotions=tuple(PromotionRecord(r.promoted_at) for r in promoted[chunk_id]),
+                hub_polls=tuple(TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
+                bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
+                routes_created=tuple(TracedRouteCreation(r.created_at) for r in created[chunk_id]),
+                promotions=tuple(TracedPromotion(r.promoted_at) for r in promoted[chunk_id]),
                 prerequisites_met=tuple(met[chunk_id]),
                 usage=tuple(_usage(r) for r in usage[chunk_id]),
                 work_refs=self._rendered(work_refs[chunk_id]),
@@ -205,40 +205,40 @@ class TraceStore:
         return tuple(dict.fromkeys(kept))
 
     @staticmethod
-    def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[DecisionResolutionRecord]]:
+    def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedDecisionResolution]]:
         stmt = (
             select(s.decisions.c.chunk_id, s.decision_resolutions)
             .join(s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id)
             .where(s.decisions.c.chunk_id.in_(ids))
         )
-        grouped: dict[str, list[DecisionResolutionRecord]] = defaultdict(list)
+        grouped: dict[str, list[TracedDecisionResolution]] = defaultdict(list)
         for r in conn.execute(stmt).all():
-            grouped[r.chunk_id].append(DecisionResolutionRecord(r.decision_id, r.resolved_at, r.choice))
+            grouped[r.chunk_id].append(TracedDecisionResolution(r.decision_id, r.resolved_at, r.choice))
         return grouped
 
     @staticmethod
-    def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[QuestionRecord]]:
+    def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedQuestion]]:
         stmt = (
             select(s.questions, s.question_answers.c.answered_at)
             .outerjoin(s.question_answers, s.question_answers.c.question_id == s.questions.c.question_id)
             .where(s.questions.c.chunk_id.in_(ids))
             .order_by(s.questions.c.asked_at)
         )
-        grouped: dict[str, list[QuestionRecord]] = defaultdict(list)
+        grouped: dict[str, list[TracedQuestion]] = defaultdict(list)
         for r in conn.execute(stmt).all():
-            grouped[r.chunk_id].append(QuestionRecord(r.question_id, r.epoch, r.asked_at, r.answered_at))
+            grouped[r.chunk_id].append(TracedQuestion(r.question_id, r.epoch, r.asked_at, r.answered_at))
         return grouped
 
     @staticmethod
-    def _slots(conn: Connection, ids: Sequence[str]) -> dict[str, list[HubExecSlotRecord]]:
+    def _slots(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubExecSlot]]:
         stmt = select(s.hub_exec_slot).where(s.hub_exec_slot.c.holder_chunk_id.in_(ids))
-        grouped: dict[str, list[HubExecSlotRecord]] = defaultdict(list)
+        grouped: dict[str, list[TracedHubExecSlot]] = defaultdict(list)
         for r in conn.execute(stmt.order_by(s.hub_exec_slot.c.acquired_at)).all():
-            grouped[r.holder_chunk_id].append(HubExecSlotRecord(r.slot_id, r.node_id, r.acquired_at, r.released_at))
+            grouped[r.holder_chunk_id].append(TracedHubExecSlot(r.slot_id, r.node_id, r.acquired_at, r.released_at))
         return grouped
 
     @staticmethod
-    def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[PrerequisiteMetRecord]]:
+    def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedPrerequisiteMet]]:
         """When each of a chunk's prerequisites first derived ``done``: its first transition into the
         terminal, or its first operator completion, whichever came first."""
         edges = conn.execute(
@@ -257,22 +257,22 @@ class TraceStore:
             for stmt in (terminal.group_by(s.transitions.c.chunk_id), completed.group_by(s.chunk_completed.c.chunk_id)):
                 for r in conn.execute(stmt).all():
                     done_at[r.chunk_id] = min(r.at, done_at.get(r.chunk_id, r.at))
-        grouped: dict[str, list[PrerequisiteMetRecord]] = defaultdict(list)
+        grouped: dict[str, list[TracedPrerequisiteMet]] = defaultdict(list)
         for edge in edges:
             if edge.prerequisite_chunk_id in done_at:
-                grouped[edge.dependent_chunk_id].append(PrerequisiteMetRecord(done_at[edge.prerequisite_chunk_id]))
+                grouped[edge.dependent_chunk_id].append(TracedPrerequisiteMet(done_at[edge.prerequisite_chunk_id]))
         return grouped
 
     # --- cursor and latch -----------------------------------------------------------
 
-    def newest_cursor(self) -> TraceCursorRecord | None:
+    def newest_cursor(self) -> TraceCheckpoint | None:
         return self._newest_cursor("newest_cursor")
 
-    def newest_export_cursor(self) -> TraceCursorRecord | None:
+    def newest_export_cursor(self) -> TraceCheckpoint | None:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor("newest_export_cursor", s.trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, operation: str, *where) -> TraceCursorRecord | None:  # type: ignore[no-untyped-def]
+    def _newest_cursor(self, operation: str, *where) -> TraceCheckpoint | None:  # type: ignore[no-untyped-def]
         c = s.trace_cursor.c
         with self._store.read(operation) as conn:
             row = conn.execute(
@@ -280,11 +280,11 @@ class TraceStore:
             ).first()
         if row is None:
             return None
-        return TraceCursorRecord(
+        return TraceCheckpoint(
             CursorKey(row.position_at, row.chunk_id, row.epoch, row.decision_id), row.span_count, row.recorded_at
         )
 
-    def newest_export_failure(self) -> TraceFailureRecord | None:
+    def newest_export_failure(self) -> TraceExportFailure | None:
         """Walks the latch events newest-first — one per outage edge, so a few — to the first failure."""
         c = s.event_log.c
         stmt = (
@@ -294,7 +294,7 @@ class TraceStore:
         )
         with self._store.read("newest_export_failure") as conn:
             row = next((r for r in conn.execute(stmt) if r.kind == _FAILED), None)
-        return TraceFailureRecord(row.recorded_at, row.message) if row is not None else None
+        return TraceExportFailure(row.recorded_at, row.message) if row is not None else None
 
     def newest_export_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
@@ -304,7 +304,7 @@ class TraceStore:
             kind = conn.execute(stmt).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 
-    def append_cursor(self, record: TraceCursorRecord) -> None:
+    def append_cursor(self, record: TraceCheckpoint) -> None:
         position = record.position
         with self._store.write("append_cursor") as conn:
             conn.execute(
@@ -319,8 +319,8 @@ class TraceStore:
             )
 
 
-def _transition(r) -> TransitionRecord:  # type: ignore[no-untyped-def]
-    return TransitionRecord(
+def _transition(r) -> TracedTransition:  # type: ignore[no-untyped-def]
+    return TracedTransition(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
         graph_id=r.graph_id,
@@ -331,8 +331,8 @@ def _transition(r) -> TransitionRecord:  # type: ignore[no-untyped-def]
     )
 
 
-def _migration(r) -> MigrationRecord:  # type: ignore[no-untyped-def]
-    return MigrationRecord(
+def _migration(r) -> TracedMigration:  # type: ignore[no-untyped-def]
+    return TracedMigration(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
         from_graph_id=r.from_graph_id,
@@ -346,8 +346,8 @@ def _migration(r) -> MigrationRecord:  # type: ignore[no-untyped-def]
     )
 
 
-def _restart(r) -> RestartRecord:  # type: ignore[no-untyped-def]
-    return RestartRecord(
+def _restart(r) -> TracedRestart:  # type: ignore[no-untyped-def]
+    return TracedRestart(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
         graph_id=r.graph_id,

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource, published_snapshot
@@ -36,6 +37,7 @@ from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.loop.process import IProcessProbe
 
 
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeDeclaration:
     """OpenCode, declared once."""

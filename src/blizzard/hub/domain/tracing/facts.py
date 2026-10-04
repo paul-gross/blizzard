@@ -8,20 +8,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import MigrationSource, UsageFact
 
 
+@dto
 @dataclass(frozen=True)
-class LeaseRecord:
+class TracedLease:
     """A ``lease_facts`` row. Deliberately carries no runner id: ownership is read from epoch owners."""
 
     epoch: int
     minted_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class EpochOwnerRecord:
+class TracedEpochOwner:
     """An ``epoch_owners`` row — ``runner_id`` ``None`` meaning the hub."""
 
     epoch: int
@@ -29,8 +32,9 @@ class EpochOwnerRecord:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class TransitionRecord:
+class TracedTransition:
     epoch: int
     recorded_at: datetime
     graph_id: str
@@ -40,8 +44,9 @@ class TransitionRecord:
     choice_name: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class MigrationRecord:
+class TracedMigration:
     epoch: int
     recorded_at: datetime
     from_graph_id: str
@@ -53,8 +58,9 @@ class MigrationRecord:
     choice_name: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class RestartRecord:
+class TracedRestart:
     epoch: int
     recorded_at: datetime
     #: The graph ``to_node_id`` belongs to.
@@ -65,15 +71,17 @@ class RestartRecord:
     decision_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class EscalationRecord:
+class TracedEscalation:
     epoch: int
     recorded_at: datetime
     decision_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class DecisionRecord:
+class TracedDecision:
     """A ``decisions`` row; ``imposed_by_runner_id`` is non-null exactly for a runner gate."""
 
     decision_id: str
@@ -83,8 +91,9 @@ class DecisionRecord:
     imposed_by_runner_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class DecisionResolutionRecord:
+class TracedDecisionResolution:
     """The moment a person decided — not when the holding runner picked it up."""
 
     decision_id: str
@@ -93,28 +102,33 @@ class DecisionResolutionRecord:
     choice: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class RequeueRecord:
+class TracedRequeue:
     requeued_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class RouteReleasedRecord:
+class TracedRouteRelease:
     released_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class ChunkStoppedRecord:
+class TracedChunkStop:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class ChunkCompletedRecord:
+class TracedChunkCompletion:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class QuestionRecord:
+class TracedQuestion:
     """A ``questions`` row with its answer's instant; the question and answer text never ride."""
 
     question_id: str
@@ -123,8 +137,9 @@ class QuestionRecord:
     answered_at: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class PauseRecord:
+class TracedPause:
     """A pause fact: ``paused`` sets it, ``paused=False`` lifts it. Carries no ``set_by``."""
 
     id: str
@@ -132,8 +147,9 @@ class PauseRecord:
     set_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class HubExecSlotRecord:
+class TracedHubExecSlot:
     """A ``hub_exec_slot`` row — keyed by node, with no epoch."""
 
     slot_id: str
@@ -142,8 +158,9 @@ class HubExecSlotRecord:
     released_at: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class HubPollRecord:
+class TracedHubPoll:
     """A ``hub_node_poll`` row, recorded at the epoch the chunk arrived at the hub node with."""
 
     id: str
@@ -152,8 +169,9 @@ class HubPollRecord:
     polled_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class BounceRecord:
+class TracedBounce:
     """A ``chunk_bounces`` row, without its envelope."""
 
     epoch: int
@@ -161,23 +179,27 @@ class BounceRecord:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class RouteCreatedRecord:
+class TracedRouteCreation:
     created_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class PromotionRecord:
+class TracedPromotion:
     promoted_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
-class PrerequisiteMetRecord:
+class TracedPrerequisiteMet:
     """The instant a prerequisite completed, resolved by the hydrator from the prerequisite's own facts."""
 
     met_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class StepFacts:
     """Everything step identification reads about one chunk.
@@ -190,26 +212,26 @@ class StepFacts:
     pin_graph_id: str | None = None
     #: The ingest instant, where the lifetime root starts.
     minted_at: datetime | None = None
-    lease_facts: tuple[LeaseRecord, ...] = ()
-    epoch_owners: tuple[EpochOwnerRecord, ...] = ()
-    transitions: tuple[TransitionRecord, ...] = ()
-    migrations: tuple[MigrationRecord, ...] = ()
-    restarts: tuple[RestartRecord, ...] = ()
-    escalations: tuple[EscalationRecord, ...] = ()
-    decisions: tuple[DecisionRecord, ...] = ()
-    decision_resolutions: tuple[DecisionResolutionRecord, ...] = ()
-    requeues: tuple[RequeueRecord, ...] = ()
-    route_released: tuple[RouteReleasedRecord, ...] = ()
-    chunk_stopped: tuple[ChunkStoppedRecord, ...] = ()
-    chunk_completed: tuple[ChunkCompletedRecord, ...] = ()
-    questions: tuple[QuestionRecord, ...] = ()
-    pauses: tuple[PauseRecord, ...] = ()
-    hub_exec_slots: tuple[HubExecSlotRecord, ...] = ()
-    hub_polls: tuple[HubPollRecord, ...] = ()
-    bounces: tuple[BounceRecord, ...] = ()
-    routes_created: tuple[RouteCreatedRecord, ...] = ()
-    promotions: tuple[PromotionRecord, ...] = ()
-    prerequisites_met: tuple[PrerequisiteMetRecord, ...] = ()
+    lease_facts: tuple[TracedLease, ...] = ()
+    epoch_owners: tuple[TracedEpochOwner, ...] = ()
+    transitions: tuple[TracedTransition, ...] = ()
+    migrations: tuple[TracedMigration, ...] = ()
+    restarts: tuple[TracedRestart, ...] = ()
+    escalations: tuple[TracedEscalation, ...] = ()
+    decisions: tuple[TracedDecision, ...] = ()
+    decision_resolutions: tuple[TracedDecisionResolution, ...] = ()
+    requeues: tuple[TracedRequeue, ...] = ()
+    route_released: tuple[TracedRouteRelease, ...] = ()
+    chunk_stopped: tuple[TracedChunkStop, ...] = ()
+    chunk_completed: tuple[TracedChunkCompletion, ...] = ()
+    questions: tuple[TracedQuestion, ...] = ()
+    pauses: tuple[TracedPause, ...] = ()
+    hub_exec_slots: tuple[TracedHubExecSlot, ...] = ()
+    hub_polls: tuple[TracedHubPoll, ...] = ()
+    bounces: tuple[TracedBounce, ...] = ()
+    routes_created: tuple[TracedRouteCreation, ...] = ()
+    promotions: tuple[TracedPromotion, ...] = ()
+    prerequisites_met: tuple[TracedPrerequisiteMet, ...] = ()
     usage: tuple[UsageFact, ...] = ()
     #: Source-native work-ref tokens (``acme#42``), rendered by the hydrator's configured binding.
     work_refs: tuple[str, ...] = ()

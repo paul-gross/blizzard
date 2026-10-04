@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.hub.domain.chunks.dependencies import FoldMint, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.errors import ChunkNotFound
@@ -182,6 +183,7 @@ def derive_blocked_markings(
     }
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkNeighbor:
     """One neighbor at one hop of :func:`derive_chunk_neighborhood` —
@@ -194,6 +196,7 @@ class ChunkNeighbor:
     satisfied: bool
 
 
+@dto
 @dataclass(frozen=True)
 class ChunkNeighborhood:
     """A chunk's standing edges one hop each way."""
@@ -261,6 +264,7 @@ def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, s
     return any(visit(node) for node in list(graph) if color.get(node, WHITE) == WHITE)
 
 
+@domain_model
 @dataclass(frozen=True)
 class FoldEdgePlan:
     """Per-target dependency-edge rewrite instructions for one fold: the release/mint

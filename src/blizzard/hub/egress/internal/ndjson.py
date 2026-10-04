@@ -16,7 +16,7 @@ from blizzard.hub.egress.internal.files import DirectoryEgressWriter
 from blizzard.hub.egress.writer import (
     MONEY_SCALE,
     DatasetSchema,
-    EgressRow,
+    EgressValues,
     EgressWriterSettings,
     IEgressWriter,
     rfc3339_utc,
@@ -36,7 +36,7 @@ def _encode_value(value: object) -> object:
 class NdjsonEncoder:
     extension = "ndjson.gz"
 
-    def encode(self, schema: DatasetSchema, rows: Sequence[EgressRow], out: BinaryIO) -> None:
+    def encode(self, schema: DatasetSchema, rows: Sequence[EgressValues], out: BinaryIO) -> None:
         with gzip.GzipFile(filename="", mode="wb", fileobj=out, mtime=0) as gz:
             for row in rows:
                 line = {c.name: _encode_value(row.values[c.name]) for c in schema.columns}

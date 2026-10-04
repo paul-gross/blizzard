@@ -13,6 +13,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
@@ -27,6 +28,7 @@ _log = get_logger("blizzard.hub.auth")
 _PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
 
 
+@dto
 @dataclass(frozen=True)
 class RunnerPrincipal:
     """A bearer token resolved to the runner it belongs to."""
@@ -35,6 +37,7 @@ class RunnerPrincipal:
     workspace_id: str
 
 
+@domain_model
 @dataclass(frozen=True)
 class AuthMode:
     """The runner-auth rollout brake — the one place a refusal decides raise vs. log."""

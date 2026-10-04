@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.findings import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
 
 #: A finding's birth, every way it leaves the live set, and its own undo — `observed`/
@@ -17,6 +18,7 @@ from blizzard.hub.domain.findings import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KI
 TREND_FACT_KINDS = frozenset({"add", "reopened"}) | EXIT_KINDS
 
 
+@dto
 @dataclass(frozen=True)
 class TrendFact:
     """One `finding_facts` row inside the window, joined to its own finding's
@@ -27,6 +29,7 @@ class TrendFact:
     introduced_at: datetime | None
 
 
+@dto
 @dataclass(frozen=True)
 class TrendPeriod:
     """One fixed-length slice of the window: findings created, exits per kind, the two
@@ -43,6 +46,7 @@ class TrendPeriod:
     reopened: int
 
 
+@dto
 @dataclass(frozen=True)
 class TrendAgeCut:
     """The cut over the window's created findings, against a caller-supplied
@@ -54,6 +58,7 @@ class TrendAgeCut:
     unattributed: int
 
 
+@dto
 @dataclass(frozen=True)
 class Trend:
     routine_name: str

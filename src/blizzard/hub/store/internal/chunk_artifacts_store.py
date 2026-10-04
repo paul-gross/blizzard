@@ -16,7 +16,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliverySources
@@ -41,7 +41,7 @@ class ChunkArtifactsStore:
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
         """Only the requested chunks and delivery families; no fleet artifact scan. Each
         chunk's markers arrive in durable write order (``artifacts.seq``)."""
-        markers: dict[str, list[ArtifactRow]] = defaultdict(list)
+        markers: dict[str, list[StoredArtifact]] = defaultdict(list)
         landed: dict[str, dict[str, str]] = defaultdict(dict)
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
@@ -61,7 +61,7 @@ class ChunkArtifactsStore:
                     .order_by(s.artifacts.c.chunk_id, s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ):
                     markers[a.chunk_id].append(
-                        ArtifactRow(
+                        StoredArtifact(
                             kind=ArtifactKind.ASSET,
                             name=a.name,
                             data=a.data,
@@ -80,10 +80,10 @@ class ChunkArtifactsStore:
                     landed[row.chunk_id][row.repo] = row.commit_hash
         return {chunk_id: DeliverySources(markers[chunk_id], landed[chunk_id]) for chunk_id in chunk_ids}
 
-    def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
+    def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         with self._store.read("load_artifacts") as conn:
             return [
-                ArtifactRow(
+                StoredArtifact(
                     kind=ArtifactKind(a.kind),
                     name=a.name,
                     data=a.data,
@@ -98,7 +98,7 @@ class ChunkArtifactsStore:
                 for a in conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
             ]
 
-    def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
+    def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
         with self._store.read("latest_artifact") as conn:
             # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
             # settles exact (epoch, produced_at) ties off backend-dependent row order.
@@ -111,7 +111,7 @@ class ChunkArtifactsStore:
             ).first()
             if a is None:
                 return None
-            return ArtifactRow(
+            return StoredArtifact(
                 kind=ArtifactKind(a.kind),
                 name=a.name,
                 data=a.data,
@@ -124,10 +124,10 @@ class ChunkArtifactsStore:
                 epoch=a.epoch,
             )
 
-    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, ArtifactRow]:
+    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, StoredArtifact]:
         if not names:
             return {}
-        result: dict[str, ArtifactRow] = {}
+        result: dict[str, StoredArtifact] = {}
         with self._store.read("latest_artifacts") as conn:
             for batch in id_batches(names):
                 # The winner per name is picked off the unloaded columns, in
@@ -146,7 +146,7 @@ class ChunkArtifactsStore:
                 for a in conn.execute(
                     select(s.artifacts).where(s.artifacts.c.artifact_id.in_(list(winner_by_name.values())))
                 ).all():
-                    result[a.name] = ArtifactRow(
+                    result[a.name] = StoredArtifact(
                         kind=ArtifactKind(a.kind),
                         name=a.name,
                         data=a.data,

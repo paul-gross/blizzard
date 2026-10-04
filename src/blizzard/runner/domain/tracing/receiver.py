@@ -12,8 +12,9 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, LEASE_ID
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord, ReceivedSpan, Scalar
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.tracing.attributes import RUNNER_ID
 
 __all__ = [
@@ -38,6 +39,7 @@ MAX_STRING_CHARS = 1024
 _WORKER = "worker"
 
 
+@dto
 @dataclass(frozen=True)
 class Allowlist:
     """The one scope a span may arrive under and the attributes it may carry, each with its declared value
@@ -49,6 +51,7 @@ class Allowlist:
     stamp_runner: bool = False
 
 
+@dto
 @dataclass(frozen=True)
 class Admission[T]:
     """``kept`` are the rebuilt items to forward; ``dropped`` counts those refused."""
@@ -57,12 +60,12 @@ class Admission[T]:
     dropped: int
 
 
-def lease_trace_id(lease: LeaseRecord) -> int:
+def lease_trace_id(lease: Lease) -> int:
     """The only trace a worker is handed: its chunk's."""
     return chunk_trace_id(lease.chunk_id)
 
 
-def admit(spans: list[ReceivedSpan], lease: LeaseRecord, allowlist: Allowlist) -> Admission[ReceivedSpan]:
+def admit(spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist) -> Admission[ReceivedSpan]:
     expected = lease_trace_id(lease)
     chunk_span = chunk_span_id(lease.chunk_id)
     keys = [StepKey.attempt(lease.chunk_id, e) for e in range(lease.epoch + 1)]
@@ -81,7 +84,7 @@ def admit(spans: list[ReceivedSpan], lease: LeaseRecord, allowlist: Allowlist) -
     return Admission(kept=kept, dropped=len(spans) - len(kept))
 
 
-def _rebuilt(span: ReceivedSpan, lease: LeaseRecord, allowlist: Allowlist) -> ReceivedSpan:
+def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist) -> ReceivedSpan:
     attributes: dict[str, Scalar] = {}
     for key, value in span.attributes.items():
         if len(attributes) >= MAX_ATTRIBUTES:
@@ -103,7 +106,7 @@ def _rebuilt(span: ReceivedSpan, lease: LeaseRecord, allowlist: Allowlist) -> Re
     )
 
 
-def admit_data_points(points: list[ReceivedDataPoint], lease: LeaseRecord, scope: str) -> Admission[ReceivedDataPoint]:
+def admit_data_points(points: list[ReceivedDataPoint], lease: Lease, scope: str) -> Admission[ReceivedDataPoint]:
     """The data points under ``scope``, each rebuilt: its sender's attributes capped, then the lease's stamps —
     chunk, lease, caller and runner — replacing any the sender set."""
     kept = [
@@ -121,7 +124,7 @@ def admit_data_points(points: list[ReceivedDataPoint], lease: LeaseRecord, scope
     return Admission(kept=kept, dropped=len(points) - len(kept))
 
 
-def admit_log_records(records: list[ReceivedLogRecord], lease: LeaseRecord, scope: str) -> Admission[ReceivedLogRecord]:
+def admit_log_records(records: list[ReceivedLogRecord], lease: Lease, scope: str) -> Admission[ReceivedLogRecord]:
     """The log records under ``scope``, each rebuilt as :func:`admit_data_points` does, with its body capped and
     its trace context kept only when it names the lease's work trace."""
     expected = lease_trace_id(lease)
@@ -133,7 +136,7 @@ def admit_log_records(records: list[ReceivedLogRecord], lease: LeaseRecord, scop
     return Admission(kept=kept, dropped=len(records) - len(kept))
 
 
-def _log_rebuilt(record: ReceivedLogRecord, lease: LeaseRecord, *, in_trace: bool) -> ReceivedLogRecord:
+def _log_rebuilt(record: ReceivedLogRecord, lease: Lease, *, in_trace: bool) -> ReceivedLogRecord:
     return replace(
         record,
         body=_truncated(record.body) if record.body is not None else None,
@@ -146,14 +149,14 @@ def _log_rebuilt(record: ReceivedLogRecord, lease: LeaseRecord, *, in_trace: boo
     )
 
 
-def _stamped_attributes(sent: Mapping[str, Scalar], lease: LeaseRecord) -> dict[str, Scalar]:
+def _stamped_attributes(sent: Mapping[str, Scalar], lease: Lease) -> dict[str, Scalar]:
     attributes = {key: _truncated(value) for key, value in list(sent.items())[:MAX_ATTRIBUTES]}
     _stamp(attributes, lease)
     attributes[RUNNER_ID] = lease.runner_id
     return attributes
 
 
-def _stamp(attributes: dict[str, Scalar], lease: LeaseRecord) -> None:
+def _stamp(attributes: dict[str, Scalar], lease: Lease) -> None:
     attributes[CALLER] = _WORKER
     attributes[CHUNK_ID] = lease.chunk_id
     attributes[LEASE_ID] = lease.lease_id

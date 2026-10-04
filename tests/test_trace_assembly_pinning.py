@@ -7,22 +7,22 @@ from typing import Any
 
 import pytest
 
-from blizzard.foundation.trace_spans import SpanRecord
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.domain.tracing import assembly
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.chunk_spans import assemble_completion, assemble_lifetime, assemble_work
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
-    ChunkCompletedRecord,
-    ChunkStoppedRecord,
-    DecisionRecord,
-    EpochOwnerRecord,
-    LeaseRecord,
-    PauseRecord,
-    PromotionRecord,
-    RouteCreatedRecord,
     StepFacts,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedEpochOwner,
+    TracedLease,
+    TracedPause,
+    TracedPromotion,
+    TracedRouteCreation,
 )
 from blizzard.hub.domain.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.tracing.summary import StepSummary, summarize_step
@@ -40,28 +40,28 @@ pytestmark = pytest.mark.unit
 US = timedelta(microseconds=1)
 
 
-def _spans(facts: StepFacts, index: int = 0) -> tuple[SpanRecord, ...]:
+def _spans(facts: StepFacts, index: int = 0) -> tuple[FinishedSpan, ...]:
     steps = identify_steps(facts)
     return assemble_step(facts, steps[index], steps)
 
 
-def _intervals(spans: tuple[SpanRecord, ...]) -> list[tuple[str, datetime, datetime]]:
+def _intervals(spans: tuple[FinishedSpan, ...]) -> list[tuple[str, datetime, datetime]]:
     return [(s.name, s.start, s.end) for s in spans[1:]]
 
 
 # --- runner id of a gate ---------------------------------------------------------------------------------------
 
 
-def _gate_with_owners(*owners: EpochOwnerRecord, imposed: str | None = None) -> StepFacts:
+def _gate_with_owners(*owners: TracedEpochOwner, imposed: str | None = None) -> StepFacts:
     return fx.make_facts(
-        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20), imposed_by_runner_id=imposed),),
+        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20), imposed_by_runner_id=imposed),),
         transitions=(fx.to("g1", "build", 70, 2, decision_id="d1"),),
         epoch_owners=owners,
-        lease_facts=(LeaseRecord(1, fx.at(10)),),
+        lease_facts=(TracedLease(1, fx.at(10)),),
     )
 
 
-def _gate_root(facts: StepFacts) -> SpanRecord:
+def _gate_root(facts: StepFacts) -> FinishedSpan:
     steps = identify_steps(facts)
     gate = next(s for s in steps if s.kind is StepKind.GATE)
     return assemble_step(facts, gate, steps)[0]
@@ -69,29 +69,29 @@ def _gate_root(facts: StepFacts) -> SpanRecord:
 
 def test_a_gate_falls_back_to_the_latest_owner_of_its_epoch() -> None:
     facts = _gate_with_owners(
-        EpochOwnerRecord(1, "r-first", fx.at(9)),
-        EpochOwnerRecord(1, "r-latest", fx.at(15)),
-        EpochOwnerRecord(1, "r-middle", fx.at(12)),
-        EpochOwnerRecord(2, "r-other-epoch", fx.at(60)),
+        TracedEpochOwner(1, "r-first", fx.at(9)),
+        TracedEpochOwner(1, "r-latest", fx.at(15)),
+        TracedEpochOwner(1, "r-middle", fx.at(12)),
+        TracedEpochOwner(2, "r-other-epoch", fx.at(60)),
     )
     assert _gate_root(facts).attributes[attr.RUNNER_ID] == "r-latest"
 
 
 def test_a_gate_latest_owner_wins_by_one_microsecond() -> None:
     facts = _gate_with_owners(
-        EpochOwnerRecord(1, "r-later", fx.at(9) + US),
-        EpochOwnerRecord(1, "r-earlier", fx.at(9)),
+        TracedEpochOwner(1, "r-later", fx.at(9) + US),
+        TracedEpochOwner(1, "r-earlier", fx.at(9)),
     )
     assert _gate_root(facts).attributes[attr.RUNNER_ID] == "r-later"
 
 
 def test_a_gate_with_no_owner_of_its_epoch_has_no_runner() -> None:
-    facts = _gate_with_owners(EpochOwnerRecord(2, "r-other-epoch", fx.at(60)))
+    facts = _gate_with_owners(TracedEpochOwner(2, "r-other-epoch", fx.at(60)))
     assert attr.RUNNER_ID not in _gate_root(facts).attributes
 
 
 def test_a_gate_imposed_by_a_runner_keeps_that_runner_over_the_owners() -> None:
-    facts = _gate_with_owners(EpochOwnerRecord(1, "r-owner", fx.at(9)), imposed="r-9")
+    facts = _gate_with_owners(TracedEpochOwner(1, "r-owner", fx.at(9)), imposed="r-9")
     assert _gate_root(facts).attributes[attr.RUNNER_ID] == "r-9"
 
 
@@ -100,7 +100,7 @@ def test_a_gate_imposed_by_a_runner_keeps_that_runner_over_the_owners() -> None:
 
 def _first_step(created: datetime, **extra: Any) -> StepFacts:
     return fx.make_facts(
-        routes_created=(RouteCreatedRecord(created),),
+        routes_created=(TracedRouteCreation(created),),
         transitions=(fx.to("g1", "review", 40, 1),),
         **fx.merge(fx.runner_epoch(1, 10), extra),
     )
@@ -127,7 +127,7 @@ def test_a_route_created_one_microsecond_after_the_step_start_is_not_claimed() -
 
 def _second_step(*created: datetime) -> StepFacts:
     return fx.make_facts(
-        routes_created=tuple(RouteCreatedRecord(c) for c in created),
+        routes_created=tuple(TracedRouteCreation(c) for c in created),
         transitions=(fx.to("g1", "review", 40, 1), fx.to("g1", "gate", 90, 2)),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
     )
@@ -165,25 +165,25 @@ def test_the_latest_eligible_route_is_the_claim() -> None:
 
 
 def test_the_queue_starts_at_a_promotion_exactly_at_the_claim() -> None:
-    facts = _first_step(fx.at(8), promotions=(PromotionRecord(fx.at(8)),))
+    facts = _first_step(fx.at(8), promotions=(TracedPromotion(fx.at(8)),))
     assert _intervals(_spans(facts))[0] == ("queue wait", fx.at(8), fx.at(8))
 
 
 def test_the_queue_starts_at_a_promotion_one_microsecond_before_the_claim() -> None:
-    facts = _first_step(fx.at(8), promotions=(PromotionRecord(fx.at(8) - US),))
+    facts = _first_step(fx.at(8), promotions=(TracedPromotion(fx.at(8) - US),))
     assert _intervals(_spans(facts))[0] == ("queue wait", fx.at(8) - US, fx.at(8))
 
 
 def test_a_promotion_one_microsecond_after_the_claim_does_not_open_the_queue() -> None:
-    facts = _first_step(fx.at(8), promotions=(PromotionRecord(fx.at(2)), PromotionRecord(fx.at(8) + US)))
+    facts = _first_step(fx.at(8), promotions=(TracedPromotion(fx.at(2)), TracedPromotion(fx.at(8) + US)))
     assert _intervals(_spans(facts))[0] == ("queue wait", fx.at(2), fx.at(8))
 
 
 def test_a_lifted_pause_exactly_at_the_claim_opens_the_queue() -> None:
     facts = _first_step(
         fx.at(8),
-        promotions=(PromotionRecord(fx.at(2)),),
-        pauses=(PauseRecord("p1", True, fx.at(3)), PauseRecord("p2", False, fx.at(8))),
+        promotions=(TracedPromotion(fx.at(2)),),
+        pauses=(TracedPause("p1", True, fx.at(3)), TracedPause("p2", False, fx.at(8))),
     )
     assert _intervals(_spans(facts))[0] == ("queue wait", fx.at(8), fx.at(8))
 
@@ -191,7 +191,7 @@ def test_a_lifted_pause_exactly_at_the_claim_opens_the_queue() -> None:
 # --- pauses ----------------------------------------------------------------------------------------------------
 
 
-def _paused(*pauses: PauseRecord) -> StepFacts:
+def _paused(*pauses: TracedPause) -> StepFacts:
     return fx.make_facts(pauses=pauses, transitions=(fx.to("g1", "review", 40, 1),), **fx.runner_epoch(1, 10))
 
 
@@ -207,30 +207,30 @@ def _paused(*pauses: PauseRecord) -> StepFacts:
     ],
 )
 def test_a_pause_is_told_only_when_set_within_the_step(set_at: datetime, expected: list[Any]) -> None:
-    facts = _paused(PauseRecord("p1", True, set_at), PauseRecord("p2", False, fx.at(20)))
+    facts = _paused(TracedPause("p1", True, set_at), TracedPause("p2", False, fx.at(20)))
     assert _intervals(_spans(facts)) == expected
 
 
 def test_a_pause_lifted_after_the_step_end_is_cut_at_the_end() -> None:
-    facts = _paused(PauseRecord("p1", True, fx.at(30)), PauseRecord("p2", False, fx.at(40) + US))
+    facts = _paused(TracedPause("p1", True, fx.at(30)), TracedPause("p2", False, fx.at(40) + US))
     assert _intervals(_spans(facts)) == [("pause", fx.at(30), fx.at(40))]
 
 
 def test_a_pause_lifted_exactly_at_the_step_end_ends_there() -> None:
-    facts = _paused(PauseRecord("p1", True, fx.at(30)), PauseRecord("p2", False, fx.at(40)))
+    facts = _paused(TracedPause("p1", True, fx.at(30)), TracedPause("p2", False, fx.at(40)))
     assert _intervals(_spans(facts)) == [("pause", fx.at(30), fx.at(40))]
 
 
 def test_a_lift_at_the_same_instant_as_the_pause_does_not_end_it() -> None:
-    facts = _paused(PauseRecord("p2", False, fx.at(30)), PauseRecord("p1", True, fx.at(30)))
+    facts = _paused(TracedPause("p2", False, fx.at(30)), TracedPause("p1", True, fx.at(30)))
     assert _intervals(_spans(facts)) == [("pause", fx.at(30), fx.at(40))]
 
 
 def test_a_pause_ends_at_the_first_lift_one_microsecond_after_it() -> None:
     facts = _paused(
-        PauseRecord("p1", True, fx.at(30)),
-        PauseRecord("p3", False, fx.at(35)),
-        PauseRecord("p2", False, fx.at(30) + US),
+        TracedPause("p1", True, fx.at(30)),
+        TracedPause("p3", False, fx.at(35)),
+        TracedPause("p2", False, fx.at(30) + US),
     )
     root, pause = _spans(facts)
     assert (pause.start, pause.end) == (fx.at(30), fx.at(30) + US)
@@ -238,7 +238,7 @@ def test_a_pause_ends_at_the_first_lift_one_microsecond_after_it() -> None:
 
 
 def test_a_lifted_pause_is_not_itself_a_pause() -> None:
-    facts = _paused(PauseRecord("p2", False, fx.at(20)))
+    facts = _paused(TracedPause("p2", False, fx.at(20)))
     assert _intervals(_spans(facts)) == []
 
 
@@ -356,8 +356,8 @@ def test_assemble_window_tells_a_closed_step_as_its_assembled_spans() -> None:
 
 def test_assemble_window_tells_a_finished_and_a_completed_chunk() -> None:
     facts = fx.make_facts(
-        chunk_stopped=(ChunkStoppedRecord(fx.at(30)),),
-        chunk_completed=(ChunkCompletedRecord(fx.at(60)),),
+        chunk_stopped=(TracedChunkStop(fx.at(30)),),
+        chunk_completed=(TracedChunkCompletion(fx.at(60)),),
         **fx.runner_epoch(1, 10),
     )
     finished = FinishedChunk(CursorKey.chunk_finished(fx.at(30), "ch_1"), facts)

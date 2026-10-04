@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.work import WorkRef
@@ -16,8 +17,9 @@ from blizzard.hub.domain.work import WorkRef
 WorkRefLabel = Callable[[WorkRef], str | None]
 
 
+@dto
 @dataclass(frozen=True)
-class TraceCursorRecord:
+class TraceCheckpoint:
     """One ``trace_cursor`` row: where the cursor stood after a pass, and what that pass told."""
 
     position: CursorKey
@@ -25,6 +27,7 @@ class TraceCursorRecord:
     recorded_at: datetime
 
 
+@dto
 @dataclass(frozen=True)
 class ClosingCandidates:
     """The chunks holding a closing fact in a window, and how far that read is complete.
@@ -37,8 +40,9 @@ class ClosingCandidates:
     newest: datetime | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class TraceFailureRecord:
+class TraceExportFailure:
     """One ``trace-export-failed`` event: when it was recorded and its fixed message."""
 
     at: datetime
@@ -55,7 +59,7 @@ class IReadTraceSteps(Protocol):
         """Each existing chunk's whole :class:`StepFacts`, keyed by chunk id, in a fixed number of statements."""
         ...
 
-    def newest_cursor(self) -> TraceCursorRecord | None:
+    def newest_cursor(self) -> TraceCheckpoint | None:
         """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
         ...
 
@@ -68,14 +72,14 @@ class IReadTraceStatus(Protocol):
     """What the operator status reads beyond the cursor and latch :class:`IReadTraceSteps` already holds —
     facts the sweep left behind, never process memory."""
 
-    def newest_export_cursor(self) -> TraceCursorRecord | None:
+    def newest_export_cursor(self) -> TraceCheckpoint | None:
         """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""
         ...
 
-    def newest_export_failure(self) -> TraceFailureRecord | None:
+    def newest_export_failure(self) -> TraceExportFailure | None:
         """The newest ``trace-export-failed`` event, or ``None``."""
         ...
 
 
 class IWriteTraceCursor(IReadTraceSteps, Protocol):
-    def append_cursor(self, record: TraceCursorRecord) -> None: ...
+    def append_cursor(self, record: TraceCheckpoint) -> None: ...

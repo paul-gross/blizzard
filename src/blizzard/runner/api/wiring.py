@@ -22,11 +22,12 @@ from blizzard.foundation.platform_tracing.received_export import (
     DisabledReceivedTelemetryExport,
     IReceivedTelemetryExport,
 )
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
-from blizzard.runner.domain.leases import LeaseRecord, LocalLeaseService
+from blizzard.runner.domain.leases import Lease, LocalLeaseService
 from blizzard.runner.domain.leases.liveness import LeaseLivenessService
 from blizzard.runner.domain.leases.session import LeaseSessionService
 from blizzard.runner.domain.pause import PauseService
@@ -47,6 +48,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 _STORE = "runner store"
 
 
+@domain_model
 @dataclass(frozen=True)
 class RunnerWiring:
     """One route's view of the wired runner — each accessor resolves its seam or refuses,
@@ -78,7 +80,7 @@ class RunnerWiring:
         stores = self.maybe_read_stores()
         return stores if stores is not None else self._refuse(_STORE)
 
-    def worker_lease(self, lease_id: str) -> LeaseRecord:
+    def worker_lease(self, lease_id: str) -> Lease:
         """The lease a worker verb may act against: the active lease, or — when the ordinary
         active lease is gone — the one an open takeover names. An open takeover
         is a second, independent source of worker-verb authorization, not a re-mint: the

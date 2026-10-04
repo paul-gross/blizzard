@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 
+
+@dto
 @dataclass(frozen=True)
 class EventQueryCriteria:
     """Every filter this API owes, all optional and freely combinable.
@@ -37,8 +40,9 @@ class EventQueryCriteria:
     effort: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class EventRecord:
+class QueriedEvent:
     """One event row as the query layer renders it — the wire layer shapes
     this further for the two encodings. ``payload`` stays raw JSON object text
     (``bzh:sql-portable``: never parsed or filtered on here)."""
@@ -62,18 +66,20 @@ class EventRecord:
     effort: str | None
 
 
+@dto
 @dataclass(frozen=True)
 class EventPage:
     """A bounded, keyset-paginated page — ``next_cursor`` is ``None``
     exactly when this page is the last one under ``criteria``'s ordering, so a caller
     drives a full bulk read by following it until absent."""
 
-    events: list[EventRecord]
+    events: list[QueriedEvent]
     next_cursor: str | None
 
 
+@dto
 @dataclass(frozen=True)
-class CountRow:
+class KeyedCount:
     """One grouping key's count — the four canned aggregations share this shape."""
 
     key: str
@@ -82,7 +88,7 @@ class CountRow:
     node_name: str | None = None
 
 
-def fold_counts_by_name(rows: list[CountRow]) -> list[CountRow]:
+def fold_counts_by_name(rows: list[KeyedCount]) -> list[KeyedCount]:
     """Fold node-keyed rows minted apart into one row per ``(graph_name, node_name)``,
     keyed ``<graph_name>/<node_name>`` and ordered like the store's own: count descending,
     key ascending. A row whose names are unresolved passes through under its id key."""
@@ -92,7 +98,7 @@ def fold_counts_by_name(rows: list[CountRow]) -> list[CountRow]:
         key = f"{row.graph_name}/{row.node_name}" if named else row.key
         ident = (row.graph_name, row.node_name, key) if named else (None, None, key)
         folded[ident] = folded.get(ident, 0) + row.count
-    out = [CountRow(key=k, count=n, graph_name=g, node_name=nn) for (g, nn, k), n in folded.items()]
+    out = [KeyedCount(key=k, count=n, graph_name=g, node_name=nn) for (g, nn, k), n in folded.items()]
     return sorted(out, key=lambda r: (-r.count, r.key))
 
 
@@ -110,18 +116,18 @@ class IReadAnalyticsEventQueries(Protocol):
         :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
-    def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_file(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         """Occurrence counts grouped by ``subject`` among ``file_read`` events matching
         ``criteria`` — ``criteria.kind`` is honored if it further narrows the scope, but
         this method's own ``file_read`` restriction always applies."""
         ...
 
-    def counts_by_skill(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_skill(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         """Occurrence counts grouped by ``subject`` among ``skill_invocation`` events
         matching ``criteria`` — see :meth:`counts_by_file` for the kind-restriction rule."""
         ...
 
-    def counts_by_agent_type(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_agent_type(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         """Occurrence counts grouped by the enclosing-sidechain ``agent_type`` column,
         across every kind matching ``criteria`` — "how much activity happened under which
         agent type," not narrowed to ``agent_spawn`` (a caller after spawn counts alone
@@ -129,6 +135,6 @@ class IReadAnalyticsEventQueries(Protocol):
         ``subject`` via the raw :meth:`events` read)."""
         ...
 
-    def counts_by_node(self, criteria: EventQueryCriteria) -> list[CountRow]:
+    def counts_by_node(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         """Occurrence counts grouped by ``node_id``, across every kind matching ``criteria``."""
         ...

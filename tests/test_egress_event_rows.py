@@ -11,7 +11,7 @@ import pytest
 from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact, SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.egress.event_rows import (
     EventDerivation,
-    EventsRow,
+    ExportedEventsEntry,
     FilePathPolicy,
     derivation_id,
     derivation_rows,
@@ -72,7 +72,7 @@ def _derivation(*events: TranscriptEvent, cwd: str | None = CWD, epoch: int = 1)
     )
 
 
-def _rows(*events: TranscriptEvent, paths: FilePathPolicy = RELATIVE, **kw: Any) -> tuple[EventsRow, ...]:
+def _rows(*events: TranscriptEvent, paths: FilePathPolicy = RELATIVE, **kw: Any) -> tuple[ExportedEventsEntry, ...]:
     return derivation_rows(fx.scenarios()["runner-step"], _derivation(*events, **kw), paths, EXPORTED)
 
 
@@ -85,7 +85,7 @@ def _hmac(path: str) -> str:
 
 
 def test_row_fields_are_the_contract_columns_in_order() -> None:
-    assert [f.name for f in fields(EventsRow)] == EVENT_COLUMNS
+    assert [f.name for f in fields(ExportedEventsEntry)] == EVENT_COLUMNS
 
 
 def test_a_derivation_gives_its_row_then_one_event_row_each() -> None:

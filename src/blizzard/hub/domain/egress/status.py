@@ -13,9 +13,10 @@ from datetime import datetime
 from typing import Literal
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, IReadEgressEvents
+from blizzard.hub.domain.egress.repository import EgressCheckpoint, IReadEgress, IReadEgressEvents
 from blizzard.hub.domain.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.tracing.window import oldest_unsent
@@ -25,6 +26,7 @@ FreeSpaceProbe = Callable[[], int | None]
 _FAILED = "egress-write-failed"
 
 
+@dto
 @dataclass(frozen=True)
 class DatasetStatus:
     """``cursor_at`` is the dataset's position in time; ``lag_seconds`` the age of the oldest row past it,
@@ -35,6 +37,7 @@ class DatasetStatus:
     lag_seconds: float | None
 
 
+@dto
 @dataclass(frozen=True)
 class EgressStatus:
     """``last_pass_*`` is the newest cursor row of any dataset; ``last_file`` the last data file the newest
@@ -135,7 +138,7 @@ class EgressStatusReader:
             backfill_max_window_seconds=config.backfill_max_window,
         )
 
-    def _dataset(self, name: str, cursor: EgressCursorRecord | None) -> DatasetStatus:
+    def _dataset(self, name: str, cursor: EgressCheckpoint | None) -> DatasetStatus:
         if cursor is None:
             return DatasetStatus(name, None, None)
         now = self._clock.now()
@@ -153,7 +156,7 @@ class EgressStatusReader:
             return DatasetStatus(name, cursor.events.at, _lag(now, self._oldest_event(cursor, now)))
         raise ValueError(f"no egress status for dataset {name!r}")
 
-    def _oldest_event(self, cursor: EgressCursorRecord, now: datetime) -> datetime | None:
+    def _oldest_event(self, cursor: EgressCheckpoint, now: datetime) -> datetime | None:
         assert cursor.events is not None
         version = EXTRACTOR_VERSION if self._config.extractor_versions == "current" else None
         markers = self._event_reads.markers_after(cursor.events, now, 1, extractor_version=version)
@@ -166,7 +169,7 @@ def _lag(now: datetime, oldest: datetime | None) -> float | None:
     return max((now - oldest).total_seconds(), 0.0) if oldest is not None else None
 
 
-def _last_data_file(record: EgressCursorRecord | None) -> str | None:
+def _last_data_file(record: EgressCheckpoint | None) -> str | None:
     """A cursor row's files end with its manifest; the file before it is the last data file."""
     if record is None or len(record.files) < 2:
         return None

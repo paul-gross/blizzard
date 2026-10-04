@@ -13,6 +13,7 @@ from typing import Literal, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.registry import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.transcripts")
@@ -30,12 +31,13 @@ CHUNK_BUDGET_MAX_BYTES = 64 * 1024 * 1024
 #: Per-runner rolling-24h rate (product plan: "roughly thirty busy nights' worth in one day").
 RUNNER_DAILY_RATE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 
-#: :attr:`SegmentRecord.rejection_reason` values a cap adjudication may set.
+#: :attr:`TranscriptSlice.rejection_reason` values a cap adjudication may set.
 REJECTED_RECORD_TOO_LARGE = "record_too_large"
 REJECTED_CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptCaps:
     """The three ceilings :meth:`TranscriptIngestService._reject_reason` adjudicates, resolved
@@ -48,8 +50,9 @@ class TranscriptCaps:
     runner_daily_rate_max_bytes: int = RUNNER_DAILY_RATE_MAX_BYTES
 
 
+@dto
 @dataclass(frozen=True)
-class SegmentRecord:
+class TranscriptSlice:
     """One shipped turn-range slice, store-shaped: ``turns_json`` is the record's turns,
     already serialized by the caller (``bzh:domain-core``). ``record_truncated`` is the
     runner's OWN cap declaration, distinct from this hub's own ``rejected`` (below)."""
@@ -77,8 +80,9 @@ class SegmentRecord:
     spawn_cwd: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
-class SegmentIndexRow:
+class SegmentSummary:
     """One segment's aggregated metadata — every stored/rejected record folded into
     its owning segment. ``truncated`` is true iff any record was cap-rejected OR declared
     its own ``record_truncated``, a runner-side loss the hub's own caps never see."""
@@ -98,6 +102,7 @@ class SegmentIndexRow:
     harness_id: str | None = None
 
 
+@dto
 @dataclass(frozen=True)
 class SegmentRecordContent:
     """One record's decompressed turns, in the order the content route concatenates them.
@@ -117,7 +122,7 @@ class IReadTranscriptSegments(Protocol):
     """Read-only operations. The operator-plane index/content routes depend on this
     variant (``bzh:controller-read-only``)."""
 
-    def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]: ...
+    def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]: ...
 
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]: ...
 
@@ -145,15 +150,16 @@ class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
 
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int: ...
 
-    def insert_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None: ...
+    def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None: ...
 
-    def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None: ...
+    def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None: ...
 
-    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None: ...
+    def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None: ...
 
-    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None: ...
+    def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None: ...
 
 
+@dto
 @dataclass(frozen=True)
 class TranscriptIngestResult:
     """:meth:`TranscriptIngestService.ingest`'s own return — the per-seq outcome
@@ -183,9 +189,9 @@ class TranscriptIngestService:
         self._clock = clock
         self._caps = caps if caps is not None else TranscriptCaps()
 
-    def ingest(self, runner_id: str, records: list[tuple[int, SegmentRecord]]) -> TranscriptIngestResult:
+    def ingest(self, runner_id: str, records: list[tuple[int, TranscriptSlice]]) -> TranscriptIngestResult:
         """``records`` pairs each record with its lane ``seq`` (the wire batch's own
-        per-record field) — kept out of :class:`SegmentRecord` since ``seq`` is a lane
+        per-record field) — kept out of :class:`TranscriptSlice` since ``seq`` is a lane
         concept, not part of a record's stored identity. A retired runner is refused with
         :class:`RunnerRetired` before anything lands."""
         self._retired.refuse_if_retired(runner_id, action="transcript ingest")
@@ -239,7 +245,7 @@ class TranscriptIngestService:
         )
         return TranscriptIngestResult(high_water=mark, applied=applied, already_applied=already, capped=capped)
 
-    def _apply(self, record: SegmentRecord, *, at: datetime) -> bool:
+    def _apply(self, record: TranscriptSlice, *, at: datetime) -> bool:
         """``True`` stored, ``False`` cap-rejected — both advance the high-water."""
         state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
         if state == "accepted":
@@ -261,7 +267,7 @@ class TranscriptIngestService:
         self._store.insert_accepted(record, byte_count=byte_count, codec="zlib", at=at)
         return True
 
-    def _reject_reason(self, record: SegmentRecord, *, byte_count: int, at: datetime) -> str | None:
+    def _reject_reason(self, record: TranscriptSlice, *, byte_count: int, at: datetime) -> str | None:
         if byte_count > self._caps.record_max_bytes:
             return self._rejected(record, REJECTED_RECORD_TOO_LARGE, byte_count, self._caps.record_max_bytes)
         # Only already-*stored* bytes count toward the chunk budget — a rejection
@@ -283,7 +289,7 @@ class TranscriptIngestService:
         return None
 
     @staticmethod
-    def _rejected(record: SegmentRecord, reason: str, observed: int, limit: int) -> str:
+    def _rejected(record: TranscriptSlice, reason: str, observed: int, limit: int) -> str:
         """Log the CONFIGURED limit alongside the reason: a rejection reads as a bug when the
         operator cannot tell which ceiling bound it, and the ceilings are no longer constants
         an operator could look up. Returns ``reason`` so the caller stays a single expression."""

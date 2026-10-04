@@ -20,7 +20,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import DecisionRow, DocketEntry
+from blizzard.hub.domain.work import DocketEntry, GateDecision
 from blizzard.wire.completion import CreateWorkItemProposal, UpdateWorkItemProposal
 from blizzard.wire.decision import (
     DecisionChoiceModel,
@@ -62,8 +62,8 @@ def _docket_entry_view(entry: DocketEntry) -> DocketEntryView:
     )
 
 
-def to_decision_view(row: DecisionRow) -> DecisionView:
-    """Map a :class:`DecisionRow` to its wire view (shared with the chunk detail)."""
+def to_decision_view(row: GateDecision) -> DecisionView:
+    """Map a :class:`GateDecision` to its wire view (shared with the chunk detail)."""
     return DecisionView(
         decision_id=row.decision_id,
         chunk_id=row.chunk_id,

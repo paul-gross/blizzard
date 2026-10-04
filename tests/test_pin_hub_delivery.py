@@ -17,7 +17,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.artifacts import StoredArtifact
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
@@ -149,7 +149,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
     on different branches at the same epoch — a chunk that worked the repo across two
     environments and never converged."""
     rows = [
-        ArtifactRow(
+        StoredArtifact(
             kind=ArtifactKind.GIT_COMMIT,
             name="w",
             data=f"{branch}:{commit * 40}",

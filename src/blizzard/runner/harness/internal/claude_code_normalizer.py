@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
     NormalizedTurn,
@@ -59,7 +60,7 @@ def _as_int(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
-def _first_field(records: list[Record], key: str) -> str | None:
+def _first_field(records: list[TranscriptEntry], key: str) -> str | None:
     """``key``'s value off the first ``records`` entry that carries one — a run's own
     ``agentType`` (route 2-4), or a sidecar file's (route 1)."""
     for record in records:
@@ -80,6 +81,7 @@ def _infer_agent_type(tool: ToolCall | None, fallback: str | None) -> str | None
     return fallback
 
 
+@domain_model
 @dataclass(frozen=True)
 class Text:
     """One string block, ANSI-stripped and capped at :data:`MAX_BLOCK_CHARS`."""
@@ -112,17 +114,18 @@ class Text:
 _EMPTY = Text("", False)
 
 
+@domain_model
 @dataclass(frozen=True, eq=False)
-class Record:
+class TranscriptEntry:
     """One raw JSONL record. Identity-bearing (``eq=False``): two records of identical content
     stay two records, which is what threads a run correctly under duplicate ``uuid`` values."""
 
     raw: dict[str, Any]
 
     @classmethod
-    def parse(cls, lines: list[str]) -> list[Record]:
+    def parse(cls, lines: list[str]) -> list[TranscriptEntry]:
         """Every line that decodes to a JSON object; anything else is skipped — degrade, never crash."""
-        records: list[Record] = []
+        records: list[TranscriptEntry] = []
         for raw_line in lines:
             line = raw_line.strip()
             if not line:
@@ -218,21 +221,22 @@ class Record:
         return sum(_as_int(usage.get(field)) for field in _CONTEXT_USAGE_FIELDS) or None
 
 
+@domain_model
 @dataclass(frozen=True, eq=False)
 class Run:
     """One inline sidechain conversation: a linear ``parentUuid`` chain of records."""
 
-    records: list[Record]
+    records: list[TranscriptEntry]
 
     @classmethod
-    def thread(cls, records: list[Record]) -> list[Run]:
+    def thread(cls, records: list[TranscriptEntry]) -> list[Run]:
         """Thread inline ``isSidechain`` records into runs by ``parentUuid``; one lacking a usable
         ``uuid``/``parentUuid`` joins a shared trailing run rather than being dropped. Linear in
         ``len(records)`` (pinned by ``test_threading_stays_fast_under_duplicate_uuid_values``)."""
         by_uuid = {r.uuid: r for r in records if r.uuid is not None}
         # Indexed by `parentUuid` as a queue, so walking a chain forward dequeues each
         # candidate exactly once; shared parents resolve in file order, first-unused-wins.
-        children: dict[str, deque[Record]] = {}
+        children: dict[str, deque[TranscriptEntry]] = {}
         for record in records:
             if record.parent_uuid is not None:
                 children.setdefault(record.parent_uuid, deque()).append(record)
@@ -244,7 +248,7 @@ class Run:
             return [cls(records)]
 
         runs: list[Run] = []
-        used: set[Record] = set()
+        used: set[TranscriptEntry] = set()
         for root in roots:
             if root in used:
                 continue
@@ -301,6 +305,7 @@ class Run:
         return _first_field(self.records, key)
 
 
+@dto
 @dataclass(frozen=True)
 class ToolInput:
     """A tool call's ``input``, never coerced from a non-object value — see
@@ -322,6 +327,7 @@ class ToolInput:
         return cls({}, json.dumps(raw), "other")
 
 
+@dto
 @dataclass(frozen=True)
 class NormalizedFile:
     """One JSONL file's records, normalized. ``agent_id_by_tool_turn`` is *attachment* — an id
@@ -341,15 +347,15 @@ class NormalizedFile:
     @classmethod
     def of_lines(cls, lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
         """One JSONL file's raw lines, collapsed."""
-        return cls.of(Record.parse(lines), is_sidechain_file=is_sidechain_file)
+        return cls.of(TranscriptEntry.parse(lines), is_sidechain_file=is_sidechain_file)
 
     @classmethod
-    def of(cls, records: list[Record], *, is_sidechain_file: bool = False) -> NormalizedFile:
+    def of(cls, records: list[TranscriptEntry], *, is_sidechain_file: bool = False) -> NormalizedFile:
         """``is_sidechain_file`` marks a sidecar file whose every record is one subagent's own
         conversation, so ``isSidechain`` no longer means "splice this elsewhere"."""
         harness_version: str | None = None
-        main: list[Record] = []
-        sidechain: list[Record] = []
+        main: list[TranscriptEntry] = []
+        sidechain: list[TranscriptEntry] = []
 
         for record in records:
             harness_version = record.version or harness_version
@@ -389,7 +395,7 @@ class NormalizedFile:
             turns_by_agent_id.setdefault(agent_id, []).append(index)
 
         for agent_id, lines in sidecar_lines.items():
-            records = Record.parse(lines)
+            records = TranscriptEntry.parse(lines)
             conv_turns = cls.of(records, is_sidechain_file=True).turns
             fallback_agent_type = _first_field(records, "agentType")
             spawning_indices = turns_by_agent_id.get(agent_id)
@@ -436,7 +442,7 @@ class _TurnCollapser:
         #: `tool_use_id` → turn index, so a later `tool_result` lands its output.
         self._pending_tool_index: dict[str, int] = {}
 
-    def feed_all(self, records: list[Record]) -> None:
+    def feed_all(self, records: list[TranscriptEntry]) -> None:
         for record in records:
             if record.type == "assistant":
                 self._assistant(record)
@@ -466,7 +472,7 @@ class _TurnCollapser:
         )
         return len(self.turns) - 1
 
-    def _assistant(self, record: Record) -> None:
+    def _assistant(self, record: TranscriptEntry) -> None:
         at = record.at
         for block in record.blocks("thinking"):
             self._thinking(block, at)
@@ -507,7 +513,7 @@ class _TurnCollapser:
             output_truncated=False,
         )
 
-    def _user(self, record: Record) -> None:
+    def _user(self, record: TranscriptEntry) -> None:
         results = record.blocks("tool_result")
         if not results:
             # A plain user record (first spawn prompt, or a later --resume injection) — env.
@@ -562,7 +568,7 @@ class _SidechainAssembler:
         # Built once, not per run: route 3 otherwise rescans every turn per run.
         self.by_prompt = self._index_by_prompt(self.turns)
 
-    def assemble(self, records: list[Record]) -> list[SidechainConversation]:
+    def assemble(self, records: list[TranscriptEntry]) -> list[SidechainConversation]:
         """Splice each run onto its spawning turn; return the runs that linked to none."""
         unlinked: list[SidechainConversation] = []
         for run in Run.thread(records):

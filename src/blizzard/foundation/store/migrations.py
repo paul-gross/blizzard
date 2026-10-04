@@ -16,6 +16,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import Column, MetaData, String, Table
 from sqlalchemy.exc import OperationalError
 
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.engine import create_engine_from_url
 
 # Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
@@ -44,6 +45,7 @@ class RevisionMismatchError(RuntimeError):
         )
 
 
+@domain_model
 @dataclass(frozen=True)
 class MigrationRunner:
     """Drives one Alembic tree against one store URL."""

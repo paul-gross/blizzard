@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.runner.domain.checks import CheckResultRecord
+from blizzard.foundation.roles import dto
+from blizzard.runner.domain.checks import ExecutedCheck
 from blizzard.wire.envelope import NodeEnvelope
 
 
+@dto
 @dataclass(frozen=True)
 class JudgementPrompt:
     """One attempt's prompt, over the node and the checks run at its worker's exit."""
 
     envelope: NodeEnvelope
-    check_results: list[CheckResultRecord]
+    check_results: list[ExecutedCheck]
 
     def render(self) -> str:
         """Authored prose, then the checks, then the elicitation.

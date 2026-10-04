@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.graph import Node
 from blizzard.wire.completion import Coverage, SubmittedArtifact
@@ -17,6 +18,7 @@ from blizzard.wire.completion import Coverage, SubmittedArtifact
 _log = get_logger("blizzard.hub.produces_auth")
 
 
+@domain_model
 @dataclass(frozen=True)
 class Produces:
     """A node's ``produces:`` declaration judged against one submission's artifacts —

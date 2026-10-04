@@ -16,7 +16,7 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import Lease
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.harness.adapter import IHarnessUsageLimits
 from blizzard.runner.harness.identity import SessionReference
@@ -41,9 +41,7 @@ _CP_JUDGE_AFTER_BRAKE = crashpoint(
 )
 
 
-def classify_worker_usage_limit(
-    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
-) -> UsageLimit | None:
+def classify_worker_usage_limit(ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]) -> UsageLimit | None:
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
     range, shared with its provider-overload classification so neither pays for the other's
@@ -57,7 +55,7 @@ def classify_worker_usage_limit(
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_worker(ctx: LoopContext, lease: LeaseRecord, limit: UsageLimit) -> None:
+def engage_and_park_worker(ctx: LoopContext, lease: Lease, limit: UsageLimit) -> None:
     """Engage the brake for a limited worker generation, then park the lease in place —
     the worker has already exited, so there is nothing to kill."""
     session = lease.session
@@ -74,9 +72,7 @@ def engage_and_park_worker(ctx: LoopContext, lease: LeaseRecord, limit: UsageLim
     )
 
 
-def classify_judge_usage_limit(
-    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
-) -> UsageLimit | None:
+def classify_judge_usage_limit(ctx: LoopContext, lease: Lease, output: str, lines: Sequence[str]) -> UsageLimit | None:
     """This generation's own judge elicitation, classified over its already-read output and
     transcript range (judge boundary to tail, shared with provider-overload classification)
     — ``None`` when not usage-limited."""
@@ -89,7 +85,7 @@ def classify_judge_usage_limit(
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_judge(ctx: LoopContext, lease: LeaseRecord, limit: UsageLimit) -> None:
+def engage_and_park_judge(ctx: LoopContext, lease: Lease, limit: UsageLimit) -> None:
     """Engage the brake for a limited judge elicitation, then park the lease in place (the
     process has already exited — nothing to kill). The elicitation record is left standing,
     on purpose: :meth:`~blizzard.runner.loop.dormant.DormantSession.on_unpause` reads it back

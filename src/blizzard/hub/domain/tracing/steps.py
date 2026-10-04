@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import StepKey
-from blizzard.hub.domain.tracing.facts import DecisionRecord, StepFacts
+from blizzard.hub.domain.tracing.facts import StepFacts, TracedDecision
 from blizzard.hub.domain.tracing.position import Position, movement_arrivals, position_at, position_of_node
 from blizzard.hub.domain.work import MigrationSource
 
@@ -44,6 +45,7 @@ class PrecededBy(StrEnum):
     RELEASED_CLAIM = "released-claim"
 
 
+@domain_model
 @dataclass(frozen=True)
 class StepClose:
     """How and when a step ended; ``fact`` is the closing fact record itself."""
@@ -53,6 +55,7 @@ class StepClose:
     fact: object
 
 
+@domain_model
 @dataclass(frozen=True)
 class NodeStep:
     """One identified step. ``close`` is ``None`` while the step is open.
@@ -72,6 +75,7 @@ class NodeStep:
     preceded_by: PrecededBy | None = None
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Candidate:
     at: datetime
@@ -132,7 +136,7 @@ def _terminal_candidates(facts: StepFacts, start: datetime, epoch: int) -> list[
     return found
 
 
-def _gate_close(facts: StepFacts, decision: DecisionRecord) -> StepClose | None:
+def _gate_close(facts: StepFacts, decision: TracedDecision) -> StepClose | None:
     """A gate closes at the first fact carrying its ``decision_id``, from the four closing tables."""
     key = decision.decision_id
     found: list[_Candidate] = []

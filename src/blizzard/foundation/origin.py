@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.roles import domain_model
 
 
+@domain_model
 @dataclass(frozen=True)
 class Origin:
     """One request's effective client origin, judged against the configured proxy trust set."""

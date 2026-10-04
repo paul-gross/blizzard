@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.internal.opencode_export import IOpenCodeExporter, OpenCodeExportError
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeMessage,
@@ -23,6 +24,7 @@ from blizzard.runner.harness.internal.opencode_shapes import (
 _log = get_logger("blizzard.runner.harness.usage")
 
 
+@dto
 @dataclass(frozen=True)
 class DescendantStep:
     """One completed ``step-finish`` part of a descendant session, with the ``(provider, model)``
@@ -33,6 +35,7 @@ class DescendantStep:
     model_id: str | None
 
 
+@domain_model
 @dataclass(frozen=True)
 class _Window:
     start_ms: int

@@ -16,7 +16,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.pause import PauseParkRecord
+from blizzard.runner.domain.pause import PausePark
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -957,7 +957,7 @@ def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    park = PauseParkRecord(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
+    park = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
     DormantSession(ctx, lease).on_unpause(park, None)
 
     payloads = _usage_payloads(store)

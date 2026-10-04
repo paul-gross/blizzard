@@ -15,6 +15,7 @@ from datetime import datetime
 from pydantic import TypeAdapter, ValidationError
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.roles import dto
 from blizzard.hub.domain.finding_bucket import FindingBucket
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp
@@ -40,6 +41,7 @@ LiveFindings = Mapping[str, str]
 
 # The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
 # `CommitResolver` to return it costs no extra forge round trip.
+@dto
 @dataclass(frozen=True)
 class CommitResolution:
     exists: bool
@@ -51,6 +53,7 @@ class CommitResolution:
 CommitResolver = Callable[[str, str], CommitResolution | None]
 
 
+@dto
 @dataclass(frozen=True)
 class ValidatedDelivery:
     """What a passing :func:`validate_delivery` hands the next phase: the run it was

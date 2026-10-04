@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.internal.opencode_shapes import OpenCodeSessionExport
 
 CURSOR_VERSION = 1
@@ -22,6 +23,7 @@ class CursorError(ValueError):
     """A cursor token is malformed or contains an unsupported required shape."""
 
 
+@domain_model
 @dataclass(frozen=True)
 class MessagePartIdentity:
     """The stable identity used for forward admission."""
@@ -36,8 +38,9 @@ class MessagePartIdentity:
             raise CursorError("part identity must be non-empty when present")
 
 
+@dto
 @dataclass(frozen=True)
-class CursorRecord:
+class MessagePartRevision:
     """One identity and its current shape, ready for admission."""
 
     identity: MessagePartIdentity
@@ -50,10 +53,11 @@ class CursorRecord:
         message_id: str,
         part_id: str | None,
         payload: object,
-    ) -> CursorRecord:
+    ) -> MessagePartRevision:
         return cls(MessagePartIdentity(message_id, part_id), payload, _fingerprint(payload))
 
 
+@domain_model
 @dataclass(frozen=True)
 class CursorMark:
     """The opaque cursor's remembered identity and latest admitted revision."""
@@ -62,14 +66,16 @@ class CursorMark:
     fingerprint: str
 
 
+@dto
 @dataclass(frozen=True)
 class CursorAdmission:
     """A record admitted as genuinely new or as a state update to a known identity."""
 
-    record: CursorRecord
+    record: MessagePartRevision
     kind: Literal["new", "updated"]
 
 
+@dto
 @dataclass(frozen=True)
 class CursorRead:
     """The forward delta and the cursor to persist for the next read."""
@@ -78,12 +84,13 @@ class CursorRead:
     cursor: MessagePartCursor
 
     @property
-    def records(self) -> tuple[CursorRecord, ...]:
+    def records(self) -> tuple[MessagePartRevision, ...]:
         """The admitted records in current export order."""
 
         return tuple(admission.record for admission in self.admissions)
 
 
+@domain_model
 @dataclass(frozen=True)
 class MessagePartCursor:
     """An opaque, identity-based cursor with deterministic JSON serialization."""
@@ -156,14 +163,14 @@ class MessagePartCursor:
             separators=(",", ":"),
         )
 
-    def admit(self, records: Iterable[CursorRecord]) -> CursorRead:
+    def admit(self, records: Iterable[MessagePartRevision]) -> CursorRead:
         """Admit new identities and changed revisions, preserving current order; repeated
         identities inside one export collapse to their last state. A mark absent
         from the current export is dropped only when this export ALSO carries a
         ``compaction`` part — real proof of pruning, since absence alone is indistinguishable
         from a transient read race and would silently re-admit retained history as "new"."""
 
-        current: dict[MessagePartIdentity, CursorRecord] = {}
+        current: dict[MessagePartIdentity, MessagePartRevision] = {}
         for record in records:
             current[record.identity] = record
 
@@ -185,20 +192,20 @@ class MessagePartCursor:
         return CursorRead(tuple(admissions), MessagePartCursor(ordered_marks))
 
 
-def records_for_export(export: OpenCodeSessionExport) -> tuple[CursorRecord, ...]:
+def records_for_export(export: OpenCodeSessionExport) -> tuple[MessagePartRevision, ...]:
     """Flatten a parsed export into message/part identity records in stable source order."""
 
-    records: list[CursorRecord] = []
+    records: list[MessagePartRevision] = []
     for message in export.messages:
         if not message.parts:
-            records.append(CursorRecord.of(message.info.id, None, message.raw))
+            records.append(MessagePartRevision.of(message.info.id, None, message.raw))
             continue
         for part in message.parts:
-            records.append(CursorRecord.of(message.info.id, part.id, part.raw))
+            records.append(MessagePartRevision.of(message.info.id, part.id, part.raw))
     return tuple(records)
 
 
-def _is_compaction_record(record: CursorRecord) -> bool:
+def _is_compaction_record(record: MessagePartRevision) -> bool:
     """Whether ``record`` is a ``type: "compaction"`` part — the one signal ``admit`` trusts
     as proof that this tick's export reflects genuinely pruned history, never inferred from a
     record's own age or size."""
@@ -219,8 +226,8 @@ __all__ = [
     "CursorError",
     "CursorMark",
     "CursorRead",
-    "CursorRecord",
     "MessagePartCursor",
     "MessagePartIdentity",
+    "MessagePartRevision",
     "records_for_export",
 ]

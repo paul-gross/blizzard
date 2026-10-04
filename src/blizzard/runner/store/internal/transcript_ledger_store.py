@@ -20,7 +20,7 @@ from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     IWriteTranscriptLedgerRepository,
     TranscriptBackfillLease,
-    TranscriptSegmentLedgerRow,
+    TranscriptSegmentState,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -34,14 +34,14 @@ class TranscriptLedgerStore:
 
     # --- reads --------------------------------------------------------------
 
-    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentState | None:
         rows = self._store.all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
         return self._row_to_transcript_segment(rows[0]) if rows else None
 
-    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
+    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
         if not segment_ids:
             return {}
-        result: dict[str, TranscriptSegmentLedgerRow] = {}
+        result: dict[str, TranscriptSegmentState] = {}
         for batch in id_batches(segment_ids):
             stmt = select(transcript_segments).where(transcript_segments.c.segment_id.in_(batch))
             for r in self._store.all(stmt):
@@ -49,7 +49,7 @@ class TranscriptLedgerStore:
                 result[row.segment_id] = row
         return result
 
-    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
+    def open_transcript_segments(self) -> list[TranscriptSegmentState]:
         stmt = (
             select(transcript_segments)
             .where(transcript_segments.c.finalized_at.is_(None))
@@ -57,7 +57,7 @@ class TranscriptLedgerStore:
         )
         return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
 
-    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
+    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentState]:
         stmt = (
             select(transcript_segments)
             .where(transcript_segments.c.lease_id == lease_id)
@@ -66,7 +66,7 @@ class TranscriptLedgerStore:
         )
         return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
 
-    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         stmt = (
             select(transcript_segments)
             .where(transcript_segments.c.chunk_id == chunk_id)
@@ -382,8 +382,8 @@ class TranscriptLedgerStore:
     # --- shared helpers -------------------------------------------------------
 
     @staticmethod
-    def _row_to_transcript_segment(r) -> TranscriptSegmentLedgerRow:  # type: ignore[no-untyped-def]
-        return TranscriptSegmentLedgerRow(
+    def _row_to_transcript_segment(r) -> TranscriptSegmentState:  # type: ignore[no-untyped-def]
+        return TranscriptSegmentState(
             segment_id=str(r.segment_id),
             chunk_id=str(r.chunk_id),
             node_id=str(r.node_id),

@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, narrow_event_log_kind
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
@@ -76,6 +77,7 @@ def _external_usage_windows_json(raw: object, *, runner_id: str, slug: str) -> s
     return json.dumps(windows)
 
 
+@domain_model
 @dataclass(frozen=True)
 class Payload:
     """One pushed fact's body, read through the coercions the intake shares.
@@ -181,6 +183,7 @@ class RunnerFactsService:
         )
 
 
+@dto
 @dataclass(frozen=True)
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck` plus, per

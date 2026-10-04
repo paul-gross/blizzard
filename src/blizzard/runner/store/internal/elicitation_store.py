@@ -9,7 +9,7 @@ from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.domain.elicitation import ElicitationRecord, IWriteElicitationRepository
+from blizzard.runner.domain.elicitation import IWriteElicitationRepository, PendingElicitation
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import in_flight_elicitations
 
@@ -22,7 +22,7 @@ class ElicitationStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def in_flight_elicitation(self, lease_id: str, epoch: int) -> ElicitationRecord | None:
+    def in_flight_elicitation(self, lease_id: str, epoch: int) -> PendingElicitation | None:
         row = self._store.all(
             select(in_flight_elicitations).where(
                 and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
@@ -31,7 +31,7 @@ class ElicitationStore:
         if not row:
             return None
         r = row[0]
-        return ElicitationRecord(
+        return PendingElicitation(
             id=int(r.id),
             lease_id=str(r.lease_id),
             epoch=int(r.epoch),
@@ -43,19 +43,19 @@ class ElicitationStore:
             relaunch_count=int(r.relaunch_count),
         )
 
-    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], PendingElicitation]:
         if not pairs:
             return {}
         wanted = set(pairs)
         lease_ids = sorted({lease_id for lease_id, _ in pairs})
-        result: dict[tuple[str, int], ElicitationRecord] = {}
+        result: dict[tuple[str, int], PendingElicitation] = {}
         for batch in id_batches(lease_ids):
             rows = self._store.all(select(in_flight_elicitations).where(in_flight_elicitations.c.lease_id.in_(batch)))
             for r in rows:
                 key = (str(r.lease_id), int(r.epoch))
                 if key not in wanted:
                     continue
-                result[key] = ElicitationRecord(
+                result[key] = PendingElicitation(
                     id=int(r.id),
                     lease_id=key[0],
                     epoch=key[1],
@@ -72,10 +72,10 @@ class ElicitationStore:
         rows = self._store.all(select(in_flight_elicitations.c.lease_id))
         return {str(r.lease_id) for r in rows}
 
-    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+    def in_flight_elicitations_by_lease(self) -> dict[str, PendingElicitation]:
         rows = self._store.all(select(in_flight_elicitations))
         return {
-            str(r.lease_id): ElicitationRecord(
+            str(r.lease_id): PendingElicitation(
                 id=int(r.id),
                 lease_id=str(r.lease_id),
                 epoch=int(r.epoch),

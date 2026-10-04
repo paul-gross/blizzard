@@ -9,7 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.roles import dto
 
+
+@dto
 @dataclass(frozen=True)
 class AcquiredEnvironment:
     """An acquired environment: its opaque id and its working directory.
@@ -20,6 +23,7 @@ class AcquiredEnvironment:
     workdir: str
 
 
+@dto
 @dataclass(frozen=True)
 class RepoBinding:
     """Where repo ``name`` lives in an env, and what forge it pushes to.
