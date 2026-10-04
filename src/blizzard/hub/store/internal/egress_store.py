@@ -16,6 +16,7 @@ from blizzard.hub.config import EGRESS_DATASETS
 from blizzard.hub.domain.egress.repository import (
     EgressCursorRecord,
     EgressFailureRecord,
+    EventsPosition,
     IWriteEgressCursor,
     UsagePosition,
 )
@@ -92,14 +93,17 @@ class EgressStore:
 
     def append_cursor(self, record: EgressCursorRecord) -> None:
         step = record.step
+        events = record.events
         with self._store.write("egress_append_cursor") as conn:
             conn.execute(
                 insert(s.egress_cursor).values(
                     dataset=record.dataset,
-                    position_at=step.at if step is not None else None,
+                    position_at=step.at if step is not None else events.at if events is not None else None,
                     chunk_id=step.chunk_id if step is not None else None,
                     epoch=step.epoch if step is not None else None,
                     decision_id=step.decision_id if step is not None else None,
+                    segment_id=events.segment_id if events is not None else None,
+                    extractor_version=events.extractor_version if events is not None else None,
                     usage_recorded_at=record.usage.recorded_at,
                     usage_id=record.usage.usage_id,
                     row_count=record.row_count,
@@ -110,9 +114,14 @@ class EgressStore:
 
 
 def _cursor(row) -> EgressCursorRecord:  # type: ignore[no-untyped-def]
+    events = (
+        EventsPosition(row.position_at, row.segment_id, row.extractor_version or "")
+        if row.segment_id is not None
+        else None
+    )
     step = (
         CursorKey(row.position_at, row.chunk_id or "", row.epoch or 0, row.decision_id or "")
-        if row.position_at is not None
+        if row.position_at is not None and events is None
         else None
     )
     return EgressCursorRecord(
@@ -122,6 +131,7 @@ def _cursor(row) -> EgressCursorRecord:  # type: ignore[no-untyped-def]
         row_count=row.row_count,
         files=tuple(json.loads(row.files)),
         recorded_at=row.recorded_at,
+        events=events,
     )
 
 

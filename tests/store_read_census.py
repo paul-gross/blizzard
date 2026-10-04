@@ -61,7 +61,14 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
-from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, UsagePosition
+from blizzard.hub.domain.egress.repository import (
+    EgressCursorRecord,
+    EpochKey,
+    EventsPosition,
+    IReadEgress,
+    IReadEgressEvents,
+    UsagePosition,
+)
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
@@ -91,6 +98,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
+from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -831,6 +839,10 @@ def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceS
 
 def _egress_store_of(connections: HubStoreConnections) -> EgressStore:
     return EgressStore(connections)
+
+
+def _egress_events_of(connections: HubStoreConnections) -> IReadEgressEvents:
+    return EgressEventStore(connections)
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -2103,6 +2115,26 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ).newest_cursor_with_files(),
     (IReadEgress, "newest_egress_failure"): lambda w: _egress_store_of(w.store_connections).newest_egress_failure(),
     (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections).newest_egress_latch(),
+    (IReadEgressEvents, "markers_after"): lambda w: _egress_events_of(w.store_connections).markers_after(
+        EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
+    ),
+    (IReadEgressEvents, "drops_after"): lambda w: _egress_events_of(w.store_connections).drops_after(
+        EventsPosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
+    (IReadEgressEvents, "derivations"): lambda w: (
+        lambda events: events.derivations(
+            events.markers_after(EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=None)
+        )
+    )(_egress_events_of(w.store_connections)),
+    (IReadEgressEvents, "epochs_minted_between"): lambda w: _egress_events_of(
+        w.store_connections
+    ).epochs_minted_between(_HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50),
+    (IReadEgressEvents, "epoch_markers"): lambda w: _egress_events_of(w.store_connections).epoch_markers(
+        [EpochKey(w.transcript_chunk, 1)], extractor_version=EXTRACTOR_VERSION
+    ),
+    (IReadEgressEvents, "epoch_drops"): lambda w: _egress_events_of(w.store_connections).epoch_drops(
+        [EpochKey(w.transcript_chunk, 1)]
+    ),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_cursor(),

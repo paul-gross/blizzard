@@ -629,6 +629,8 @@ lease_facts = Table(
 )
 # Leading chunk_id also serves chunk-only filters.
 Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
+# The events backfill's epochs-minted-in-a-window read.
+Index("ix_lease_facts_minted_at", lease_facts.c.minted_at)
 
 # --- Epoch owners (first owner wins; null runner_id means hub) -----
 epoch_owners = Table(
@@ -1377,7 +1379,7 @@ egress_cursor = Table(
     Column("dataset", String, nullable=False),
     Column(
         "position_at", UtcDateTime, nullable=True
-    ),  # the last written step's closing-fact time; null for invocations
+    ),  # the last written step's closing-fact time, or the events source's time; null for invocations
     Column("chunk_id", String, nullable=True),
     Column("epoch", Integer, nullable=True),
     Column("decision_id", String, nullable=True),  # empty for runner and hub steps
@@ -1386,6 +1388,9 @@ egress_cursor = Table(
     Column("row_count", Integer, nullable=False),
     Column("files", Text, nullable=False),  # JSON list of the placed paths, manifest last
     Column("recorded_at", UtcDateTime, nullable=False),
+    # The events position after ``position_at``; a drop's version is empty. Null for the other datasets.
+    Column("segment_id", String, nullable=True),
+    Column("extractor_version", String, nullable=True),
 )
 Index(
     "ix_egress_cursor_dataset_recorded_at_id", egress_cursor.c.dataset, egress_cursor.c.recorded_at, egress_cursor.c.id
@@ -1537,6 +1542,13 @@ transcript_event_derivations = Table(
     # declared, never silently indistinguishable from a session that read nothing.
     Column("complete", Boolean, nullable=False),
 )
+# The events egress's markers-past-a-position read, in its cursor order.
+Index(
+    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    transcript_event_derivations.c.derived_at,
+    transcript_event_derivations.c.segment_id,
+    transcript_event_derivations.c.extractor_version,
+)
 
 # --- Transcript segment drops — append-only: one row per time a segment's derived events and
 # markers were deleted. A segment dropped, derived again, and dropped again leaves two rows,
@@ -1559,6 +1571,8 @@ Index(
     transcript_event_drops.c.dropped_at,
     transcript_event_drops.c.segment_id,
 )
+# The events backfill's drops-of-these-epochs read.
+Index("ix_transcript_event_drops_chunk_id_epoch", transcript_event_drops.c.chunk_id, transcript_event_drops.c.epoch)
 
 # --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and
