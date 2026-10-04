@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
@@ -24,14 +25,7 @@ from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph import GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.work import (
-    ChunkFacts,
-    IntendedMigration,
-    MigrationFact,
-    MigrationMode,
-    MigrationSource,
-    TransitionFact,
-)
+from blizzard.hub.domain.work import ChunkFacts, IntendedMigration, MigrationFact, MigrationSource, TransitionFact
 from blizzard.hub.store import schema as s
 from tests.support import build_hub, chunk_stores, pointer_token, report_lease
 

@@ -14,7 +14,7 @@ from typing import Annotated, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.work import WorkItemPriority
+from blizzard.foundation.work_items import WorkItemPriority
 
 
 class SubmittedArtifact(BaseModel):

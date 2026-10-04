@@ -13,13 +13,9 @@ from datetime import datetime
 from sqlalchemy import Connection, insert, select
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalClosure,
-    GardenProposalClosureKind,
-    GardenProposalItemOutcome,
-    IWriteGardenProposalClosureRepository,
-)
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, IWriteGardenProposalClosureRepository
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposals

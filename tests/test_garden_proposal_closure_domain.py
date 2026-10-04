@@ -13,19 +13,22 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.garden_proposals import (
+    GardenProposalClosureKind,
+    GardenProposalItemOutcome,
+    GardenProposalOrigin,
+)
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosure,
-    GardenProposalClosureKind,
     GardenProposalClosureService,
     GardenProposalCountBucket,
-    GardenProposalItemOutcome,
     GardenProposalPassReasonRequired,
     IWriteGardenProposalClosureRepository,
     _compose_minted_body,
     classify_proposal_count_bucket,
 )
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed, GardenProposalOrigin
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed
 from blizzard.hub.domain.work_items import WorkItemEditService
 
 pytestmark = pytest.mark.unit

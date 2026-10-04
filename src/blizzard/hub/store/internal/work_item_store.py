@@ -13,18 +13,18 @@ from datetime import datetime
 from sqlalchemy import Connection, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemAuthorKind,
-    WorkItemClosure,
     WorkItemMaterializationOutcome,
     WorkItemRecord,
     WorkRef,

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import (
@@ -40,14 +41,7 @@ from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
-from blizzard.hub.domain.work import (
-    Chunk,
-    ChunkFacts,
-    DecisionChoice,
-    MigrationFact,
-    MigrationMode,
-    MigrationSource,
-)
+from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, MigrationFact, MigrationSource
 from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 

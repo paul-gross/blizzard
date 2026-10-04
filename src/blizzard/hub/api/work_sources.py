@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -24,7 +25,7 @@ from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemHeldByDependents,

@@ -1,7 +1,7 @@
 """Garden-proposal closure — the two verbs that end a proposal's life:
 **pass** (considered and declined, with a reason) and **accept** (agreed, minting a
 linked hub work item by default). Closure is terminal, mirroring
-:class:`~blizzard.hub.domain.work.WorkItemClosure`. Takes an already-loaded
+:class:`~blizzard.foundation.work_items.WorkItemClosure`. Takes an already-loaded
 :class:`~blizzard.hub.domain.garden_proposals.GardenProposal` (``bzh:domain-takes-objects``)."""
 
 from __future__ import annotations
@@ -13,27 +13,12 @@ from enum import StrEnum
 from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.domain.work_items import WorkItemEditService
-
-
-class GardenProposalClosureKind(StrEnum):
-    """How a garden proposal closed — recorded on the row itself when it closes, never
-    derived from anything else."""
-
-    PASSED = "passed"
-    ACCEPTED = "accepted"
-
-
-class GardenProposalItemOutcome(StrEnum):
-    """Whether an accepted proposal minted a work item — recorded positively rather than
-    inferred from an absent link, so a declined mint reads as a decision, not a gap."""
-
-    MINTED = "minted"
-    DECLINED = "declined"
 
 
 class GardenProposalCountBucket(StrEnum):

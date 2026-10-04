@@ -13,9 +13,10 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
 from blizzard.hub.domain.edit import UnsetType
 from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, GardenProposalClosureKind
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure
 from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
     GardenProposal,
@@ -27,7 +28,6 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
-    GardenProposalOrigin,
     IWriteGardenProposalRepository,
     RoutineGardenProposalReader,
     RoutineProposalState,

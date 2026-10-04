@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -36,7 +37,6 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     EscalationFact,
     IntendedMigration,
-    MigrationMode,
     PauseFact,
     QuestionFact,
     RouteCreatedFact,

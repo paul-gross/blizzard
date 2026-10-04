@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store.internal.finding_store import FindingStore

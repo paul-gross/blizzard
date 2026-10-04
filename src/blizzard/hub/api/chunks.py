@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -59,13 +60,7 @@ from blizzard.hub.domain.review_findings import (
 )
 from blizzard.hub.domain.review_findings_materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.stop import ChunkNotStoppable
-from blizzard.hub.domain.work import (
-    Chunk,
-    ChunkFacts,
-    FleetSummary,
-    WorkItemPriority,
-    WorkRef,
-)
+from blizzard.hub.domain.work import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,

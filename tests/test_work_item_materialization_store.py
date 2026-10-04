@@ -16,12 +16,12 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     IWriteWorkItemRepository,
     WorkItemAuthor,
-    WorkItemClosure,
     WorkItemMaterializationOutcome,
     WorkRef,
     mint_chunk,

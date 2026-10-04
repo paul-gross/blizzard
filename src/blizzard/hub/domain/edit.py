@@ -11,13 +11,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Final
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.harnesses import validated_harnesses
-from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
+from blizzard.hub.domain.work import Chunk, IntendedMigration
 
 
 class UnsetType(Enum):

@@ -18,6 +18,7 @@ from sqlalchemy import Engine
 from blizzard.auth_core import Role
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
@@ -61,7 +62,7 @@ from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSet
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
 from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin, IReadGardenProposalRepository
+from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
 from blizzard.hub.domain.garden_run import IReadGardenRunRepository
 from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden_trend import IReadGardenTrendRepository

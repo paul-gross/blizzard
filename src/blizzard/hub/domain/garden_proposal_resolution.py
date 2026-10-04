@@ -10,13 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.findings import Finding, IFindingExitResolver, IReadFindingRepository
-from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalClosureKind,
-    GardenProposalItemOutcome,
-    IReadGardenProposalClosureRepository,
-)
+from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
 from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
 from blizzard.hub.domain.work import Chunk, WorkRef
 

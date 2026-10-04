@@ -11,8 +11,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.work import MigrationMode, WorkItemPriority
+from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.work_source import WorkItemAuthorView

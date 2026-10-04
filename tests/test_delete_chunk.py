@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
@@ -22,13 +23,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.queue import ChunkNotFound
-from blizzard.hub.domain.work import (
-    Chunk,
-    PendingCloseIntent,
-    WorkItemAuthor,
-    WorkItemClosure,
-    WorkRef,
-)
+from blizzard.hub.domain.work import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

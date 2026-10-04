@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.findings import EXIT_KINDS, Finding
@@ -87,14 +88,6 @@ class GardenProposalAlreadyClosed(Exception):
         super().__init__(f"garden proposal {proposal_id} is already {closure.closure.value}")
         self.proposal_id = proposal_id
         self.closure = closure
-
-
-class GardenProposalOrigin(StrEnum):
-    """Who authored a garden proposal — a mint-time fact, stored on
-    the row itself and never inferred from a null `routine_name`."""
-
-    ROUTINE_RUN = "routine-run"
-    OPERATOR = "operator"
 
 
 class RoutineProposalState(StrEnum):

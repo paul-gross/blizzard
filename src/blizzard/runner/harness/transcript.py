@@ -14,7 +14,7 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-#: The normalized turn vocabulary — :data:`~blizzard.runner.transcripts.repository.TurnKind`
+#: The normalized turn vocabulary — :data:`~blizzard.foundation.transcripts.TurnKind`
 #: carries every one of these, plus its own ``"sidechain"``.
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 

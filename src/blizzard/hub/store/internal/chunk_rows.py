@@ -15,6 +15,7 @@ from typing import Protocol, cast
 
 from sqlalchemy import Connection, Select, func, insert, select
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.fleet import Route
@@ -23,7 +24,6 @@ from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     Chunk,
     IntendedMigration,
-    MigrationMode,
     QuestionRow,
     RouteCreatedFact,
     RouteHistory,

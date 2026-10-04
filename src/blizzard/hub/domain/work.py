@@ -13,10 +13,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.proposals import WorkItemProposalRow
@@ -68,22 +70,6 @@ class WorkItemAuthor:
     @classmethod
     def fleet(cls, *, runner_id: str, chunk_id: str, node_name: str) -> WorkItemAuthor:
         return cls(kind=WorkItemAuthorKind.FLEET, runner_id=runner_id, chunk_id=chunk_id, node_name=node_name)
-
-
-class WorkItemClosure(StrEnum):
-    """How a hub-owned work item closed — recorded on the row itself when
-    it closes, never derived from anything else."""
-
-    DELIVERED = "delivered"
-    WITHDRAWN = "withdrawn"
-
-
-class WorkItemPriority(StrEnum):
-    """The three stated-priority values a create or edit may set."""
-
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
 
 
 @dataclass(frozen=True)
@@ -155,16 +141,6 @@ class PendingCloseIntent:
     intent_id: int = field(default=0, compare=False)
     attempt_count: int = field(default=0, compare=False)
     last_attempt_at: datetime | None = field(default=None, compare=False)
-
-
-class MigrationMode(StrEnum):
-    """How a chunk's intended migration fires at its next transition.
-
-    ``AUTO`` fires only when the transition's own destination node name also exists on
-    the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``."""
-
-    AUTO = "auto"
-    FORCED = "forced"
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -35,7 +36,6 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
-    GardenProposalOrigin,
 )
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict

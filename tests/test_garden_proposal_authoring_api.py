@@ -10,9 +10,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
+from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore

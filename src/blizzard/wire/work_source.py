@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from blizzard.hub.domain.work import WorkItemClosure, WorkItemPriority
+from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 
 
 class WorkSourceSummary(BaseModel):
