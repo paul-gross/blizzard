@@ -50,9 +50,11 @@ def _init_runner(tmp_path: Path) -> Path:
 
 
 @contextmanager
-def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
+def _serve_local_api(root: Path, *, trace_status: bool = True) -> Iterator[tuple[Path, str]]:
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config).app
+    if not trace_status:
+        app.state.trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
@@ -201,6 +203,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     assert "open takeovers (1):" in out
     assert "chunk ch_3" in out and "takeover=tko_1" in out
     assert "subscriptions (1):" in out
+    assert "\nharness telemetry: off\n" in out
     assert "anthropic (anthropic): never sampled" in out
 
 
@@ -306,6 +309,20 @@ def test_status_omits_an_unheld_pool_slot_from_held_environments(
     assert "e2" not in result.output
 
 
+@pytest.mark.component
+def test_status_renders_every_other_section_when_the_trace_status_read_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root, trace_status=False):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "subscriptions (1):" in result.output
+    assert "harness telemetry" not in result.output
+
+
 @pytest.mark.unit
 def test_status_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)  # initialized, but nothing is serving
@@ -404,5 +421,5 @@ def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalati
     assert result.exit_code == 0, result.output
     assert "escalations (1):" in result.output
     assert "/api/harness-health" not in paths
-    assert "harness " not in result.output
+    assert "    harness " not in result.output
     assert "cause:" not in result.output

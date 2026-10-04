@@ -184,6 +184,7 @@ also_copy = [
     "scripts/is-retryable-push-error.sh",
     "scripts/release-notes.sh",
     "scripts/restated-invariants.json",
+    "tests/fixtures/claude_code_telemetry",
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",
     "scripts/restated_invariants.py",

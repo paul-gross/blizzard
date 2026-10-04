@@ -1429,6 +1429,40 @@ export type HarnessHealthView = {
 };
 
 /**
+ * HarnessSignalStatus
+ *
+ * One signal of Claude Code's telemetry: what the binding does with its exporter, and what the runner's
+ * receiver for it has accepted and dropped since start, in that signal's own unit.
+ */
+export type HarnessSignalStatus = {
+    /**
+     * Accepted
+     */
+    accepted: number;
+    /**
+     * Dropped
+     */
+    dropped: number;
+    outcome: HarnessTelemetryOutcome;
+};
+
+/**
+ * HarnessTelemetryOutcome
+ *
+ * What the runner does with one of Claude Code's telemetry signals.
+ */
+export type HarnessTelemetryOutcome = 'off' | 'captured' | 'operator_configured' | 'no_runner_destination';
+
+/**
+ * HarnessTelemetryStatus
+ */
+export type HarnessTelemetryStatus = {
+    logs: HarnessSignalStatus;
+    metrics: HarnessSignalStatus;
+    traces: HarnessSignalStatus;
+};
+
+/**
  * HeartbeatRequest
  *
  * A worker's heartbeat: the lease it inherited at spawn (``BLIZZARD_LEASE_ID``).
@@ -2202,6 +2236,64 @@ export type RunnerTraceReplayResponse = {
 };
 
 /**
+ * RunnerTraceStatusResponse
+ *
+ * The shared status body, plus the runner's harness-telemetry read; ``None`` where the plan is not wired.
+ */
+export type RunnerTraceStatusResponse = {
+    /**
+     * Cursor At
+     */
+    cursor_at: string | null;
+    /**
+     * Endpoint
+     */
+    endpoint: string | null;
+    harness_telemetry?: HarnessTelemetryStatus | null;
+    /**
+     * Lag Seconds
+     */
+    lag_seconds: number | null;
+    /**
+     * Last Error At
+     */
+    last_error_at: string | null;
+    /**
+     * Last Error Message
+     */
+    last_error_message: string | null;
+    /**
+     * Last Error Ongoing
+     */
+    last_error_ongoing: boolean;
+    /**
+     * Last Export At
+     */
+    last_export_at: string | null;
+    /**
+     * Last Export Span Count
+     */
+    last_export_span_count: number | null;
+    receiver?: ReceiverStatus | null;
+    /**
+     * Rejected Setting
+     */
+    rejected_setting: string | null;
+    /**
+     * Rejected Value
+     */
+    rejected_value: string | null;
+    /**
+     * Replay Max Window Seconds
+     */
+    replay_max_window_seconds?: number | null;
+    /**
+     * State
+     */
+    state: 'enabled' | 'disabled' | 'rejected';
+};
+
+/**
  * ScopeView
  *
  * A scope as served by the create/list/read/lifecycle routes.
@@ -2525,66 +2617,6 @@ export type TraceReplayRequest = {
      * Until
      */
     until: string;
-};
-
-/**
- * TraceStatusResponse
- *
- * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
- * error text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.
- * ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
- * widest window one replay request may cover.
- */
-export type TraceStatusResponse = {
-    /**
-     * Cursor At
-     */
-    cursor_at: string | null;
-    /**
-     * Endpoint
-     */
-    endpoint: string | null;
-    /**
-     * Lag Seconds
-     */
-    lag_seconds: number | null;
-    /**
-     * Last Error At
-     */
-    last_error_at: string | null;
-    /**
-     * Last Error Message
-     */
-    last_error_message: string | null;
-    /**
-     * Last Error Ongoing
-     */
-    last_error_ongoing: boolean;
-    /**
-     * Last Export At
-     */
-    last_export_at: string | null;
-    /**
-     * Last Export Span Count
-     */
-    last_export_span_count: number | null;
-    receiver?: ReceiverStatus | null;
-    /**
-     * Rejected Setting
-     */
-    rejected_setting: string | null;
-    /**
-     * Rejected Value
-     */
-    rejected_value: string | null;
-    /**
-     * Replay Max Window Seconds
-     */
-    replay_max_window_seconds?: number | null;
-    /**
-     * State
-     */
-    state: 'enabled' | 'disabled' | 'rejected';
 };
 
 /**
@@ -4590,7 +4622,7 @@ export type TraceStatusApiTracesStatusGetResponses = {
     /**
      * Successful Response
      */
-    200: TraceStatusResponse;
+    200: RunnerTraceStatusResponse;
 };
 
 export type TraceStatusApiTracesStatusGetResponse = TraceStatusApiTracesStatusGetResponses[keyof TraceStatusApiTracesStatusGetResponses];

@@ -12,6 +12,7 @@ from typing import Any
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout
 from blizzard.runner.harness.declaration import IHarnessDeclaration, SharedHarnessInputs
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.claude_code_declaration import CLAUDE_CODE_DECLARATION
 from blizzard.runner.harness.internal.opencode_declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.sections import HARNESS_SECTION_KINDS, HarnessSections, IHarnessSection
@@ -54,7 +55,12 @@ def bundle_layouts() -> tuple[HarnessLayout, ...]:
     return tuple(declaration.bundle_layout for declaration in HARNESS_CATALOG)
 
 
-def shared_inputs(config: RunnerConfig, *, bundle: BundleSnapshot | None = None) -> SharedHarnessInputs:
+def shared_inputs(
+    config: RunnerConfig,
+    *,
+    bundle: BundleSnapshot | None = None,
+    harness_telemetry: HarnessTelemetryPlan | None = None,
+) -> SharedHarnessInputs:
     """The runner-wide inputs ``config`` hands every binding."""
     return SharedHarnessInputs(
         root=config.root,
@@ -63,6 +69,7 @@ def shared_inputs(config: RunnerConfig, *, bundle: BundleSnapshot | None = None)
         worker_env=config.worker_env,
         transcripts_root=config.transcripts_root,
         bundle=bundle,
+        harness_telemetry=harness_telemetry or HarnessTelemetryPlan(),
     )
 
 

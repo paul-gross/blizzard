@@ -327,6 +327,9 @@ neither number comes from measured compaction data — none exists yet.
 means base allowlist only, and a daemon credential such as `BZ_HUB_TOKEN` is absent from every worker child by
 construction unless deliberately named there.
 
+With `[tracing] harness_telemetry` on, a Claude Code worker's environment also carries the variables that point its
+metrics, logs and traces at the runner; [tracing.md](./tracing.md#harness-telemetry) owns them.
+
 For Claude Code a worker must never see the `ANTHROPIC_MODEL` family: absent from the base allowlist by construction,
 never to be added through `env_passthrough`; the guarantee covers daemon-spawned children only — a shell exporting
 `ANTHROPIC_MODEL` can override a takeover session's model, so unset it before taking over.

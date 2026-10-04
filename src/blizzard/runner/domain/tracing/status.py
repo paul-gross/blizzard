@@ -11,11 +11,22 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
+from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.domain.tracing.receiver_limits import ReceiverCount, ReceiverCounter
 from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.domain.tracing.sweep import FAILED_MESSAGE
+
+
+@dataclass(frozen=True)
+class HarnessTelemetryStatus:
+    """The Claude Code binding's plan, and what each signal's receiver has taken in since start, in that
+    signal's own unit (spans, data points, log records)."""
+
+    plan: HarnessTelemetryPlan
+    receivers: dict[TelemetrySignal, ReceiverCount]
 
 
 @dataclass(frozen=True)
@@ -38,6 +49,7 @@ class LeaseTraceStatus:
     last_error_ongoing: bool
     receiver: ReceiverCount | None = None
     replay_max_window_seconds: int | None = None
+    harness_telemetry: HarnessTelemetryStatus | None = None
 
 
 class LeaseTraceStatusReader:
@@ -49,7 +61,17 @@ class LeaseTraceStatusReader:
         clock: IClock,
         receiver: ReceiverCounter | None = None,
         replay_max_window: int | None = None,
+        harness_telemetry: HarnessTelemetryPlan | None = None,
+        claude_trace_receiver: ReceiverCounter | None = None,
+        metric_receiver: ReceiverCounter | None = None,
+        log_receiver: ReceiverCounter | None = None,
     ) -> None:
+        self._harness_telemetry = harness_telemetry
+        self._signal_receivers = {
+            TelemetrySignal.TRACES: claude_trace_receiver,
+            TelemetrySignal.METRICS: metric_receiver,
+            TelemetrySignal.LOGS: log_receiver,
+        }
         self._replay_max_window = replay_max_window
         self._settings = settings
         self._receiver = receiver
@@ -75,6 +97,18 @@ class LeaseTraceStatusReader:
             last_error_ongoing=ongoing,
             receiver=self._receiver.count() if self._receiver else None,
             replay_max_window_seconds=self._replay_max_window,
+            harness_telemetry=self._harness(),
+        )
+
+    def _harness(self) -> HarnessTelemetryStatus | None:
+        if self._harness_telemetry is None:
+            return None
+        return HarnessTelemetryStatus(
+            plan=self._harness_telemetry,
+            receivers={
+                signal: counter.count() if counter else ReceiverCount(0, 0)
+                for signal, counter in self._signal_receivers.items()
+            },
         )
 
     def _lag(self, position: LeaseCursorKey) -> float | None:

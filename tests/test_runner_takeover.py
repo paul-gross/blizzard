@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
@@ -30,6 +31,7 @@ from blizzard.runner.domain.takeover import (
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.process_launch import ProcessLauncher
@@ -711,3 +713,24 @@ def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch, s
     opened = _service(store, harness=adapter).open(_open_scope(store), force=False)
 
     assert opened.env["PATH"] == "/opt/mise/shims:/usr/bin:/bin"
+
+
+def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(tmp_path, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
+    """The re-minted token makes the real binding's identity env point every captured signal at the runner;
+    none of it reaches an attended session."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    process = FakeProbe()
+    captured = HarnessTelemetryOutcome.CAPTURED
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=process,
+        launcher=ProcessLauncher(process, executor=spawn_executor),
+        harness_telemetry=HarnessTelemetryPlan(traces=captured, metrics=captured, logs=captured),
+    )
+
+    opened = _service(store, harness=adapter).open(_open_scope(store), force=False)
+
+    assert opened.env["BLIZZARD_LEASE_TOKEN"]
+    assert not [n for n in opened.env if n.startswith(("OTEL_", "CLAUDE_CODE_"))]

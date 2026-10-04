@@ -12,6 +12,7 @@ import click
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMissReason
 
 # The operator's TCP door onto the local API — the override for when the socket is not
@@ -96,6 +97,8 @@ def status(directory: str, runner_url: str | None) -> None:
             if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations)
             else []
         )
+        # Not raised on: a runner that cannot serve its trace status still renders every other section.
+        traces_resp = daemon.send("get", "/api/traces/status")
 
     click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
     pause = view["pause"]
@@ -165,6 +168,13 @@ def status(directory: str, runner_url: str | None) -> None:
                 f"  {sub['slug']} ({sub['provider']}): miss ({miss_text}), "
                 f"last attempt {sub['sampled_at']}{renewal_suffix}"
             )
+
+    harness = traces_resp.json().get("harness_telemetry") if traces_resp.is_success else None
+    harness_lines = harness_telemetry_lines(harness)
+    if harness_lines:
+        click.echo()
+        for line in harness_lines:
+            click.echo(line)
 
 
 @click.command()

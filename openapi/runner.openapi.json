@@ -2338,6 +2338,60 @@
         "title": "HarnessHealthView",
         "type": "object"
       },
+      "HarnessSignalStatus": {
+        "description": "One signal of Claude Code's telemetry: what the binding does with its exporter, and what the runner's\nreceiver for it has accepted and dropped since start, in that signal's own unit.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "dropped": {
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/HarnessTelemetryOutcome"
+          }
+        },
+        "required": [
+          "outcome",
+          "accepted",
+          "dropped"
+        ],
+        "title": "HarnessSignalStatus",
+        "type": "object"
+      },
+      "HarnessTelemetryOutcome": {
+        "description": "What the runner does with one of Claude Code's telemetry signals.",
+        "enum": [
+          "off",
+          "captured",
+          "operator_configured",
+          "no_runner_destination"
+        ],
+        "title": "HarnessTelemetryOutcome",
+        "type": "string"
+      },
+      "HarnessTelemetryStatus": {
+        "properties": {
+          "logs": {
+            "$ref": "#/components/schemas/HarnessSignalStatus"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/HarnessSignalStatus"
+          },
+          "traces": {
+            "$ref": "#/components/schemas/HarnessSignalStatus"
+          }
+        },
+        "required": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "title": "HarnessTelemetryStatus",
+        "type": "object"
+      },
       "HeartbeatRequest": {
         "description": "A worker's heartbeat: the lease it inherited at spawn (``BLIZZARD_LEASE_ID``).",
         "properties": {
@@ -3572,6 +3626,169 @@
         "title": "RunnerTraceReplayResponse",
         "type": "object"
       },
+      "RunnerTraceStatusResponse": {
+        "description": "The shared status body, plus the runner's harness-telemetry read; ``None`` where the plan is not wired.",
+        "properties": {
+          "cursor_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor At"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "harness_telemetry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessTelemetryStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lag_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_ongoing": {
+            "title": "Last Error Ongoing",
+            "type": "boolean"
+          },
+          "last_export_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export At"
+          },
+          "last_export_span_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export Span Count"
+          },
+          "receiver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReceiverStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rejected_setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Setting"
+          },
+          "rejected_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Value"
+          },
+          "replay_max_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Max Window Seconds"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "endpoint",
+          "rejected_setting",
+          "rejected_value",
+          "cursor_at",
+          "lag_seconds",
+          "last_export_at",
+          "last_export_span_count",
+          "last_error_at",
+          "last_error_message",
+          "last_error_ongoing"
+        ],
+        "title": "RunnerTraceStatusResponse",
+        "type": "object"
+      },
       "ScopeView": {
         "description": "A scope as served by the create/list/read/lifecycle routes.",
         "properties": {
@@ -4034,159 +4251,6 @@
           "until"
         ],
         "title": "TraceReplayRequest",
-        "type": "object"
-      },
-      "TraceStatusResponse": {
-        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter\nerror text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.\n``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the\nwidest window one replay request may cover.",
-        "properties": {
-          "cursor_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cursor At"
-          },
-          "endpoint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Endpoint"
-          },
-          "lag_seconds": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lag Seconds"
-          },
-          "last_error_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error At"
-          },
-          "last_error_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error Message"
-          },
-          "last_error_ongoing": {
-            "title": "Last Error Ongoing",
-            "type": "boolean"
-          },
-          "last_export_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Export At"
-          },
-          "last_export_span_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Export Span Count"
-          },
-          "receiver": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReceiverStatus"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "rejected_setting": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rejected Setting"
-          },
-          "rejected_value": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rejected Value"
-          },
-          "replay_max_window_seconds": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replay Max Window Seconds"
-          },
-          "state": {
-            "enum": [
-              "enabled",
-              "disabled",
-              "rejected"
-            ],
-            "title": "State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "state",
-          "endpoint",
-          "rejected_setting",
-          "rejected_value",
-          "cursor_at",
-          "lag_seconds",
-          "last_export_at",
-          "last_export_span_count",
-          "last_error_at",
-          "last_error_message",
-          "last_error_ongoing"
-        ],
-        "title": "TraceStatusResponse",
         "type": "object"
       },
       "TranscriptResponse": {
@@ -7397,14 +7461,14 @@
     },
     "/api/traces/status": {
       "get": {
-        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error.",
+        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,\nand Claude Code's harness-telemetry plan with each signal's receiver counts.",
         "operationId": "trace_status_api_traces_status_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TraceStatusResponse"
+                  "$ref": "#/components/schemas/RunnerTraceStatusResponse"
                 }
               }
             },

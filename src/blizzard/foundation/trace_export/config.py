@@ -27,8 +27,10 @@ class TracingConfig:
     platform_sample_ratio: float = 0.01
     #: Worker programs' own spans reach the runner's receiver; takes effect only alongside ``platform``.
     worker_programs: bool = False
-    #: Scope name to the ``service.name`` its kept worker-program spans leave with.
+    #: Scope name to the ``service.name`` its kept worker-program or Claude Code telemetry leaves with.
     worker_program_services: Mapping[str, str] = field(default_factory=dict)
+    #: Claude Code workers export all three signals to the runner's receivers; needs ``platform``.
+    harness_telemetry: bool = False
 
     @classmethod
     def of(cls, raw_tracing: object, invalid: type[Exception]) -> TracingConfig:
@@ -49,6 +51,7 @@ class TracingConfig:
             ),
             worker_programs=cls._boolean(raw_tracing, "worker_programs", defaults.worker_programs, invalid),
             worker_program_services=cls._services(raw_tracing, invalid),
+            harness_telemetry=cls._boolean(raw_tracing, "harness_telemetry", defaults.harness_telemetry, invalid),
         )
 
     @staticmethod
@@ -106,6 +109,9 @@ class TracingConfig:
             "# queries, outbound calls), roots kept at platform_sample_ratio, 0 to 1.\n"
             "# worker_programs = true (with platform) also lets a worker's own programs send\n"
             "# spans to the runner; a third-party program may record bodies or parameters.\n"
+            "# harness_telemetry = true (with platform) points a Claude Code worker's metrics, logs\n"
+            "# and traces at the runner for each signal you have not configured; its identity\n"
+            "# attributes (user.email, organization.id) are exported with them.\n"
             f"{_SERVICES_NOTE if receiver else ''}"
             "# Uncomment to override.\n",
             "[tracing]\n",
@@ -124,7 +130,7 @@ class TracingConfig:
         return lines
 
 
-_SERVICES_NOTE = "# [tracing.worker_program_services] names those spans' service.name by scope.\n"
+_SERVICES_NOTE = "# [tracing.worker_program_services] names that telemetry's service.name by scope.\n"
 
 _KEYS = (
     "sweep_seconds",
@@ -135,6 +141,7 @@ _KEYS = (
     "platform",
     "platform_sample_ratio",
     "worker_programs",
+    "harness_telemetry",
 )
 
 

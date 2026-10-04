@@ -12,20 +12,27 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.catalog import enabled, shared_inputs
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
 
 
 def build_production_harness_registry(
-    config: RunnerConfig, *, executor: Executor, process: LinuxProcessProbe, bundle: BundleSnapshot | None = None
+    config: RunnerConfig,
+    *,
+    executor: Executor,
+    process: LinuxProcessProbe,
+    bundle: BundleSnapshot | None = None,
+    harness_telemetry: HarnessTelemetryPlan | None = None,
 ) -> HarnessRegistry:
     """Build every enabled harness binding once for one graph, over one shared probe/
     launcher pair. The process graph owns the injected executor and probe for the
-    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup.
+    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup;
+    ``harness_telemetry`` is the plan the composition root derived for Claude Code's exporters.
     Insertion follows the catalog order: the first binding is the runner's default harness."""
     launcher = ProcessLauncher(process, executor=executor)
-    shared = shared_inputs(config, bundle=bundle)
+    shared = shared_inputs(config, bundle=bundle, harness_telemetry=harness_telemetry or HarnessTelemetryPlan())
     bindings: dict[str, HarnessBinding] = {
         declaration.harness_id: declaration.binding(section, shared, process=process, launcher=launcher)
         for declaration, section in enabled(config.harness_sections)

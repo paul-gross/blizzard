@@ -18,6 +18,8 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.signals import TelemetrySignal
+from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 
@@ -102,6 +104,17 @@ def observe_version(binary: str) -> str | None:
     return result.stdout.strip() or result.stderr.strip() or None
 
 
+def receiver_env(signal: TelemetrySignal, local_api_url: str, lease_token: str) -> dict[str, str]:
+    """The one owner of the signal-specific endpoint, protocol and header variables that point a worker's
+    exporter at the runner's own receiver for ``signal`` — shared by worker-program traces and by harness
+    telemetry capture."""
+    return {
+        signal.endpoint_variable: f"{local_api_url}/v1/{signal.value}",
+        signal.protocol_variable: SUPPORTED_PROTOCOL,
+        signal.headers_variable: f"X-Blizzard-Lease-Token={lease_token}",
+    }
+
+
 def build_identity_env(
     preamble: WorkerPreamble,
     chunk_id: str,
@@ -131,9 +144,7 @@ def build_identity_env(
         env["BLIZZARD_TRACEPARENT"] = preamble.traceparent
         env["TRACEPARENT"] = preamble.traceparent
         if preamble.worker_programs and preamble.lease_token:
-            env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = f"{preamble.local_api_url}/v1/traces"
-            env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "http/protobuf"
-            env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = f"X-Blizzard-Lease-Token={preamble.lease_token}"
+            env.update(receiver_env(TelemetrySignal.TRACES, preamble.local_api_url, preamble.lease_token))
             # Winter ignores the generic names and switches on only its own; it appends `/v1/traces` itself.
             env["WINTER_OTEL_EXPORTER_OTLP_ENDPOINT"] = preamble.local_api_url
             env["WINTER_OTEL_EXPORTER_OTLP_HEADERS"] = f"x-blizzard-lease-token={preamble.lease_token}"

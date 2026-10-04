@@ -5,7 +5,7 @@ adding a harness is one declaration and one section kind under ``harness/interna
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, TypeVar
 
@@ -13,6 +13,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.harness_telemetry import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.harness.sections import IHarnessSection
@@ -37,6 +38,8 @@ class SharedHarnessInputs:
     transcripts_root: str
     #: The snapshot this process published at startup, when it published one.
     bundle: BundleSnapshot | None = None
+    #: How Claude Code's own exporters are wired, as the composition root planned it.
+    harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
 
 
 class IHarnessDeclaration(Protocol[SectionT_contra]):

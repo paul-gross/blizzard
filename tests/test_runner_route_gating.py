@@ -66,6 +66,8 @@ _OPEN: set[tuple[str, str]] = {
     ("GET", "/api/auth/session"),
     ("POST", "/api/heartbeat"),
     ("POST", "/v1/traces"),
+    ("POST", "/v1/metrics"),
+    ("POST", "/v1/logs"),
     ("POST", "/api/leases/{lease_id}/session-end"),
     ("POST", "/api/leases/{lease_id}/asks"),
     ("POST", "/api/leases/{lease_id}/attachments"),
@@ -171,10 +173,11 @@ def test_open_lane_routes_reach_their_handler_over_tcp_under_oauth() -> None:
         assert _request(client, method, path) != 401, (method, path)
 
 
-def test_the_otlp_receiver_path_is_never_redirected_to_the_login_bounce() -> None:
-    """``/v1/traces`` is OTLP/HTTP's fixed path, outside ``/api`` — the web gate exempts it, so a worker's
-    export meets its own token check, not a browser bounce."""
+@pytest.mark.parametrize("path", ["/v1/traces", "/v1/metrics", "/v1/logs"])
+def test_the_otlp_receiver_paths_are_never_redirected_to_the_login_bounce(path: str) -> None:
+    """The OTLP receivers' paths are OTLP/HTTP's fixed ones, outside ``/api`` — the web gate exempts them, so a
+    worker's export meets its own token check, not a browser bounce."""
     client = _oauth_app()
-    refused = client.post("/v1/traces", content=b"", follow_redirects=False)
+    refused = client.post(path, content=b"", follow_redirects=False)
     assert refused.status_code == 403
     assert client.get("/v1/other", follow_redirects=False).status_code == 307

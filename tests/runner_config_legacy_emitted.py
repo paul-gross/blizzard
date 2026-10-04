@@ -111,7 +111,10 @@ retention_days = 14
 # queries, outbound calls), roots kept at platform_sample_ratio, 0 to 1.
 # worker_programs = true (with platform) also lets a worker's own programs send
 # spans to the runner; a third-party program may record bodies or parameters.
-# [tracing.worker_program_services] names those spans' service.name by scope.
+# harness_telemetry = true (with platform) points a Claude Code worker's metrics, logs
+# and traces at the runner for each signal you have not configured; its identity
+# attributes (user.email, organization.id) are exported with them.
+# [tracing.worker_program_services] names that telemetry's service.name by scope.
 # Uncomment to override.
 [tracing]
 # sweep_seconds = 60
@@ -122,6 +125,7 @@ retention_days = 14
 # platform = false
 # platform_sample_ratio = 0.01
 # worker_programs = false
+# harness_telemetry = false
 
 # [tracing.worker_program_services]
 # winter_cli = "winter-blizzard"

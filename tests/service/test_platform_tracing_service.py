@@ -20,6 +20,7 @@ from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
+from tests import claude_code_telemetry
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import make_store
@@ -211,3 +212,82 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
             _stop(proc)
         cli = [(r, s) for r, s in _platform_spans(sink) if r["service.name"] == "blizzard-cli"]
         assert len(cli) == 2, read_daemon_log(log)
+
+
+def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_real_exporters(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    hub_port = _free_port()
+    token = "service-lease-token"
+    with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
+        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        tracing = TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
+        config = dataclasses.replace(config, tracing=tracing)
+        config.config_path.write_text(config.to_toml())
+        env = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        log = config.root / "daemon.log"
+        proc = subprocess.Popen(
+            [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
+            env=env,
+            stdout=daemon_log_sink(log),
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx.Client(
+            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        )
+        try:
+            _await_http(proc, tcp, "/api/health", log=log)
+            assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
+            store = make_store(config.db_url)
+            now = datetime.now(UTC)
+            store.record_lease(
+                NewLease(
+                    lease_id="lease_svc",
+                    chunk_id="ch_svc",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    runner_id=config.runner_id,
+                    retries_max=2,
+                    created_at=now,
+                )
+            )
+            store.record_lease_token("lease_svc", TokenHash(token).hex, now)
+            for client in (tcp, uds):
+                for path, signal in (("/v1/metrics", "metrics"), ("/v1/logs", "logs")):
+                    for content_type, body in (
+                        ("application/x-protobuf", claude_code_telemetry.protobuf_body(signal)),
+                        ("application/json", claude_code_telemetry.json_body(signal)),
+                    ):
+                        headers = {"Content-Type": content_type, "X-Blizzard-Lease-Token": token}
+                        assert client.post(path, content=body, headers=headers).status_code == 200
+        finally:
+            tcp.close()
+            uds.close()
+            _stop(proc)
+        points = [
+            (resource_metrics.resource, point)
+            for request in sink.metric_requests
+            for resource_metrics in request.resource_metrics
+            for scope_metrics in resource_metrics.scope_metrics
+            for metric in scope_metrics.metrics
+            for point in metric.sum.data_points
+        ]
+        records = [
+            (resource_logs.resource, record)
+            for request in sink.log_requests
+            for resource_logs in request.resource_logs
+            for scope_logs in resource_logs.scope_logs
+            for record in scope_logs.log_records
+        ]
+        assert len(points) == 8, read_daemon_log(log)
+        assert len(records) == 24, read_daemon_log(log)
+        for resource, item in [*points, *records]:
+            names = {kv.key: kv.value.string_value for kv in resource.attributes}
+            assert names["service.name"] == "blizzard-claude-code"
+            stamped = {kv.key: kv.value.string_value for kv in item.attributes}
+            assert stamped["blizzard.lease.id"] == "lease_svc"
+            assert stamped["blizzard.runner.id"] == config.runner_id

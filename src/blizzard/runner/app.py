@@ -25,6 +25,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.exclusion import is_excluded
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
+from blizzard.foundation.platform_tracing.received_export import IReceivedTelemetryExport
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
@@ -85,7 +86,7 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -166,8 +167,8 @@ _HUMAN = (
 )
 
 
-# OTLP/HTTP's fixed path: authenticated by the worker's lease token, where a browser session cannot bounce.
-_OTLP_TRACES_PATH = "/v1/traces"
+# OTLP/HTTP's fixed paths: authenticated by the worker's lease token, where a browser session cannot bounce.
+_OTLP_PATHS = frozenset({"/v1/traces", "/v1/metrics", "/v1/logs"})
 
 
 @contextlib.asynccontextmanager
@@ -195,6 +196,10 @@ def create_app(
     trace_replay: LeaseTraceReplay | None = None,
     span_limiter: SpanRateLimiter | None = None,
     receiver_counter: ReceiverCounter | None = None,
+    claude_trace_counter: ReceiverCounter | None = None,
+    metric_bounds: ReceiverBounds | None = None,
+    log_bounds: ReceiverBounds | None = None,
+    received_telemetry: IReceivedTelemetryExport | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
@@ -258,9 +263,14 @@ def create_app(
     app.state.trace_status = trace_status
     app.state.trace_replay = trace_replay
     app.state.platform_tracing = platform_tracing
-    # The worker-span receiver's bound and tally, process-scoped: the host passes the graph's own.
+    # The OTLP receivers' bounds and tallies and the received-telemetry export, process-scoped:
+    # the host passes the graph's own.
     app.state.span_limiter = span_limiter or SpanRateLimiter(clock)
     app.state.receiver_counter = receiver_counter or ReceiverCounter()
+    app.state.claude_trace_counter = claude_trace_counter or ReceiverCounter()
+    app.state.metric_bounds = metric_bounds or ReceiverBounds.fresh(clock)
+    app.state.log_bounds = log_bounds or ReceiverBounds.fresh(clock)
+    app.state.received_telemetry = received_telemetry
     app.state.takeover = takeover
     app.state.requeue = requeue
     app.state.attachments = attachments
@@ -330,7 +340,7 @@ def create_app(
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:
         return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
 
-    # An excluded request (the worker heartbeat, a trace-receiver path) makes no server span, and
+    # An excluded request (the worker heartbeat, an OTLP receiver path) makes no server span, and
     # none of its store reads may start a sampled root of their own either.
     @app.middleware("http")
     async def _suppress_excluded(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -342,7 +352,7 @@ def create_app(
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
-        if not (request.url.path.startswith("/api") or request.url.path == _OTLP_TRACES_PATH):
+        if not (request.url.path.startswith("/api") or request.url.path in _OTLP_PATHS):
             try:
                 require_human_session(request)
             except NeedsFederationBounce as exc:
@@ -497,10 +507,18 @@ def _wire_hosted_app(
             clock=clock,
             receiver=graph.receiver_counter,
             replay_max_window=config.tracing.replay_max_window,
+            harness_telemetry=graph.harness_telemetry,
+            claude_trace_receiver=graph.claude_trace_counter,
+            metric_receiver=graph.metric_bounds.counter,
+            log_receiver=graph.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
         span_limiter=graph.span_limiter,
         receiver_counter=graph.receiver_counter,
+        claude_trace_counter=graph.claude_trace_counter,
+        metric_bounds=graph.metric_bounds,
+        log_bounds=graph.log_bounds,
+        received_telemetry=graph.received_telemetry,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,
