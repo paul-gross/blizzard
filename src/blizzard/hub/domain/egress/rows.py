@@ -111,7 +111,7 @@ def money(amount: float | None) -> Decimal | None:
     return None if amount is None else Decimal(repr(amount)).quantize(_MONEY_SCALE)
 
 
-def _trace_id_of(key: StepKey) -> str:
+def trace_id_text(key: StepKey) -> str:
     return f"{trace_id(key):032x}"
 
 
@@ -119,7 +119,7 @@ def step_row(summary: StepSummary, exported_at: datetime) -> StepRow:
     """The ``steps`` row of a closed step. ``runner_id`` is the holder of a runner step only."""
     return StepRow(
         step_key=summary.step_key.text(),
-        trace_id=_trace_id_of(summary.step_key),
+        trace_id=trace_id_text(summary.step_key),
         step_kind=summary.kind.value,
         chunk_id=summary.chunk_id,
         work_refs=summary.work_refs,
@@ -172,7 +172,7 @@ def invocation_row(facts: StepFacts, step: NodeStep, usage: UsageRow, exported_a
     return InvocationRow(
         usage_id=usage.usage_id,
         step_key=step.key.text(),
-        trace_id=_trace_id_of(step.key),
+        trace_id=trace_id_text(step.key),
         chunk_id=usage.chunk_id,
         epoch=fact.epoch,
         graph_id=step.position.graph_id,
