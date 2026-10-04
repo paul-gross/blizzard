@@ -2,17 +2,17 @@
 plus its read-back counterpart ``GET``.
 
 The lease token is presented as ``X-Blizzard-Lease-Token`` or ``Authorization: Bearer``,
-the dedicated header checked first. ``404`` unknown/closed lease, ``403`` bad token."""
+the dedicated header checked first. ``404`` unknown/closed lease, ``403`` bad token,
+``409`` an open takeover's closed reference lease, ``422`` empty content."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
-from blizzard.runner.api.lease_scope import authorized_lease
-from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.lease_scope import authorized_lease, authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.operator.attachments import AttachmentRejected
+from blizzard.runner.operator.attachments import AttachmentEmpty, AttachmentOnClosedLease
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse, StagedAttachment
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -22,16 +22,13 @@ router = APIRouter(prefix="/api", tags=["runner"])
 def record_attachment(lease_id: str, request_body: AttachmentRequest, request: Request) -> AttachmentResponse:
     """Record a worker's explicit artifact for ``request_body.name`` against its lease."""
     service = RunnerWiring.of(request).attachments()
-    lease = RunnerWiring.of(request).worker_lease(lease_id)
+    worker = authorized_worker_lease(lease_id, request)
     try:
-        service.attach(
-            lease,
-            presented_token=presented_lease_token(request),
-            name=request_body.name,
-            content=request_body.content,
-        )
-    except AttachmentRejected as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        service.attach(worker, name=request_body.name, content=request_body.content)
+    except AttachmentEmpty as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except AttachmentOnClosedLease as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return AttachmentResponse(
         recorded=True,
         lease_id=lease_id,

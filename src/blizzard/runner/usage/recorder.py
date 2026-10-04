@@ -19,9 +19,16 @@ from blizzard.runner.transcripts.invocation_boundaries import (
     WORKER_STARTING_KINDS,
     InvocationBoundary,
     InvocationBoundaryKind,
+    InvocationBoundaryStart,
     IReadInvocationBoundaryRepository,
 )
-from blizzard.runner.usage.repository import IWriteUsageRepository, derive_invocation_cost
+from blizzard.runner.usage.repository import (
+    IWriteUsageRepository,
+    charge_range,
+    derive_invocation_cost,
+    effective_model,
+    usage_kind_for,
+)
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.loop")
@@ -50,8 +57,7 @@ class UsageRecorder:
     def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""
         generation = self.leases.lease_generation(lease.lease_id)
-        kind: UsageKind = "spawn" if generation <= 1 else "resume"
-        sample = self._worker_sample(lease, bindings, generation=generation, kind=kind)
+        sample = self._worker_sample(lease, bindings, generation=generation, kind=usage_kind_for(generation))
         if sample is not None:
             self.record_sample(lease, generation=generation, sample=sample)
 
@@ -64,13 +70,11 @@ class UsageRecorder:
         if session is None:
             return
         harness = self.harnesses.usage_accounting(session.harness_id)
-        model = lease.resolved_model
-        needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=model)
+        requested = lease.resolved_model
+        needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=requested)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
-        if model is None and lines:
-            # The lease asked for nothing, so ask the judge's own transcript
-            # range what actually ran — the same rule `_worker_sample` applies below.
-            model = harness.observed_model(lines)
+        # The judge's own transcript range is read for what actually ran only when the lease asked for nothing.
+        model = effective_model(requested, harness.observed_model(lines) if requested is None and lines else None)
         judge_sample = harness.parse_usage(judge_output, "judge", model=model, transcript_lines=lines)
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
@@ -99,7 +103,7 @@ class UsageRecorder:
         )
         # `None` on an exact-replay idempotent no-op (`record_usage`'s own docstring) — nothing
         # was enqueued, so nothing to announce, and no rejected reading to warn of a second time.
-        if seq is not None and sample.cost_usd is not None and cost.cost_usd is None:
+        if seq is not None and cost.billed_reading_rejected:
             # Absent cost here is a rejected reading, not a worker that died before its
             # envelope — the two are indistinguishable on the board, so say so once here.
             _log.warning(
@@ -128,15 +132,13 @@ class UsageRecorder:
         if session is None:
             return None
         harness = self.harnesses.usage_accounting(session.harness_id)
-        model = lease.resolved_model
+        requested = lease.resolved_model
         needs_transcript = (
-            self.transcripts_wired and bool(output) and harness.needs_usage_transcript(output, model=model)
+            self.transcripts_wired and bool(output) and harness.needs_usage_transcript(output, model=requested)
         )
         lines = self.worker_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
-        if model is None and lines:
-            # The lease asked for nothing, so read the range once and observe what ran —
-            # before `parse_usage`, which prices a model-less stdout envelope only off this `model`.
-            model = harness.observed_model(lines)
+        # Observed before `parse_usage`, which prices a model-less stdout envelope only off this model.
+        model = effective_model(requested, harness.observed_model(lines) if requested is None and lines else None)
         sample = harness.parse_usage(output, kind, model=model, transcript_lines=lines) if output else None
         if sample is not None:
             return sample
@@ -153,17 +155,13 @@ class UsageRecorder:
         session = lease.session
         if session is None or not self.transcripts_wired:
             return []
-        boundary = self._worker_boundary(lease.lease_id, generation)
-        if boundary is None:
-            # No durable start for this exact generation: never charge the whole session to
-            # one generation — no boundary, no read.
-            return []
-        if boundary.start_unreadable:
-            # A genuinely failed tail read must never silently read from zero, re-reading an
-            # earlier generation's already-recorded lines.
-            return []
         return self._read_range(
-            lease.lease_id, session, bindings, generation=generation, start=boundary.start_position, end_kind="judge"
+            lease.lease_id,
+            session,
+            bindings,
+            generation=generation,
+            start=self._worker_boundary(lease.lease_id, generation),
+            end_kind="judge",
         )
 
     def judge_transcript_lines(self, lease: Lease, bindings: list[EnvBinding], *, generation: int) -> list[str]:
@@ -174,11 +172,13 @@ class UsageRecorder:
         session = lease.session
         if session is None or not self.transcripts_wired:
             return []
-        start = self.invocation_boundaries.current_start(lease.lease_id, generation, "judge")
-        if start is None or start.start_unreadable:
-            return []
         return self._read_range(
-            lease.lease_id, session, bindings, generation=generation, start=start.start_position, end_kind=None
+            lease.lease_id,
+            session,
+            bindings,
+            generation=generation,
+            start=self.invocation_boundaries.current_start(lease.lease_id, generation, "judge"),
+            end_kind=None,
         )
 
     def _read_range(
@@ -188,9 +188,17 @@ class UsageRecorder:
         bindings: list[EnvBinding],
         *,
         generation: int,
-        start: str | None,
+        start: InvocationBoundary | InvocationBoundaryStart | None,
         end_kind: InvocationBoundaryKind | None,
     ) -> list[str]:
+        """The raw lines :func:`charge_range` charges this invocation for — a same-generation
+        later invocation's recorded start (``end_kind``) caps the read."""
+        end_boundary = (
+            self.invocation_boundaries.boundary(lease_id, generation, end_kind) if end_kind is not None else None
+        )
+        charged = charge_range(start, end_boundary)
+        if charged is None:
+            return []
         fallback_workdir = bindings[0].workdir if bindings else None
         spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
         try:
@@ -204,23 +212,12 @@ class UsageRecorder:
                 detail=str(exc),
             )
             return []
-        if end_kind is not None:
-            # A same-generation judge's own durable start caps this read — its own later
-            # turns must never bleed into the worker's own range.
-            end_boundary = self.invocation_boundaries.boundary(lease_id, generation, end_kind)
-            if end_boundary is not None and end_boundary.start_unreadable:
-                # Its own start could not be read: falling back to "tail right now" risks the
-                # judge's own later turns bleeding into this range — skip it instead.
-                return []
-            if end_boundary is not None and end_boundary.start_position is not None:
-                end = TranscriptPosition(end_boundary.start_position)
-            else:
-                # Genuinely no end boundary at all for this generation — the tail right now
-                # is the safe cap.
-                end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
-        else:
-            end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
-        start_position = TranscriptPosition(start) if start is not None else None
+        end = (
+            TranscriptPosition(charged.end)
+            if charged.end is not None
+            else source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
+        )
+        start_position = TranscriptPosition(charged.start) if charged.start is not None else None
         return source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start_position, end=end)
 
     def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundary | None:

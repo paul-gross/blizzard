@@ -475,7 +475,7 @@
           "short_help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only."
         }
       },
-      "help": "Worker: read node-step, graph, and system artifacts; write this node-step's own.\nThe lease binding is ambient: every verb acts on the worker's own lease, resolved\nfrom the spawn environment \u2014 none takes a flag naming another chunk. ``--scope`` picks node\nscope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.\n``create`` *stages* a submission, published on completion (#169).",
+      "help": "Worker: read node-step, graph, and system artifacts; write this node-step's own.\nThe lease binding is ambient: every verb acts on the worker's own lease, resolved\nfrom the spawn environment \u2014 none takes a flag naming another chunk. ``--scope`` picks node\nscope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.\n``create`` *stages* a submission, published on completion.",
       "params": [],
       "path": "runner artifact",
       "short_help": "Worker: read node-step, graph, and system artifacts; write this node-step's own."

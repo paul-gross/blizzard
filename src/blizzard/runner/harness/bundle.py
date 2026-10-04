@@ -38,6 +38,14 @@ class HarnessBundleError(ConfigError):
         self.cause = cause
 
 
+class HarnessBundleNotPublished(ConfigError):
+    """A harness-config bundle is configured but no snapshot of it is published yet."""
+
+    def __init__(self, config_dir: Path) -> None:
+        super().__init__("config_dir is configured but no snapshot is published; restart the runner")
+        self.config_dir = config_dir
+
+
 @domain_model
 @dataclass(frozen=True)
 class EntryPoint:
@@ -162,6 +170,14 @@ def published_snapshot(runtime_root: Path) -> Path | None:
     """The snapshot ``current`` resolves to, or ``None`` when nothing is published."""
     link = runtime_root / HARNESS_CONFIG_DIRNAME / CURRENT_LINK
     return link.resolve() if link.is_dir() else None
+
+
+def require_published(config_dir: Path, snapshot: Path | None) -> Path:
+    """``snapshot``, the published copy of the bundle at ``config_dir``; a configured bundle with
+    no published snapshot is an error (:class:`HarnessBundleNotPublished`), never an empty one."""
+    if snapshot is None:
+        raise HarnessBundleNotPublished(config_dir)
+    return snapshot
 
 
 def _plan(config_dir: Path, layouts: tuple[HarnessLayout, ...]) -> _Plan:

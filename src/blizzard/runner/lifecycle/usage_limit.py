@@ -16,7 +16,6 @@ from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.adapter import IHarnessUsageLimits
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -24,8 +23,8 @@ from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.spawn import SpawnStores
-from blizzard.runner.throttle.pause import PauseService
-from blizzard.runner.usage.repository import IReadUsageRepository
+from blizzard.runner.throttle.pause import PauseService, usage_limit_reason
+from blizzard.runner.usage.repository import IReadUsageRepository, soonest_exhausted_reset
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -138,30 +137,15 @@ def _engage(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> None:
 
 
 def _reason(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> str:
-    resets_at = limit.resets_at or _fallback_reset(ctx)
-    suffix = f" (resets {_minute_precision(resets_at)})" if resets_at is not None else ""
-    return f"usage limit: {harness_id}{suffix}"
+    return usage_limit_reason(harness_id, limit.resets_at or _fallback_reset(ctx))
 
 
 def _fallback_reset(ctx: UsageLimitContext) -> datetime | None:
-    """The soonest future reset among every declared subscription's own latest-sampled
-    windows at or past 100% utilization — no harness-to-subscription mapping, just
-    what every declared subscription itself last reported. ``None`` when nothing exhausted
-    is on record, which the caller reads as "no reset time known", not "no limit"."""
-    now = ctx.clock.now()
-    soonest: datetime | None = None
+    """The soonest pending reset every declared subscription itself last reported
+    (:func:`~blizzard.runner.usage.repository.soonest_exhausted_reset`) — no
+    harness-to-subscription mapping."""
     windows_by_slug = ctx.stores.usage.latest_external_usage_windows_by_slug([r.slug for r in ctx.subscriptions])
-    for resolved in ctx.subscriptions:
-        for window in windows_by_slug.get(resolved.slug, ()):
-            if window.utilization_pct < 100.0 or window.resets_at <= now:
-                continue
-            if soonest is None or window.resets_at < soonest:
-                soonest = window.resets_at
-    return soonest
-
-
-def _minute_precision(value: datetime) -> str:
-    return as_utc(value).strftime("%Y-%m-%dT%H:%MZ")
+    return soonest_exhausted_reset(windows_by_slug, ctx.clock.now())
 
 
 def _usage_limit_adapter(ctx: UsageLimitContext, session: SessionReference) -> IHarnessUsageLimits | None:

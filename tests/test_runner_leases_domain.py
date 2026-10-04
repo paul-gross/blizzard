@@ -173,6 +173,13 @@ def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> Non
     )
 
 
+def _liveness(store, lease):  # type: ignore[no-untyped-def]
+    """``lease``'s baseline from the facts the store holds for it."""
+    return Liveness.of(
+        lease, heartbeat=store.latest_heartbeat(lease.lease_id), spawn=store.latest_spawn(lease.lease_id)
+    )
+
+
 @pytest.mark.unit
 def test_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The true edge: ``now - last == THRESHOLD`` reads not-stale (strict ``>``)."""
@@ -183,7 +190,7 @@ def test_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  # type: ignor
     assert lease is not None
     at_threshold = _NOW + HEARTBEAT_STALENESS_THRESHOLD
 
-    assert Liveness.of(store, lease).stale(at_threshold) is False
+    assert _liveness(store, lease).stale(at_threshold) is False
 
 
 @pytest.mark.unit
@@ -196,7 +203,7 @@ def test_stale_just_past_threshold_is_stale(tmp_path) -> None:  # type: ignore[n
     assert lease is not None
     just_past = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(microseconds=1)
 
-    assert Liveness.of(store, lease).stale(just_past) is True
+    assert _liveness(store, lease).stale(just_past) is True
 
 
 @pytest.mark.unit
@@ -219,7 +226,7 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
 
     # Parked for two hours: without the spawn fact in the baseline the lease is long stale.
     resumed_at = _NOW + timedelta(hours=2)
-    assert Liveness.of(store, lease).stale(resumed_at) is True
+    assert _liveness(store, lease).stale(resumed_at) is True
 
     # The answer-resume respawns the same lease — a second generation, same lease_id.
     store.record_spawn(
@@ -230,10 +237,10 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
         spawned_at=resumed_at,
     )
 
-    assert Liveness.of(store, lease).stale(resumed_at + timedelta(seconds=1)) is False
-    assert Liveness.of(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert _liveness(store, lease).stale(resumed_at + timedelta(seconds=1)) is False
+    assert _liveness(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
     assert (
-        Liveness.of(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+        _liveness(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
     )  # and the window still closes, absent new heartbeats
 
 
@@ -255,8 +262,8 @@ def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> N
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
-    assert Liveness.of(store, lease).stale(beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
+    assert _liveness(store, lease).stale(beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
 
 
 @pytest.mark.unit
@@ -268,8 +275,8 @@ def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
-    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
 
 
 # LocalLeaseService.list_active() — component tier, real sqlite store
@@ -595,8 +602,8 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
 @pytest.mark.unit
 def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The caller may already have read `latest_heartbeat`, so it can hand it in
-    rather than have `Liveness.of` re-query. The sentinel keeps a supplied `None`
-    (a lease that genuinely never beat) distinct from "not supplied, go read it"."""
+    rather than have `Liveness.of` re-query. A supplied `None` (a lease that genuinely
+    never beat) is honored as such, never re-read."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn(
@@ -611,8 +618,8 @@ def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> N
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert Liveness.of(store, lease).last_activity == beat_at  # unsupplied: reads it itself
-    assert Liveness.of(store, lease, heartbeat=beat_at).last_activity == beat_at  # supplied: same answer
+    assert _liveness(store, lease).last_activity == beat_at  # read from the store
+    assert Liveness.of(lease, heartbeat=beat_at, spawn=_NOW).last_activity == beat_at  # supplied: same answer
     # A supplied None means "never beat" and must not be re-read into the real value —
     # the baseline falls back to the spawn, not to the heartbeat sitting in the store.
-    assert Liveness.of(store, lease, heartbeat=None).last_activity == _NOW
+    assert Liveness.of(lease, heartbeat=None, spawn=_NOW).last_activity == _NOW

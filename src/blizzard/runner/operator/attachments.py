@@ -1,19 +1,24 @@
 """The worker attach channel — ``blizzard runner attach --name <n>``.
 
-A worker durably submits an explicit artifact for a ``produces:`` name, authorized by
-the lease token minted at its own spawn. :meth:`AttachmentService.attach` is the one
-place the write happens (``bzh:controller-read-only``)."""
+A worker durably submits an explicit artifact for a ``produces:`` name, authorized by its spawn-minted
+lease token; :meth:`AttachmentService.attach` is the one place the write happens. :func:`check_attachable`
+accepts non-empty content against the active lease, even mid-judgement (newest wins until submitted),
+and refuses empty content and an open takeover's closed reference lease, which nothing would publish."""
 
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.runner.auth.tokens import IReadTokenRepository
-from blizzard.runner.leases import Lease
-from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
+from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
-__all__ = ["AttachmentRejected", "AttachmentService"]
+__all__ = [
+    "AttachmentEmpty",
+    "AttachmentOnClosedLease",
+    "AttachmentRefused",
+    "AttachmentService",
+    "check_attachable",
+]
 
 
 # The armed crash window (``bzh:crash-point-registry``): the attach row is
@@ -24,28 +29,46 @@ _CP_ATTACH_AFTER_RECORD = crashpoint(
 )
 
 
-class AttachmentRejected(Exception):
-    """The presented lease token does not authorize this attach — the API edge maps
-    this to ``403``."""
+class AttachmentRefused(Exception):
+    """Base for the attach refusals."""
+
+
+class AttachmentEmpty(AttachmentRefused):
+    """The attachment carries no content — the API edge maps this to ``422``."""
+
+
+class AttachmentOnClosedLease(AttachmentRefused):
+    """The attach names the closed reference lease an open takeover holds — the API edge
+    maps this to ``409``."""
+
+
+def check_attachable(worker: WorkerLease, *, name: str, content: str) -> None:
+    """Pass when ``content`` may be staged under ``name`` for ``worker``'s lease, else raise
+    the :class:`AttachmentRefused` that applies — empty content first."""
+    if not content:
+        raise AttachmentEmpty(f"attachment {name!r} is empty — an attachment must carry content")
+    if not worker.accepts(WorkerVerb.ATTACH):
+        raise AttachmentOnClosedLease(
+            f"lease {worker.lease.lease_id} is closed — "
+            "an attachment on a takeover's reference lease is never published"
+        )
 
 
 class AttachmentService:
-    """Composition-root-wired: the attachment store, the token store (for authorization),
-    and the clock."""
+    """Composition-root-wired: the attachment store and the clock."""
 
-    def __init__(self, store: IWriteAttachmentRepository, clock: IClock, *, tokens: IReadTokenRepository) -> None:
+    def __init__(self, store: IWriteAttachmentRepository, clock: IClock) -> None:
         self._store = store
         self._clock = clock
-        self._tokens = tokens
 
-    def attach(self, lease: Lease, *, presented_token: str | None, name: str, content: str) -> None:
-        """Record ``content`` under ``name`` for ``lease``, or raise
-        :class:`AttachmentRejected` if ``presented_token`` does not authorize it. ``lease``
-        is already resolved by the caller (``bzh:domain-takes-objects``). Append-and-read-
-        newest: a repeat call for the same ``(lease, name)`` is a correction, not an error."""
-        stored_hash = self._tokens.lease_token_hash(lease.lease_id)
-        if not LeaseToken(presented_token, stored_hash).valid:
-            raise AttachmentRejected(f"presented token does not authorize lease {lease.lease_id}")
+    def attach(self, worker: WorkerLease, *, name: str, content: str) -> None:
+        """Record ``content`` under ``name`` for ``worker``'s lease, or raise the
+        :class:`AttachmentRefused` :func:`check_attachable` names. ``worker`` is already
+        resolved and its token checked by the caller (``bzh:domain-takes-objects``).
+        Append-and-read-newest: a repeat call for the same ``(lease, name)`` is a
+        correction, not an error."""
+        check_attachable(worker, name=name, content=content)
+        lease = worker.lease
         self._store.record_attachment(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,

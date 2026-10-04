@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark
+from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, unshadowed
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
@@ -74,7 +74,8 @@ class AskStore:
             .where(asks.c.lease_id.not_in(select(lease_closures.c.lease_id)))
             .order_by(asks.c.id.desc())
         )
-        return [self._row_to_ask(r) for r in self._store.all(stmt)]
+        forwarded = {str(r.question_id) for r in self._store.all(select(park_facts.c.question_id))}
+        return unshadowed([self._row_to_ask(r) for r in self._store.all(stmt)], forwarded=forwarded)
 
     def record_ask(
         self,

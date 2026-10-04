@@ -17,15 +17,24 @@ from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import (
     ESCALATED,
-    ESCALATION_MINT,
     NO_ACCEPTABLE_HARNESS_MINT,
     PREEMPTED,
     RELEASED,
+)
+from blizzard.runner.leases.escalations import resume_workdir
+from blizzard.runner.lifecycle.model import (
+    FailureMove,
+    OwnerUnresolvableMove,
+    failure_move,
+    owner_unresolvable_closure,
+    owner_unresolvable_move,
+    retry_owner_admitted,
+    routed_away,
 )
 from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
@@ -95,11 +104,11 @@ class Attempt:
         )
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
-        """Close a failed attempt, then requeue at the node or escalate per the budget.
+        """Close a failed attempt, then abandon, requeue at the node, or escalate per :func:`failure_move`.
 
-        An escalation is a one-way door this tick's flush cannot retract, so the exhausted-retries
-        branch re-asks ownership first and defers while locally paused;
-        a retry whose owner this runner can no longer dispatch to escalates immediately instead."""
+        A chunk the hub routes elsewhere (or no longer knows) is abandoned before any retry. An
+        escalation defers while locally paused, since this tick's flush cannot retract it; a retry
+        whose owner this runner can no longer dispatch to escalates instead."""
         lease = self.lease
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
@@ -110,16 +119,14 @@ class Attempt:
         # attempt_count includes this lease, and a first attempt is not a retry.
         retried = self.ctx.stores.lease_record.attempt_count(lease.chunk_id, lease.node_id) - 1
         owner_block = self._owner_block()
-        if retried < lease.retries_max and owner_block is None:
-            # Retry: enqueued ATOMICALLY with the closure it describes.
-            self.close(
-                reason,
-                now,
-                self._event(_ATTEMPT_FAILED, f"attempt failed, retrying — {reason} (via {via})", reason, via, tail),
-            )
-            self.requeue()
-            return
-        if self.detached():
+        move = failure_move(
+            retried=retried,
+            retries_max=lease.retries_max,
+            owner_blocked=owner_block is not None,
+            detached=self.detached(),
+            braked=self._braked(),
+        )
+        if move is FailureMove.ABANDON:
             # Emitted HERE rather than in `abandon`, which the ordinary detach sweep also
             # reaches and which must stay silent.
             OutboundFacts(self.ctx).event(
@@ -133,7 +140,16 @@ class Attempt:
             )
             self.abandon(killed=True, via=via)
             return
-        if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
+        if move is FailureMove.RETRY:
+            # Retry: enqueued ATOMICALLY with the closure it describes.
+            self.close(
+                reason,
+                now,
+                self._event(_ATTEMPT_FAILED, f"attempt failed, retrying — {reason} (via {via})", reason, via, tail),
+            )
+            self.requeue()
+            return
+        if move is FailureMove.DEFER:
             # Deliberate deferral, not a surfaced failure — emit nothing.
             _log.info(
                 "escalation deferred — locally paused",
@@ -143,9 +159,9 @@ class Attempt:
                 lease_id=lease.lease_id,
             )
             return
-        if owner_block is not None:
-            # `detached`/`local_paused` already ran above for this lease, so this calls the
-            # actual close directly rather than re-checking them via the public precedence gate.
+        if move is FailureMove.ESCALATE_OWNER_UNRESOLVABLE and owner_block is not None:
+            # The precedence already ran above for this lease, so this calls the actual close
+            # directly rather than re-checking it via the public precedence gate.
             session, exc = owner_block
             self._escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return
@@ -153,6 +169,7 @@ class Attempt:
             ESCALATED,
             now,
             self._event(_WORKER_LOST, f"worker lost — retries exhausted ({reason}, via {via})", reason, via, tail),
+            escalation_cause=EscalationCause.RETRIES_EXHAUSTED,
         )
         self.escalate(
             cause=EscalationCause.RETRIES_EXHAUSTED,
@@ -173,14 +190,14 @@ class Attempt:
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(lease.chunk_id, lease.epoch))):
                 envelope = self.ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read
-        except ChunkNotFoundError:
+        except (ChunkNotFoundError, ChunkEndedError):
             _log.warning("hub reports chunk unknown at requeue — releasing envs", chunk_id=lease.chunk_id)
             self.ctx.env_release.release_chunk(lease.chunk_id)
             return
         except HubClientError:
             return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
         acceptable = envelope.node.session_harnesses
-        if acceptable and lease.harness_id not in acceptable:
+        if not retry_owner_admitted(lease.harness_id, acceptable):
             # The failed attempt's owner has fallen out of a since-edited acceptable set — a
             # membership check, not resolvability (`_owner_block` already ran that half above).
             assert lease.harness_id is not None  # every requeue-reachable lease was minted under a recorded owner
@@ -215,18 +232,23 @@ class Attempt:
         wrapped = ""
         session = lease.session
         harness = self._resolve_harness(session, via="escalate") if session is not None else None
-        if session is not None and bindings and harness is not None:
+        workdir = resume_workdir(session, bindings)
+        if session is not None and workdir is not None and harness is not None:
             # Composed from the lease's own stamps, so a takeover lands in exactly
             # the configuration the parked session ran with, never a fresh resolution.
             takeover = harness.resume_command(
-                SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir),
+                SpawnCwd.of_session(self.ctx.config.workspace_root, workdir),
                 session.session_id,
                 model=lease.resolved_model,
                 effort=lease.resolved_effort,
             )
             # Wrapped-vs-raw rules: `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries.
-            if self.ctx.config.runner_dir:
-                wrapped = TakeoverCommand(lease.chunk_id, self.ctx.config.runner_dir).wrapped
+            wrapped = (
+                TakeoverCommand.wrapped_for(
+                    lease.chunk_id, resume_command=takeover, runner_dir=self.ctx.config.runner_dir
+                )
+                or ""
+            )
         else:
             # No session, released bindings, or an unresolvable owner all compose nothing; the
             # logged fields say which (`blizzard-context:/domain/humans/escalation.md` §What each origin carries).
@@ -259,7 +281,8 @@ class Attempt:
         escalation."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if self.detached():
+        move = owner_unresolvable_move(detached=self.detached(), braked=self._braked())
+        if move is OwnerUnresolvableMove.ABANDON:
             OutboundFacts(self.ctx).event(
                 kind=_ATTEMPT_ABANDONED,
                 chunk_id=lease.chunk_id,
@@ -271,7 +294,7 @@ class Attempt:
             )
             self.abandon(via=via)
             return
-        if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
+        if move is OwnerUnresolvableMove.DEFER:
             # Deliberate deferral, not a surfaced escalation (mirrors `fail`'s own defer) — the
             # lease stays open, untouched, for a later pass once the pause lifts.
             _log.info(
@@ -295,7 +318,8 @@ class Attempt:
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; nothing is live behind it
         self._kill_in_flight_elicitation()
-        status = "unavailable" if isinstance(exc, UnavailableHarnessError) else "unknown"
+        closure = owner_unresolvable_closure(lease, unavailable=isinstance(exc, UnavailableHarnessError))
+        status = closure.owner_status
         message = f"escalated — recorded harness owner {status} ({session.harness_id!r}, via {via})"
         event = {
             "severity": EVENT_LOG_SEVERITY[_OWNER_UNRESOLVABLE],
@@ -306,10 +330,13 @@ class Attempt:
             "message": message,
             "detail": {"via": via, "harness_id": session.harness_id, "owner_status": status},
         }
-        # `lease.session` is None only for a lease that was never spawned — the
-        # escalation-mint path; every other lease reaching here already ran a real attempt.
-        closure_reason = ESCALATION_MINT if lease.session is None else None
-        self.close(ESCALATED, now, event, closure_reason=closure_reason)
+        self.close(
+            ESCALATED,
+            now,
+            event,
+            closure_reason=closure.closure_reason,
+            escalation_cause=EscalationCause.OWNER_UNRESOLVABLE,
+        )
         # Resolved inline, same as `abandon`/`park_paused`/`preempt` — escalated is a third
         # resolution `record_resume_clear` closes here, not a fourth pending state.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
@@ -340,7 +367,13 @@ class Attempt:
                 "skipped": [{"harness_id": s.harness_id, "reason": s.reason} for s in skipped],
             },
         }
-        self.close(ESCALATED, now, event, closure_reason=NO_ACCEPTABLE_HARNESS_MINT)
+        self.close(
+            ESCALATED,
+            now,
+            event,
+            closure_reason=NO_ACCEPTABLE_HARNESS_MINT,
+            escalation_cause=EscalationCause.NO_ACCEPTABLE_HARNESS,
+        )
         # Same resolve-inline shape as `_escalate_owner_unresolvable`.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         tried = ", ".join(f"{s.harness_id}: {s.reason}" for s in skipped) or "none skipped"
@@ -443,21 +476,12 @@ class Attempt:
         )
 
     def preempt(self, *, via: str) -> None:
-        """Tear down an attempt an operator's restart superseded, and re-enter the node (#370).
+        """Tear down an attempt an operator's restart superseded, and re-enter the node.
 
-        Inverse of :meth:`abandon` in what survives — route, tenure and envs stay this runner's
-        — and no retry is consumed. Deferred entirely while locally paused, as :meth:`fail`'s
-        escalation branch defers (#45): the re-entry is a spawn that brake suppresses."""
+        Inverse of :meth:`abandon` in what survives — route, tenure and envs stay this runner's — and
+        no retry is consumed. The fenced-out worker is killed and closed even under the local brake;
+        only the re-entry spawn waits for it to lift."""
         lease = self.lease
-        if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
-            _log.info(
-                "preempt deferred — locally paused",
-                runner_id=self.ctx.config.runner_id,
-                via=via,
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-            )
-            return
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
         self._kill_in_flight_elicitation()
@@ -486,7 +510,7 @@ class Attempt:
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(lease.chunk_id, lease.epoch))):
                 envelope = self.ctx.hub.get_envelope(lease.chunk_id)
-        except ChunkNotFoundError:
+        except (ChunkNotFoundError, ChunkEndedError):
             _log.warning("hub reports chunk unknown at restart — releasing envs", chunk_id=lease.chunk_id)
             self.ctx.env_release.release_chunk(lease.chunk_id)
             return
@@ -509,7 +533,11 @@ class Attempt:
             return True  # the chunk no longer exists at the hub — terminal, not retryable
         except HubClientError:
             return False  # hub unreachable — last-known directive holds; keep working
-        return view.route_runner_id != self.ctx.config.runner_id
+        return routed_away(view, self.ctx.config.runner_id)
+
+    def _braked(self) -> bool:
+        """The runner's own brake holds back this attempt's escalations and starts."""
+        return not Spawner(self.ctx).brakes().starts_processes
 
     def close(
         self,
@@ -518,12 +546,12 @@ class Attempt:
         event: dict[str, object] | None = None,
         *,
         closure_reason: str | None = None,
+        escalation_cause: EscalationCause | None = None,
     ) -> None:
-        """Close this lease. An ``event`` lands in the outbound buffer in the same transaction
-        as the closure it describes, so the two are never seen apart. Every
-        closure path funnels through here — the one place to pump this lease's own open
-        transcript segment(s) before ``record_closure`` finalizes them.
-        ``closure_reason`` overrides what is recorded, never the published cause."""
+        """Close this lease. An ``event`` lands in the outbound buffer in the same transaction as the
+        closure it describes. Every closure path funnels through here — the one place to pump this lease's
+        open transcript segment(s) before ``record_closure`` finalizes them. ``closure_reason`` overrides
+        what is recorded, never the published cause; ``escalation_cause`` records why it escalated."""
         self._pump_lease_before_close()
         # Every open invocation boundary closes here too, BEFORE
         # `record_closure` — a crash between the two just retries this idempotent path.
@@ -538,6 +566,7 @@ class Attempt:
             closed_at=at,
             event_kind=EVENT_RECORDED if event else None,
             event_payload=json.dumps(event) if event else None,
+            escalation_cause=escalation_cause,
         )
         # After the closure commits, never before (decision: a crash between the two leaves at
         # most an orphan the startup sweep collects, never a still-active lease's directory gone).

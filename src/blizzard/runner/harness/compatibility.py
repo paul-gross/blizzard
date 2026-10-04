@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 
 
 class CompatibilityProbe(StrEnum):
@@ -189,7 +189,7 @@ class ProbeResult:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CompatibilityReport:
     """A complete, ordered compatibility report for one observed harness version.
@@ -230,6 +230,24 @@ class CompatibilityReport:
             results=tuple(collected[probe] for probe in PROBE_ROSTER),
             version_admitted=version_admitted,
         )
+
+    @classmethod
+    def from_probe_report(
+        cls,
+        version: object,
+        admitted_range: object,
+        version_admitted: object,
+        observations: Iterable[ProbeObservation],
+    ) -> CompatibilityReport:
+        """A report from the fields a live probe reported about itself, refusing any it left
+        blank or mistyped — an untrusted probe's report is checked before it is believed."""
+        if not isinstance(version, str) or not version.strip():
+            raise CompatibilityContractError("the compatibility probe did not report an observed version")
+        if not isinstance(admitted_range, str) or not admitted_range.strip():
+            raise CompatibilityContractError("the compatibility probe did not report its admitted range")
+        if not isinstance(version_admitted, bool):
+            raise CompatibilityContractError("the compatibility probe did not report a version-admitted verdict")
+        return cls.from_observations(version, admitted_range, version_admitted, observations)
 
     @property
     def classification(self) -> CompatibilityClassification:  # ast-grep-ignore: bzh:property-delegates
@@ -330,13 +348,7 @@ class CompatibilityDiagnostic:
             raise CompatibilityContractError(
                 "the compatibility probe did not report its observed version and admitted range"
             ) from exc
-        if not isinstance(version, str) or not version.strip():
-            raise CompatibilityContractError("the compatibility probe did not report an observed version")
-        if not isinstance(admitted_range, str) or not admitted_range.strip():
-            raise CompatibilityContractError("the compatibility probe did not report its admitted range")
-        if not isinstance(version_admitted, bool):
-            raise CompatibilityContractError("the compatibility probe did not report a version-admitted verdict")
-        return CompatibilityReport.from_observations(version, admitted_range, version_admitted, observations)
+        return CompatibilityReport.from_probe_report(version, admitted_range, version_admitted, observations)
 
 
 SUPPORTED = CompatibilityClassification.SUPPORTED

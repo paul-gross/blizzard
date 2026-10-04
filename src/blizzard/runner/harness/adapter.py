@@ -396,7 +396,7 @@ class IHarnessHealthProbe(Protocol):
     def supported_version(self) -> SpecifierSet | None:
         """This binding's declared admitted-version range as a semver ``SpecifierSet``, or
         ``None`` when it declares no range at all. Checked through
-        :func:`~blizzard.runner.harness.harness_shared.version_admitted`, never
+        :func:`~blizzard.runner.harness.admission.version_admitted`, never
         equality against one literal; ``None`` is the only "no constraint" value — an
         *empty* ``SpecifierSet`` would instead admit every version."""
         ...

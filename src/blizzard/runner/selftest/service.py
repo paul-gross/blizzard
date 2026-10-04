@@ -8,7 +8,6 @@ when a result repository is wired."""
 from __future__ import annotations
 
 import threading
-from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
@@ -17,7 +16,7 @@ from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessErr
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
-from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
+from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
 # The whole-run wall-clock budget: a hung check must fail the canary loudly
@@ -30,8 +29,8 @@ __all__ = ["SelfTestService", "UnknownHarnessError"]
 class SelfTestService:
     """Mint selftest runs and execute them off the request thread.
 
-    A ``harness`` outside the injected ``harnesses`` registry raises
-    :class:`UnknownHarnessError` — a client error, never a missing resource."""
+    A ``harness`` outside the injected ``harnesses`` registry raises :class:`UnknownHarnessError`, a
+    client error. Concurrent runs for one harness are legal; the last to finish records the result."""
 
     def __init__(
         self,
@@ -52,10 +51,6 @@ class SelfTestService:
         self._lock = threading.Lock()
         self._runs: dict[str, SelfTestRun] = {}
 
-    @property
-    def known_harnesses(self) -> tuple[str, ...]:
-        return self._harnesses.known_harnesses
-
     def start(self, harness: str) -> SelfTestRun:
         """Mint a run and begin it in a background thread; returns immediately."""
         adapter = self._harnesses.self_test(harness)
@@ -66,16 +61,9 @@ class SelfTestService:
         return run
 
     def get(self, selftest_id: str) -> SelfTestRun | None:
-        """Read back a run's current state — a snapshot, not the live mutable object.
-
-        ``_finish`` reassigns the run's fields as a whole under the lock, so a caller
-        reading outside the lock must not be handed the live instance.
-        """
+        """Read back a run's current state — an immutable snapshot, replaced whole on conclusion."""
         with self._lock:
-            run = self._runs.get(selftest_id)
-            if run is None:
-                return None
-            return replace(run, checks=list(run.checks))
+            return self._runs.get(selftest_id)
 
     def _execute(self, selftest_id: str, adapter: IHarnessSelfTestSeam) -> None:
         # Joined against the budget in its own thread: an overrun cannot be killed, so it
@@ -93,36 +81,26 @@ class SelfTestService:
         worker = threading.Thread(target=_run, daemon=True)
         worker.start()
         worker.join(self._run_budget_seconds)
-        if worker.is_alive():
-            detail = f"selftest exceeded its {self._run_budget_seconds:g}s wall-clock budget — the harness appears hung"
-            self._finish(selftest_id, status="failed", checks=[], error=detail)
-            return
-
-        checks, error = outcome[0]
-        if error is not None:
-            self._finish(selftest_id, status="failed", checks=[], error=error)
-            return
-        status: SelfTestStatus = "passed" if all(c.passed for c in checks) else "failed"
-        self._finish(selftest_id, status=status, checks=checks, error=None)
-
-    def _finish(
-        self, selftest_id: str, *, status: SelfTestStatus, checks: list[SelfTestCheck], error: str | None
-    ) -> None:
         with self._lock:
-            harness = self._runs[selftest_id].harness
+            run = self._runs[selftest_id]
+        if worker.is_alive():
+            self._finish(run.overran(self._run_budget_seconds))
+            return
+        checks, error = outcome[0]
+        self._finish(run.crashed(error) if error is not None else run.conclude(checks))
+
+    def _finish(self, concluded: SelfTestRun) -> None:
         # Durable before visible: a caller that reads the run as terminal can rely on its
         # outcome already being recorded. A failed write still resolves the run.
         try:
             if self._results is not None:
+                record = concluded.result_record(self._clock.now())
                 self._results.record_selftest_result(
-                    harness_id=harness,
-                    status=status,
-                    error=error,
-                    recorded_at=self._clock.now(),
+                    harness_id=record.harness_id,
+                    status=record.status,
+                    error=record.error,
+                    recorded_at=record.recorded_at,
                 )
         finally:
             with self._lock:
-                run = self._runs[selftest_id]
-                run.checks = checks
-                run.status = status
-                run.error = error
+                self._runs[concluded.id] = concluded

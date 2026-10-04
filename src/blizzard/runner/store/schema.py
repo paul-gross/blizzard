@@ -157,6 +157,8 @@ lease_closures = Table(
     Column("node_id", String, nullable=False),
     Column("reason", String, nullable=False),  # transitioned | reaped | failed | escalated
     Column("closed_at", UtcDateTime, nullable=False),
+    # Why an escalating closure escalated (an ``EscalationCause``); NULL on every other closure.
+    Column("escalation_cause", String, nullable=True),
 )
 # The trace sweep's window read, in cursor order.
 Index("ix_lease_closures_closed_at_lease_id", lease_closures.c.closed_at, lease_closures.c.lease_id)

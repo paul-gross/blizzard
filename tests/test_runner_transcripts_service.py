@@ -162,7 +162,7 @@ def _close(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
     store.record_closure(**fields)  # type: ignore[arg-type]
 
 
-def _closed_lease(store) -> None:  # type: ignore[no-untyped-def]
+def _closed_lease(store, *, unshipped_turn: bool = False) -> None:  # type: ignore[no-untyped-def]
     _seed_lease(store)
     store.record_spawn(
         "lease_1",
@@ -171,6 +171,8 @@ def _closed_lease(store) -> None:  # type: ignore[no-untyped-def]
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
+    if unshipped_turn:
+        _buffer_unshipped_turn(store)  # buffered while open: a finalized segment takes no content
     _close(store)
     assert store.active_lease("lease_1") is None
 
@@ -178,10 +180,9 @@ def _closed_lease(store) -> None:  # type: ignore[no-untyped-def]
 def _buffer_unshipped_turn(store) -> None:  # type: ignore[no-untyped-def]
     """One content row left unacked in the transcript lane's outbound buffer — what a
     closed lease looks like while the bounded drain is still catching up."""
-    segment = store.open_transcript_segments()
-    segment_id = segment[0].segment_id if segment else _segment_id(store)
+    [segment] = store.open_transcript_segments()
     store.record_transcript_deltas(
-        segment_id=segment_id,
+        segment_id=segment.segment_id,
         chunk_id="ch_1",
         cursor="1",
         shipped_bytes=10,
@@ -191,11 +192,6 @@ def _buffer_unshipped_turn(store) -> None:  # type: ignore[no-untyped-def]
         payloads=['{"segment_id": "sg", "turns": []}'],
         created_at=_NOW,
     )
-
-
-def _segment_id(store) -> str:  # type: ignore[no-untyped-def]
-    [delta] = store.pending_transcript_outbound()
-    return delta.segment_id
 
 
 @pytest.mark.unit
@@ -233,8 +229,7 @@ def test_a_closed_lease_with_unshipped_turns_still_reads_local_not_the_hubs_pref
     lease's tail buffered, so the hub holds a **prefix**; serving that under the archived
     badge would silently shorten the transcript."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    _closed_lease(store)
-    _buffer_unshipped_turn(store)
+    _closed_lease(store, unshipped_turn=True)
     assert store.has_unshipped_transcript_content("ch_1") is True
     local = FakeTranscriptRepository(
         {

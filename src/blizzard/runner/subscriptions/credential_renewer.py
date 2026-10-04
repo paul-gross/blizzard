@@ -7,12 +7,13 @@ vendor's own tooling to refresh it, and reports only whether that ask worked."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
-__all__ = ["ICredentialRenewer", "RenewalFailureReason", "RenewalOutcome", "RenewalOutcomeKind"]
+__all__ = ["ICredentialRenewer", "RenewalFailureReason", "RenewalOutcome", "RenewalOutcomeKind", "renewal_due"]
 
 
 class RenewalOutcomeKind(StrEnum):
@@ -38,7 +39,7 @@ class RenewalFailureReason(StrEnum):
     PROTOCOL_ERROR = "protocol_error"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RenewalOutcome:
     """One ``renew_if_due()`` call's result. ``failure_reason`` is set only when
@@ -46,6 +47,25 @@ class RenewalOutcome:
 
     kind: RenewalOutcomeKind
     failure_reason: RenewalFailureReason | None = None
+
+    @property
+    def recorded_value(self) -> str | None:
+        """The attempt row's ``renewal`` string: ``None`` when nothing renewal-worthy happened
+        (not due), the kind's own value for a success, and ``"failed:<reason>"`` for a failure,
+        so the reason travels with it."""
+        return self._recorded_value()
+
+    def _recorded_value(self) -> str | None:
+        if self.kind is RenewalOutcomeKind.NOT_DUE:
+            return None
+        if self.kind is RenewalOutcomeKind.FAILED and self.failure_reason is not None:
+            return f"failed:{self.failure_reason.value}"
+        return self.kind.value
+
+
+def renewal_due(expires_at: datetime, now: datetime, lead: timedelta) -> bool:
+    """A credential is due for renewal once ``now`` reaches the lead window before its expiry."""
+    return now >= expires_at - lead
 
 
 class ICredentialRenewer(Protocol):

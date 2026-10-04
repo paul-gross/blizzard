@@ -13,7 +13,13 @@ import httpx
 from pydantic import TypeAdapter
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.runner.hub.client import (
+    ChunkEndedError,
+    ChunkNotFoundError,
+    HubClientError,
+    IHubClient,
+    RouteClaimOutcome,
+)
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -112,7 +118,9 @@ class HttpHubClient:
         return TranscriptSegmentAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)
+        resp = self._get(
+            f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError, ended_on_conflict=True
+        )
         return NodeEnvelope.model_validate(resp.json())
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
@@ -169,7 +177,7 @@ class HttpHubClient:
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
-        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None)
+        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True)
         return RouteTokenRekeyResponse.model_validate(resp.json())
 
     # --- plumbing -----------------------------------------------------------
@@ -180,15 +188,18 @@ class HttpHubClient:
         *,
         params: dict[str, list[str]] | None = None,
         not_found_as: type[HubClientError] | None = None,
+        ended_on_conflict: bool = False,
     ) -> httpx.Response:
         try:
             resp = self._client.get(path, params=params)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"GET {path}") from exc
-        self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as)
+        self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as, ended_on_conflict=ended_on_conflict)
         return resp
 
-    def _post(self, path: str, body: object, *, timeout: float | None = None) -> httpx.Response:
+    def _post(
+        self, path: str, body: object, *, timeout: float | None = None, ended_on_conflict: bool = False
+    ) -> httpx.Response:
         try:
             if timeout is not None:
                 resp = self._client.post(path, json=body, timeout=timeout)
@@ -196,17 +207,24 @@ class HttpHubClient:
                 resp = self._client.post(path, json=body)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
-        self._raise_for_status(resp, f"POST {path}")
+        self._raise_for_status(resp, f"POST {path}", ended_on_conflict=ended_on_conflict)
         return resp
 
     def _raise_for_status(
-        self, resp: httpx.Response, operation: str, *, not_found_as: type[HubClientError] | None = None
+        self,
+        resp: httpx.Response,
+        operation: str,
+        *,
+        not_found_as: type[HubClientError] | None = None,
+        ended_on_conflict: bool = False,
     ) -> None:
         if resp.is_success:
             return
         _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
         if not_found_as is not None and resp.status_code == httpx.codes.NOT_FOUND:
             raise not_found_as(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+        if ended_on_conflict and resp.status_code == httpx.codes.CONFLICT:
+            raise ChunkEndedError(f"{operation} -> {resp.status_code}: {resp.text[:200]}", detail=_detail(resp))
         raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
 
     @staticmethod
@@ -217,3 +235,13 @@ class HttpHubClient:
 
 def _conforms_hub_client(x: HttpHubClient) -> IHubClient:
     return x
+
+
+def _detail(resp: httpx.Response) -> str:
+    """A FastAPI refusal's ``detail`` text, or the raw body when it carries none."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return resp.text[:200]
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return str(detail) if detail is not None else resp.text[:200]

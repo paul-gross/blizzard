@@ -9,8 +9,8 @@ from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.tokens import IReadTokenRepository
-from blizzard.runner.leases import Lease
-from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.leases import Lease, WorkerLease
+from blizzard.runner.leases.lease_auth import LeaseToken, LeaseTokenRejected
 
 
 def authorized_lease(lease_id: str, request: Request) -> Lease:
@@ -18,15 +18,21 @@ def authorized_lease(lease_id: str, request: Request) -> Lease:
     — and check the presented token, or raise the store-free ``503`` /
     unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an unauthorized
     caller never learns the fleet's hub-wiring state."""
+    return authorized_worker_lease(lease_id, request).lease
+
+
+def authorized_worker_lease(lease_id: str, request: Request) -> WorkerLease:
+    """:func:`authorized_lease`, keeping whether the lease is the active one or an open
+    takeover's closed reference lease — for the verbs whose acceptance depends on it."""
     wiring = RunnerWiring.of(request)
-    lease = wiring.worker_lease(lease_id)
+    worker = wiring.worker_lease_standing(lease_id)
     tokens: IReadTokenRepository = wiring.read_stores().tokens
-    if not LeaseToken(presented_lease_token(request), tokens.lease_token_hash(lease_id)).valid:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
-        )
+    try:
+        LeaseToken(presented_lease_token(request), tokens.lease_token_hash(lease_id)).require(lease_id)
+    except LeaseTokenRejected as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     annotate_caller("worker")
-    return lease
+    return worker
 
 
 def resolved_lease(lease_id: str, request: Request) -> Lease:

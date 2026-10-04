@@ -113,3 +113,17 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None
 
     assert result.exit_code != 0
     assert "not needs_human" in result.output
+
+
+@pytest.mark.component
+def test_requeue_refuses_a_needs_human_chunk_holding_no_environment(tmp_path: Path) -> None:
+    root = _init_runner(tmp_path)
+    store = _store(root)
+    _seed_escalated_chunk(store)
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["requeue", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "requeue it at the hub" in result.output

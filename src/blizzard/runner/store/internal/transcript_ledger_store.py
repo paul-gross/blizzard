@@ -21,6 +21,7 @@ from blizzard.runner.transcripts.ledger import (
     IWriteTranscriptLedgerRepository,
     TranscriptBackfillLease,
     TranscriptSegmentState,
+    TruncationMark,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -173,37 +174,37 @@ class TranscriptLedgerStore:
             if row is None:
                 return False
             current_reason, current_severity, warned_json = row
-            warned: list[str] = json.loads(warned_json) if warned_json is not None else []
-            # Latched per (segment, reason) — a reason already warned never re-warns, no
-            # matter how the display field below moves after it.
-            already_warned = reason in warned
+            # The read-modify-write stays in this one transaction; `TruncationMark` decides.
+            mark = TruncationMark(
+                current_reason=current_reason,
+                current_severity=current_severity,
+                reasons_warned=tuple(json.loads(warned_json)) if warned_json is not None else (),
+            )
+            update = mark.apply(reason, severity)
             values: dict[str, Any] = {}
-            if not already_warned:
-                values["truncated_reasons_warned"] = json.dumps([*warned, reason])
-            # Worst-of, by the CALLER's own severity — the store holds no opinion on reasons.
-            # `current_severity` is nullable and never backfilled: a row that took its reason
-            # before that column existed reads NULL, which is not comparable.
-            if current_reason != reason and (
-                current_reason is None or current_severity is None or severity >= current_severity
-            ):
-                values["truncated_reason"] = reason
-                values["truncated_reason_severity"] = severity
+            if update.reasons_warned is not None:
+                values["truncated_reasons_warned"] = json.dumps(list(update.reasons_warned))
+            if update.truncated_reason is not None:
+                values["truncated_reason"] = update.truncated_reason
+                values["truncated_reason_severity"] = update.truncated_reason_severity
             if values:
                 conn.execute(
                     transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(**values)
                 )
-        changed = not already_warned
+        changed = update.newly_warned
         if changed:
             _log.warning("transcript record truncated", segment_id=segment_id, reason=reason)
         return changed
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         with self._store.begin() as conn:
-            # `IS NULL` guard: a segment already stopped keeps its first reason.
+            # `IS NULL` guards: a segment already stopped keeps its first reason, and a
+            # finalized one takes no stop (`SEGMENT_TRANSITIONS`).
             result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
                 .where(transcript_segments.c.shipping_stopped_reason.is_(None))
+                .where(transcript_segments.c.finalized_at.is_(None))
                 .values(shipping_stopped_reason=reason)
             )
         changed = result.rowcount > 0
@@ -245,6 +246,8 @@ class TranscriptLedgerStore:
         agent_tool_use_ids: dict[str, str] | None = None,
     ) -> list[int]:
         with self._store.begin() as conn:
+            if not self._accepts_content(conn, segment_id):
+                return []
             conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
@@ -349,6 +352,8 @@ class TranscriptLedgerStore:
         agent_tool_use_ids: dict[str, str] | None = None,
     ) -> None:
         with self._store.begin() as conn:
+            if not self._accepts_content(conn, segment_id):
+                return
             conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
@@ -372,12 +377,20 @@ class TranscriptLedgerStore:
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(False))
             )
+            # Only a pending marker takes the ack: an acked one keeps its first `acked_at`.
             conn.execute(
                 transcript_outbound_buffer.update()
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(True))
+                .where(transcript_outbound_buffer.c.acked_at.is_(None))
                 .values(acked_at=acked_at)
             )
+
+    def _accepts_content(self, conn: Connection, segment_id: str) -> bool:
+        """Whether the segment, read in the caller's transaction, takes a content write — a
+        finalized one takes none. An unknown id is left to the write itself, as before."""
+        row = conn.execute(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id)).first()
+        return row is None or self._row_to_transcript_segment(row).accepts_content
 
     # --- shared helpers -------------------------------------------------------
 

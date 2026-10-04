@@ -5,21 +5,63 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.leases import Lease
+from blizzard.runner.leases.asks import OpenAsk
 
 __all__ = [
+    "COMMAND_FAILED_STDERR_TAIL",
+    "COMPLETION_KIND",
+    "DECISION_KIND",
+    "OUTBOUND_TRANSITIONS",
+    "SUBMISSION_KINDS",
     "BufferedFact",
     "IReadOutboundRepository",
     "IWriteOutboundRepository",
+    "OutboundEventFields",
     "OutboundFactEntry",
+    "OutboundFactState",
+    "answer_delivered_payload",
+    "command_failed_event",
+    "escalation_payload",
     "event_payload",
+    "lease_minted_payload",
+    "outbound_ack_applies",
+    "question_asked_payload",
+    "submission_payload",
+    "transcript_truncated_event",
 ]
 
+#: The two submission kinds the drain flushes to their own routes; every other flushes to ``POST /events``.
+COMPLETION_KIND = "completion.submitted"
+DECISION_KIND = "decision.submitted"
+SUBMISSION_KINDS: tuple[str, ...] = (COMPLETION_KIND, DECISION_KIND)
 
-@dto
+#: How much of a failed command's stderr a ``command-failed`` event keeps — its tail.
+COMMAND_FAILED_STDERR_TAIL = 2000
+
+#: Where one buffered fact stands: awaiting delivery, or acked (delivered or semantically rejected).
+OutboundFactState = Literal["pending", "acked"]
+
+#: The writes a buffered fact takes from each state: one ack, from pending; re-acking keeps the first ``acked_at``.
+OUTBOUND_TRANSITIONS: dict[OutboundFactState, frozenset[Literal["ack"]]] = {
+    "pending": frozenset({"ack"}),
+    "acked": frozenset(),
+}
+
+
+def outbound_ack_applies(acked_at: datetime | None) -> bool:
+    """Whether an ack writes over a fact whose ``acked_at`` is this, per :data:`OUTBOUND_TRANSITIONS`."""
+    state: OutboundFactState = "acked" if acked_at is not None else "pending"
+    return "ack" in OUTBOUND_TRANSITIONS[state]
+
+
+@domain_model
 @dataclass(frozen=True)
 class BufferedFact:
     """One pending hub-bound fact in the store-and-forward buffer."""
@@ -30,6 +72,21 @@ class BufferedFact:
     lease_id: str | None
     payload: str
     created_at: datetime
+
+    @property
+    def is_submission(self) -> bool:
+        """A completion or decision — flushed to its own route, never to ``POST /events``."""
+        return self._is_submission()
+
+    def _is_submission(self) -> bool:
+        return self.kind in SUBMISSION_KINDS
+
+    @property
+    def is_completion(self) -> bool:
+        return self._is_completion()
+
+    def _is_completion(self) -> bool:
+        return self.kind == COMPLETION_KIND
 
 
 @dto
@@ -65,6 +122,89 @@ def event_payload(
         "message": message,
         "detail": detail,
     }
+
+
+def lease_minted_payload(chunk_id: str, lease_id: str, *, epoch: int, route_token: str | None) -> dict[str, object]:
+    """The ``lease.minted`` payload — the fence input the hub's completion check consumes."""
+    return {"chunk_id": chunk_id, "epoch": epoch, "lease_id": lease_id, "route_token": route_token}
+
+
+def escalation_payload(
+    lease: Lease,
+    *,
+    takeover: str,
+    wrapped_takeover: str,
+    cause: EscalationCause,
+    detail: str,
+    route_token: str | None,
+) -> dict[str, object]:
+    """The ``escalation.recorded`` payload — both takeover strings and why it was raised."""
+    return {
+        "chunk_id": lease.chunk_id,
+        "epoch": lease.epoch,
+        "lease_id": lease.lease_id,
+        "takeover_command": takeover,
+        "wrapped_takeover_command": wrapped_takeover,
+        "cause": str(cause),
+        "detail": detail,
+        "route_token": route_token,
+    }
+
+
+def question_asked_payload(lease: Lease, ask: OpenAsk, *, route_token: str | None) -> dict[str, object]:
+    """The ``question.asked`` payload. The ask's own session and harness win; the lease's
+    stand in for an ask that recorded none."""
+    return {
+        "question_id": ask.question_id,
+        "chunk_id": lease.chunk_id,
+        "node_id": lease.node_id,
+        "session_id": ask.session_id or lease.session_id,
+        "harness_id": ask.harness_id or lease.harness_id,
+        "epoch": lease.epoch,
+        "lease_id": lease.lease_id,
+        "question": ask.question,
+        "options": ask.options,
+        "asked_at": iso_utc(ask.asked_at),
+        "route_token": route_token,
+    }
+
+
+def answer_delivered_payload(lease: Lease, question_id: str) -> dict[str, object]:
+    return {"chunk_id": lease.chunk_id, "question_id": question_id}
+
+
+def submission_payload(submission_json: Mapping[str, object]) -> dict[str, object]:
+    """A completion's or decision's payload: the submission, already rendered to JSON."""
+    return {"submission": dict(submission_json)}
+
+
+@dto
+@dataclass(frozen=True)
+class OutboundEventFields:
+    """The message and detail one operational event carries, before :func:`event_payload` frames it."""
+
+    kind: EventLogKind
+    message: str
+    detail: Mapping[str, object]
+
+
+def command_failed_event(*, command: str, stderr_tail: str) -> OutboundEventFields:
+    """A captured command failure: its command and the last :data:`COMMAND_FAILED_STDERR_TAIL`
+    characters of its stderr."""
+    return OutboundEventFields(
+        kind="command-failed",
+        message=f"command failed: {command}",
+        detail={"command": command, "stderr_tail": stderr_tail[-COMMAND_FAILED_STDERR_TAIL:] if stderr_tail else ""},
+    )
+
+
+def transcript_truncated_event(*, segment_id: str, reason: str) -> OutboundEventFields:
+    """A segment that stopped shipping content — truncation is never silent."""
+    return OutboundEventFields(
+        kind="transcript-truncated",
+        message=f"transcript segment {segment_id} truncated — {reason}",
+        detail={"segment_id": segment_id, "reason": reason},
+    )
 
 
 class IReadOutboundRepository(Protocol):
@@ -107,12 +247,14 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
         ...
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Mark a buffered fact delivered — a semantic rejection acks too."""
+        """Mark a buffered fact delivered — a semantic rejection acks too. An already-acked
+        fact keeps its first ``acked_at`` (:data:`OUTBOUND_TRANSITIONS`)."""
         ...
 
     def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
         """Mark every seq in ``seqs`` delivered, in one transaction, so a
-        crash mid-batch never acks part of one delivered run."""
+        crash mid-batch never acks part of one delivered run. An already-acked seq keeps
+        its first ``acked_at``."""
         ...
 
     def prune_outbound(self, *, now: datetime) -> int:

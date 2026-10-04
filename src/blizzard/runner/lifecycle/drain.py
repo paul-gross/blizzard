@@ -13,13 +13,22 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.hub.client import HubClientError
-from blizzard.runner.hub.outbound import COMPLETION_KIND, DECISION_KIND
 from blizzard.runner.hub.outbound_buffer import BufferedFact
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.closure import FAILED, PARKED, TRANSITIONED
+from blizzard.runner.leases.closure import ESCALATED, FAILED, PARKED, TRANSITIONED
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.held_chunk import HeldChunk, HeldChunkContext
+from blizzard.runner.lifecycle.model import (
+    CompletionMove,
+    DecisionMove,
+    completion_move,
+    decision_move,
+    spend_cap_detail,
+    spend_cap_partial_note,
+    spend_cap_reached,
+)
 from blizzard.runner.lifecycle.spawn import SpawnConfig
+from blizzard.wire.chunk import ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -74,14 +83,14 @@ class OutboundDrain:
         fact first flushes the run collected so far, then routes to its own arm unchanged."""
         run: list[BufferedFact] = []
         for fact in self.ctx.stores.outbound.pending_outbound(limit=_DRAIN_LIMIT):
-            if fact.kind not in (COMPLETION_KIND, DECISION_KIND):
+            if not fact.is_submission:
                 run.append(fact)
                 continue
             if run:
                 if not self._flush_run(run):
                     return  # transport failure — stop; retry the backlog next tick
                 run = []
-            handler = self._completion if fact.kind == COMPLETION_KIND else self._decision
+            handler = self._completion if fact.is_completion else self._decision
             if not handler(fact):
                 return  # transport failure — stop; retry the backlog next tick
         if run:
@@ -151,7 +160,7 @@ class OutboundDrain:
         lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
         if lease is None:
             return True  # already parked on an earlier flush whose ack was lost
-        if response.outcome == ApplyOutcome.FAILURE:
+        if decision_move(response.outcome) is DecisionMove.FAIL:
             _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
             Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
             return True
@@ -164,50 +173,55 @@ class OutboundDrain:
 
         Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap
         checks at: the attempt just closed is genuinely done, so parking here kills nothing live."""
-        if response.outcome == ApplyOutcome.FAILURE:
+        # Only an advancing completion can reach the cap, so only then is the spend read.
+        breach = self._spend_cap_breach(lease) if response.outcome == ApplyOutcome.NEXT else None
+        move = completion_move(response.outcome, capped=breach is not None)
+        if move is CompletionMove.FAIL:
             # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
             # requeue or escalate. The chunk never advanced.
             _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
             Attempt(self.ctx, lease).fail(reason=FAILED, via="pull")
             return
+        if move is CompletionMove.ESCALATE_SPEND_CAP and breach is not None:
+            cost, cap = breach
+            # Closed escalated, so the escalation reads open here like any other, and the next node is
+            # not entered, so no attempt there is spent.
+            attempt = Attempt(self.ctx, lease)
+            attempt.close(ESCALATED, self.ctx.clock.now(), escalation_cause=EscalationCause.SPEND_CAP)
+            _CP_AFTER_CLOSURE.reached()
+            attempt.escalate(cause=EscalationCause.SPEND_CAP, detail=spend_cap_detail(cost, cap))
+            return
         Attempt(self.ctx, lease).close(TRANSITIONED, self.ctx.clock.now())
         _CP_AFTER_CLOSURE.reached()
-        if response.outcome == ApplyOutcome.NEXT and self._capped(lease):
-            return  # capped — needs_human; the next attempt is not spawned
         HeldChunk(self.ctx, lease.chunk_id).apply(
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         )
 
-    def _capped(self, lease: Lease) -> bool:
-        """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
+    def _spend_cap_breach(self, lease: Lease) -> tuple[ChunkUsageTotalView, float] | None:
+        """The chunk's spend and the cap it reached, when it has (:func:`spend_cap_reached`).
 
         Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is
         a LOWER BOUND — a row with no billed cost contributes $0, estimate or not — so the cap
         trips conservatively, and its PARTIAL is the total's ``billed_partial``."""
         cap = self.ctx.config.chunk_cap_usd
         if cap is None:
-            return False
+            return None
         try:
             view = self.ctx.chunk_views.get(lease.chunk_id)
         except HubClientError:
             # Covers ChunkNotFoundError too — re-checked at the next step boundary either way.
-            return False
+            return None
         cost = view.cost
-        if cost.cost_usd < cap:
-            return False
-        partial_note = " (PARTIAL — true spend may be higher)" if cost.billed_partial else ""
+        if not spend_cap_reached(cost, cap):
+            return None
         _log.warning(
-            f"chunk parked — spend cap exceeded{partial_note}",
+            f"chunk parked — spend cap exceeded{spend_cap_partial_note(cost)}",
             chunk_id=lease.chunk_id,
             cap_usd=cap,
             spend_usd=cost.cost_usd,
             cost_partial=cost.billed_partial,
         )
-        Attempt(self.ctx, lease).escalate(
-            cause=EscalationCause.SPEND_CAP,
-            detail=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})",
-        )
-        return True
+        return cost, cap
 
     def _ack(self, fact: BufferedFact) -> None:
         self.ctx.stores.outbound.ack_outbound(fact.seq, acked_at=self.ctx.clock.now())

@@ -1750,3 +1750,81 @@ def test_prune_external_usage_samples_never_prunes_a_same_instant_tied_newest_pa
             .where(external_usage_samples.c.slug == "anthropic")
         ).scalar_one()
     assert remaining == 2
+
+
+@pytest.mark.unit
+def test_ack_of_an_acked_outbound_fact_keeps_its_first_acked_at(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    seq = store.enqueue_outbound(
+        kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
+    store.ack_outbound(seq, acked_at=_NOW)
+
+    store.ack_outbound(seq, acked_at=_NOW + timedelta(hours=1))
+    store.ack_outbound_batch([seq], acked_at=_NOW + timedelta(hours=2))
+
+    [entry] = store.recent_outbound(1)
+    assert entry.acked_at == _NOW
+
+
+@pytest.mark.unit
+def test_ack_of_an_acked_final_marker_keeps_its_first_acked_at(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    [marker] = store.pending_transcript_outbound()
+    store.ack_transcript_outbound(marker.seq, acked_at=_NOW)
+
+    store.ack_transcript_outbound(marker.seq, acked_at=_NOW + timedelta(hours=1))
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        acked_at = conn.execute(sa.select(transcript_outbound_buffer.c.acked_at)).scalar_one()
+    assert acked_at.replace(tzinfo=None) == _NOW.replace(tzinfo=None)
+
+
+@pytest.mark.unit
+def test_a_finalized_segment_takes_no_content_and_no_stop(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    [segment] = store.open_transcript_segments()
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    seqs = store.record_transcript_deltas(
+        segment_id=segment.segment_id,
+        chunk_id="ch_1",
+        cursor="late",
+        shipped_bytes=10,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payloads=['{"turns": []}'],
+        created_at=_NOW,
+    )
+    store.advance_transcript_cursor(segment.segment_id, cursor="later", normalizer_version="v1", harness_version=None)
+    stopped = store.stop_transcript_segment_shipping(segment.segment_id, reason="chunk_budget_exceeded")
+
+    sealed = store.transcript_segment(segment.segment_id)
+    assert seqs == []
+    assert stopped is False
+    assert sealed is not None
+    assert (sealed.cursor, sealed.shipped_bytes, sealed.shipping_stopped_reason) == (
+        segment.cursor,
+        segment.shipped_bytes,
+        None,
+    )
+    assert [d.final for d in store.pending_transcript_outbound()] == [True]

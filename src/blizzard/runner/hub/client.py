@@ -49,13 +49,23 @@ class ChunkNotFoundError(HubClientError):
     :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
 
 
+class ChunkEndedError(HubClientError):
+    """The hub refuses a chunk-scoped call because the chunk has ended (409) — terminal, not transient:
+    an envelope read with no current runner node, or a rekey of a route on a ``done``/``stopped`` chunk.
+    ``detail`` is the hub's refusal text. Still a :class:`HubClientError`, so an unaware caller retries."""
+
+    def __init__(self, message: str, *, detail: str) -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
 @dto
 @dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
-    ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
-    / ``denied_incompatible`` set. A conflict is a race
-    this claim lost; every denial means the hub refused it before any race."""
+    ``denied_paused`` / ``denied_terminal`` / ``denied_dependency`` / ``denied_incompatible``
+    set — construction refuses any other count. A conflict is a race this claim lost; every
+    denial means the hub refused it before any race."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
@@ -63,6 +73,19 @@ class RouteClaimOutcome:
     denied_terminal: RouteClaimTerminalDenial | None = None
     denied_dependency: RouteClaimDependencyDenial | None = None
     denied_incompatible: RouteClaimIncompatibleDenial | None = None
+
+    def __post_init__(self) -> None:
+        arms = (
+            self.claimed,
+            self.conflict,
+            self.denied_paused,
+            self.denied_terminal,
+            self.denied_dependency,
+            self.denied_incompatible,
+        )
+        set_count = sum(arm is not None for arm in arms)
+        if set_count != 1:
+            raise ValueError(f"a route claim outcome sets exactly one arm, not {set_count}")
 
     @property
     def won(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
@@ -119,7 +142,9 @@ class IHubClient(IChunkStatusReader, Protocol):
         ...
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read."""
+        """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read. Raises
+        :class:`ChunkNotFoundError` for an unknown chunk and :class:`ChunkEndedError` for one
+        that has ended."""
         ...
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
@@ -162,5 +187,6 @@ class IHubClient(IChunkStatusReader, Protocol):
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
         capability token. Why it exists: `src/blizzard/hub/domain/execution/claim.py`'s
-        ``ClaimService.rekey``."""
+        ``ClaimService.rekey``. Raises :class:`ChunkEndedError` when the live route sits on an
+        ended chunk."""
         ...

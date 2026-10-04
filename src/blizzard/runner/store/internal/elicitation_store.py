@@ -9,7 +9,12 @@ from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.leases.elicitation import IWriteElicitationRepository, PendingElicitation
+from blizzard.runner.leases.elicitation import (
+    ElicitationNotRecorded,
+    ElicitationVerb,
+    IWriteElicitationRepository,
+    PendingElicitation,
+)
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import in_flight_elicitations
 
@@ -116,11 +121,13 @@ class ElicitationStore:
         self, lease_id: str, epoch: int, *, pid: int, process_start_time: str, pgid: int | None = None
     ) -> None:
         with self._store.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 in_flight_elicitations.update()
                 .where(and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch))
                 .values(pid=pid, process_start_time=process_start_time, pgid=pgid)
             )
+            if result.rowcount == 0:
+                raise ElicitationNotRecorded(ElicitationVerb.STARTED, lease_id, epoch)
         _log.info("elicitation started", lease_id=lease_id, epoch=epoch, pid=pid, pgid=pgid)
 
     def record_elicitation_relaunch(self, lease_id: str, epoch: int, *, output_path: str) -> None:
@@ -129,7 +136,9 @@ class ElicitationStore:
                 select(in_flight_elicitations.c.relaunch_count).where(
                     and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
                 )
-            ).one()
+            ).one_or_none()
+            if existing is None:
+                raise ElicitationNotRecorded(ElicitationVerb.RELAUNCH, lease_id, epoch)
             conn.execute(
                 in_flight_elicitations.update()
                 .where(and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch))

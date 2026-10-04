@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -25,13 +24,22 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
 from blizzard.runner.lifecycle.judgement.checks import IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext, GitCommitsStores
-from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
+from blizzard.runner.lifecycle.model import (
+    Fenced,
+    RestartDisposition,
+    UnpauseMove,
+    answer_ready,
+    park_names_elicitation,
+    pause_park_drain_expired,
+    restart_disposition,
+    unpause_move,
+)
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark
-from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
+from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -144,12 +152,10 @@ class DormantSession:
             )
         _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
-    def restart_or_release(self) -> None:
-        """Park a paused chunk, else resume in place, else abandon it if the hub reassigned its
-        chunk, or if the hub no longer knows it at all.
-
-        The pause branch is **first** and keys on the pause *fact*, not the lossy derived status.
-        It is conjoined with ``ours``, so a detached-then-paused chunk still abandons."""
+    def restart_or_release(self, fenced: Fenced) -> None:
+        """Park a paused chunk, else preempt a lease a restart fenced out while the runner was
+        down, else resume in place, else abandon it if the hub reassigned its chunk, or if the
+        hub no longer knows it at all (:func:`restart_disposition`)."""
         lease = self.lease
         try:
             view = self.ctx.chunk_views.get(lease.chunk_id)
@@ -162,10 +168,12 @@ class DormantSession:
             # Hub unreachable — the intent is durable and the envs stay held. Resuming blind
             # would risk re-asserting authority over a chunk that may have been reassigned.
             return
-        ours = view.route_runner_id == self.ctx.config.runner_id
-        if ours and view.pause is not None:
+        disposition = restart_disposition(view, self.ctx.config.runner_id, fenced=fenced.out(view, lease))
+        if disposition is RestartDisposition.PARK:
             Attempt(self.ctx, lease).park_paused(via="resume")
-        elif view.status == ChunkStatus.RUNNING and ours:
+        elif disposition is RestartDisposition.PREEMPT:
+            Attempt(self.ctx, lease).preempt(via="resume")
+        elif disposition is RestartDisposition.RESTART:
             self._restart()
         else:
             Attempt(self.ctx, lease).abandon(via="resume")
@@ -185,7 +193,7 @@ class DormantSession:
             question = self.ctx.hub.get_question(park.question_id)
         except HubClientError:
             return  # hub unreachable — the park is durable; retry next tick
-        if not question.answered or question.answer is None:
+        if not answer_ready(question):
             return  # still waiting — reap clock stays stopped
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
@@ -231,23 +239,29 @@ class DormantSession:
             return
         except HubClientError:
             return  # hub unreachable — the park is durable; retry next tick
-        if view.pause is not None:
-            return  # still paused — the reap clock stays stopped
-        if view.route_runner_id != self.ctx.config.runner_id:
-            return  # detached/reassigned while parked — PULL's sweep abandons it, not this step
         now = self.ctx.clock.now()
-        if lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids():
+        # Read fresh, not the tick's hoisted read: settling above may have just cleared it.
+        standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        move = unpause_move(
+            view,
+            self.ctx.config.runner_id,
+            ask_parked=lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids(),
+            judge_parked=standing is not None,
+            has_env_and_session=bool(bindings) and lease.session is not None,
+        )
+        if move is UnpauseMove.WAIT:
+            return  # still paused, or detached while parked — PULL's sweep abandons it, not this step
+        if move is UnpauseMove.CLEAR_AWAIT_ANSWER:
             # Dormant on a question underneath the pause: clearing the pause-park is the whole
             # action, and an answer — not this resume — restarts it.
             self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
             _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
             return
-        standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
-        if standing is not None:
+        if move is UnpauseMove.RELAUNCH_JUDGE and standing is not None:
             self._resume_judge_usage_limit_park(now, superseded_invocation=iso_utc(standing.first_launched_at))
             return
-        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-        if not bindings or lease.session is None:
+        if move is UnpauseMove.CANNOT_RESUME:
             _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
             return
         harness = self._resolve_harness(via="unpause-resume")
@@ -273,14 +287,12 @@ class DormantSession:
         idempotent. An unnamed standing record is a usage-limit judge park's, left for its relaunch.
         ``elicitation`` is the tick's hoisted read of this lease's in-flight elicitation, if any."""
         lease = self.lease
-        past_deadline = self.ctx.clock.now() >= park.parked_at + timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE)
+        past_deadline = pause_park_drain_expired(park, now=self.ctx.clock.now())
         if not self._owned_group_settled(
             pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid, past_deadline=past_deadline
         ):
             return False
-        if park.interrupted_elicitation_id is None:
-            return True
-        if elicitation is None or elicitation.id != park.interrupted_elicitation_id:
+        if not park_names_elicitation(park, elicitation) or elicitation is None:
             return True
         if not self._owned_group_settled(
             pid=elicitation.pid,
@@ -342,7 +354,7 @@ class DormantSession:
         before the elicitation overloaded, so there is nothing to "continue" by message."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if fact.resume_after is None or now < fact.resume_after:
+        if not fact.due(now):
             return
         suppressed = Spawner(self.ctx).suppressed(
             via="overload-backoff-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
@@ -371,10 +383,10 @@ class DormantSession:
         )
 
     def _resume_judge_overload_backoff(self, now: datetime, *, superseded_invocation: str) -> None:
-        """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch,
-        exactly :meth:`_resume_judge_usage_limit_park`'s own shape: the stale record from the
-        overloaded elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
-        to delete-then-insert over, so there is no window where neither record exists."""
+        """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch, shaped like
+        :meth:`_resume_judge_usage_limit_park`: `Judgement._launch`'s `record_elicitation_launch`
+        deletes-then-inserts over the stale record, so one always exists. The resume goes straight to a
+        fresh launch (`Judgement.resume`): the gate and the produces nudge already ran on this exit."""
         lease = self.lease
         # Deferred: `judgement` imports `DormantSession` at module scope, so importing
         # `Judgement` back at module scope here would cycle.
@@ -401,7 +413,7 @@ class DormantSession:
                 start_unreadable=start_unreadable,
                 advanced_at=now,
             )
-        judgement.run()
+        judgement.resume()
         _log.info(
             "resumed a judge elicitation after a provider-overload backoff",
             chunk_id=lease.chunk_id,
@@ -413,7 +425,8 @@ class DormantSession:
         """Unpause a judge-usage-limit park: the worker's own turn already
         finished normally before its verdict elicitation hit the limit, so there is nothing
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
-        waking the worker with `_UNPAUSE_MESSAGE`. The stale record from the
+        waking the worker with `_UNPAUSE_MESSAGE`, straight to a launch (`Judgement.resume`) since
+        the gate and the produces nudge already ran on this exit. The stale record from the
         limited elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
         to delete-then-insert over, rather than cleared here first — no window where neither
         record exists. The park-resume is recorded only AFTER the fresh elicitation is
@@ -447,7 +460,7 @@ class DormantSession:
                 start_unreadable=start_unreadable,
                 advanced_at=now,
             )
-        judgement.run()
+        judgement.resume()
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
             "resumed a judge-usage-limit park with a fresh elicitation",
@@ -537,9 +550,8 @@ class DormantSession:
         its boundary at this generation — `_wake`'s own, self-determined guard against opening
         a second one alongside a nudge's own, even across a LATER, unrelated wake trigger
         reaching the same still-dormant lease."""
-        return any(
-            b.generation == generation and b.kind in WORKER_STARTING_KINDS
-            for b in self.ctx.stores.invocation_boundaries.open_boundaries_for_lease(self.lease.lease_id)
+        return worker_boundary_open(
+            self.ctx.stores.invocation_boundaries.open_boundaries_for_lease(self.lease.lease_id), generation
         )
 
     def _wake(

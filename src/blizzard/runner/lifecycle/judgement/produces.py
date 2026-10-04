@@ -59,7 +59,7 @@ class ProducesReconciler:
     ) -> list[SubmittedArtifact]:
         """An asset artifact per produced name no git commit covers.
 
-        An explicit attachment wins over the assessment, marked ``attached=True`` (#90).
+        An explicit attachment wins over the assessment, marked ``attached=True``.
         """
         covered = {a.name for a in git_artifacts}
         submitted: list[SubmittedArtifact] = []

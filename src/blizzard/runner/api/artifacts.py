@@ -18,13 +18,16 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository
+from blizzard.runner.lifecycle.judgement.artifacts import (
+    ArtifactAmbiguous,
+    ArtifactNotFound,
+    ArtifactRead,
+    ArtifactReadContradiction,
+    IReadGraphArtifactRepository,
+)
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope, WorkerArtifact
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-#: Scopes that name no producing node — pairing either with ``--node`` is a contradiction.
-_NODELESS_SCOPES = (ArtifactScope.GRAPH, ArtifactScope.SYSTEM)
 
 
 def _node_row(artifact: EnvelopeArtifact) -> WorkerArtifact:
@@ -80,42 +83,6 @@ def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
     )
 
 
-def _remaining_levers(
-    candidates: list[WorkerArtifact], *, node: str | None, scope: ArtifactScope | None
-) -> tuple[str, ...]:
-    """The narrowing flags that could actually change this result. ``--node`` names a
-    *producing* node, which only a node-scoped candidate has, so it is offered only when the
-    ambiguous set actually holds one — a graph/system-only collision has no producing node
-    for ``--node`` to narrow, and advising it would send the caller toward an unrelated
-    ``404`` instead of a resolution."""
-    if node is not None:
-        return ()
-    node_scoped = any(c.scope is ArtifactScope.NODE for c in candidates)
-    if scope is None:
-        return ("--scope", "--node") if node_scoped else ("--scope",)
-    return ("--node",) if node_scoped else ()
-
-
-def _ambiguous(name: str, candidates: list[WorkerArtifact], *, levers: tuple[str, ...]) -> HTTPException:
-    def _label(c: WorkerArtifact) -> str:
-        if c.scope is ArtifactScope.NODE:
-            return f"node {c.node_name}"
-        if c.scope is ArtifactScope.SYSTEM:
-            return "system"
-        if c.scope is ArtifactScope.GRAPH:
-            return "graph"
-        raise AssertionError(f"unhandled artifact scope {c.scope!r}")  # pragma: no cover
-
-    labels = sorted({_label(c) for c in candidates})
-    # Only levers still open to the caller: telling them to pass a flag they already
-    # passed is advice they cannot act on.
-    hint = f" (pass {' and/or '.join(levers)} to disambiguate)" if levers else ""
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=f"artifact {name!r} is ambiguous — found for: {', '.join(labels)}{hint}",
-    )
-
-
 @domain_model
 @dataclass(frozen=True)
 class NodeArtifacts:
@@ -160,51 +127,21 @@ def get_artifact(
     ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
     nodes, or a name colliding across scopes — is ``409`` naming them."""
     lease = authorized_lease(lease_id, request)
-    if node is not None and scope is not None and scope in _NODELESS_SCOPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"--node {node!r} cannot narrow {scope.value} scope — only node scope has a producing "
-                f"node; drop one of --node / --scope {scope.value}"
-            ),
-        )
-    if scope is ArtifactScope.GRAPH:
-        graph_hit = _graph_hit(lease.graph_id, name, request)
-        if graph_hit is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"no graph-scoped artifact {name!r} pinned for this lease's mint {lease.graph_id!r}",
-            )
-        return graph_hit
-    if scope is ArtifactScope.SYSTEM:
-        system_hit = _system_hit(name, request)
-        if system_hit is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no system artifact {name!r}")
-        return system_hit
-
-    node_matches = NodeArtifacts.of(lease.chunk_id, request).named(name, node=node)
-    candidates: list[WorkerArtifact] = [_node_row(a) for a in node_matches]
-    searched_other_scopes = scope is None and node is None
-    if searched_other_scopes:
-        graph_hit = _graph_hit(lease.graph_id, name, request)
-        if graph_hit is not None:
-            candidates.append(graph_hit)
-        system_hit = _system_hit(name, request)
-        if system_hit is not None:
-            candidates.append(system_hit)
-    if not candidates:
-        # Names what was actually searched: a graph/system miss is only part of the story
-        # when those scopes were in the search at all.
-        qualifier = f" from node {node!r}" if node is not None else ""
-        where = (
-            f", nor pinned for its mint {lease.graph_id!r}, nor a published system artifact"
-            if (searched_other_scopes)
-            else ""
-        )
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"no artifact {name!r}{qualifier} for this node-step{where}",
-        )
-    if len(candidates) > 1:
-        raise _ambiguous(name, candidates, levers=_remaining_levers(candidates, node=node, scope=scope))
-    return candidates[0]
+    read = ArtifactRead(name=name, graph_id=lease.graph_id, node=node, scope=scope)
+    try:
+        read.validate()
+    except ArtifactReadContradiction as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    candidates: list[WorkerArtifact] = []
+    if read.searches_node():
+        candidates += [_node_row(a) for a in NodeArtifacts.of(lease.chunk_id, request).named(name, node=node)]
+    if read.searches_graph() and (graph_hit := _graph_hit(lease.graph_id, name, request)) is not None:
+        candidates.append(graph_hit)
+    if read.searches_system() and (system_hit := _system_hit(name, request)) is not None:
+        candidates.append(system_hit)
+    try:
+        return read.resolve(candidates)
+    except ArtifactNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ArtifactAmbiguous as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

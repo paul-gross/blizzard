@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.status.view import PauseState, RunnerStatusService
 from blizzard.runner.throttle.pause import IReadPauseRepository
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 
@@ -84,11 +84,10 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
 
 
 def _view(pause: IReadPauseRepository, runner_id: str) -> RunnerControlView:
-    local_paused = pause.local_paused(runner_id)
-    hub_paused = pause.hub_paused(runner_id)
+    state = PauseState.of(local=pause.local_paused(runner_id), hub=pause.hub_paused(runner_id), local_reason=None)
     return RunnerControlView(
         runner_id=runner_id,
-        local_paused=local_paused,
-        hub_paused=hub_paused,
-        paused=local_paused or hub_paused,
+        local_paused=state.local,
+        hub_paused=state.hub,
+        paused=state.effective,
     )

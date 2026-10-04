@@ -13,10 +13,15 @@ from dataclasses import dataclass
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
 
-__all__ = ["LeaseToken"]
+__all__ = ["LeaseToken", "LeaseTokenRejected"]
 
 # The capability token's size — one owner for every mint path (spawn, resume, takeover).
 _LEASE_TOKEN_BYTES = 32
+
+
+class LeaseTokenRejected(Exception):
+    """The presented token does not authorize the lease it names — the API edge maps this
+    to ``403``."""
 
 
 @domain_model
@@ -42,3 +47,9 @@ class LeaseToken:
         if self.presented is None or self.stored_hash is None:
             return False
         return hmac.compare_digest(TokenHash(self.presented).hex, self.stored_hash)
+
+    def require(self, lease_id: str) -> None:
+        """Pass when the token authorizes ``lease_id``'s lease, else raise
+        :class:`LeaseTokenRejected`."""
+        if not self.valid:
+            raise LeaseTokenRejected(f"presented token does not authorize lease {lease_id}")

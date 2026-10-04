@@ -2,28 +2,41 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
-from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
+from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    ExternalSubscriptionUsageWindow,
+    SampleMiss,
+    SampleMissReason,
+)
+from blizzard.wire.facts import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 
 __all__ = [
+    "ChargeRange",
     "ContextSampleState",
+    "ExternalUsageAttempt",
     "ExternalUsageAttemptSummary",
     "IReadUsageRepository",
     "IWriteUsageRepository",
     "InvocationCost",
     "UsageTotals",
+    "charge_range",
     "derive_invocation_cost",
+    "effective_model",
+    "external_usage_attempt",
+    "soonest_exhausted_reset",
+    "usage_kind_for",
 ]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ContextSampleState:
     """What a lease's recorded context samples establish so far — the sampler's own memory."""
@@ -32,6 +45,20 @@ class ContextSampleState:
     last_sampled_at: datetime
     #: The highest context measured, or ``None`` when no attempt measured one — the warn dedupe.
     max_context_tokens: int | None
+
+    @classmethod
+    def sample_due(cls, state: ContextSampleState | None, *, now: datetime, interval: timedelta) -> bool:
+        """A lease samples once ``interval`` has passed since its newest sample, or at once
+        when it was never sampled."""
+        return state is None or now - state.last_sampled_at >= interval
+
+    @classmethod
+    def first_crossing(cls, state: ContextSampleState | None, *, tokens: int | None, warn_tokens: int) -> bool:
+        """Only the first sample past the warn line reports, once per lease: the warning is a
+        state change, not a level, so a lease already past it samples on without re-reporting."""
+        if tokens is None or tokens <= warn_tokens:
+            return False
+        return not (state is not None and (state.max_context_tokens or 0) > warn_tokens)
 
 
 @dto
@@ -58,6 +85,8 @@ class InvocationCost:
     cost_usd: float | None
     #: The zero-cost steps' estimate; ``None`` when absent or withheld with a rejected billed reading.
     estimated_cost_usd: float | None
+    #: The harness reported a billed figure the session's banked basis rejects — worth a warning.
+    billed_reading_rejected: bool = field(default=False, compare=False)
 
 
 def derive_invocation_cost(sample: UsageSample, basis: SessionCostBasis | None) -> InvocationCost:
@@ -70,10 +99,54 @@ def derive_invocation_cost(sample: UsageSample, basis: SessionCostBasis | None) 
     return InvocationCost(
         cost_usd=cost_usd,
         estimated_cost_usd=None if billed_reading_rejected else sample.estimated_cost_usd,
+        billed_reading_rejected=billed_reading_rejected,
     )
 
 
+def usage_kind_for(generation: int) -> UsageKind:
+    """A lease's first generation is its spawn; every later one is a resume."""
+    return "spawn" if generation <= 1 else "resume"
+
+
+def effective_model(requested: str | None, observed: str | None) -> str | None:
+    """The model a usage fact prices against: the lease's requested model wins, else what the
+    transcript observed ran."""
+    return requested if requested is not None else observed
+
+
+class _RangeStart(Protocol):
+    """A recorded invocation start, as either boundary read answers it."""
+
+    @property
+    def start_position(self) -> str | None: ...
+    @property
+    def start_unreadable(self) -> bool: ...
+
+
 @dto
+@dataclass(frozen=True)
+class ChargeRange:
+    """The transcript range one invocation is charged for: from ``start`` (``None`` is the
+    transcript's beginning) to ``end`` (``None`` is the tail as it stands now)."""
+
+    start: str | None
+    end: str | None
+
+
+def charge_range(start: _RangeStart | None, end: _RangeStart | None) -> ChargeRange | None:
+    """The range an invocation is charged for, or ``None`` to charge nothing. No recorded start
+    charges nothing, so a whole session is never charged to one generation; an unreadable start
+    charges nothing rather than re-reading earlier generations' lines from zero. A later
+    invocation's recorded start caps the range; an unreadable one charges nothing rather than
+    risk its turns bleeding in, and none at all reads to the tail."""
+    if start is None or start.start_unreadable:
+        return None
+    if end is not None and end.start_unreadable:
+        return None
+    return ChargeRange(start=start.start_position, end=end.start_position if end is not None else None)
+
+
+@domain_model
 @dataclass(frozen=True)
 class UsageTotals:
     """A summed window of usage facts. ``cost_partial`` carries the
@@ -86,6 +159,59 @@ class UsageTotals:
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+
+    def reaches(self, cap: float) -> bool:
+        """The summed spend is at or past ``cap`` — a lower bound when :attr:`cost_partial`."""
+        return self.cost_usd >= cap
+
+
+def soonest_exhausted_reset(
+    windows_by_slug: Mapping[str, Sequence[ExternalSubscriptionUsageWindow]], now: datetime
+) -> datetime | None:
+    """The soonest future reset among every subscription's windows still holding a limit, or
+    ``None`` when none is on record — "no reset time known", not "no limit"."""
+    resets = [
+        window.resets_at for windows in windows_by_slug.values() for window in windows if window.exhausted_pending(now)
+    ]
+    return min(resets, default=None)
+
+
+@domain_model
+@dataclass(frozen=True)
+class ExternalUsageAttempt:
+    """One declared subscription's sampling attempt to record: a miss with its reason, or a
+    sampled snapshot whose windows the stored payload carries."""
+
+    slug: str
+    sampled_at: datetime
+    snapshot: ExternalSubscriptionUsageSnapshot | None
+    miss_reason: SampleMissReason | None
+    #: This attempt's own renewal outcome, as :attr:`RenewalOutcome.recorded_value` reduces it.
+    renewal: str | None
+
+    @property
+    def missed(self) -> bool:
+        return self._missed()
+
+    def _missed(self) -> bool:
+        return self.snapshot is None
+
+    @property
+    def report_kind(self) -> str:
+        return self._report_kind()
+
+    def _report_kind(self) -> str:
+        return EXTERNAL_SUBSCRIPTION_USAGE_MISSED if self.missed else EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
+
+
+def external_usage_attempt(
+    result: ExternalSubscriptionUsageSnapshot | SampleMiss, *, slug: str, renewal: str | None, at: datetime
+) -> ExternalUsageAttempt:
+    """The attempt row one sampler result records. A miss is still an attempt: its slug's
+    cadence advances, it stores no payload, and its reason feeds the runner-local diagnostics."""
+    if isinstance(result, SampleMiss):
+        return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=None, miss_reason=result.reason, renewal=renewal)
+    return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=result, miss_reason=None, renewal=renewal)
 
 
 class IReadUsageRepository(Protocol):

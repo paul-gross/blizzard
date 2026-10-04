@@ -13,7 +13,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases import NewLease
-from blizzard.runner.loop.steps import Pull, Reap
+from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.completion import CompletionSubmission
@@ -217,8 +217,9 @@ def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):
     assert store.attempt_count("ch_1", "nd_build") == 1  # the rejection spent nothing
 
 
-def test_a_local_pause_defers_the_preempt_rather_than_killing_the_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """Preemption under the brake would kill a worker that cannot be replaced."""
+def test_a_local_pause_still_kills_and_closes_the_fenced_out_worker(tmp_path):  # type: ignore[no-untyped-def]
+    """The displaced worker is fenced out already, so the brake does not keep it running at a
+    stale epoch: it is killed and closed now, and only the re-entry spawn waits."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     _brake(store, paused=True)
@@ -227,13 +228,13 @@ def test_a_local_pause_defers_the_preempt_rather_than_killing_the_worker(tmp_pat
 
     Pull(ctx).run()
 
-    assert probe.killed == []
-    lease = store.active_lease("lease_1")
-    assert lease is not None and lease.pid == 100
-    assert store.attempt_count("ch_1", "nd_build") == 1
+    assert probe.killed == [100]
+    assert store.active_lease("lease_1") is None
+    assert store.active_lease_for_chunk("ch_1") is None  # the re-entry spawn waits for the brake
+    assert store.attempt_count("ch_1", "nd_build") == 0  # a preempted attempt spends no retry
 
 
-def test_the_preempt_resumes_after_the_local_brake_clears(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_re_entry_spawns_once_the_local_brake_clears(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
     _brake(store, paused=True)
@@ -241,7 +242,7 @@ def test_the_preempt_resumes_after_the_local_brake_clears(tmp_path):  # type: ig
     Pull(ctx).run()
 
     _brake(store, paused=False)
-    Pull(_ctx(store, _restarted_hub())).run()
+    Advance(_ctx(store, _restarted_hub())).run()  # the held chunk's newer epoch is entered
 
     fresh = store.active_lease_for_chunk("ch_1")
     assert fresh is not None and fresh.lease_id != "lease_1"
@@ -420,8 +421,9 @@ def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: igno
     assert harness.resume_froms == [None]  # minted again, not resumed off a pool head
 
 
-def test_a_full_tick_under_the_local_brake_neither_preempts_nor_spawns_and_the_next_past_it_does(tmp_path):  # type: ignore[no-untyped-def]
-    """A full braked tick starts nothing; the fence survives until the brake lifts."""
+def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_next_past_it_re_enters(tmp_path):  # type: ignore[no-untyped-def]
+    """A full braked tick kills and closes the fenced-out worker but starts nothing; the re-entry
+    waits until the brake lifts."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     _brake(store, paused=True)
@@ -432,10 +434,9 @@ def test_a_full_tick_under_the_local_brake_neither_preempts_nor_spawns_and_the_n
 
     tick(ctx)
 
-    assert probe.killed == []
+    assert probe.killed == [100]
     assert harness.spawns == []
-    lease = store.active_lease("lease_1")
-    assert lease is not None and lease.pid == 100
+    assert store.active_lease("lease_1") is None
 
     _brake(store, paused=False)
     tick(ctx)

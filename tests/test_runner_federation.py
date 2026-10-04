@@ -243,6 +243,26 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
     assert second.status_code == 400
 
 
+def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
+    """A token carrying no ``exp`` is refused: its ``jti`` would have no retention to hold it
+    against a replay."""
+    private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    claims = jwt.decode(_sign(private_key, jti="jti-no-exp"), options={"verify_signature": False})
+    del claims["exp"]
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
+
+    client.cookies.set(_NAMES.bounce_state, "s1")
+    resp = client.post(
+        "/api/auth/callback",
+        content=f"token={token}&state=s1",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert _NAMES.session not in resp.cookies
+
+
 def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)

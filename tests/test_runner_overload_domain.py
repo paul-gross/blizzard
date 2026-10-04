@@ -1,8 +1,9 @@
 """Provider-overload backoff policy and closure — pure domain.
 
-``backoff_delay`` is a pure formula; ``backing_off_facts`` closes a fact against a lease's
-own current generation or elicitation launch instant, with no store of its own — both
-exercised here against minimal in-memory fakes, no I/O."""
+``backoff_delay`` is a pure formula and :meth:`OverloadExit.still_open` closes a fact against a
+lease's own current generation or elicitation launch instant — both pinned by value.
+``backing_off_facts``, the bulk read that applies the predicate, runs against minimal in-memory
+fakes, no I/O."""
 
 from __future__ import annotations
 
@@ -116,21 +117,16 @@ def _worker_fact(**overrides: object) -> OverloadExit:
 
 @pytest.mark.unit
 def test_a_worker_fact_stands_while_the_generation_is_unmoved() -> None:
-    facts = _FakeOverloadReads([_worker_fact()])
-    liveness = _FakeLeaseGeneration({"lease_1": 2})
-    elicitations = _FakeElicitations({})
-    result = backing_off_facts(facts, liveness, elicitations)
-    assert result == {"lease_1": facts.facts[0]}
+    assert _worker_fact().still_open(generation=2, elicitation_launched_at=None)
 
 
 @pytest.mark.unit
 def test_a_worker_fact_closes_once_the_generation_moves_past_it() -> None:
     """No separate closing write — the recorded generation no longer matching the
     lease's own current one is itself the closure, e.g. after this exact backoff's wake."""
-    facts = _FakeOverloadReads([_worker_fact(generation=2, invocation_identity="2")])
-    liveness = _FakeLeaseGeneration({"lease_1": 3})
-    elicitations = _FakeElicitations({})
-    assert backing_off_facts(facts, liveness, elicitations) == {}
+    assert not _worker_fact(generation=2, invocation_identity="2").still_open(
+        generation=3, elicitation_launched_at=None
+    )
 
 
 def _judge_fact(**overrides: object) -> OverloadExit:
@@ -165,27 +161,18 @@ def _elicitation(*, first_launched_at: datetime) -> PendingElicitation:
 
 @pytest.mark.unit
 def test_a_judge_fact_stands_while_its_own_elicitation_is_still_in_flight() -> None:
-    facts = _FakeOverloadReads([_judge_fact()])
-    liveness = _FakeLeaseGeneration({})
-    elicitations = _FakeElicitations({("lease_1", 1): _elicitation(first_launched_at=_NOW)})
-    assert backing_off_facts(facts, liveness, elicitations) == {"lease_1": facts.facts[0]}
+    assert _judge_fact().still_open(generation=None, elicitation_launched_at=_NOW)
 
 
 @pytest.mark.unit
 def test_a_judge_fact_closes_once_a_fresh_elicitation_relaunches_under_a_new_identity() -> None:
-    facts = _FakeOverloadReads([_judge_fact()])
-    liveness = _FakeLeaseGeneration({})
     later = _NOW + timedelta(minutes=5)
-    elicitations = _FakeElicitations({("lease_1", 1): _elicitation(first_launched_at=later)})
-    assert backing_off_facts(facts, liveness, elicitations) == {}
+    assert not _judge_fact().still_open(generation=None, elicitation_launched_at=later)
 
 
 @pytest.mark.unit
 def test_a_judge_fact_closes_once_no_elicitation_is_in_flight_at_all() -> None:
-    facts = _FakeOverloadReads([_judge_fact()])
-    liveness = _FakeLeaseGeneration({})
-    elicitations = _FakeElicitations({})
-    assert backing_off_facts(facts, liveness, elicitations) == {}
+    assert not _judge_fact().still_open(generation=None, elicitation_launched_at=None)
 
 
 @pytest.mark.unit
@@ -200,6 +187,24 @@ def test_multiple_open_facts_key_the_result_by_lease_id() -> None:
     elicitations = _FakeElicitations({})
     result = backing_off_facts(facts, liveness, elicitations)
     assert set(result) == {"lease_1", "lease_2"}
+
+
+@pytest.mark.unit
+def test_the_bulk_read_drops_every_fact_the_predicate_closes() -> None:
+    """Each fact is judged against its own lease's bulk-read generation or elicitation."""
+    worker_open = _worker_fact(lease_id="lease_1", generation=2, invocation_identity="2")
+    worker_moved = _worker_fact(lease_id="lease_2", generation=5, invocation_identity="5")
+    judge_open = _judge_fact(lease_id="lease_3")
+    judge_relaunched = _judge_fact(lease_id="lease_4")
+    facts = _FakeOverloadReads([worker_open, worker_moved, judge_open, judge_relaunched])
+    liveness = _FakeLeaseGeneration({"lease_1": 2, "lease_2": 6})
+    elicitations = _FakeElicitations(
+        {
+            ("lease_3", 1): _elicitation(first_launched_at=_NOW),
+            ("lease_4", 1): _elicitation(first_launched_at=_NOW + timedelta(minutes=5)),
+        }
+    )
+    assert backing_off_facts(facts, liveness, elicitations) == {"lease_1": worker_open, "lease_3": judge_open}
 
 
 @pytest.mark.unit

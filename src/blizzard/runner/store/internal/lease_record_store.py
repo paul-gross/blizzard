@@ -194,6 +194,7 @@ class LeaseRecordStore:
         closed_at: datetime,
         event_kind: str | None = None,
         event_payload: str | None = None,
+        escalation_cause: str | None = None,
     ) -> int | None:
         # The closure and its operational event land in ONE transaction, so a `kill -9`
         # can neither surface an event for a closure that never happened nor drop one (#125).
@@ -201,7 +202,12 @@ class LeaseRecordStore:
         with self._store.begin() as conn:
             conn.execute(
                 lease_closures.insert().values(
-                    lease_id=lease_id, chunk_id=chunk_id, node_id=node_id, reason=reason, closed_at=closed_at
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    reason=reason,
+                    closed_at=closed_at,
+                    escalation_cause=escalation_cause,
                 )
             )
             if event_kind is not None and event_payload is not None:

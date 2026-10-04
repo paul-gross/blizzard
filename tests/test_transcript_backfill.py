@@ -17,7 +17,7 @@ from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, 
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill, TranscriptReshipError
-from blizzard.runner.transcripts.transcript_pump import CHUNK_TRANSCRIPT_MAX_BYTES, MAX_BUFFERED_BYTES
+from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -583,28 +583,18 @@ def test_the_reship_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> N
         TranscriptBackfill(off).reship(first)
 
 
-def test_reship_reports_a_chunk_budget_stop_rather_than_a_clean_zero_byte_run() -> None:
-    """The pump treats a shipping-stopped segment as caught up, so this path returns
-    `complete=True` with zero counts — indistinguishable from a whole re-ship unless the
-    stop reason is carried, and re-shipping spends the per-chunk budget a second time."""
+def test_reship_is_refused_up_front_when_the_chunk_budget_is_spent() -> None:
+    """A re-ship spends the per-chunk budget a second time; with it already spent the new
+    segment could ship nothing, so the re-ship is refused before any segment opens."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
-    ctx.stores.transcript_ledger.record_transcript_deltas(
-        segment_id=first,
-        chunk_id="ch_1",
-        cursor="spent",
-        shipped_bytes=CHUNK_TRANSCRIPT_MAX_BYTES,
-        shipped_turns=1,
-        normalizer_version="fake/1",
-        harness_version="claude/9",
-        payloads=[],
-        created_at=_NOW,
-    )
+    spent = ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(["ch_1"])["ch_1"]
+    capped = replace(ctx, config=replace(ctx.config, transcript_chunk_max_bytes=spent))
 
-    report = TranscriptBackfill(ctx).reship(first)
+    with pytest.raises(TranscriptReshipError, match="spent its transcript budget"):
+        TranscriptBackfill(capped).reship(first)
 
-    assert report.shipping_stopped_reason == "chunk_budget_exceeded"
-    assert (report.turns, report.shipped_bytes) == (0, 0)
+    assert [s.segment_id for s in ctx.stores.transcript_ledger.transcript_segments_for_chunk("ch_1")] == [first]
 
 
 def test_reship_resumes_its_own_unfinished_segment_instead_of_stranding_it() -> None:

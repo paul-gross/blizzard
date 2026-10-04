@@ -29,7 +29,7 @@ _TOKEN = "the-lease-token"
 def _app_with_attachments(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), tokens=store)
+    service = AttachmentService(store, FixedClock(_NOW))
     return create_app(config, runner_stores=make_stores(store), attachments=service), store
 
 
@@ -62,7 +62,7 @@ def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), tokens=store)
+    service = AttachmentService(store, FixedClock(_NOW))
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, attachments=service)
@@ -173,10 +173,10 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The worker-authorization resolver's other half: once an open
-    takeover names the (now closed) reference lease, its re-minted token reaches
-    this route the same as an ordinary active lease would."""
+def test_an_open_takeover_authorizes_a_closed_reference_lease_but_refuses_the_attach(tmp_path: Path) -> None:
+    """Once an open takeover names the (now closed) reference lease, its re-minted token reaches this
+    route like an active lease's — a wrong token is still ``403`` — but a closed lease rides no further
+    completion, so the attach is refused ``409``."""
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -193,13 +193,42 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
     with TestClient(app) as client:
+        forged = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "n", "content": "c"},
+            headers={"X-Blizzard-Lease-Token": "not-it"},
+        )
         resp = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "c"},
             headers={"X-Blizzard-Lease-Token": takeover_token},
         )
-    assert resp.status_code == 200, resp.text
-    assert store.attachments_for_lease("lease_1") == {"n": "c"}
+    assert forged.status_code == 403, forged.text
+    assert resp.status_code == 409, resp.text
+    assert "closed" in resp.json()["detail"]
+    assert store.attachments_for_lease("lease_1") == {}
+
+
+@pytest.mark.component
+def test_422_for_empty_content(tmp_path: Path) -> None:
+    """Empty content is refused at the API door too, not only by the CLI — and refused
+    after the token check, so an unauthorized caller still reads ``403``."""
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        forged = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "n", "content": ""},
+            headers={"X-Blizzard-Lease-Token": "not-it"},
+        )
+        resp = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "n", "content": ""},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert forged.status_code == 403, forged.text
+    assert resp.status_code == 422, resp.text
+    assert store.attachments_for_lease("lease_1") == {}
 
 
 # --------------------------------------------------------------------------- #

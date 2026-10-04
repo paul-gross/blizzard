@@ -285,9 +285,14 @@ def test_environments_lists_every_pool_environment_held_or_not(tmp_path: Path) -
     assert resp.status_code == 200, resp.text
     items = resp.json()["items"]
     assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
-        {"environment_id": "e2", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
-        {"environment_id": "e3", "chunk_id": None, "held_since": None},
+        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
+        {
+            "environment_id": "e2",
+            "chunk_id": "ch_2",
+            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
+            "held": True,
+        },
+        {"environment_id": "e3", "chunk_id": None, "held_since": None, "held": False},
     ]
 
 
@@ -300,7 +305,7 @@ def test_a_released_binding_reverts_its_slot_to_unused(tmp_path: Path) -> None:
     with TestClient(app) as client:
         resp = client.get("/api/environments")
 
-    assert resp.json()["items"] == [{"environment_id": "e1", "chunk_id": None, "held_since": None}]
+    assert resp.json()["items"] == [{"environment_id": "e1", "chunk_id": None, "held_since": None, "held": False}]
 
 
 @pytest.mark.component
@@ -326,8 +331,13 @@ def test_a_held_binding_outside_the_configured_pool_still_surfaces(tmp_path: Pat
 
     items = resp.json()["items"]
     assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
-        {"environment_id": "e9", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
+        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
+        {
+            "environment_id": "e9",
+            "chunk_id": "ch_2",
+            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
+            "held": True,
+        },
     ]
 
 
@@ -344,8 +354,13 @@ def test_two_held_bindings_on_one_environment_id_both_surface(tmp_path: Path) ->
 
     items = resp.json()["items"]
     assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
-        {"environment_id": "e1", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
+        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
+        {
+            "environment_id": "e1",
+            "chunk_id": "ch_2",
+            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
+            "held": True,
+        },
     ]
 
 
@@ -382,6 +397,31 @@ def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
         "harness_id": "claude_code",
         "asked_at": _NOW.isoformat(),
     }
+
+
+@pytest.mark.component
+def test_open_asks_hides_an_unforwarded_ask_a_newer_one_on_its_lease_supersedes(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    for question_id in ("qn_1", "qn_2"):
+        store.record_ask(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            question_id=question_id,
+            question="which branch?",
+            options=[],
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+            asked_at=_NOW,
+        )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.status_code == 200, resp.text
+    assert [item["question_id"] for item in resp.json()["items"]] == ["qn_2"]
+    unforwarded = store.unforwarded_ask("lease_1")
+    assert unforwarded is not None
+    assert unforwarded.question_id == "qn_2"  # the same ask the forwarder picks
 
 
 @pytest.mark.component
@@ -529,6 +569,26 @@ def test_an_escalation_derives_its_cause_from_the_closure_reason(
     app, store = _app_with_status(tmp_path)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason=reason, closed_at=_NOW)
+
+    with TestClient(app) as client:
+        items = client.get("/api/escalations").json()["items"]
+
+    assert [item["cause"] for item in items] == [cause]
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("cause", ["retries-exhausted", "spend-cap"])
+def test_an_ordinary_escalated_closure_reads_back_the_cause_recorded_beside_it(tmp_path: Path, cause: str) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW,
+        escalation_cause=cause,
+    )
 
     with TestClient(app) as client:
         items = client.get("/api/escalations").json()["items"]

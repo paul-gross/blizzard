@@ -1,14 +1,39 @@
-"""The check-result and produces-nudge repository seam."""
+"""The check-result and produces-nudge repository seam, and the plan a node's ``checks:``
+run under."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
+from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT
+from blizzard.wire.envelope import NodeConfig
 
-__all__ = ["ExecutedCheck", "IReadCheckRepository", "IWriteCheckRepository"]
+__all__ = ["CheckPlan", "ExecutedCheck", "IReadCheckRepository", "IWriteCheckRepository"]
+
+
+@domain_model
+@dataclass(frozen=True)
+class CheckPlan:
+    """How a node's ``checks:`` run at worker exit: its commands, in order, from ``cwd``
+    under a per-check ``timeout`` (seconds). A node that declares no checks runs none."""
+
+    commands: tuple[str, ...]
+    cwd: str
+    timeout: int
+
+    @classmethod
+    def of(cls, node: NodeConfig, workdir: str) -> CheckPlan:
+        """The plan for ``node`` in the leased worktree ``workdir``: ``checks_cwd`` joined
+        onto it when the node names one, and the node's ``checks_timeout`` or the default."""
+        return cls(
+            commands=tuple(node.checks),
+            cwd=os.path.join(workdir, node.checks_cwd) if node.checks_cwd else workdir,
+            timeout=node.checks_timeout or DEFAULT_CHECK_TIMEOUT,
+        )
 
 
 @dto

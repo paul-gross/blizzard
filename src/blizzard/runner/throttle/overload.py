@@ -19,7 +19,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.overload import BACKOFF_LIMIT, InvocationKind, IWriteOverloadRepository, backoff_delay
+from blizzard.runner.leases.overload import BACKOFF_LIMIT, InvocationKind, IWriteOverloadRepository, OverloadStreak
 
 __all__ = [
     "OverloadContext",
@@ -104,7 +104,7 @@ def record_judge_overload(
 def reset_if_streak_open(ctx: OverloadContext, lease: Lease) -> None:
     """Close an open streak on a clean exit — written only when one is actually open,
     so a lease that has never overloaded never gains a reset row of its own."""
-    if ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch) > 0:
+    if OverloadStreak(ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch)).open:
         ctx.stores.overload.record_reset(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
 
 
@@ -117,22 +117,30 @@ def _record(
     invocation_kind: InvocationKind,
     invocation_identity: str,
 ) -> bool:
-    now = ctx.clock.now()
-    streak_ordinal = ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch) + 1
-    backing_off = streak_ordinal < BACKOFF_LIMIT
-    resume_after = now + backoff_delay(streak_ordinal) if backing_off else None
-    ctx.stores.overload.record_overload(
+    streak = OverloadStreak(ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch))
+    candidate = streak.next_fact(
         lease_id=lease.lease_id,
         chunk_id=lease.chunk_id,
         epoch=lease.epoch,
         generation=generation,
         invocation_kind=invocation_kind,
         invocation_identity=invocation_identity,
-        streak_ordinal=streak_ordinal,
-        observed_at=now,
-        resume_after=resume_after,
+        at=ctx.clock.now(),
     )
-    if backing_off:
+    standing = ctx.stores.overload.record_overload(
+        lease_id=candidate.lease_id,
+        chunk_id=candidate.chunk_id,
+        epoch=candidate.epoch,
+        generation=candidate.generation,
+        invocation_kind=candidate.invocation_kind,
+        invocation_identity=candidate.invocation_identity,
+        streak_ordinal=candidate.streak_ordinal,
+        observed_at=candidate.observed_at,
+        resume_after=candidate.resume_after,
+    )
+    fact = candidate.settled(standing)
+    resume_after = fact.resume_after
+    if fact.backing_off:
         if ctx.events is not None:
             # The same `dormant` cause `park_on_ask`/`park_paused` already publish for
             # their own state flips — the SSE corpus gains no new kind.
@@ -142,7 +150,7 @@ def _record(
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
             invocation_kind=invocation_kind,
-            streak=streak_ordinal,
+            streak=fact.streak_ordinal,
             backoff_limit=BACKOFF_LIMIT,
             resume_after=iso_utc(resume_after) if resume_after is not None else None,
             detail=overload.detail,
@@ -153,11 +161,11 @@ def _record(
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
             invocation_kind=invocation_kind,
-            streak=streak_ordinal,
+            streak=fact.streak_ordinal,
             backoff_limit=BACKOFF_LIMIT,
             detail=overload.detail,
         )
-    return backing_off
+    return fact.backing_off
 
 
 def _overload_adapter(ctx: OverloadContext, session: SessionReference) -> IHarnessProviderOverload | None:

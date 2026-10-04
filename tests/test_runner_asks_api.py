@@ -123,10 +123,10 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The resolver's other half: an open takeover's re-minted token
-    authorizes its closed reference lease the same as an active lease's token would —
-    previously this route checked no token at all."""
+def test_an_open_takeover_authorizes_a_closed_reference_lease_but_refuses_the_ask(tmp_path: Path) -> None:
+    """The resolver's other half: an open takeover's re-minted token authorizes its
+    closed reference lease the same as an active lease's token would — a wrong token is
+    still ``403`` — but an ask there is never forwarded, so it is refused ``409``."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -143,8 +143,13 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
     with TestClient(app) as client:
+        forged = client.post(
+            "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": "not-it"}
+        )
         resp = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": takeover_token}
         )
-    assert resp.status_code == 201, resp.text
-    assert store.unforwarded_ask("lease_1") is not None
+    assert forged.status_code == 403, forged.text
+    assert resp.status_code == 409, resp.text
+    assert "closed" in resp.json()["detail"]
+    assert store.unforwarded_ask("lease_1") is None

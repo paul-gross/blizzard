@@ -550,3 +550,14 @@ def test_opencode_without_a_preamble_launches_with_the_bare_config_env(tmp_path:
     for env in launcher.envs:
         assert env["OPENCODE_CONFIG"] == str(worker)
         assert "BLIZZARD_ENV_IDS" not in env
+
+
+def test_loading_records_where_the_autonomy_posture_comes_from(tmp_path: Path) -> None:
+    path = tmp_path / CONFIG_FILENAME
+    path.write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n')
+    assert RunnerConfig.load(tmp_path).autonomy_source == "default"
+
+    path.write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n[harness]\nautonomy = "normal"\n')
+    loaded = RunnerConfig.load(tmp_path)
+    assert loaded.autonomy is Autonomy.Normal
+    assert loaded.autonomy_source == "[harness] autonomy"

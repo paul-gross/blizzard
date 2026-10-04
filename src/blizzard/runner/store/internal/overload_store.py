@@ -87,12 +87,12 @@ class OverloadStore:
         streak_ordinal: int,
         observed_at: datetime,
         resume_after: datetime | None,
-    ) -> None:
+    ) -> OverloadExit | None:
         # Check-then-insert, mirroring `nudge_facts` (`bzh:sql-portable`): re-classifying
-        # the same exit on a later pass writes nothing.
+        # the same exit on a later pass writes nothing and answers the exit already standing.
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(overload_facts.c.id).where(
+                select(overload_facts).where(
                     and_(
                         overload_facts.c.lease_id == lease_id,
                         overload_facts.c.epoch == epoch,
@@ -102,7 +102,7 @@ class OverloadStore:
                 )
             ).one_or_none()
             if existing is not None:
-                return
+                return self._row_to_record(existing)
             conn.execute(
                 overload_facts.insert().values(
                     lease_id=lease_id,
@@ -124,6 +124,7 @@ class OverloadStore:
             streak_ordinal=streak_ordinal,
             resume_after=iso_utc(resume_after) if resume_after else None,
         )
+        return None
 
     def record_reset(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         with self._store.begin() as conn:

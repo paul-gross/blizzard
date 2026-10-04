@@ -37,7 +37,7 @@ class TakeoverStore:
 
     def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
         stmt = (
-            select(takeovers)
+            self._takeover_select()
             .where(takeovers.c.chunk_id == chunk_id)
             .where(_OPEN_TAKEOVER.clause)
             .order_by(takeovers.c.opened_at.desc())
@@ -50,7 +50,7 @@ class TakeoverStore:
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def open_takeovers(self) -> list[OpenTakeover]:
-        stmt = select(takeovers).where(_OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
+        stmt = self._takeover_select().where(_OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
         return [self._row_to_takeover(r) for r in self._store.all(stmt)]
 
     def record_takeover(
@@ -85,6 +85,13 @@ class TakeoverStore:
         _log.info("takeover ended", takeover_id=takeover_id)
 
     @staticmethod
+    def _takeover_select():  # type: ignore[no-untyped-def]
+        # The reference lease's own epoch rides along, so the takeover's hold is scoped to it.
+        return select(takeovers, leases.c.epoch.label("reference_epoch")).select_from(
+            takeovers.outerjoin(leases, leases.c.lease_id == takeovers.c.lease_id)
+        )
+
+    @staticmethod
     def _row_to_takeover(r) -> OpenTakeover:  # type: ignore[no-untyped-def]
         return OpenTakeover(
             takeover_id=str(r.takeover_id),
@@ -95,6 +102,7 @@ class TakeoverStore:
             fence_epoch=int(r.fence_epoch) if r.fence_epoch is not None else None,
             opened_at=r.opened_at,
             harness_id=str(r.harness_id) if r.harness_id is not None else None,
+            reference_epoch=int(r.reference_epoch) if r.reference_epoch is not None else None,
         )
 
 

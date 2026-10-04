@@ -143,11 +143,9 @@ def test_tick_primes_every_touched_chunk_in_one_batch_call(tmp_path):  # type: i
 
     assert len(hub.chunk_statuses_calls) == 1, hub.chunk_statuses_calls
     assert set(hub.chunk_statuses_calls[0]) == {"ch_lease", "ch_esc", "ch_tko", "ch_held", "ch_unknown"}
-    # Two independent readers touch the not-found id this tick (FILL's interrupted-claim
-    # reconciler and ADVANCE's held-chunk poll) — both raised ChunkNotFoundError off the
-    # ONE cached absence above, each releasing the same way a genuine 404 always has;
-    # the single batch call above is the proof the cache — not the hub — absorbed the repeat.
-    assert provider.released == ["e_unknown", "e_unknown"]
+    # FILL's interrupted-claim reconciler releases the not-found id off the ONE cached absence above, stamped
+    # after the binding even though this clock reads earlier than ``_NOW``, so ADVANCE releases nothing twice.
+    assert provider.released == ["e_unknown"]
     # The known-but-inert chunks were left exactly as scripted — no chunk here was written to.
     assert store.open_escalations() != []
     assert store.open_takeover_for_chunk("ch_tko") is not None

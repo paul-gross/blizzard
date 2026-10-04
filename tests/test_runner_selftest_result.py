@@ -13,7 +13,11 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
+from blizzard.runner.harness.selftest_result import (
+    IWriteSelfTestResultRepository,
+    LatestSelfTestResult,
+    SelfTestTerminalStatus,
+)
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store
@@ -70,7 +74,9 @@ class _SlowWriter:
     def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         return self._store.latest_selftest_result(harness_id)
 
-    def record_selftest_result(self, *, harness_id: str, status: str, error: str | None, recorded_at: datetime) -> None:
+    def record_selftest_result(
+        self, *, harness_id: str, status: SelfTestTerminalStatus, error: str | None, recorded_at: datetime
+    ) -> None:
         time.sleep(0.3)
         self._store.record_selftest_result(harness_id=harness_id, status=status, error=error, recorded_at=recorded_at)
 

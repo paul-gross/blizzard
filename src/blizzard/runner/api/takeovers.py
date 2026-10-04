@@ -12,13 +12,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.chunk_scope import resolved_takeover_close_scope, resolved_takeover_open_scope
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.lifecycle.takeover import (
-    ChunkNotTakeable,
-    LiveWorkerConflict,
-    SubmissionPending,
-    TakeoverEndedElsewhere,
-)
+from blizzard.runner.lifecycle.takeover import TakeoverEndedElsewhere, TakeoverError
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import OpenTakeoverListResponse
 from blizzard.wire.runner_status import OpenTakeoverView as OpenTakeoverViewWire
@@ -37,13 +31,7 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
     scope = resolved_takeover_open_scope(chunk_id, request)
     try:
         opened = service.open(scope, force=request_body.force)
-    except (
-        ChunkNotTakeable,
-        LiveWorkerConflict,
-        SubmissionPending,
-        UnknownHarnessError,
-        UnavailableHarnessError,
-    ) as exc:
+    except TakeoverError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return TakeoverOpenResponse(
         takeover_id=opened.takeover_id,

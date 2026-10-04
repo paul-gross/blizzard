@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
@@ -54,22 +55,23 @@ def capability_snapshot(
     """One entry per known harness binding, each carrying the tier ids its adapter can resolve, its observed
     version, and its computed availability. The entry matching :func:`default_harness_id` is marked
     ``default``. ``versions`` routes the version probe through the cross-tick cache when wired; omitted, this probes
-    directly (a one-shot caller with no "next tick" a cache would pay off). ``health`` omitted defaults every entry
-    ``available=True`` — a caller with no health cache wired asserts none, matching the wire's own default."""
+    directly (a one-shot caller with no "next tick" a cache would pay off). ``health`` omitted reports every entry
+    unprobed (:func:`~blizzard.runner.harness.health.reported_health`): a caller with no health cache asserts none."""
     default_id = default_harness_id(harnesses)
     snapshot: list[RunnerCapability] = []
     for harness_id in harnesses.known_harnesses:
         observe_version = harnesses.lifecycle(harness_id).observe_version
         model = harnesses.model_resolution(harness_id)
         version = versions.get(harness_id, observe_version) if versions is not None else observe_version()
-        result = health.refresh(harness_id, adapter=model, observed_version=version) if health is not None else None
+        refreshed = health.refresh(harness_id, adapter=model, observed_version=version) if health is not None else None
+        result = reported_health(harness_id, refreshed)
         snapshot.append(
             RunnerCapability(
                 harness_id=harness_id,
                 version=version,
                 tiers=list(model.resolvable_tier_ids()),
                 default=harness_id == default_id,
-                available=result.available if result is not None else True,
+                available=result.available,
             )
         )
     return tuple(snapshot)

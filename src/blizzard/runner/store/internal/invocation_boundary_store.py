@@ -14,6 +14,7 @@ from blizzard.runner.transcripts.invocation_boundaries import (
     InvocationBoundaryKind,
     InvocationBoundaryStart,
     IWriteInvocationBoundaryRepository,
+    boundary_transition_applies,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -60,11 +61,11 @@ class InvocationBoundaryStore:
         opened_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
-        # Check-then-insert in one transaction, mirroring `record_usage` — idempotent by
-        # construction rather than a DB constraint (`bzh:sql-portable`).
+        # Check-then-insert in one transaction, mirroring `record_usage` (`bzh:sql-portable`); the marker's
+        # transition table decides, so an open or closed marker takes no second open.
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(invocation_boundaries.c.id).where(
+                select(invocation_boundaries).where(
                     and_(
                         invocation_boundaries.c.lease_id == lease_id,
                         invocation_boundaries.c.generation == generation,
@@ -72,7 +73,9 @@ class InvocationBoundaryStore:
                     )
                 )
             ).one_or_none()
-            if existing is not None:
+            if not boundary_transition_applies(
+                self._row_to_boundary(existing) if existing is not None else None, "open"
+            ):
                 return
             conn.execute(
                 invocation_boundaries.insert().values(
@@ -102,11 +105,11 @@ class InvocationBoundaryStore:
         advanced_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
-        # Check-then-insert in one transaction, mirroring `record_boundary_open`
-        # (`bzh:sql-portable`).
+        # Check-then-insert in one transaction, mirroring `record_boundary_open`; the marker's transition
+        # table decides, so an absent or closed marker takes no advance.
         with self._store.begin() as conn:
             marker = conn.execute(
-                select(invocation_boundaries.c.id).where(
+                select(invocation_boundaries).where(
                     and_(
                         invocation_boundaries.c.lease_id == lease_id,
                         invocation_boundaries.c.generation == generation,
@@ -114,7 +117,9 @@ class InvocationBoundaryStore:
                     )
                 )
             ).one_or_none()
-            if marker is None:
+            if not boundary_transition_applies(
+                self._row_to_boundary(marker) if marker is not None else None, "advance"
+            ):
                 return
             existing = conn.execute(
                 select(invocation_boundary_advances.c.id).where(

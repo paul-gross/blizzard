@@ -310,3 +310,40 @@ def test_content_404s_when_the_segment_belongs_to_a_different_chunk_in_the_url(t
     resp = TestClient(app).get(f"/api/chunks/ch_other/transcripts/{segment.segment_id}")
 
     assert resp.status_code == 404
+
+
+@pytest.mark.component
+def test_a_segment_that_stopped_shipping_reads_truncated_in_the_index_and_its_content(tmp_path: Path) -> None:
+    """A shipping stop loses content just as a marked truncation does: the index entry, the
+    segment's content view, and its final record all share one ``truncated``."""
+    turn = Turn(
+        index=0,
+        kind="env",
+        timestamp=_NOW,
+        text="hello",
+        tool=None,
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+    repo = FakeTranscriptRepository(
+        {"sess-a": Transcript(session_id="sess-a", available=True, reason=None, turns=[turn], truncated=False)}
+    )
+    app, store = _app_with_segments(tmp_path, repo=repo)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    [segment] = store.transcript_segments_for_chunk("ch_1")
+    store.stop_transcript_segment_shipping(segment.segment_id, reason="chunk_budget_exceeded")
+    client = TestClient(app)
+
+    [entry] = client.get("/api/chunks/ch_1/transcripts").json()["segments"]
+    content = client.get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}").json()
+
+    assert entry["truncated"] is True
+    assert content["truncated"] is True

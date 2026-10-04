@@ -9,27 +9,83 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from enum import StrEnum
+from typing import Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.harness.identity import SessionReference
 
 __all__ = [
+    "CHUNK_BUDGET_EXCEEDED",
+    "SEGMENT_TRANSITIONS",
     "BufferedTranscriptDelta",
     "IReadTranscriptLedgerRepository",
     "IWriteTranscriptLedgerRepository",
+    "SegmentState",
+    "SegmentTransition",
     "TranscriptBackfillLease",
     "TranscriptSegmentState",
+    "TruncationMark",
+    "TruncationMarkUpdate",
+    "TruncationReason",
 ]
 
+#: The one reason a segment stops shipping for good: the chunk's transcript budget is spent.
+CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 
-@dto
+
+class TruncationReason(StrEnum):
+    """Why a segment lost content — the never-silent ``truncated_reason`` vocabulary, ranked
+    by :attr:`severity` so the displayed reason is always the worst one marked."""
+
+    #: One tick's own source read came back incomplete.
+    SOURCE_READ_TRUNCATED = "source_read_truncated"
+    #: A record was shrunk to fit the per-record cap.
+    RECORD_CAP_EXCEEDED = "record_cap_exceeded"
+    #: A record could not be shrunk under the per-record cap at all.
+    RECORD_UNSHIPPABLE = "record_unshippable"
+    #: A lease-closure drain could not catch up with the source before its deadline.
+    LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
+    #: The same loss on the backfill's own drain, where no lease closure is involved.
+    BACKFILL_INCOMPLETE = "backfill_incomplete"
+    #: The hub capped a record this runner shipped — the worst: the content left the runner.
+    HUB_CAPPED = "hub_capped"
+
+    @property
+    def severity(self) -> int:
+        """Worst-of rank, mildest first."""
+        return _TRUNCATION_SEVERITY[self]
+
+
+_TRUNCATION_SEVERITY: dict[TruncationReason, int] = {
+    TruncationReason.SOURCE_READ_TRUNCATED: 0,
+    TruncationReason.RECORD_CAP_EXCEEDED: 1,
+    TruncationReason.RECORD_UNSHIPPABLE: 2,
+    TruncationReason.LEASE_CLOSURE_INCOMPLETE: 3,
+    TruncationReason.BACKFILL_INCOMPLETE: 3,
+    TruncationReason.HUB_CAPPED: 4,
+}
+
+#: Where one segment stands: still taking content, or sealed by its final marker.
+SegmentState = Literal["open", "finalized"]
+
+#: The writes a segment takes: content, the shipping stop, its finalization, and a truncation mark.
+SegmentTransition = Literal["ship", "stop_shipping", "finalize", "mark_truncated"]
+
+#: The transitions that write from each state; a truncation mark stays legal even after finalization.
+SEGMENT_TRANSITIONS: dict[SegmentState, frozenset[SegmentTransition]] = {
+    "open": frozenset({"ship", "stop_shipping", "finalize", "mark_truncated"}),
+    "finalized": frozenset({"mark_truncated"}),
+}
+
+
+@domain_model
 @dataclass(frozen=True)
 class TranscriptSegmentState:
-    """One row of the transcript segment ledger — local state, never shipped
-    as-is, and so named apart from the wire's own ``TranscriptSegmentRecord``.
-    ``normalizer_version`` is never ``None``, starting at the source seam's "never ran"
-    sentinel. ``truncated_reason``/``shipping_stopped_reason`` are independent: the former never latches."""
+    """One row of the transcript segment ledger — local state, never shipped as-is, so named apart from
+    the wire's ``TranscriptSegmentRecord``. ``normalizer_version`` starts at the source seam's "never ran"
+    sentinel; ``truncated_reason``/``shipping_stopped_reason`` are independent, the former never latching.
+    :data:`SEGMENT_TRANSITIONS` declares which writes it takes from which state."""
 
     segment_id: str
     chunk_id: str
@@ -63,14 +119,109 @@ class TranscriptSegmentState:
     def session(self) -> SessionReference:
         return SessionReference(self.harness_id, self.session_id)
 
+    @property
+    def state(self) -> SegmentState:
+        return self._state()
+
+    def _state(self) -> SegmentState:
+        return "finalized" if self.finalized_at is not None else "open"
+
+    @property
+    def final(self) -> bool:
+        """Sealed by its final marker — no more content will ever ship for it."""
+        return self._final()
+
+    def _final(self) -> bool:
+        return self.finalized_at is not None
+
+    @property
+    def shipping_stopped(self) -> bool:
+        """Stopped for good past the chunk's transcript budget: ships nothing more."""
+        return self._shipping_stopped()
+
+    def _shipping_stopped(self) -> bool:
+        return self.shipping_stopped_reason is not None
+
+    @property
+    def truncated(self) -> bool:
+        """Lost content, by either path: a marked truncation or a shipping stop. The one
+        definition the segment index, the segment's content view, and its final record share."""
+        return self._truncated()
+
+    def _truncated(self) -> bool:
+        return self.truncated_reason is not None or self.shipping_stopped_reason is not None
+
+    @property
+    def lost_to_cap(self) -> bool:
+        """Content the hub will never hold, by a cap on either side — the hub capped a record,
+        or this runner stopped shipping past the chunk budget."""
+        return self._lost_to_cap()
+
+    def _lost_to_cap(self) -> bool:
+        return self.truncated_reason == TruncationReason.HUB_CAPPED or self.shipping_stopped
+
+    @property
+    def accepts_content(self) -> bool:
+        """Whether a content write (deltas or a cursor advance) applies — ``False`` once finalized."""
+        return self.accepts("ship")
+
+    def accepts(self, transition: SegmentTransition) -> bool:
+        """Whether ``transition`` writes from this segment's state, per :data:`SEGMENT_TRANSITIONS`."""
+        return transition in SEGMENT_TRANSITIONS[self.state]
+
+
+@dto
+@dataclass(frozen=True)
+class TruncationMarkUpdate:
+    """What one truncation mark writes: the displayed reason and its severity when they change,
+    the warned-reason latch when it grows. ``newly_warned`` is whether the mark owes its warning."""
+
+    truncated_reason: str | None
+    truncated_reason_severity: int | None
+    reasons_warned: tuple[str, ...] | None
+    newly_warned: bool
+
+    @property
+    def changes(self) -> bool:
+        return self._changes()
+
+    def _changes(self) -> bool:
+        return self.truncated_reason is not None or self.reasons_warned is not None
+
+
+@domain_model
+@dataclass(frozen=True)
+class TruncationMark:
+    """A segment's truncation display and warn latch, as stored. ``current_severity`` is
+    ``None`` for a row that took its reason before severities were recorded — incomparable."""
+
+    current_reason: str | None
+    current_severity: int | None
+    reasons_warned: tuple[str, ...]
+
+    def apply(self, reason: str, severity: int) -> TruncationMarkUpdate:
+        """Mark ``reason``. The display is worst-of by ``severity`` (a tie or an incomparable
+        current takes the new reason); the warning is latched per reason, independent of the
+        display — a reason already warned never re-warns."""
+        newly_warned = reason not in self.reasons_warned
+        replaces = self.current_reason != reason and (
+            self.current_reason is None or self.current_severity is None or severity >= self.current_severity
+        )
+        return TruncationMarkUpdate(
+            truncated_reason=reason if replaces else None,
+            truncated_reason_severity=severity if replaces else None,
+            reasons_warned=(*self.reasons_warned, reason) if newly_warned else None,
+            newly_warned=newly_warned,
+        )
+
 
 @dto
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
-    """One pending record in the transcript lane's own buffer — ``BufferedFact``'s
-    counterpart. Non-final ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
-    ``seq``/``runner_id``) as JSON; a final one is just ``{"segment_id": ...}``. ``final``
-    mirrors the payload's own flag, driving ack-time keep-vs-delete."""
+    """One pending record in the transcript lane's own buffer — ``BufferedFact``'s counterpart. Non-final
+    ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus ``seq``/``runner_id``) as JSON; a final
+    one is just ``{"segment_id": ...}``. ``final`` mirrors the payload's flag, driving ack-time
+    keep-vs-delete."""
 
     seq: int
     segment_id: str
@@ -181,7 +332,8 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
         breached. The only field :class:`TranscriptPump`'s guard reads; idempotent,
-        keeps its first reason. Returns whether this call actually set the field."""
+        keeps its first reason, and a no-op on a finalized segment. Returns whether this call
+        actually set the field."""
         ...
 
     def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
@@ -207,7 +359,8 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
         ``len(payloads)`` buffer rows — ONE transaction, so a batch split
         into several records still advances the cursor exactly once, and a crash loses
-        neither the cursor advance nor any record. Returns their seqs, in payload order."""
+        neither the cursor advance nor any record. Returns their seqs, in payload order —
+        ``[]``, writing nothing, when the segment is finalized (:data:`SEGMENT_TRANSITIONS`)."""
         ...
 
     def open_transcript_segment(
@@ -250,7 +403,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         window that moved the source's read position but produced no turn (e.g. a run of
         control records), which still must not be re-read next tick. Unlike
         :meth:`record_transcript_deltas`, no outbound row: there is no record to ship, only
-        progress to remember."""
+        progress to remember. A no-op on a finalized segment."""
         ...
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:

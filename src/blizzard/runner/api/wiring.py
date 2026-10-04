@@ -28,7 +28,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
-from blizzard.runner.leases import Lease, LocalLeaseService
+from blizzard.runner.leases import Lease, LocalLeaseService, WorkerLease
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
 from blizzard.runner.leases.session import LeaseSessionService
@@ -41,6 +41,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
+from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.transcripts.service import TranscriptService
@@ -85,14 +86,22 @@ class RunnerWiring:
         active lease is gone — the one an open takeover names. An open takeover
         is a second, independent source of worker-verb authorization, not a re-mint: the
         resolved record's id, node and epoch are unchanged from whatever they already were."""
+        return self.worker_lease_standing(lease_id).lease
+
+    def worker_lease_standing(self, lease_id: str) -> WorkerLease:
+        """:meth:`worker_lease`, with whether it resolved to the active lease or to the
+        closed reference lease an open takeover names."""
         stores = self.read_stores()
-        lease = stores.lease_record.active_lease(lease_id) or stores.takeover.lease_for_open_takeover(lease_id)
-        if lease is None:
+        active = stores.lease_record.active_lease(lease_id)
+        if active is not None:
+            return WorkerLease(lease=active, active=True)
+        reference = stores.takeover.lease_for_open_takeover(lease_id)
+        if reference is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"no active lease or open takeover for lease {lease_id}",
             )
-        return lease
+        return WorkerLease(lease=reference, active=False)
 
     def status(self) -> RunnerStatusService:
         service: RunnerStatusService | None = getattr(self.state, "runner_status", None)
@@ -133,6 +142,24 @@ class RunnerWiring:
     def received_telemetry(self) -> IReceivedTelemetryExport:
         """The received metrics and logs export; the disabled one where the composer wired none."""
         return getattr(self.state, "received_telemetry", None) or DisabledReceivedTelemetryExport()
+
+    def telemetry_receiver(self) -> TelemetryReceiver:
+        """The worker telemetry receiver over the process's limiters and tallies, switched by
+        the runner's ``[tracing]`` config (every receiver flag off with no config wired)."""
+        config = self.maybe_config()
+        return TelemetryReceiver(
+            platform_tracing=self.platform_tracing(),
+            received_telemetry=self.received_telemetry(),
+            span_limiter=self.span_limiter(),
+            span_counter=self.receiver_counter(),
+            claude_span_counter=self.claude_trace_counter(),
+            metric_bounds=self.metric_bounds(),
+            log_bounds=self.log_bounds(),
+            clock=getattr(self.state, "clock", None),
+            worker_programs=config is not None and config.tracing.worker_programs,
+            harness_telemetry=config is not None and config.tracing.harness_telemetry,
+            mapped_services=config.tracing.worker_program_services if config is not None else {},
+        )
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)

@@ -22,9 +22,12 @@ class GitCommitDeclarationRequest(BaseModel):
 
 
 class GitCommitDeclarationResponse(BaseModel):
-    """``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably."""
+    """``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably.
+    ``note`` is set when it lands but rides no completion — declared against the closed
+    reference lease an open takeover names."""
 
     recorded: bool
     lease_id: str
     repo: str
     environment_id: str
+    note: str | None = None

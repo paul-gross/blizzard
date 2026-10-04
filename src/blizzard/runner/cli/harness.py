@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 
 import click
@@ -10,21 +9,13 @@ import click
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.harness.bundle import published_snapshot
+from blizzard.runner.harness.bundle import HarnessBundleNotPublished, published_snapshot, require_published
 from blizzard.runner.harness.wiring import HARNESS_CATALOG, declared, inspect_harness_bundle, shared_inputs
 
 
 @click.group("harness")
 def harness_group() -> None:
     """Operator: the harness-config bundle this runtime loads."""
-
-
-def _autonomy_source(config: RunnerConfig) -> str:
-    overrides = [override for s in config.harness_sections if (override := s.autonomy_override()) is not None]
-    if overrides:
-        return overrides[0]
-    harness = tomllib.loads(config.config_path.read_text()).get("harness")
-    return "[harness] autonomy" if isinstance(harness, dict) and "autonomy" in harness else "default"
 
 
 @harness_group.command("status")
@@ -42,7 +33,7 @@ def harness_status(directory: str) -> None:
     but no snapshot is published."""
     try:
         config = RunnerConfig.load(Path(directory))
-        click.echo(f"autonomy: {config.autonomy} (from {_autonomy_source(config)})")
+        click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         shared = shared_inputs(config.harness_settings)
         spawn_root = build_workspace_provider(config.workspace_settings).spawn_root()
         for declaration, section in declared(config.harness_sections):
@@ -58,9 +49,10 @@ def harness_status(directory: str) -> None:
             click.echo(f"{source.dirname}: source {source.source_dir}; entry points: {', '.join(source.entry_points)}")
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    snapshot = published_snapshot(config.root)
-    if snapshot is None:
-        raise click.ClickException("config_dir is configured but no snapshot is published; restart the runner")
+    try:
+        snapshot = require_published(config.harness_config_dir, published_snapshot(config.root))
+    except HarnessBundleNotPublished as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"snapshot: {snapshot}")
     for declaration in HARNESS_CATALOG:
         _echo(declaration.snapshot_status(snapshot, sources))

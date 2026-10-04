@@ -19,9 +19,9 @@ from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentState,
+    TruncationReason,
 )
 from blizzard.runner.transcripts.transcript_pump import (
-    TRUNCATION_REASON_SEVERITY,
     TranscriptPump,
     TranscriptPumpConfig,
     TranscriptPumpContext,
@@ -35,14 +35,6 @@ _log = get_logger("blizzard.runner.loop")
 # seq-idempotent high-water mark must absorb — its own family, never `flush.*`'s.
 _CP_BEFORE_SUBMIT = crashpoint("transcript.before-submit", "fact at head of the transcript buffer; not submitted")
 _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied the fact; ack not recorded")
-
-#: The reason `_deliver_batch` marks on a hub-cap-rejected record — distinct from `transcript_pump.py`'s own.
-#: Public: the backfill reports a capped segment apart from a whole one.
-HUB_CAPPED = "hub_capped"
-
-#: Worse than every pump-side reason: unlike those, this one means the
-#: content was already read, shipped, and hub-confirmed lost, never merely unattempted.
-HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
 
 #: A final marker's own upper bound, no render needed: its shape is a handful of short
 #: ids and scalars with an empty `turns`, well under this even at the widest realistic id
@@ -180,11 +172,14 @@ class TranscriptDrain:
                 _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
                 # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
                 changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
-                    delta.segment_id, reason=HUB_CAPPED, severity=HUB_CAPPED_SEVERITY
+                    delta.segment_id, reason=TruncationReason.HUB_CAPPED, severity=TruncationReason.HUB_CAPPED.severity
                 )
                 if changed:
                     OutboundFacts(self.ctx).transcript_truncated(
-                        chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=HUB_CAPPED, at=self.ctx.clock.now()
+                        chunk_id=delta.chunk_id,
+                        segment_id=delta.segment_id,
+                        reason=TruncationReason.HUB_CAPPED,
+                        at=self.ctx.clock.now(),
                     )
         seqs = [delta.seq for delta in deltas]
         self.ctx.stores.transcript_ledger.ack_transcript_outbound_batch(seqs, acked_at=self.ctx.clock.now())
@@ -223,7 +218,7 @@ def _scrub_surrogates(value: Any) -> Any:
 
 
 def _final_record(seq: int, segment: TranscriptSegmentState) -> TranscriptSegmentRecord:
-    record_truncated = segment.truncated_reason is not None or segment.shipping_stopped_reason is not None
+    record_truncated = segment.truncated
     return TranscriptSegmentRecord(
         seq=seq,
         segment_id=segment.segment_id,

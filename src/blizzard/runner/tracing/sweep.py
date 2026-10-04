@@ -7,6 +7,7 @@ told and §The cursor, deferring to fleet-spans for the cursor's rules. Every co
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -50,15 +51,44 @@ def _report(kind: EventLogKind, message: str, detail: dict[str, object] | None) 
     )
 
 
-def announce_rejected_tracing(settings: TracingSettings, outbound: IWriteOutboundRepository, at: datetime) -> None:
-    """A rejected tracing setting never stops the runner: it serves with tracing off and
-    buffers one runner-wide ``trace-config-rejected`` per start, naming the setting."""
+def rejected_tracing_report(settings: TracingSettings) -> str | None:
+    """The ``trace-config-rejected`` event payload a rejected tracing setting owes, naming the
+    setting — ``None`` for an accepted one. A rejection never stops the runner: it serves with
+    tracing off."""
     if settings.state != "rejected":
-        return
-    payload = _report(
+        return None
+    return _report(
         _REJECTED, settings.rejection_message("runner"), {"setting": settings.setting, "value": settings.value}
     )
+
+
+def announce_rejected_tracing(settings: TracingSettings, outbound: IWriteOutboundRepository, at: datetime) -> None:
+    """Buffer one runner-wide ``trace-config-rejected`` per start when the setting was rejected."""
+    payload = rejected_tracing_report(settings)
+    if payload is None:
+        return
     outbound.enqueue_outbound(kind=EVENT_RECORDED, chunk_id=None, lease_id=None, payload=payload, created_at=at)
+
+
+def cursor_after(keys: Sequence[LeaseCursorKey], span_count: int, at: datetime) -> LeaseTraceCheckpoint:
+    """The checkpoint a told window leaves: past its last lease, with the spans it told. A
+    window of leases never minted to completion tells nothing, yet still advances the cursor."""
+    return LeaseTraceCheckpoint(keys[-1], span_count, at)
+
+
+def skipped_window_report(jump: CursorJump[LeaseCursorKey], *, unsent: bool) -> str | None:
+    """The ``trace-window-skipped`` event payload a cursor jump owes — only when the window it
+    skips holds a lease never told (``unsent``); replay is then the only way it is told."""
+    since = jump.skipped_from
+    if since is None or not unsent:
+        return None
+    detail: dict[str, object] = {
+        "reason": jump.reason.value,
+        "since": {"at": iso_utc(since.at), "lease_id": since.lease_id},
+        "until": iso_utc(jump.to.at),
+    }
+    message = f"runner trace cursor jumped ({jump.reason.value}); the skipped window is told only by replay"
+    return _report(_SKIPPED, message, detail)
 
 
 class LeaseTraceSweep:
@@ -110,13 +140,13 @@ class LeaseTraceSweep:
         spans = tuple(span for k in keys if k.lease_id in facts for span in assemble_lease(facts[k.lease_id]))
         if not spans:
             # A window of leases never minted to completion tells nothing, so there is nothing to export.
-            self._leases.append_trace_cursor(LeaseTraceCheckpoint(keys[-1], 0, now))
+            self._leases.append_trace_cursor(cursor_after(keys, 0, now))
             return
         if not self._export(spans):
             self._failed(now, len(keys))
             return
         _CP_LEASETRACE_AFTER_EXPORT_BEFORE_CURSOR.reached()
-        self._leases.append_trace_cursor(LeaseTraceCheckpoint(keys[-1], len(spans), self._clock.now()))
+        self._leases.append_trace_cursor(cursor_after(keys, len(spans), self._clock.now()))
         self._recovered()
         _log.info("lease trace sweep completed", leases=len(keys), spans=len(spans))
 
@@ -149,18 +179,12 @@ class LeaseTraceSweep:
 
     def _jump(self, jump: CursorJump[LeaseCursorKey], now: datetime) -> None:
         since = jump.skipped_from
-        if since is not None and self._leases.oldest_unsent_lease(since, jump.to.at - timedelta(microseconds=1)):
-            detail: dict[str, object] = {
-                "reason": jump.reason.value,
-                "since": {"at": iso_utc(since.at), "lease_id": since.lease_id},
-                "until": iso_utc(jump.to.at),
-            }
-            message = f"runner trace cursor jumped ({jump.reason.value}); the skipped window is told only by replay"
+        unsent = since is not None and bool(
+            self._leases.oldest_unsent_lease(since, jump.to.at - timedelta(microseconds=1))
+        )
+        payload = skipped_window_report(jump, unsent=unsent)
+        if payload is not None:
             self._outbound.enqueue_outbound(
-                kind=EVENT_RECORDED,
-                chunk_id=None,
-                lease_id=None,
-                payload=_report(_SKIPPED, message, detail),
-                created_at=now,
+                kind=EVENT_RECORDED, chunk_id=None, lease_id=None, payload=payload, created_at=now
             )
         self._leases.append_trace_cursor(LeaseTraceCheckpoint(jump.to, 0, now))

@@ -11,15 +11,12 @@ import json
 from collections.abc import Callable, Container, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol
 
 from pydantic import ValidationError
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -34,24 +31,38 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, elicitation_still_pending
+from blizzard.runner.lifecycle.model import (
+    AdvanceMove,
+    Fenced,
+    LeaseReconcileMove,
+    ReapMove,
+    TakeoverHolds,
+    advance_move,
+    crash_orphaned,
+    lease_reconcile_move,
+    open_slots,
+    reap_move,
+    resumable,
+)
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
-from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
-from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    SampleMissReason,
+    sample_due,
+)
 from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
     reset_if_streak_open,
 )
-from blizzard.runner.throttle.pause import PauseService
-from blizzard.runner.usage.repository import ContextSampleState
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.throttle.pause import PauseService, spend_ceiling_reason
+from blizzard.runner.usage.repository import ContextSampleState, external_usage_attempt
 from blizzard.wire.facts import (
     EVENT_RECORDED,
-    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     ExternalSubscriptionUsageWindowFact,
 )
 from blizzard.wire.runner import RunnerSubscriptionDeclaration
@@ -125,15 +136,12 @@ class SpendCeiling(Step):
         if ctx.stores.pause.local_paused(ctx.config.runner_id):
             return  # already engaged — engage-once; `blizzard runner start` is the only clear
         now = ctx.clock.now()
-        since = now - timedelta(hours=ctx.config.runner_ceiling_window_hours)
-        totals = ctx.stores.usage.usage_since(since)
-        if totals.cost_usd < cap:
-            return
-        partial_note = " (PARTIAL — true spend may be higher)" if totals.cost_partial else ""
         window_hours = ctx.config.runner_ceiling_window_hours
-        reason = (
-            f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h "
-            f"(spend ${totals.cost_usd:.2f}{partial_note})"
+        totals = ctx.stores.usage.usage_since(now - timedelta(hours=window_hours))
+        if not totals.reaches(cap):
+            return
+        reason = spend_ceiling_reason(
+            cap=cap, window_hours=window_hours, spend=totals.cost_usd, partial=totals.cost_partial
         )
         _log.warning(
             f"runner locally paused — {reason}",
@@ -157,48 +165,42 @@ class Reap(Step):
         conservative staleness threshold is what keeps the two apart."""
         ctx = self.ctx
         _CP_REAP_BEFORE.reached()
-        local_paused = ctx.stores.pause.local_paused(ctx.config.runner_id)
+        braked = not Spawner(ctx).brakes().starts_processes
         now = ctx.clock.now()
         parked = ctx.stores.asks.parked_lease_ids()
-        taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
+        takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
         active_leases = ctx.stores.lease_record.list_active_leases()
         # One bulk read for every candidate's heartbeat/spawn (`bzh:bulk-reconstitution`),
-        # rather than `Liveness.of` re-reading both per lease.
+        # rather than two reads per lease.
         liveness_facts = ctx.stores.liveness.liveness_facts([lease.lease_id for lease in active_leases])
         deferred = 0
         for lease in active_leases:
-            if lease.chunk_id in taken_over:
-                continue  # the human holds this session — no loop step touches it
-            if lease.lease_id in parked:
-                # Dormant on a question: no live worker to stall, so the reap clock is
-                # stopped — a parked chunk is never reaped for inactivity.
-                continue
-            if lease.pid is None or lease.session_id is None:
+            facts = liveness_facts.get(lease.lease_id)
+            liveness = Liveness.of(
+                lease,
+                heartbeat=facts.latest_heartbeat if facts is not None else None,
+                spawn=facts.latest_spawn if facts is not None else None,
+            )
+            move = reap_move(
+                lease,
+                taken_over=takeovers.holds_lease(lease),
+                parked=lease.lease_id in parked,
+                alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
+                stale=liveness.stale(now),
+                braked=braked,
+            )
+            if move is ReapMove.REAP_UNSPAWNED:
                 if lease.pid is not None:
                     # A durably-provisional generation: close it unidentified before
                     # failing the attempt, so REAP doesn't leave the generation ambiguously open.
                     ctx.stores.liveness.record_identity_failed(lease.lease_id, at=now)
                 _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
                 Attempt(ctx, lease).fail(reason=REAPED, via="reap")
-                continue
-            if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
-                continue  # exited — ADVANCE's (exit-is-done)
-            facts = liveness_facts.get(lease.lease_id)
-            liveness = Liveness.of(
-                ctx.stores.liveness,
-                lease,
-                heartbeat=facts.latest_heartbeat if facts is not None else None,
-                spawn=facts.latest_spawn if facts is not None else None,
-            )
-            if liveness.stale(now):
-                if local_paused:
-                    # Do not kill a live worker while the brake is on — a pause is not a
-                    # drain. The first tick after it clears reaps this lease as it would now.
-                    deferred += 1
-                    continue
+            elif move is ReapMove.DEFER:
+                deferred += 1
+            elif move is ReapMove.REAP_STALLED:
                 _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
                 Attempt(ctx, lease).fail(reason=REAPED, via="reap")
-            # A live, beating worker runs on.
         if deferred:
             _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
         _CP_REAP_AFTER.reached()
@@ -251,26 +253,34 @@ class ResumeIntents:
         pending = self.stores.outbound.pending_submission_lease_ids()
         eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
         backing_off = backing_off_facts(self.stores.overload, self.stores.liveness, self.stores.elicitations)
+        takeovers = TakeoverHolds.of(self.stores.takeover.open_takeovers())
         for lease in self.stores.lease_record.list_active_leases():
-            if lease.pid is None or lease.session_id is None:
-                continue
-            if lease.lease_id in parked or lease.lease_id in pending or lease.lease_id in eliciting:
-                continue
-            if lease.lease_id in backing_off:
-                continue
-            yield lease
+            if resumable(
+                lease,
+                parked=parked,
+                pending_submission=pending,
+                eliciting=eliciting,
+                backing_off=backing_off,
+                taken_over=takeovers.holds_lease(lease),
+            ):
+                yield lease
 
     def _crash_orphaned(self, ended: Container[str], process: IProcessProbe, crashed_at: datetime) -> Iterator[Lease]:
+        # Declared done (SessionEnd fired) is ADVANCE's to judge; orphaned-but-alive is REAP's to re-adopt;
+        # gone stale before the crash, ADVANCE judges the dead session, a retry consumed only if no verdict comes.
         for lease in self._resumable():
-            if lease.lease_id in ended:
-                continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
-            if lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""):
-                continue  # orphaned-but-alive — REAP re-adopts it, or expires it if the beat went stale
-            if Liveness.of(self.stores.liveness, lease).stale(crashed_at):
-                # Its process is already gone (the test above), so REAP passes it over and ADVANCE
-                # claims it: a verdict elicited from the dead session, a retry consumed only if none is.
-                continue
-            yield lease
+            liveness = Liveness.of(
+                lease,
+                heartbeat=self.stores.liveness.latest_heartbeat(lease.lease_id),
+                spawn=self.stores.liveness.latest_spawn(lease.lease_id),
+            )
+            if crash_orphaned(
+                lease,
+                session_ended=lease.lease_id in ended,
+                alive=lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""),
+                stale=liveness.stale(crashed_at),
+            ):
+                yield lease
 
     def _mark(self, leases: Iterator[Lease], *, now: datetime) -> int:
         marked = 0
@@ -293,44 +303,15 @@ class Resume(Step):
             return
         _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
         active = {lease.lease_id: lease for lease in ctx.stores.lease_record.list_active_leases()}
+        takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
         for lease_id in intents:
             lease = active.get(lease_id)
             if lease is None:
                 ctx.stores.resume_intent.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
                 continue
-            DormantSession(ctx, lease).restart_or_release()
-
-
-class _FenceRef(Protocol):
-    """The two facts :class:`Fenced` needs — from a live lease or a closed one behind an open
-    escalation, nothing else."""
-
-    @property
-    def chunk_id(self) -> str: ...
-
-    @property
-    def epoch(self) -> int: ...
-
-
-@domain_model
-@dataclass(frozen=True)
-class Fenced:
-    """Whether the hub has moved a chunk out from under a reference epoch still held here — an
-    active lease or a closed one behind an open escalation.
-
-    The signal is the fence itself: an epoch above the reference's, or a restart AT it. The id set
-    is the one place a higher one is somebody else's business — a takeover a person is in."""
-
-    taken_over: Container[str]
-
-    def out(self, view: ChunkStatusView, ref: _FenceRef) -> bool:
-        if ref.chunk_id in self.taken_over:
-            return False
-        if view.latest_epoch is not None and view.latest_epoch > ref.epoch:
-            return True
-        # A restart mints one above the newest epoch THE HUB knows, which excludes a reference whose
-        # own mint is still buffered here — so it can land LEVEL with what it displaces.
-        return any(epoch >= ref.epoch for epoch in view.restart_epochs)
+            if takeovers.holds_lease(lease):
+                continue  # a person holds this session — the intent waits for the takeover to end
+            DormantSession(ctx, lease).restart_or_release(Fenced(takeovers))
 
 
 class Pull(Step):
@@ -383,7 +364,7 @@ class Pull(Step):
         pause *fact*, which an ask-park masks."""
         ctx = self.ctx
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
-        fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
+        fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
         for lease in ctx.stores.lease_record.list_active_leases():
             try:
                 view = ctx.chunk_views.get(lease.chunk_id)
@@ -394,18 +375,18 @@ class Pull(Step):
                 continue
             except HubClientError:
                 continue  # hub unreachable — last-known directive holds; keep working
-            if view.status == ChunkStatus.STOPPED:
-                # Honor the terminal fact directly, rather than waiting on the
-                # route check below to observe the release.
+            move = lease_reconcile_move(
+                view,
+                lease,
+                runner_id=ctx.config.runner_id,
+                pause_parked=pause_parked,
+                fenced=fenced.out(view, lease),
+            )
+            if move is LeaseReconcileMove.ABANDON:
                 Attempt(ctx, lease).abandon(via="pull")
-            elif view.route_runner_id != ctx.config.runner_id:
-                Attempt(ctx, lease).abandon(via="pull")
-            elif view.pause is not None:
-                # A pause outranks a move: the paused chunk keeps its lease, route and epoch, and
-                # the re-entry happens on the tick after the pause lifts.
-                if lease.lease_id not in pause_parked:
-                    Attempt(ctx, lease).park_paused(via="pull")
-            elif fenced.out(view, lease):
+            elif move is LeaseReconcileMove.PARK:
+                Attempt(ctx, lease).park_paused(via="pull")
+            elif move is LeaseReconcileMove.PREEMPT:
                 Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
@@ -420,7 +401,7 @@ class Pull(Step):
         gone), reassigned to another runner (route moved), or an operator restart at or past this
         epoch (``Fenced``). The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
-        fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
+        fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
         for escalation in ctx.stores.escalations.open_escalations():
             try:
                 view = ctx.chunk_views.get(escalation.chunk_id)
@@ -428,10 +409,8 @@ class Pull(Step):
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
-            superseded = (
-                view.status in TERMINAL_STATUSES
-                or view.route_runner_id != ctx.config.runner_id
-                or fenced.out(view, escalation)
+            superseded = escalation.superseded_by(
+                view, runner_id=ctx.config.runner_id, fenced_out=fenced.out(view, escalation)
             )
             if not superseded:
                 _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=view.status.value)
@@ -461,7 +440,7 @@ class Pull(Step):
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))
                 continue
-            if view.status not in TERMINAL_STATUSES:
+            if not takeover.ended_by(view):
                 _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=view.status.value)
                 continue
             ctx.stores.takeover.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
@@ -477,29 +456,28 @@ class Fill(Step):
         chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
         """
         ctx = self.ctx
-        hub_paused = ctx.stores.pause.hub_paused(ctx.config.runner_id)
-        local_paused = ctx.stores.pause.local_paused(ctx.config.runner_id)
-        InterruptedClaims(ctx).reconcile(braked=hub_paused or local_paused)
-        if hub_paused or local_paused:
+        brakes = Spawner(ctx).brakes()
+        InterruptedClaims(ctx).reconcile(braked=brakes.blocks_claims)
+        if brakes.blocks_claims:
             _log.info(
                 "paused — no new claims this tick",
                 runner_id=ctx.config.runner_id,
-                hub_paused=hub_paused,
-                local_paused=local_paused,
+                hub_paused=brakes.hub,
+                local_paused=brakes.local,
             )
             return
-        slots = ctx.config.max_agents - ctx.stores.lease_record.count_active_leases()
+        slots = open_slots(ctx.config.max_agents, ctx.stores.lease_record.count_active_leases())
         # Whether this runner asserts capabilities at all is a registry-shape question —
         # read from the registry, never by building a snapshot that probes every binary.
         if ctx.harnesses.known_harnesses:
             # A capability-asserting runner peeks per attempt, not once per fill
             # — the single-entry peek response leaves no cache to reuse.
-            for _ in range(max(slots, 0)):
+            for _ in range(slots):
                 if not ReadyQueue.peeked(ctx).claim_one():
                     break
         else:
             queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill — legacy path only
-            for _ in range(max(slots, 0)):
+            for _ in range(slots):
                 if not queue.claim_one():
                     break
 
@@ -518,42 +496,36 @@ class Advance(Step):
         in_flight_elicitations = ctx.stores.elicitations.in_flight_elicitations_by_lease()  # hoisted: same, by lease id
         backing_off = backing_off_facts(ctx.stores.overload, ctx.stores.liveness, ctx.stores.elicitations)
         resume_intents = ctx.stores.resume_intent.resume_intent_lease_ids()
-        taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
+        takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
         for lease in ctx.stores.lease_record.list_active_leases():
-            if lease.chunk_id in taken_over:
-                continue  # the human holds this session — no loop step touches it
-            if lease.pid is None or lease.session_id is None:
-                continue  # REAP's residue
-            if lease.lease_id in resume_intents:
-                continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
-            if lease.lease_id in pending:
-                continue  # outcome elicited, awaiting flush — the node boundary
             park = open_parks.get(lease.lease_id)
-            if park is not None:
+            move = advance_move(
+                lease,
+                taken_over=takeovers.holds_lease(lease),
+                resume_marked=lease.lease_id in resume_intents,
+                pending_submission=lease.lease_id in pending,
+                pause_parked=park is not None,
+                ask_parked=lease.lease_id in ask_parked,
+                backing_off=lease.lease_id in backing_off,
+                alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
+            )
+            if move is AdvanceMove.ON_UNPAUSE and park is not None:
                 # Dormant on an operator pause — finish the park's teardown, resume when it lifts.
                 DormantSession(ctx, lease).on_unpause(park, in_flight_elicitations.get(lease.lease_id))
-                continue
-            if lease.lease_id in ask_parked:
+            elif move is AdvanceMove.ON_ANSWER:
                 DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
-                continue
-            if lease.lease_id in backing_off:
-                # No-ops until `resume_after` passes, then wakes the same lease/epoch/session
-                # in place — checked before liveness since an overloaded worker
-                # generation has already exited; a judge's own process is gone too.
+            elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
+                # No-ops until `resume_after` passes, then wakes the same lease/epoch/session in place.
                 DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
-                continue
-            if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
-                continue  # worker still running
-            self._advance_exited_worker(lease)
+            elif move is AdvanceMove.EXITED:
+                self._advance_exited_worker(lease)
 
         # Read AFTER the loop above, not the same set it started with (`bzh:bulk-reconstitution`):
         # that loop can close a lease whose chunk this one must now drive in the same pass.
         active_chunk_ids = {lease.chunk_id for lease in ctx.stores.lease_record.list_active_leases()}
         for chunk_id in ctx.stores.environments.live_tenure_chunk_ids():
-            if chunk_id in taken_over:
-                continue  # the human holds this chunk — no gate/hub-node poll while they do
             if chunk_id not in active_chunk_ids:
-                HeldChunk(ctx, chunk_id).drive()
+                HeldChunk(ctx, chunk_id).drive(takeovers)
 
     def _advance_exited_worker(self, lease: Lease) -> None:
         """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
@@ -692,9 +664,8 @@ class ContextSample(Step):
         if session is None or not ctx.transcripts_wired:
             return  # a lease whose spawn has not yet minted a session has nothing to read
         now = ctx.clock.now()
-        if state is not None and now - state.last_sampled_at < timedelta(
-            seconds=ctx.config.context_sample_interval_seconds
-        ):
+        interval = timedelta(seconds=ctx.config.context_sample_interval_seconds)
+        if not ContextSampleState.sample_due(state, now=now, interval=interval):
             return
         try:
             source = ctx.transcript_source_for(session)
@@ -711,13 +682,7 @@ class ContextSample(Step):
             )
             return
         tokens = source.context_tokens(session.session_id, spawn_cwd=self._spawn_cwd(bindings))
-        # Only the FIRST crossing reports: the warning is a state change, not a level, and a
-        # lease past the line samples on for the curve without re-reporting every minute.
-        crossing = (
-            tokens is not None
-            and tokens > warn_tokens
-            and not (state is not None and (state.max_context_tokens or 0) > warn_tokens)
-        )
+        crossing = ContextSampleState.first_crossing(state, tokens=tokens, warn_tokens=warn_tokens)
         seq = ctx.stores.usage.record_context_sample(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
@@ -762,18 +727,6 @@ class ContextSample(Step):
         return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
 
 
-def _renewal_outcome_value(outcome: RenewalOutcome) -> str | None:
-    """The attempt row's ``renewal`` string for one :class:`RenewalOutcome`: ``None``
-    for :attr:`RenewalOutcomeKind.NOT_DUE` (nothing renewal-worthy happened this
-    attempt), the kind's own value for a success, and ``"failed:<reason>"`` for a
-    failure — the reason travels with it, rather than only "failed"."""
-    if outcome.kind is RenewalOutcomeKind.NOT_DUE:
-        return None
-    if outcome.kind is RenewalOutcomeKind.FAILED and outcome.failure_reason is not None:
-        return f"failed:{outcome.failure_reason.value}"
-    return outcome.kind.value
-
-
 class ExternalUsageSample(Step):
     """Every declared subscription's own rate-limit utilization, each on
     its own per-slug cadence — last in the tick."""
@@ -793,57 +746,32 @@ class ExternalUsageSample(Step):
     def _sample_one(self, resolved: ResolvedSubscription) -> None:
         ctx = self.ctx
         anchor = ctx.stores.usage.last_external_usage_attempt_at(resolved.slug)
-        if anchor is not None:
-            elapsed = ctx.clock.now() - anchor
-            if elapsed < timedelta(seconds=resolved.sample_interval_seconds):
-                return
-        if resolved.sampler is None:
-            # Declared, but its provider names no known sampler binding — stays declared
-            # and unsampled: no attempt row, since there is no sampler to have failed.
+        if not sample_due(anchor, ctx.clock.now(), resolved.sample_interval_seconds):
+            return
+        sampler = resolved.samplable
+        if sampler is None:
             return
         # Renewal, if this provider binds one, runs before the sample on this same cadence
         # gate, never its own; a failed or not-due renewal never stops the sample.
         renewal = self._renewal_value(resolved)
-        # A miss is still an attempt worth recording: this slug's cadence advances, its
-        # last-good windows stay untouched, and the reason feeds the runner-local diagnostics.
-        result = resolved.sampler.sample()
-        if isinstance(result, SampleMiss):
-            missed_at = ctx.clock.now()
-            missed_payload = json.dumps(self._miss_payload(resolved, result, missed_at=missed_at))
-            seq = ctx.stores.usage.record_external_usage_attempt(
-                slug=resolved.slug,
-                sampled_at=missed_at,
-                payload=None,
-                report_kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                report_payload=missed_payload,
-                miss_reason=result.reason.value,
-                renewal=renewal,
-            )
-            if seq is not None and ctx.events is not None:
-                ctx.events.publish_fact_changed(
-                    seq=seq,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                    chunk_id=None,
-                    lease_id=None,
-                )
-            return
-        snapshot = result
-        payload = json.dumps(self._payload(resolved, snapshot))
+        attempt = external_usage_attempt(sampler.sample(), slug=resolved.slug, renewal=renewal, at=ctx.clock.now())
+        if attempt.snapshot is None:
+            assert attempt.miss_reason is not None  # a miss always carries its reason
+            payload = None
+            report_payload = json.dumps(self._miss_payload(resolved, attempt.miss_reason, missed_at=attempt.sampled_at))
+        else:
+            payload = report_payload = json.dumps(self._payload(resolved, attempt.snapshot))
         seq = ctx.stores.usage.record_external_usage_attempt(
-            slug=resolved.slug,
-            sampled_at=ctx.clock.now(),
+            slug=attempt.slug,
+            sampled_at=attempt.sampled_at,
             payload=payload,
-            report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-            report_payload=payload,
-            renewal=renewal,
+            report_kind=attempt.report_kind,
+            report_payload=report_payload,
+            miss_reason=attempt.miss_reason.value if attempt.miss_reason is not None else None,
+            renewal=attempt.renewal,
         )
         if seq is not None and ctx.events is not None:
-            ctx.events.publish_fact_changed(
-                seq=seq,
-                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                chunk_id=None,
-                lease_id=None,
-            )
+            ctx.events.publish_fact_changed(seq=seq, kind=attempt.report_kind, chunk_id=None, lease_id=None)
 
     @staticmethod
     def _renewal_value(resolved: ResolvedSubscription) -> str | None:
@@ -858,10 +786,12 @@ class ExternalUsageSample(Step):
         except Exception as exc:  # second line of defense — the renewer contract already promises this
             _log.warning("credential renewal failed unexpectedly", slug=resolved.slug, detail=str(exc))
             return None
-        return _renewal_outcome_value(outcome)
+        return outcome.recorded_value
 
     @staticmethod
-    def _miss_payload(resolved: ResolvedSubscription, result: SampleMiss, *, missed_at: datetime) -> dict[str, object]:
+    def _miss_payload(
+        resolved: ResolvedSubscription, reason: SampleMissReason, *, missed_at: datetime
+    ) -> dict[str, object]:
         """The stable JSON shape for a sampler miss — exactly ``{slug,
         name, missed_at, reason}``, the reason only: never a token, a refresh token, or a
         path crosses on a miss."""
@@ -869,7 +799,7 @@ class ExternalUsageSample(Step):
             "slug": resolved.slug,
             "name": resolved.name,
             "missed_at": iso_utc(missed_at),
-            "reason": result.reason.value,
+            "reason": reason.value,
         }
 
     @staticmethod

@@ -121,6 +121,22 @@ def test_requeue_a_chunk_that_is_not_needs_human_is_409(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_requeue_a_needs_human_chunk_holding_no_environment_is_409(tmp_path: Path) -> None:
+    """Escalated, but its binding already released: no fresh attempt could spawn here,
+    so the refusal points at the hub requeue instead of a ``202`` that never acts."""
+    app, store = _app_with_requeue(tmp_path)
+    _seed_escalated_chunk(store)
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chunks/ch_1/requeues")
+
+    assert resp.status_code == 409, resp.text
+    assert "requeue it at the hub" in resp.json()["detail"]
+    assert store.pending_requeue_chunk_ids() == set()
+
+
+@pytest.mark.component
 def test_requeue_after_an_ended_takeover_returns_202(tmp_path: Path) -> None:
     """The pasted-command flow: a takeover opened and ended over the escalated chunk."""
     app, store = _app_with_requeue(tmp_path)

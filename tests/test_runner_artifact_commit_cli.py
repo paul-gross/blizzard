@@ -21,8 +21,14 @@ _ENV = {
 
 
 class _FakeResponse:
+    def __init__(self, payload: dict | None = None) -> None:
+        self._payload = payload or {}
+
     def raise_for_status(self) -> None:
         return None
+
+    def json(self) -> dict:
+        return self._payload
 
 
 @pytest.mark.unit

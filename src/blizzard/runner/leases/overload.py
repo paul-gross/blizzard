@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 
@@ -24,6 +24,7 @@ __all__ = [
     "IWriteOverloadRepository",
     "InvocationKind",
     "OverloadExit",
+    "OverloadStreak",
     "backing_off_facts",
     "backoff_delay",
 ]
@@ -38,7 +39,7 @@ BACKOFF_CAP_SECONDS = 15 * 60
 BACKOFF_LIMIT = 5
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OverloadExit:
     """One recorded overload exit on a (lease, epoch) — ``resume_after`` is ``None`` for a
@@ -55,6 +56,74 @@ class OverloadExit:
     streak_ordinal: int
     observed_at: datetime
     resume_after: datetime | None
+
+    @property
+    def backing_off(self) -> bool:
+        """The lease waits out this fact and resumes in place; a fall-through does not."""
+        return self._backing_off()
+
+    def _backing_off(self) -> bool:
+        return self.resume_after is not None
+
+    def due(self, now: datetime) -> bool:
+        """The backoff has run out at ``now``; a fall-through is never due."""
+        return self.resume_after is not None and now >= self.resume_after
+
+    def still_open(self, *, generation: int | None, elicitation_launched_at: datetime | None) -> bool:
+        """This fact still holds its lease back: the invocation it closes against has not moved
+        on. A worker fact holds only while the lease is still at its recorded generation; a judge
+        fact only while the lease's in-flight elicitation keeps the launch it recorded — a
+        relaunch, or no elicitation at all, means the invocation was already acted on."""
+        if self.invocation_kind == "worker":
+            return str(generation or 0) == self.invocation_identity
+        return elicitation_launched_at is not None and iso_utc(elicitation_launched_at) == self.invocation_identity
+
+    def settled(self, standing: OverloadExit | None) -> OverloadExit:
+        """The fact that stands once this one is recorded: an exit already recorded for the same
+        invocation keeps its own ordinal and decision, since re-classifying it writes nothing."""
+        return standing if standing is not None else self
+
+
+@domain_model
+@dataclass(frozen=True)
+class OverloadStreak:
+    """The overload exits recorded on one (lease, epoch) since its latest reset."""
+
+    count: int
+
+    @property
+    def open(self) -> bool:
+        """A streak is open once one overload stands unreset — only then does a clean exit reset it."""
+        return self._open()
+
+    def _open(self) -> bool:
+        return self.count > 0
+
+    def next_fact(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        epoch: int,
+        generation: int,
+        invocation_kind: InvocationKind,
+        invocation_identity: str,
+        at: datetime,
+    ) -> OverloadExit:
+        """The next overload exit in this streak. Short of :data:`BACKOFF_LIMIT` it backs off for
+        its ordinal's :func:`backoff_delay`; at the limit it falls through to the ordinary path."""
+        ordinal = self.count + 1
+        return OverloadExit(
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            epoch=epoch,
+            generation=generation,
+            invocation_kind=invocation_kind,
+            invocation_identity=invocation_identity,
+            streak_ordinal=ordinal,
+            observed_at=at,
+            resume_after=at + backoff_delay(ordinal) if ordinal < BACKOFF_LIMIT else None,
+        )
 
 
 def backoff_delay(streak_ordinal: int) -> timedelta:
@@ -98,11 +167,12 @@ class IWriteOverloadRepository(IReadOverloadRepository, Protocol):
         streak_ordinal: int,
         observed_at: datetime,
         resume_after: datetime | None,
-    ) -> None:
+    ) -> OverloadExit | None:
         """Durably record one overload exit. Insert-if-absent keyed on
         ``(lease_id, epoch, invocation_kind, invocation_identity)`` — re-classifying the
         same exit on a later pass writes nothing, mirroring ``nudge_facts``'s own
-        check-then-insert (``bzh:sql-portable``)."""
+        check-then-insert (``bzh:sql-portable``), and returns the exit already standing
+        for that invocation; ``None`` when this call inserted it."""
         ...
 
     def record_reset(self, *, lease_id: str, epoch: int, at: datetime) -> None:
@@ -125,12 +195,10 @@ def backing_off_facts(
     overload: IReadOverloadRepository, liveness: _IReadLeaseGeneration, elicitations: IReadElicitationRepository
 ) -> dict[str, OverloadExit]:
     """Every active lease currently backing off, keyed by lease id — read once per tick
-    like ``pause_parked_lease_ids``. A candidate closes implicitly: a worker's own
-    generation moving past the recorded one, or a judge's elicitation relaunching under a
-    fresh identity, both mean this invocation was already acted on, with no separate
-    closing write. The per-fact generation and elicitation reads are each collapsed into
-    one bulk read up front, keyed by exactly the ids this open-facts set names
-    (`bzh:bulk-reconstitution`)."""
+    like ``pause_parked_lease_ids``. A candidate closes implicitly
+    (:meth:`OverloadExit.still_open`), with no separate closing write. The per-fact
+    generation and elicitation reads are each collapsed into one bulk read up front, keyed
+    by exactly the ids this open-facts set names (`bzh:bulk-reconstitution`)."""
     facts = overload.open_overload_facts()
     generations = liveness.lease_generations([fact.lease_id for fact in facts if fact.invocation_kind == "worker"])
     elicitations_by_pair = elicitations.in_flight_elicitations(
@@ -138,12 +206,12 @@ def backing_off_facts(
     )
     result: dict[str, OverloadExit] = {}
     for fact in facts:
-        if fact.invocation_kind == "worker":
-            if str(generations.get(fact.lease_id, 0)) != fact.invocation_identity:
-                continue
-        else:
-            elicitation = elicitations_by_pair.get((fact.lease_id, fact.epoch))
-            if elicitation is None or iso_utc(elicitation.first_launched_at) != fact.invocation_identity:
-                continue
-        result[fact.lease_id] = fact
+        elicitation = (
+            elicitations_by_pair.get((fact.lease_id, fact.epoch)) if fact.invocation_kind != "worker" else None
+        )
+        if fact.still_open(
+            generation=generations.get(fact.lease_id),
+            elicitation_launched_at=elicitation.first_launched_at if elicitation is not None else None,
+        ):
+            result[fact.lease_id] = fact
     return result

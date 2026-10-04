@@ -26,13 +26,19 @@ from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFil
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
-    END_TO_END_EDIT_COMMIT,
     RESUME_COMMAND,
     SPAWN_SESSION_ID,
     TRANSCRIPT_READABILITY,
     USAGE_PARSING,
     VERDICT_ELICITATION,
     SelfTestCheck,
+    commit_verdict,
+    judge_verdict,
+    resume_command_verdict,
+    resume_verdict,
+    skipped_after_failed_spawn,
+    spawn_exit_verdict,
+    spawn_identity_verdict,
 )
 from blizzard.runner.selftest.scratch_git import IScratchGit
 from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
@@ -126,19 +132,16 @@ class Spawn:
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
-        # The harness-neutral claim: non-empty and authoritative. Hint-equality is
-        # demanded only where the adapter declares it honors the hint (Claude Code does).
-        if not handle.session_id:
-            detail = "spawn returned an empty session id — never authoritative"
-            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
-        if scratch.adapter.honors_session_hint() and handle.session_id != scratch.session_id:
-            detail = f"expected the pre-assigned session id {scratch.session_id!r}, got {handle.session_id!r}"
-            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
-        if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
-            detail = f"worker pid {handle.pid} did not exit within {_EXIT_TIMEOUT_SECONDS}s (exit-is-done undetected)"
-            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
-        detail = f"spawned pid {handle.pid} honoring session id {handle.session_id!r}; exit-is-done detected"
-        return cls(SelfTestCheck(SPAWN_SESSION_ID, True, detail), handle)
+        refusal = spawn_identity_verdict(
+            handle.session_id, scratch.session_id, honors_hint=scratch.adapter.honors_session_hint()
+        )
+        if refusal is not None:
+            return cls(refusal, handle)
+        exited = Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time)
+        verdict = spawn_exit_verdict(
+            handle.pid, handle.session_id, exited=exited, exit_timeout_seconds=_EXIT_TIMEOUT_SECONDS
+        )
+        return cls(verdict, handle)
 
     @staticmethod
     def _preamble(workdir: str) -> WorkerPreamble:
@@ -174,11 +177,7 @@ class Spawn:
 
 class Commit(Check):
     def run(self) -> SelfTestCheck:
-        count = self.scratch.scratch_git.commit_count(self.scratch.workdir)
-        if count < 2:  # the baseline commit plus the worker's own edit
-            detail = f"only {count} commit(s) in the scratch repo — no edit landed"
-            return SelfTestCheck(END_TO_END_EDIT_COMMIT, False, detail)
-        return SelfTestCheck(END_TO_END_EDIT_COMMIT, True, f"{count - 1} new commit(s) landed in the scratch repo")
+        return commit_verdict(self.scratch.scratch_git.commit_count(self.scratch.workdir))
 
 
 class Judge(Check):
@@ -192,13 +191,9 @@ class Judge(Check):
         handle.confirm_durable()  # no durable record here to threaten — disarm now
         # The detached launch/collect shape: the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
-        if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
-            return SelfTestCheck(VERDICT_ELICITATION, False, "judgement process never exited")
-        output = ElicitationFiles(root="").read(output_path)
-        choice = scratch.adapter.parse_verdict(output)
-        if choice is None:
-            return SelfTestCheck(VERDICT_ELICITATION, False, "judgement resume produced no parseable <Choice>")
-        return SelfTestCheck(VERDICT_ELICITATION, True, f"parsed verdict {choice!r}")
+        exited = Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time)
+        choice = scratch.adapter.parse_verdict(ElicitationFiles(root="").read(output_path)) if exited else None
+        return judge_verdict(exited=exited, choice=choice)
 
 
 class Resume(Check):
@@ -213,10 +208,9 @@ class Resume(Check):
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
         resumed.confirm_durable()  # no durable record here to threaten — disarm now
-        if resumed.pid <= 0:
-            return SelfTestCheck(
-                AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
-            )
+        verdict = resume_verdict(resumed.pid, scratch.session_id)
+        if not verdict.passed:
+            return verdict
         worker = Worker(scratch.process, resumed.pid)
         # Bounded wait first, so a fast-finishing resume actually flushes its own output —
         # `UsageParsing` reads this same file, and reaping (killing) immediately here left
@@ -226,7 +220,7 @@ class Resume(Check):
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
         worker.reap()
-        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {resumed.pid}")
+        return verdict
 
 
 class ResumeCommand(Check):
@@ -236,9 +230,7 @@ class ResumeCommand(Check):
             command = scratch.adapter.resume_command(scratch.workdir, scratch.session_id)
         except Exception as exc:
             return SelfTestCheck(RESUME_COMMAND, False, f"resume_command raised: {exc}")
-        if not command or scratch.session_id not in command or scratch.workdir not in command:
-            return SelfTestCheck(RESUME_COMMAND, False, f"resume command missing session/workdir: {command!r}")
-        return SelfTestCheck(RESUME_COMMAND, True, command)
+        return resume_command_verdict(command, scratch.session_id, scratch.workdir)
 
 
 class UsageParsing(Check):
@@ -305,14 +297,7 @@ class SelfTest:
             spawn = Spawn.of(scratch)
             checks = [spawn.result]
             if spawn.handle is None:
-                skipped = "skipped — the spawn/session-id check failed first"
-                checks.append(SelfTestCheck(END_TO_END_EDIT_COMMIT, False, skipped))
-                checks.append(SelfTestCheck(VERDICT_ELICITATION, False, skipped))
-                checks.append(SelfTestCheck(AUTOMATED_RESUME, False, skipped))
-                checks.append(SelfTestCheck(RESUME_COMMAND, False, skipped))
-                checks.append(SelfTestCheck(USAGE_PARSING, False, skipped))
-                checks.append(SelfTestCheck(TRANSCRIPT_READABILITY, False, skipped))
-                return checks
+                return checks + skipped_after_failed_spawn()
 
             # The id the adapter actually returned, which a failed gate check may leave
             # differing from the pre-assigned one.
