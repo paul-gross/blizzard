@@ -1,4 +1,4 @@
-"""``bzh:live-set-read`` — a newest-fact read costs rows in the number of keys, not in each
+"""``bzh:newest-per-key-read`` — a newest-fact read costs rows in the number of keys, not in each
 key's fact history (component tier).
 
 Each read answers the same key set at two history depths: the answer is the newest fact and
