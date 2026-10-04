@@ -372,6 +372,8 @@ class TranscriptCapsConfig:
 EGRESS_FORMATS = ("ndjson", "parquet")
 #: The datasets an export can carry, in the order a pass writes them.
 EGRESS_DATASETS = ("steps", "invocations")
+#: What leaves as a ``file_read`` event's subject.
+EGRESS_FILE_PATHS = ("relative", "hashed", "absolute", "omit")
 
 
 @dataclass(frozen=True)
@@ -390,6 +392,10 @@ class EgressConfig:
     min_free_bytes: int = 1024**3
     #: The widest window a backfill may write, in seconds.
     backfill_max_window: int = 604800
+    #: How a ``file_read`` event's path leaves: relative to the working directory, keyed-hashed, as stored, or omitted.
+    file_paths: Literal["relative", "hashed", "absolute", "omit"] = "relative"
+    #: The environment variable holding the HMAC key for hashed paths; the config never holds the secret itself.
+    path_key_env: str = "BZ_EGRESS_PATH_KEY"
 
     @classmethod
     def of(cls, raw_egress: object) -> EgressConfig:
@@ -408,6 +414,8 @@ class EgressConfig:
             backfill_max_window=cls._integer(
                 raw_egress, "backfill_max_window", defaults.backfill_max_window, minimum=1
             ),
+            file_paths=cls._file_paths(raw_egress, defaults.file_paths),
+            path_key_env=cls._path_key_env(raw_egress, defaults.path_key_env),
         )
 
     @staticmethod
@@ -427,6 +435,28 @@ class EgressConfig:
         if value == "parquet":
             return "parquet"
         raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
+
+    @staticmethod
+    def _file_paths(
+        raw: Mapping[str, object], default: Literal["relative", "hashed", "absolute", "omit"]
+    ) -> Literal["relative", "hashed", "absolute", "omit"]:
+        value = raw.get("file_paths", default)
+        if value == "relative":
+            return "relative"
+        if value == "hashed":
+            return "hashed"
+        if value == "absolute":
+            return "absolute"
+        if value == "omit":
+            return "omit"
+        raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
+
+    @staticmethod
+    def _path_key_env(raw: Mapping[str, object], default: str) -> str:
+        value = raw.get("path_key_env", default)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"egress.path_key_env must be a non-empty environment variable name, got {value!r}")
+        return value
 
     @staticmethod
     def _datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
@@ -456,7 +486,9 @@ class EgressConfig:
             "\n# Fact egress: write closed steps and usage as immutable files an analytics tool can load.\n"
             "# Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
             "# blizzard[egress] extra); datasets draws from steps and invocations. Seconds, except\n"
-            "# batch_limit and max_rows_per_file (rows) and min_free_bytes. Uncomment to override.\n",
+            "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n"
+            "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n"
+            "# environment variable holding the key for hashed paths. Uncomment to override.\n",
             "[egress]\n",
             '# directory = "/var/lib/blizzard/egress"\n'
             if self.directory is None
@@ -478,6 +510,8 @@ _EGRESS_KEYS = (
     "max_rows_per_file",
     "min_free_bytes",
     "backfill_max_window",
+    "file_paths",
+    "path_key_env",
 )
 
 

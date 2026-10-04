@@ -70,6 +70,17 @@ class DerivationMarker:
 
 
 @dataclass(frozen=True)
+class DropFact:
+    """One segment's drop: the moment its events stopped counting, with the segment's own position."""
+
+    segment_id: str
+    chunk_id: str
+    epoch: int
+    spawn_generation: int
+    dropped_at: datetime
+
+
+@dataclass(frozen=True)
 class CandidacyRead:
     """One candidacy pass's whole visibility evaluation: the visible
     segment set, and which of those segments' stored digests disagree with their current-

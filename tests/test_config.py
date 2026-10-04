@@ -2159,8 +2159,19 @@ def test_egress_scaffold_leaves_the_switch_off_and_every_other_knob_commented_at
     text = HubConfig.scaffold(root).to_toml()
     assert "[egress]\n" in text
     assert '# directory = "' in text
-    for key in ("format", "datasets", "sweep_seconds", "settle_seconds", "batch_limit", "max_rows_per_file"):
+    for key in (
+        "format",
+        "datasets",
+        "sweep_seconds",
+        "settle_seconds",
+        "batch_limit",
+        "max_rows_per_file",
+        "file_paths",
+        "path_key_env",
+    ):
         assert f"# {key} = " in text
+    assert '# file_paths = "relative"\n' in text
+    assert '# path_key_env = "BZ_EGRESS_PATH_KEY"\n' in text
     (root / "blizzard-hub.toml").write_text(text)
     assert HubConfig.load(root).egress == EgressConfig()
 
@@ -2198,6 +2209,22 @@ def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_w
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("mode", ["relative", "hashed", "absolute", "omit"])
+def test_egress_file_paths_and_key_variable_parse_and_round_trip(tmp_path: Path, mode: str) -> None:
+    root = _hub_egress_root(tmp_path, f'\n[egress]\nfile_paths = "{mode}"\npath_key_env = "MY_KEY"\n')
+    egress = HubConfig.load(root).egress
+    assert (egress.file_paths, egress.path_key_env) == (mode, "MY_KEY")
+    (root / "blizzard-hub.toml").write_text(dataclasses.replace(HubConfig.scaffold(root), egress=egress).to_toml())
+    assert HubConfig.load(root).egress == egress
+
+
+@pytest.mark.unit
+def test_egress_file_paths_default_to_relative_with_the_conventional_key_variable() -> None:
+    egress = EgressConfig()
+    assert (egress.file_paths, egress.path_key_env) == ("relative", "BZ_EGRESS_PATH_KEY")
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -2215,6 +2242,10 @@ def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_w
         ("backfill_max_window", "0"),
         ("batch_limit", "true"),
         ("sweep_seconds", "1.5"),
+        ("file_paths", '"bogus"'),
+        ("file_paths", "3"),
+        ("path_key_env", '""'),
+        ("path_key_env", "3"),
     ],
 )
 def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> None:
