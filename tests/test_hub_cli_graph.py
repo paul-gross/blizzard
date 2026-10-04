@@ -454,3 +454,27 @@ def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed(monkeypatch: pyt
     assert "default: minted gr_a" in result.output
     assert "broken: failed — entry node not found" in result.output
     assert "failed to reconcile" in result.output
+
+
+@pytest.mark.unit
+def test_graph_mint_refuses_an_unknown_extension_naming_the_accepted_ones(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.txt"
+    graph_path.write_text("name: tiny\n")
+
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
+
+    assert result.exit_code != 0
+    for extension in (".yaml", ".yml", ".json"):
+        assert extension in result.output
+
+
+@pytest.mark.unit
+def test_graph_mint_renders_a_decode_error_naming_the_key_and_line(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.yaml"
+    graph_path.write_text("name: a\nname: b\n")
+
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert "duplicate key 'name'" in result.output
+    assert "line 2" in result.output

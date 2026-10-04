@@ -1,7 +1,7 @@
 """Reconcile the packaged graph set against the store — ``blizzard hub graph sync`` (#146).
 
 The edge half: walk the packaged set, load and inline each ``graph.yaml`` (filesystem and
-PyYAML, both outside the domain — ``bzh:domain-core``), and hand it with the stored definition
+the config codec, both outside the domain — ``bzh:domain-core``), and hand it with the stored definition
 to the domain, which owns the mint-only-if-changed rule. Per-graph isolated — one graph
 failing to load is a report row, not a stop — and additive: nothing re-pins a chunk."""
 
@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-import yaml
-
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
 from blizzard.hub.domain.graph import GraphDoc, GraphParseError, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService, GraphValidationError
 from blizzard.hub.graphs import PACKAGED, GraphFile
@@ -66,7 +65,7 @@ class GraphReconciliation:
             packaged = GraphFile(path)
             doc = packaged.doc
             definition_yaml = packaged.inlined_yaml
-        except (OSError, ValueError, yaml.YAMLError) as exc:
+        except (OSError, ValueError) as exc:
             # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
             _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
             return GraphSyncOutcome(name=path.parent.name, status=GraphSyncStatus.FAILED, detail=str(exc))
@@ -95,8 +94,7 @@ class GraphReconciliation:
         if stored is None:
             return None
         try:
-            raw = yaml.safe_load(stored)
-            return GraphDoc.of(raw) if isinstance(raw, dict) else None
-        except (yaml.YAMLError, GraphParseError):
+            return GraphDoc.of(YAML_CODEC.decode(stored.encode("utf-8")))
+        except (ConfigDecodeError, GraphParseError):
             _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
             return None

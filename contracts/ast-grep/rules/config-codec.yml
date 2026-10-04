@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:config-codec
+language: Python
+severity: error
+message: >-
+  PyYAML is imported only by the strict YAML binding of the config codec. Decode and encode a document
+  through blizzard.hub.documents.codec instead.
+files:
+  - src/blizzard/**
+ignores:
+  - src/blizzard/hub/documents/internal/**
+rule:
+  any:
+    - pattern: import yaml
+    - pattern: import yaml as $ALIAS
+    - pattern: from yaml import $$$NAMES
+    - pattern: from yaml.$$$SUB import $$$NAMES

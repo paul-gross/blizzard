@@ -1,0 +1,30 @@
+id: bzh:config-codec
+snapshots:
+  ? |
+    from yaml import safe_load
+  : labels:
+    - source: from yaml import safe_load
+      style: primary
+      start: 0
+      end: 26
+  ? |
+    from yaml.constructor import ConstructorError
+  : labels:
+    - source: from yaml.constructor import ConstructorError
+      style: primary
+      start: 0
+      end: 45
+  ? |
+    import yaml
+  : labels:
+    - source: import yaml
+      style: primary
+      start: 0
+      end: 11
+  ? |
+    import yaml as pyyaml
+  : labels:
+    - source: import yaml as pyyaml
+      style: primary
+      start: 0
+      end: 21

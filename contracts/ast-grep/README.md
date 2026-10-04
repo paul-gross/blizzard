@@ -25,6 +25,12 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/claim.py`), reasoned at the site with
     `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
+- **`bzh:config-codec`** (`rules/config-codec.yml`) — PyYAML is imported only by the strict YAML binding of the config
+  codec. The rule's own prose home is `blizzard-context:/architecture/system-shape/configuration.md`; this file states
+  none of that prose, only what the rule mechanically checks.
+  - Scoped to `src/blizzard/**`, except `src/blizzard/hub/documents/internal/**`.
+  - Matches `import yaml`, `import yaml as …`, `from yaml import …`, and `from yaml.<module> import …`.
+
 - **`bzh:property-delegates`** (`rules/property-delegates.yml`) — a property body only delegates. The rule's own prose
   home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
   none of that prose, only what the rule mechanically checks.

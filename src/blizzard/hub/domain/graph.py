@@ -444,7 +444,7 @@ class GraphDoc:
 
     @classmethod
     def of(cls, raw: dict[str, object]) -> GraphDoc:
-        """Parse a plain ``dict`` (from ``yaml.safe_load``) into a whole doc."""
+        """Parse a plain ``dict`` (a decoded config document) into a whole doc."""
         try:
             name = str(raw["name"])
             entry = str(raw["entry"])

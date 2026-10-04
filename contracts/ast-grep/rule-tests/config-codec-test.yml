@@ -1,0 +1,19 @@
+id: bzh:config-codec
+valid:
+  # Decoding through the seam.
+  - |
+    from blizzard.hub.documents.codec import YAML_CODEC
+
+    mapping = YAML_CODEC.decode(data)
+  # A module merely named like the library.
+  - |
+    from blizzard.hub import yaml_view
+invalid:
+  - |
+    import yaml
+  - |
+    import yaml as pyyaml
+  - |
+    from yaml import safe_load
+  - |
+    from yaml.constructor import ConstructorError
