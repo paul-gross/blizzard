@@ -18,6 +18,7 @@ from blizzard.hub.domain.analytics.events import DerivationMarker, DropFact, Seg
 from blizzard.hub.domain.egress.assembly import runner_step
 from blizzard.hub.domain.egress.rows import trace_id_text
 from blizzard.hub.domain.tracing.facts import StepFacts
+from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.egress.writer import rfc3339_utc
 
 __all__ = [
@@ -151,7 +152,7 @@ def _anchored(
     ``exported_at``."""
     if chunk_id != facts.chunk_id:
         raise ValueError(f"segment {segment_id} belongs to {chunk_id}, not {facts.chunk_id}")
-    step = runner_step(facts, epoch)
+    step = runner_step(identify_steps(facts), epoch)
     if step is None:
         raise LookupError(f"segment {segment_id} has no runner step at epoch {epoch} of {facts.chunk_id}")
     return EventsRow(
