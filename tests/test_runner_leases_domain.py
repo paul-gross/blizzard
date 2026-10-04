@@ -14,7 +14,8 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.domain.leases import (
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import (
     HEARTBEAT_STALENESS_THRESHOLD,
     RECENT_LEASE_LIMIT,
     ClosedLeaseActivity,
@@ -24,7 +25,6 @@ from blizzard.runner.domain.leases import (
     LocalLeaseService,
     NewLease,
 )
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, runner_store_errors

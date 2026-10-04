@@ -1,7 +1,7 @@
 """The write-protocol census — every write-only member
 :class:`~blizzard.runner.stores.IWriteRunnerStore` requires, whether declared on
 its own class body or on a concept Protocol it inherits (e.g.
-:class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository`), mapped to
+:class:`~blizzard.runner.leases.IWriteLeaseRecordRepository`), mapped to
 either the event kind its mutation publishes (:class:`Published`) or a stated reason it
 publishes nothing (:class:`Silent`). Exhaustiveness is carried by
 ``tests/test_runner_write_protocol_census.py``, this module's only reader — which is also
@@ -70,13 +70,13 @@ _RETENTION_PRUNE = (
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- lease lifecycle ---------------------------------------------------
     "record_graph_artifacts": Silent(
-        "Spawner._mint (runner/loop/spawn.py) — the pinned mint's graph-scoped declarations, "
+        "Spawner._mint (runner/lifecycle/spawn.py) — the pinned mint's graph-scoped declarations, "
         "read only by the worker's own scoped artifact verb; no panel-facing kind represents it."
     ),
-    "record_lease": Published(LEASE_CHANGED, "Spawner._mint (runner/loop/spawn.py) — cause='created'"),
+    "record_lease": Published(LEASE_CHANGED, "Spawner._mint (runner/lifecycle/spawn.py) — cause='created'"),
     "record_spawn": Published(
         LEASE_CHANGED,
-        "Spawner.spawn (runner/loop/spawn.py) and DormantSession._wake (runner/loop/dormant.py) "
+        "Spawner.spawn (runner/lifecycle/spawn.py) and DormantSession._wake (runner/lifecycle/dormant.py) "
         "— cause='spawned', once the pid is durable; the 'created' mint alone leaves the "
         "spawning->running flip unannounced, since the lease is already visible but not yet live.",
     ),
@@ -88,7 +88,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_identified_spawn": Published(
         LEASE_CHANGED,
-        "Spawner.spawn (runner/loop/spawn.py) — cause='spawned', once a two-phase spawn's "
+        "Spawner.spawn (runner/lifecycle/spawn.py) — cause='spawned', once a two-phase spawn's "
         "authoritative session id is durable; the phase-two counterpart of record_spawn's own "
         "publish, for the fresh-mint path that splits launch from identity (D1/D2).",
     ),
@@ -99,7 +99,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_closure": Published(
         LEASE_CHANGED,
-        "Attempt.close (runner/loop/attempt.py) — cause=the closure reason itself, which IS "
+        "Attempt.close (runner/lifecycle/attempt.py) — cause=the closure reason itself, which IS "
         "the LeaseChangeCause vocabulary (transitioned/reaped/failed/escalated/parked/released); "
         "reason='escalated' additionally publishes escalation-changed(opened) at the same site. "
         "When `close()` is given an operational `event` (a retry or an exhausted-retries "
@@ -135,7 +135,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_overload": Published(
         LEASE_CHANGED,
-        "loop/overload.py's _record (blizzard#595) — cause='dormant', the same LeaseActivity.state "
+        "throttle/overload.py's _record (blizzard#595) — cause='dormant', the same LeaseActivity.state "
         "flip record_park/record_pause_park already publish, reached on the streak entering a "
         "backoff wait. Silent on a fall-through: the streak limit is reached, not a new dormancy.",
     ),
@@ -148,7 +148,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_ask": Published(ASK_CHANGED, "POST /api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'"),
     "record_park": Published(
         LEASE_CHANGED,
-        "DormantSession.park_on_ask (runner/loop/dormant.py) — cause='dormant'. The ask itself "
+        "DormantSession.park_on_ask (runner/lifecycle/dormant.py) — cause='dormant'. The ask itself "
         "is already visible from record_ask's own 'asked' frame, but this write separately flips "
         "LeaseActivity.state (domain/leases.py) to 'parked' via parked_lease_ids(), which GET "
         "/api/leases renders as the row's headline label — a real leases-rail transition, "
@@ -156,16 +156,16 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_park_resume": Published(
         ASK_CHANGED,
-        "DormantSession.on_answer (runner/loop/dormant.py) — cause='answered', the answer that "
+        "DormantSession.on_answer (runner/lifecycle/dormant.py) — cause='answered', the answer that "
         "actually resumed the session. The same method is also called from Attempt.abandon "
-        "(runner/loop/attempt.py) to retire a stranded park with no answer — silent there, since "
+        "(runner/lifecycle/attempt.py) to retire a stranded park with no answer — silent there, since "
         "the ask was not answered and that lease's own lease-changed(released) frame already "
         "prompts a re-read.",
     ),
     # --- operator pause (local + hub-mirrored) --------------------------------
     "record_pause_park": Published(
         LEASE_CHANGED,
-        "Attempt.park_paused (runner/loop/attempt.py) — cause='dormant', the same "
+        "Attempt.park_paused (runner/lifecycle/attempt.py) — cause='dormant', the same "
         "LeaseActivity.state flip record_park causes above, reached via the operator-pause path "
         "instead of an ask. The hub-sourced pause fact D7 already covers is a different render "
         "(the chunk-detail pause banner) — this frame is for the leases-rail state, which that "
@@ -202,35 +202,37 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "Spawner's own lease-changed(created) frame announces."
     ),
     # --- takeovers ---------------------------------------------------------------
-    "record_takeover": Published(TAKEOVER_CHANGED, "TakeoverService.open (runner/domain/takeover.py) — cause='opened'"),
+    "record_takeover": Published(
+        TAKEOVER_CHANGED, "TakeoverService.open (runner/lifecycle/takeover.py) — cause='opened'"
+    ),
     "record_takeover_end": Published(
         TAKEOVER_CHANGED,
-        "TakeoverService.close (runner/domain/takeover.py) and Pull._reconcile_takeovers "
+        "TakeoverService.close (runner/lifecycle/takeover.py) and Pull._reconcile_takeovers "
         "(runner/loop/steps.py) — both cause='closed', the CLI's own end and the hub-terminal "
         "supersession.",
     ),
     # --- environments --------------------------------------------------------------
-    "record_binding": Published(ENVIRONMENT_CHANGED, "ReadyQueue._bind (runner/loop/claim.py) — cause='bound'"),
+    "record_binding": Published(ENVIRONMENT_CHANGED, "ReadyQueue._bind (runner/lifecycle/claim.py) — cause='bound'"),
     "record_release": Published(
         ENVIRONMENT_CHANGED,
-        "EnvironmentRelease.release_chunk/release_binding (runner/loop/env_release.py) — cause='released'",
+        "EnvironmentRelease.release_chunk/release_binding (runner/lifecycle/env_release.py) — cause='released'",
     ),
     # --- outbound facts --------------------------------------------------------------
     "enqueue_outbound": Published(
         FACT_CHANGED,
-        "OutboundFacts._enqueue (runner/loop/outbound.py), and TakeoverService.open's own fence-"
-        "bump enqueue (runner/domain/takeover.py) — every hub-bound fact enqueued.",
+        "OutboundFacts._enqueue (runner/hub/outbound.py), and TakeoverService.open's own fence-"
+        "bump enqueue (runner/lifecycle/takeover.py) — every hub-bound fact enqueued.",
     ),
     "ack_outbound": Published(
         FACT_CHANGED,
-        "OutboundDrain._ack (runner/loop/drain.py) — the same seq re-announced. "
+        "OutboundDrain._ack (runner/lifecycle/drain.py) — the same seq re-announced. "
         "FactChangedPayload carries no acked state itself (D6), but the fact log's own ✓/· "
         "flush marker reads `acked_at` off the row this re-read fetches, so leaving this "
         "silent stales that marker until the next backstop poll.",
     ),
     "ack_outbound_batch": Published(
         FACT_CHANGED,
-        "OutboundDrain._ack_run (runner/loop/drain.py) — every seq in one delivered generic-"
+        "OutboundDrain._ack_run (runner/lifecycle/drain.py) — every seq in one delivered generic-"
         "kind run, re-announced the same as `ack_outbound`'s own single-seq case (issue #522).",
     ),
     # --- liveness/usage/context — the elapsed-time-derived samplers ------------
@@ -241,7 +243,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "prune_external_usage_samples": Silent(_RETENTION_PRUNE),
     "record_usage": Published(
         FACT_CHANGED,
-        "UsageRecorder.record_sample (runner/loop/usage.py) — kind='usage.recorded'. D7 names the "
+        "UsageRecorder.record_sample (runner/usage/recorder.py) — kind='usage.recorded'. D7 names the "
         "usage *sampler's own elapsed-time readout* as backstop-bounded, but this write also always "
         "buffers a fact-log row (except on an exact-replay idempotent no-op, which enqueues nothing "
         "to announce) — a different render this frame covers (blizzard#317 review round 4, F1 — was "
@@ -283,10 +285,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     # --- the lease trace sweep ---------------------------------------------------------
     "append_trace_cursor": Silent(
-        _INTERNAL_BOOKKEEPING + " (LeaseTraceSweep.sweep, runner/domain/tracing/sweep.py — the export cursor)"
+        _INTERNAL_BOOKKEEPING + " (LeaseTraceSweep.sweep, runner/tracing/sweep.py — the export cursor)"
     ),
     "record_trace_latch": Silent(
-        "LeaseTraceSweep._latch (runner/domain/tracing/sweep.py) runs off the loop with no event broker; "
+        "LeaseTraceSweep._latch (runner/tracing/sweep.py) runs off the loop with no event broker; "
         "the report row it buffers reaches the local fact log's poll backstop and the hub's event log, "
         "never a live frame."
     ),

@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.checks import CheckOutcome
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (

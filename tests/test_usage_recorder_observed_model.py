@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -22,8 +21,9 @@ from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPric
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeProbe, FakeTranscriptSource, make_store

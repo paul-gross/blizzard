@@ -18,8 +18,18 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
-from blizzard.runner.domain.takeover import (
+from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.lifecycle.session import SessionResolver
+from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.lifecycle.takeover import (
     ChunkNotTakeable,
     LiveWorkerConflict,
     SubmissionPending,
@@ -28,16 +38,6 @@ from blizzard.runner.domain.takeover import (
     TakeoverOpenScope,
     TakeoverService,
 )
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.session import SessionResolver
-from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import LEASE_MINTED

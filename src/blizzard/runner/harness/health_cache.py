@@ -1,7 +1,7 @@
 """The runner's harness-health cache and the read-only seam its consumers depend on.
 
 Composition-root-owned and as long-lived as the runner process: the loop refreshes it, the
-local API and :class:`~blizzard.runner.loop.session.HarnessSelector` only read it through
+local API and :class:`~blizzard.runner.lifecycle.session.HarnessSelector` only read it through
 :class:`IReadHarnessHealth`."""
 
 from __future__ import annotations
@@ -13,11 +13,11 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import classify_offline
 from blizzard.runner.harness.admission import version_admitted as harness_version_admitted
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
+from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 
 _log = get_logger("blizzard.runner.harness.health_cache")
 
@@ -137,7 +137,7 @@ class HarnessHealthCache:
 
     def get(self, harness_id: str) -> HarnessHealthResult | None:
         """The last-computed result, or ``None`` when :meth:`refresh` has never run for
-        this harness — :class:`~blizzard.runner.loop.session.HarnessSelector`'s own read,
+        this harness — :class:`~blizzard.runner.lifecycle.session.HarnessSelector`'s own read,
         which must never itself trigger a probe mid-selection."""
         return self._results.get(harness_id)
 

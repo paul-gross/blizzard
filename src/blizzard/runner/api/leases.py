@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.leases import ClosedLeaseActivity, LeaseActivity
+from blizzard.runner.leases import ClosedLeaseActivity, LeaseActivity
 from blizzard.wire.lease import LeaseListResponse, LeaseView
 
 router = APIRouter(prefix="/api", tags=["runner"])

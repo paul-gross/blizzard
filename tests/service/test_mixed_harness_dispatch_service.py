@@ -20,7 +20,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.observability.analytics.extraction import extract_events
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Fill, Pull
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, transcript_segments, usage_facts

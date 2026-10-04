@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import and_, func, select
 
-from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactEntry
+from blizzard.runner.hub.outbound_buffer import BufferedFact, IWriteOutboundRepository, OutboundFactEntry
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
 

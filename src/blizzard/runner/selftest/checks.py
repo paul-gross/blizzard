@@ -22,7 +22,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
-from blizzard.runner.loop.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,

@@ -9,7 +9,7 @@ from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.domain.elicitation import IWriteElicitationRepository, PendingElicitation
+from blizzard.runner.leases.elicitation import IWriteElicitationRepository, PendingElicitation
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import in_flight_elicitations
 

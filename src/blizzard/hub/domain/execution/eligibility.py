@@ -66,7 +66,7 @@ class EligibilityCheck:
 
     def _lineage_satisfied(self, node: Node) -> bool:
         """Whether some reported capability could serve ``node``'s effective session,
-        mirroring :class:`~blizzard.runner.loop.session.HarnessSelector`'s gate against a
+        mirroring :class:`~blizzard.runner.lifecycle.session.HarnessSelector`'s gate against a
         static snapshot rather than a live adapter."""
         session = EffectiveSession.of(self.chunk, self.graph, node)
         available = self._available_capabilities

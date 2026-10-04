@@ -13,13 +13,13 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.transcript import TranscriptPosition
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse

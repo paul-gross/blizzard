@@ -11,6 +11,7 @@ import pytest
 from blizzard.runner.app import create_app_for_export
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -27,7 +28,6 @@ from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
-from blizzard.runner.loop.capability_snapshot import capability_snapshot, default_harness_id
 from blizzard.runner.process.probe import LinuxProcessProbe
 from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource

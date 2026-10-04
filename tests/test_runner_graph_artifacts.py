@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.runner.domain.artifacts import PinnedGraphArtifact
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
 from blizzard.wire.envelope import GraphArtifact
 from blizzard.wire.queue import QueuePeekEntry

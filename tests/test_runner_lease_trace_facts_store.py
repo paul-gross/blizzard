@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.domain.checks import ExecutedCheck
-from blizzard.runner.domain.leases import NewLease, WorkRefStamp
-from blizzard.runner.domain.tracing.assembly import assemble_lease
-from blizzard.runner.domain.tracing.facts import (
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.leases import NewLease, WorkRefStamp
+from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
+from blizzard.runner.tracing.assembly import assemble_lease
+from blizzard.runner.tracing.facts import (
     CheckResultFact,
     ChecksRanFact,
     ContextSampleFact,
@@ -24,11 +28,7 @@ from blizzard.runner.domain.tracing.facts import (
     TakeoverEndFact,
     TakeoverFact,
 )
-from blizzard.runner.domain.usage import InvocationCost
-from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
+from blizzard.runner.usage.repository import InvocationCost
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 from tests.support import count_queries

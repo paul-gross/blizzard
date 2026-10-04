@@ -24,7 +24,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO_NAME,

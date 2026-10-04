@@ -13,8 +13,8 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.subscriptions import _subscription_list
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.lifecycle.usage_limit import _fallback_reset
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.usage_limit import _fallback_reset
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
 from tests.support import count_queries

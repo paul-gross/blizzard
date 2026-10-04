@@ -20,11 +20,11 @@ from blizzard.runner.api.dashboard import _DASHBOARD_HUB_TIMEOUT
 from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases import NewLease
+from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import FakeHarness, FakeHarnessHealth, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)

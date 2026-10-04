@@ -19,7 +19,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.leases import NewLease
 from tests import claude_code_telemetry
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink

@@ -1,5 +1,5 @@
 """A one-shot, argv-based subprocess seam — distinct from
-:class:`~blizzard.runner.loop.checks.ICheckRunner` (an authored shell string, no stdin) and
+:class:`~blizzard.runner.lifecycle.judgement.check_runner.ICheckRunner` (an authored shell string, no stdin) and
 :class:`~blizzard.runner.harness.process_launch.ProcessLauncher` (a long-lived worker child
 with its own process group and parent-death signal). A credential renewer drives a vendor CLI
 that reads its request off stdin and exits on EOF — argv, stdin, and a bounded timeout are the

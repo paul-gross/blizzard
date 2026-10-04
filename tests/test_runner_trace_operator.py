@@ -18,11 +18,11 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import create_app
 from blizzard.runner.cli.traces import harness_telemetry_lines, traces_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.domain.tracing.receiver_limits import ReceiverCount, ReceiverCounter
-from blizzard.runner.domain.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
-from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
-from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.tracing.receiver_limits import ReceiverCount, ReceiverCounter
+from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
+from blizzard.runner.tracing.status import LeaseTraceStatusReader
+from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease

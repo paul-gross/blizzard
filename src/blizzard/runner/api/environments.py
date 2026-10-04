@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import EnvironmentListResponse, EnvironmentView
 
 router = APIRouter(prefix="/api", tags=["runner"])

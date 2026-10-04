@@ -65,10 +65,10 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedRouteRelease,
 )
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
-from blizzard.runner.domain.tracing import attributes as runner_attr
-from blizzard.runner.domain.tracing import platform as runner_platform
-from blizzard.runner.domain.tracing.assembly import assemble_lease
-from blizzard.runner.domain.tracing.facts import LeaseTraceFacts
+from blizzard.runner.tracing import attributes as runner_attr
+from blizzard.runner.tracing import platform as runner_platform
+from blizzard.runner.tracing.assembly import assemble_lease
+from blizzard.runner.tracing.facts import LeaseTraceFacts
 from tests import runner_trace_fixtures as rfx
 from tests import trace_fixtures as fx
 from tests.repo_files import repo_root

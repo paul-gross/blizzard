@@ -14,10 +14,10 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.produces import ProducesReconciler
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.graph import ProducesEntry

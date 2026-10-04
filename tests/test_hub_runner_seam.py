@@ -12,19 +12,19 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.lifecycle.env_release import EnvironmentRelease
+from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.session import HarnessSelector
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.loop.elicitation_files import ElicitationFiles
-from blizzard.runner.loop.env_release import EnvironmentRelease
-from blizzard.runner.loop.internal.http_hub import HttpHubClient
-from blizzard.runner.loop.session import HarnessSelector
 from blizzard.runner.loop.steps import Pull
-from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from tests.runner_fakes import (
     FakeHarness,
     FakeProbe,

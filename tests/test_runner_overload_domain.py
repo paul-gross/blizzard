@@ -15,21 +15,21 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.elicitation import PendingElicitation
-from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.overload import (
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases import Lease
+from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.overload import (
     BACKOFF_CAP_SECONDS,
     BACKOFF_LIMIT,
     OverloadExit,
     backing_off_facts,
     backoff_delay,
 )
-from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.overload import ProviderOverload
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.overload import classify_judge_overload, classify_worker_overload
+from blizzard.runner.throttle.overload import classify_judge_overload, classify_worker_overload
 from tests.runner_fakes import FakeHarness
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)

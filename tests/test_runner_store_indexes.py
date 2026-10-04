@@ -19,8 +19,8 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse

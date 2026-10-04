@@ -9,10 +9,10 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.outbound import COMPLETION_KIND
+from blizzard.runner.hub.outbound import COMPLETION_KIND
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, PauseView

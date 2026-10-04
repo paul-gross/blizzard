@@ -343,7 +343,7 @@ class SubscriptionDeclaration:
 @dataclass(frozen=True)
 class Queue:
     """The ``[queue]`` table — this runner's selection policy over the peeked
-    ready queue, applied at :class:`~blizzard.runner.loop.claim.ReadyQueue`'s peek seam."""
+    ready queue, applied at :class:`~blizzard.runner.lifecycle.claim.ReadyQueue`'s peek seam."""
 
     table: Table
 

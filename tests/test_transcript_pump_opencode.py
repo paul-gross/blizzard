@@ -13,14 +13,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.transcript_pump import TranscriptPump
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
 from tests.test_runner_harness_opencode_transcript import (

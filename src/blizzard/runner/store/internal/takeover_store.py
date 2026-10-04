@@ -7,9 +7,9 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import Lease
-from blizzard.runner.domain.takeover import IWriteTakeoverRepository, OpenTakeover
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases import Lease
+from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository, OpenTakeover
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import Unclosed, lease_select, row_to_lease
 from blizzard.runner.store.schema import leases, takeover_ends, takeovers

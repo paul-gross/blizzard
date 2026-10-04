@@ -16,11 +16,11 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.attachments import AttachmentService
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
+from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,

@@ -12,13 +12,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageLimit
-from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.judgement import ELICITATION_STALENESS_THRESHOLD
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.judgement.judgement import ELICITATION_STALENESS_THRESHOLD
 from blizzard.runner.loop.steps import Advance
 from tests.runner_fakes import (
     FakeHarness,

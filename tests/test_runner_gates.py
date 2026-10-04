@@ -11,9 +11,9 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView

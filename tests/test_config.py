@@ -2069,7 +2069,7 @@ def test_reserved_service_names_cover_each_daemons_own_name() -> None:
     from blizzard.foundation.trace_export.config import RESERVED_SERVICE_NAMES
     from blizzard.hub.domain.observability.tracing.attributes import CHUNK_SERVICE_NAME as CHUNK
     from blizzard.hub.domain.observability.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
-    from blizzard.runner.domain.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
+    from blizzard.runner.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
 
     assert {HUB, RUNNER, CHUNK} <= RESERVED_SERVICE_NAMES
 

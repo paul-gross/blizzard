@@ -9,7 +9,42 @@ message: >-
   — resolve $ID to its entity at the edge and pass that instead.
 files:
   - src/blizzard/hub/domain/**
-  - src/blizzard/runner/domain/**
+  - src/blizzard/runner/harness/harness_telemetry_plan.py
+  - src/blizzard/runner/harness/selftest_result.py
+  - src/blizzard/runner/hub/outbound_buffer.py
+  - src/blizzard/runner/leases/__init__.py
+  - src/blizzard/runner/leases/asks.py
+  - src/blizzard/runner/leases/closure.py
+  - src/blizzard/runner/leases/elicitation.py
+  - src/blizzard/runner/leases/escalations.py
+  - src/blizzard/runner/leases/lease_auth.py
+  - src/blizzard/runner/leases/liveness.py
+  - src/blizzard/runner/leases/overload.py
+  - src/blizzard/runner/leases/record.py
+  - src/blizzard/runner/leases/resume_intent.py
+  - src/blizzard/runner/leases/session.py
+  - src/blizzard/runner/lifecycle/judgement/artifacts.py
+  - src/blizzard/runner/lifecycle/judgement/checks.py
+  - src/blizzard/runner/lifecycle/judgement/git_commit_declaration.py
+  - src/blizzard/runner/lifecycle/takeover.py
+  - src/blizzard/runner/operator/attachments.py
+  - src/blizzard/runner/operator/requeue.py
+  - src/blizzard/runner/status/view.py
+  - src/blizzard/runner/throttle/pause.py
+  - src/blizzard/runner/tracing/__init__.py
+  - src/blizzard/runner/tracing/assembly.py
+  - src/blizzard/runner/tracing/attributes.py
+  - src/blizzard/runner/tracing/cursor.py
+  - src/blizzard/runner/tracing/facts.py
+  - src/blizzard/runner/tracing/platform.py
+  - src/blizzard/runner/tracing/receiver.py
+  - src/blizzard/runner/tracing/receiver_limits.py
+  - src/blizzard/runner/tracing/replay.py
+  - src/blizzard/runner/tracing/repository.py
+  - src/blizzard/runner/tracing/status.py
+  - src/blizzard/runner/tracing/sweep.py
+  - src/blizzard/runner/transcripts/invocation_boundaries.py
+  - src/blizzard/runner/usage/repository.py
 rule:
   all:
     - kind: function_definition

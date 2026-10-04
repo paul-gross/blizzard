@@ -2,7 +2,7 @@
 
 Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
 and the round-trip it delegates to
-:class:`~blizzard.runner.domain.git_commit_declaration.GitCommitDeclarationService`.
+:class:`~blizzard.runner.lifecycle.judgement.git_commit_declaration.GitCommitDeclarationService`.
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter

@@ -11,8 +11,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import LeaseTraceCheckpoint
+from blizzard.runner.tracing.cursor import LeaseCursorKey
+from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_migration_prototype
 from tests.runner_trace_leases import close, closed_lease

@@ -17,13 +17,13 @@ from structlog.testing import capture_logs
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.hub.client import HubClientError, RouteClaimOutcome
+from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, PauseView

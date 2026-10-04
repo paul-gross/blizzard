@@ -113,41 +113,41 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
-from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
-from blizzard.runner.domain.asks import IReadAskRepository
-from blizzard.runner.domain.attachments import IReadAttachmentRepository
-from blizzard.runner.domain.checks import ExecutedCheck, IReadCheckRepository
-from blizzard.runner.domain.elicitation import IReadElicitationRepository
-from blizzard.runner.domain.escalations import IReadEscalationRepository
-from blizzard.runner.domain.git_commit_declaration import IReadGitCommitDeclarationRepository
-from blizzard.runner.domain.invocation_boundaries import IReadInvocationBoundaryRepository
-from blizzard.runner.domain.leases import (
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.harness.health_cache import IReadHarnessHealth
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.leases import (
     IReadLeaseLivenessRepository,
     IReadLeaseRecordRepository,
     IReadLeaseResumeIntentRepository,
     IReadLeaseSessionRepository,
     NewLease,
 )
-from blizzard.runner.domain.outbound import IReadOutboundRepository
-from blizzard.runner.domain.overload import IReadOverloadRepository
-from blizzard.runner.domain.pause import IReadPauseRepository
-from blizzard.runner.domain.requeue import IReadRequeueRepository
-from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
-from blizzard.runner.domain.takeover import IReadTakeoverRepository
-from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
-from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
-from blizzard.runner.domain.usage import IReadUsageRepository
-from blizzard.runner.environments.repository import IReadEnvironmentRepository
-from blizzard.runner.harness.fingerprint import PreambleFingerprint
-from blizzard.runner.harness.health_cache import IReadHarnessHealth
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.leases.asks import IReadAskRepository
+from blizzard.runner.leases.elicitation import IReadElicitationRepository
+from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.overload import IReadOverloadRepository
+from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
+from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
+from blizzard.runner.operator.attachments import IReadAttachmentRepository
+from blizzard.runner.operator.requeue import IReadRequeueRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.throttle.pause import IReadPauseRepository
+from blizzard.runner.tracing.cursor import LeaseCursorKey
+from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
+from blizzard.runner.transcripts.invocation_boundaries import IReadInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
+from blizzard.runner.usage.repository import IReadUsageRepository
 from tests.runner_fakes import record_usage
 from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
 

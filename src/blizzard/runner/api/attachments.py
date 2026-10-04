@@ -12,7 +12,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.attachments import AttachmentRejected
+from blizzard.runner.operator.attachments import AttachmentRejected
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse, StagedAttachment
 
 router = APIRouter(prefix="/api", tags=["runner"])

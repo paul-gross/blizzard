@@ -16,7 +16,8 @@ RETENTION_FLOOR = timedelta(hours=1)
 @dataclass
 class RetentionPasses:
     """When the last retention pass ran, held **across ticks** in memory — composition-root-owned
-    and as long-lived as the loop itself, like :class:`~blizzard.runner.loop.capability_snapshot.HarnessVersionCache`.
+    and as long-lived as the loop itself, like
+    :class:`~blizzard.runner.harness.capability_snapshot.HarnessVersionCache`.
 
     A restart forgets it, so the first tick after one runs a full pass: harmless for an age-based
     prune, and it adds no store write or crash window."""

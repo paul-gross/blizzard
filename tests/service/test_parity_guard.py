@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from blizzard.runner.loop.hub import IHubClient
+from blizzard.runner.hub.client import IHubClient
 from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import mock_hub, mock_runner, require_mock_fleet, service_gate
 
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.service, service_gate]
 # --------------------------------------------------------------------------------- #
 
 #: One row per ``IHubClient`` endpoint method, verbatim from
-#: ``src/blizzard/runner/loop/internal/http_hub.py`` (the reference binding).
+#: ``src/blizzard/runner/hub/internal/http_hub.py`` (the reference binding).
 _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "peek_queue": ("POST", "/api/fleet/queue/peek"),
     "claim_route": ("POST", "/api/fleet/routes"),

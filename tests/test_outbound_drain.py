@@ -12,10 +12,10 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop import drain as drain_module
+from blizzard.runner.hub.outbound import COMPLETION_KIND
+from blizzard.runner.lifecycle import drain as drain_module
+from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.drain import OutboundDrain
-from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.steps import Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.tracing.replay import ReplayUnavailable, ReplayWindowRefused
+from blizzard.runner.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.runner_traces import (
     HarnessSignalStatus,
     HarnessTelemetryStatus,

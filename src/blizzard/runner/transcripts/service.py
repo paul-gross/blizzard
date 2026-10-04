@@ -11,10 +11,10 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.transcripts import TranscriptProvenance
-from blizzard.runner.domain.leases import IReadLeaseRecordRepository, Lease
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.leases import IReadLeaseRecordRepository, Lease
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentState
 from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript, Turn

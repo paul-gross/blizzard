@@ -19,18 +19,18 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.leases import NewLease
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.drain import OutboundDrain
+from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.drain import OutboundDrain
-from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,

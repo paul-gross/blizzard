@@ -1,0 +1,166 @@
+"""The hub-client seam — the runner's outbound edge to the hub HTTP API.
+
+The runner talks to the hub outbound-only. This Protocol is the seam; the httpx adapter
+under ``internal/`` is the reference binding, and a test injects a fake.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Protocol
+
+from blizzard.foundation.roles import dto
+from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
+from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
+from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
+from blizzard.wire.question import QuestionView
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
+from blizzard.wire.route import (
+    RouteClaim,
+    RouteClaimConflict,
+    RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
+    RouteClaimPausedDenial,
+    RouteClaimResponse,
+    RouteClaimTerminalDenial,
+    RouteTokenRekeyResponse,
+)
+from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
+from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
+
+
+class HubClientError(RuntimeError):
+    """A hub call failed at the transport level (unreachable, 5xx, malformed body).
+
+    A 409 route conflict and a 403 paused denial are **not** errors — they are expected
+    claim outcomes returned as :class:`RouteClaimOutcome`."""
+
+
+class ChunkNotFoundError(HubClientError):
+    """The hub reports a chunk unknown (404) — terminal, not transient.
+
+    Raised by :meth:`IHubClient.get_envelope` and, at the chunk-view cache layer
+    (:mod:`blizzard.runner.hub.chunk_status_cache`, not ``IHubClient`` itself —
+    ``IHubClient.chunk_statuses`` never raises it for an unknown id), by
+    :meth:`~blizzard.runner.hub.chunk_status_cache.IChunkViews.get`. Still a
+    :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
+
+
+@dto
+@dataclass(frozen=True)
+class RouteClaimOutcome:
+    """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
+    ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
+    / ``denied_incompatible`` set. A conflict is a race
+    this claim lost; every denial means the hub refused it before any race."""
+
+    claimed: RouteClaimResponse | None = None
+    conflict: RouteClaimConflict | None = None
+    denied_paused: RouteClaimPausedDenial | None = None
+    denied_terminal: RouteClaimTerminalDenial | None = None
+    denied_dependency: RouteClaimDependencyDenial | None = None
+    denied_incompatible: RouteClaimIncompatibleDenial | None = None
+
+    @property
+    def won(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        return self.claimed is not None
+
+
+class IChunkStatusReader(Protocol):
+    """One method of :class:`IHubClient`'s thirteen (the seam-size ceiling: a new consumer
+    re-types to the capability it calls, not the whole wide client). ``IHubClient``
+    composes this rather than re-declaring the method — one contract, not two copies free
+    to drift."""
+
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
+        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
+        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
+        whole call."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, Protocol):
+    """The runner's client of the hub API. Outbound-only."""
+
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+        """The FILL read — at most one matched entry while this runner holds a token
+        (``POST /api/fleet/queue/peek``); the reference binding falls back to the legacy,
+        unfiltered ``GET`` on a ``401``, so every caller here sees one uniform call
+        regardless of which verb actually served it."""
+        ...
+
+    def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
+        """``POST /api/fleet/routes`` — claim work; 409 loses the race (or, distinctly,
+        the chunk is already terminal or stands on an unmet prerequisite), 403 means
+        the hub registry already has this runner paused."""
+        ...
+
+    def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
+        """``POST /api/fleet/chunks/{id}/completions`` — the atomic, epoch-fenced write."""
+        ...
+
+    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+        """``POST /api/fleet/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
+        ...
+
+    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+        """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
+        ...
+
+    def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
+        push, seq-idempotent against its own high-water mark. Structurally independent
+        of :meth:`push_facts`: a wedged or slow
+        transcript flush never blocks it."""
+        ...
+
+    def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+        """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read."""
+        ...
+
+    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+        """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
+        hub command node one step (#65/#66).
+
+        ``ran=False`` means the hub declined to run a step this call — simply retried on a
+        later :class:`~blizzard.runner.loop.steps.Advance` tick."""
+        ...
+
+    def get_question(self, question_id: str) -> QuestionView:
+        """``GET /api/fleet/questions/{id}`` — the runner's answer poll, by question id."""
+        ...
+
+    def register_runner(
+        self,
+        runner_id: str,
+        workspace_id: str,
+        *,
+        env_capacity: int | None = None,
+        url: str | None = None,
+        redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        gates: tuple[str, ...] = (),
+    ) -> None:
+        """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
+        upsert and the liveness heartbeat, called before the paused read. Every optional
+        field, ``subscriptions`` included, is unconditionally overwritten each call;
+        ``subscriptions`` is always a list, never omitted. ``gates`` is the runner's own configured
+        human-gate node names — reported for display, never read back to enforce."""
+        ...
+
+    def fetch_runner_paused(self, runner_id: str) -> bool:
+        """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake.
+
+        Read on the outbound pull; never a push into the box."""
+        ...
+
+    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+        """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
+        capability token. Why it exists: `src/blizzard/hub/domain/execution/claim.py`'s
+        ``ClaimService.rekey``."""
+        ...

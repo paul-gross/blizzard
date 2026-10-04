@@ -10,15 +10,15 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
+from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource, make_store
 

@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 from blizzard.foundation.roles import dto
-from blizzard.runner.domain.tracing.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.process.probe import IProcessProbe

@@ -7,14 +7,14 @@ from datetime import datetime
 from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.invocation_boundaries import (
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.schema import invocation_boundaries, invocation_boundary_advances
+from blizzard.runner.transcripts.invocation_boundaries import (
     InvocationBoundary,
     InvocationBoundaryKind,
     InvocationBoundaryStart,
     IWriteInvocationBoundaryRepository,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.schema import invocation_boundaries, invocation_boundary_advances
 
 _log = get_logger("blizzard.runner.store")
 

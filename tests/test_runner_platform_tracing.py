@@ -52,28 +52,28 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import Lease, NewLease
-from blizzard.runner.domain.tracing.attributes import RUNNER_ID
-from blizzard.runner.domain.tracing.platform import (
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
+from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.leases import Lease, NewLease
+from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.steps import Advance
+from blizzard.runner.loop.tick import tick
+from blizzard.runner.tracing.attributes import RUNNER_ID
+from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     TICK_STEP,
 )
-from blizzard.runner.domain.tracing.receiver import MAX_BODY_BYTES
-from blizzard.runner.domain.tracing.receiver_limits import (
+from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
+from blizzard.runner.tracing.receiver_limits import (
     ReceiverBounds,
     ReceiverCount,
     ReceiverCounter,
     SpanRateLimiter,
 )
-from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
-from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
-from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.steps import Advance
-from blizzard.runner.loop.tick import tick
+from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission

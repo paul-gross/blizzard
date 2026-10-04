@@ -12,13 +12,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
+from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.transcript_pump import TranscriptPump
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

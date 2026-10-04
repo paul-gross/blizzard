@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository, LatestSelfTestResult
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store

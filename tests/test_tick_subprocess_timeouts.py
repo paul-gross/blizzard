@@ -20,8 +20,8 @@ _REPO_ROOT = repo_root()
 
 #: Every tick-reached module whose `subprocess.run` calls must each carry `timeout=`.
 _GUARDED_MODULES = (
-    "src/blizzard/runner/loop/internal/subprocess_worktree_git.py",
-    "src/blizzard/runner/loop/internal/subprocess_check_runner.py",
+    "src/blizzard/runner/environments/internal/subprocess_worktree_git.py",
+    "src/blizzard/runner/lifecycle/judgement/internal/subprocess_check_runner.py",
     "src/blizzard/runner/environments/internal/git.py",
     "src/blizzard/runner/environments/internal/winter_cli.py",
 )

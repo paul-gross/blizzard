@@ -15,8 +15,6 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.pause import PausePark
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -27,11 +25,13 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
-from blizzard.runner.loop.usage import UsageRecorder
-from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.throttle.pause import PausePark
+from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (

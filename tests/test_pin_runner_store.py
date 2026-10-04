@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases import NewLease
 from blizzard.runner.store.errors import (
     RunnerStoreError,
     RunnerStoreErrorFactory,

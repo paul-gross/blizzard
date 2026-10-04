@@ -11,13 +11,6 @@ from sqlalchemy import Connection, Row, and_, case, func, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.domain.usage import (
-    ContextSampleState,
-    ExternalUsageAttemptSummary,
-    InvocationCost,
-    IWriteUsageRepository,
-    UsageTotals,
-)
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -29,6 +22,13 @@ from blizzard.runner.store.schema import (
     usage_facts,
 )
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
+from blizzard.runner.usage.repository import (
+    ContextSampleState,
+    ExternalUsageAttemptSummary,
+    InvocationCost,
+    IWriteUsageRepository,
+    UsageTotals,
+)
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")

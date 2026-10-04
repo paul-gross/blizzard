@@ -2,7 +2,7 @@
 
 :meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from
 ``base.PAUSE_PARKED_LEASE_IDS``, the union both concepts' Protocols agree
-:meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids` answers — never
+:meth:`~blizzard.runner.leases.asks.IReadAskRepository.parked_lease_ids` answers — never
 by reaching into the pause adapter itself, a sibling-adapter edge the concept split exists
 to avoid."""
 
@@ -14,8 +14,8 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.asks import IWriteAskRepository, OpenAsk, QuestionPark
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes

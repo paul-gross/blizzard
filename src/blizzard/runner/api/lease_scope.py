@@ -9,8 +9,8 @@ from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.tokens import IReadTokenRepository
-from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.domain.leases import Lease
+from blizzard.runner.leases import Lease
+from blizzard.runner.leases.lease_auth import LeaseToken
 
 
 def authorized_lease(lease_id: str, request: Request) -> Lease:
