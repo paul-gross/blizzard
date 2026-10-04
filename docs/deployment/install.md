@@ -19,7 +19,8 @@
 The hub's delivery credentials (`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`) go in `/etc/blizzard/hub.env`, alongside
 `BZ_FORGE_OWNER` — the owner used to qualify a bare repo name, defaulting to blizzard when unset; its work sources are
 `[[work_source]]` blocks in `blizzard-hub.toml`, owned by [work-sources.md](./work-sources.md); the runner's workspace
-and harness bindings live in its own `blizzard-runner.toml` and carry no credentials.
+and harness bindings live in its own `blizzard-runner.toml` and carry no credentials. Credentials the hub stores itself,
+written once and never read back, are owned by [secrets.md](./secrets.md).
 
 The hub's deployment-varying values — db_url, host, port — also resolve from the environment at load, precedence CLI
 flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_HUB_HOST`, `BZ_HUB_PORT`, with
@@ -56,12 +57,11 @@ revision whose `upgrade()` deletes rows, and not a config change the new wheel r
 
 The `20260929_1100_drop_open_pr_facts` migration is the first in either store whose `upgrade()` deletes rows: it drops
 the retired `delivery_pr_opened` and `delivery_pr_closed` tables, rows included; `downgrade()` recreates both empty and
-never restores the rows. No delivery path writes either table any more, so a store the current wheel produced holds none,
-but the drop is unconditional and irreversible — stop the hub, then copy its store file
-(sqlite `hub.db` with any `hub.db-wal` beside it, or the postgres equivalent) before restarting into a wheel carrying
-it; the revision-mismatch guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and its `-wal`
-sidecar together — and remove any `hub.db-wal` already at the destination first, or its stale frames replay over the
-restored file.
+never restores the rows. No delivery path writes either table any more, so a store the current wheel produced holds
+none, but the drop is unconditional and irreversible — stop the hub, then copy its store file (sqlite `hub.db` with any
+`hub.db-wal` beside it, or the postgres equivalent) before restarting into a wheel carrying it; the revision-mismatch
+guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and its `-wal` sidecar together — and remove
+any `hub.db-wal` already at the destination first, or its stale frames replay over the restored file.
 
 ### The `[[work_source]]` rename
 

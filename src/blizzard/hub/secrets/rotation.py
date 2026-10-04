@@ -52,10 +52,9 @@ class _Target:
 def rotate_keys(repo: IResealSecretRepository, environ: Mapping[str, str], *, data_dir: Path) -> RotationResult:
     """Re-seal every row not under the target generation, in one transaction.
 
-    Env mode (``BZ_HUB_SECRET_KEY`` set) mints nothing: the target is that key, and rows
-    sealed under an older one open through ``BZ_HUB_SECRET_KEY_PREVIOUS``. Directory mode
-    mints a new generation, re-seals into it, then promotes it and demotes the old current
-    to ``previous``; a generation file no row references any longer is deleted."""
+    Env mode (``BZ_HUB_SECRET_KEY`` set) mints nothing; older rows open through
+    ``BZ_HUB_SECRET_KEY_PREVIOUS``. Directory mode mints a generation, re-seals into it,
+    then promotes it and prunes any generation file no row references."""
     if environ.get(ENV_SECRET_KEY):
         return _rotate(repo, EnvKeyProvider(environ), directory=None)
     if environ.get(ENV_SECRET_KEY_PREVIOUS):

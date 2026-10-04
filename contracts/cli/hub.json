@@ -5678,7 +5678,7 @@
           "short_help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced."
         },
         "rotate-key": {
-          "help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host.\n\nDirectory mode mints a new key generation and promotes it; env mode re-seals under\n$BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A running\nhub keeps reading every secret throughout. Exits non-zero, changing nothing, when a\nconcurrent replace races the rotation \u2014 re-run it.",
+          "help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host.\n\nDirectory mode mints and promotes a new generation; env mode re-seals under\n$BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race\nwith a replace changes nothing and exits non-zero \u2014 re-run it.",
           "params": [
             {
               "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",

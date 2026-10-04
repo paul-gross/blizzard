@@ -53,8 +53,7 @@ TRANSCRIPT_READ = Permission("transcript:read")
 #: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
 #: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
 ANALYTICS_ADMIN = Permission("analytics:admin")
-#: Write the hub's configured records — today the secret store (``POST``/``PUT``/retire/enable
-#: under ``/api/secrets``). Held by ``admin``+.
+#: Write a configured record — today the secret store. Held by ``admin``+.
 CONFIG_EDIT = Permission("config:edit")
 
 #: ``guest`` — read everything, mutate nothing.
