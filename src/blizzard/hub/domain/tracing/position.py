@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
-from blizzard.hub.domain.tracing.facts import StepFacts
-from blizzard.hub.domain.work import MigrationFact
+from blizzard.hub.domain.tracing.facts import MigrationRecord, StepFacts
+from blizzard.hub.domain.work import MigrationFact, MigrationSource
 
 # Movement kinds rank as ``ChunkFacts.latest_movement`` ranks them on an exact tie.
 _INITIAL_RANK = -1
@@ -69,6 +69,11 @@ def _landed(facts: StepFacts, migration_from: str | None, from_graph_id: str, to
     return MigrationFact.landing_node(_graph(facts, to_graph_id), from_name)
 
 
+def _movement_migrations(facts: StepFacts) -> tuple[MigrationRecord, ...]:
+    """The migrations that arrive on their own — a restart-sourced one is folded into its restart row."""
+    return tuple(m for m in facts.migrations if m.source is not MigrationSource.RESTART)
+
+
 def movement_arrivals(facts: StepFacts) -> tuple[Arrival, ...]:
     """Every movement fact as an arrival, in order — without the implicit entry placement."""
     arrivals: list[Arrival] = []
@@ -84,7 +89,7 @@ def movement_arrivals(facts: StepFacts) -> tuple[Arrival, ...]:
                 name,
             )
         )
-    for migration in facts.migrations:
+    for migration in _movement_migrations(facts):
         landed = migration.landed_node_id or _landed(
             facts, migration.from_node_id, migration.from_graph_id, migration.to_graph_id
         )
@@ -110,7 +115,7 @@ def _starting_graph_id(facts: StepFacts, arrivals: tuple[Arrival, ...]) -> str:
     for transition in facts.transitions:
         if (transition.recorded_at, transition.epoch, _TRANSITION_RANK) == first.order():
             return transition.graph_id
-    for migration in facts.migrations:
+    for migration in _movement_migrations(facts):
         if (migration.recorded_at, migration.epoch, _MIGRATION_RANK) == first.order():
             return migration.from_graph_id
     for restart in facts.restarts:
