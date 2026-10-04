@@ -19,6 +19,9 @@
   </fleet-kit-panel>
   @if (showNodeHistory()) {
     <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
+      @if (eventsLinkBase()) {
+        <span fleetKitPanelHeader class="events-slot"><ng-container [ngTemplateOutlet]="eventsLink" /></span>
+      }
       <!-- The panel above already engraves "node history"; the section's own
            heading would repeat it word for word, so this call site opts out. -->
       <fleet-chunk-detail-timeline
@@ -29,6 +32,9 @@
         (pickStep)="pickStep.emit($event)"
       />
     </fleet-kit-panel>
+  }
+  @if (!showNodeHistory() && eventsLinkBase()) {
+    <div class="section events-row"><ng-container [ngTemplateOutlet]="eventsLink" /></div>
   }
   <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
     <fleet-chunk-detail-awaiting-human
@@ -42,3 +48,12 @@
     />
   </fleet-kit-panel>
 </div>
+<!-- The chunk's own events, on the daemon's events view filtered by `?chunk=` — beside
+     node history when General shows it, on a line of its own otherwise. -->
+<ng-template #eventsLink>
+  @if (eventsLinkBase(); as base) {
+    <a class="events-link" data-testid="chunk-events-link" [routerLink]="base" [queryParams]="{ chunk: detail().chunk_id }"
+      >events →</a
+    >
+  }
+</ng-template>

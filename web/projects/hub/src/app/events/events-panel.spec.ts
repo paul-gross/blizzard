@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
@@ -37,15 +38,17 @@ async function openSelect(fixture: ComponentFixture<unknown>, testid: string) {
 describe('EventsPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (events: unknown = EVENTS) => {
+  const render = async (events: unknown = EVENTS, url = '/events') => {
     stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/events' ? { events } : {}));
     await TestBed.configureTestingModule({
       imports: [EventsPanel],
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([{ path: 'events', component: EventsPanel }]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
+    await TestBed.inject(Router).navigateByUrl(url);
     const fixture = TestBed.createComponent(EventsPanel);
     await settle(fixture);
     return fixture;
@@ -169,5 +172,38 @@ describe('EventsPanel', () => {
 
     const after = stub.forRoute('/api/events', 'GET').length;
     expect(after).toBeGreaterThan(before);
+  });
+
+  it('initialises the chunk filter from ?chunk= and sends it to the hub as chunk_id', async () => {
+    const fixture = await render(EVENTS, '/events?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
+
+    const reads = stub.forRoute('/api/events', 'GET');
+    expect(reads.some((r) => new URLSearchParams(r.search).get('chunk_id') === 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).toBe(true);
+    await openSelect(fixture, 'events-chunk-filter');
+    expect(inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows a ?chunk= id absent from the options feed as the active chip', async () => {
+    const fixture = await render(EVENTS, '/events?chunk=ch_01KXKVVF1J3D6H6VYZ3XYNOLD0');
+
+    await openSelect(fixture, 'events-chunk-filter');
+    expect(inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYNOLD0')?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('writes a chunk chip toggle to the URL, and drops ?chunk= when cleared', async () => {
+    const fixture = await render(EVENTS, '/events?chunk=ch_01KXKVVF1J3D6H6VYZ3XYNOLD0');
+    const router = TestBed.inject(Router);
+
+    await openSelect(fixture, 'events-chunk-filter');
+    inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')?.click();
+    await settle(fixture);
+    await fixture.whenStable();
+    expect(router.url).toBe('/events?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
+
+    await openSelect(fixture, 'events-chunk-filter');
+    inOverlay('events-chunk-filter-all')?.click();
+    await settle(fixture);
+    await fixture.whenStable();
+    expect(router.url).toBe('/events');
   });
 });

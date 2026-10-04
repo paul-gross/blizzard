@@ -11,6 +11,8 @@ import {
   deriveHistoryRows,
   deriveMultiGraph,
   type HistoryRow,
+  rowChoice,
+  rowMark,
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
 
@@ -68,7 +70,7 @@ export class ChunkTimeline {
   /** Whether a row carrying a real join key activates by mouse/Enter/Space, emitting
    * {@link pickStep}, instead of linking to the chunk detail page's Node history tab
    * under {@link linkBase}. Either way, a keyed row draws the hover wash and takes the
-   * focus/keyboard affordance — a keyless row (a migration, or an active row with no
+   * focus/keyboard affordance — a keyless row (a migration, bounce, or restart, or an active row with no
    * epoch yet) draws neither, regardless of this input. `false` (the default) is the
    * board dock's own mode; the chunk detail page's own tabs, already on the route a
    * link would point at, set this `true`. No third mode today for a keyed row that is
@@ -96,10 +98,12 @@ export class ChunkTimeline {
   /** Emitted with an activated row's join key, or `null` when the already-selected
    * row is re-activated — the only way to clear a step selection from this component,
    * since re-navigating to an identical URL is a no-op the router drops.
-   * Never emitted for a `null`-keyed row (a migration, or an active
+   * Never emitted for a `null`-keyed row (a migration, bounce, or restart, or an active
    * row with no epoch yet) or while {@link activatable} is `false`. */
   readonly pickStep = output<string | null>();
 
+  protected readonly rowMark = rowMark;
+  protected readonly rowChoice = rowChoice;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
   protected readonly harnessName = harnessName;

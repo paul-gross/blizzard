@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { Router } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
 import { vi } from 'vitest';
@@ -28,15 +28,15 @@ describe('EventsPage', () => {
   });
 
   async function mount() {
-    const navigate = vi.fn();
     await TestBed.configureTestingModule({
       imports: [EventsPage],
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        { provide: Router, useValue: { navigate } },
       ],
     }).compileComponents();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     const fixture = TestBed.createComponent(EventsPage);
     await fixture.whenStable();
     return { fixture, navigate };

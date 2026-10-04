@@ -228,6 +228,10 @@ export class ChunkPage {
   /** The daemon's graphs view a graph badge links to, or `null` — unlinked. */
   protected readonly graphLinkBase = this.actions?.graphLinkBase ?? null;
 
+  /** The daemon's events view the General tab links this chunk's events to, or `null` —
+   * no link. */
+  protected readonly eventsLinkBase = this.actions?.eventsLinkBase ?? null;
+
   /** Whether the Transcripts tab's option shows in the strip. With a port, the port's
    * permission decides; a deep link still reaches {@link ChunkTranscriptsContainer},
    * which renders the backend's 403 as its own state rather than relying on this

@@ -16,8 +16,9 @@
           class="step"
           [class.selected]="row.key !== null && row.key === selectedKey()"
           [class.keyed]="row.key !== null"
-          [attr.data-testid]="row.kind === 'migration' ? 'history-migration-step' : 'history-step'"
-          [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
+          [attr.data-testid]="row.kind === 'transition' ? 'history-step' : 'history-' + row.kind + '-step'"
+          [attr.data-choice]="rowChoice(row)"
+          [attr.title]="row.title"
           [attr.role]="activatable() && row.key !== null ? 'button' : null"
           [attr.tabindex]="activatable() && row.key !== null ? 0 : null"
           (click)="onActivate(row.key)"
@@ -33,7 +34,7 @@
               [attr.aria-label]="'Open ' + row.nodeName + ', epoch ' + row.epoch"
             ></a>
           }
-          <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
+          <span class="att">{{ rowMark(row) }}</span>
           <span class="nd" [attr.title]="row.nodeId">
             @if (multiGraph() && row.graphName) {
               @if (graphLinkBase(); as linkBase) {
@@ -60,7 +61,12 @@
                routes to the target graph's landing node. -->
           <span class="jg">
             <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
-            <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            @if (row.toName !== null) {
+              <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            }
+            @if (row.actor !== null) {
+              <span class="jg-by" data-testid="history-actor">by {{ row.actor }}</span>
+            }
           </span>
           <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
           <!-- That node-step's own usage — every invocation recorded at

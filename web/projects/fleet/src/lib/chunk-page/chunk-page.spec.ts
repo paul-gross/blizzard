@@ -452,6 +452,15 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
   });
 
+  it("renders no events link — the daemon serves no events feed", async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-events-link"]')).toBeNull();
+  });
+
   it('links nothing to /graphs on the General or Node history tab', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);

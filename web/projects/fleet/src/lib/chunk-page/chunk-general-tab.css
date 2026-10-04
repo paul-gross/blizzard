@@ -13,6 +13,28 @@
 fleet-kit-panel.section {
   flex: none;
 }
+/* The link to this chunk's own events — a navigation affordance, so it reads as one. */
+.events-slot {
+  margin-left: auto;
+}
+.events-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 4px;
+}
+.events-link {
+  color: var(--cyan);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.events-link:hover,
+.events-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 /* The two-column General tab, at the same 720px breakpoint the hub's
    Artifacts tab's nav-beside-viewer split uses — work item and issues
    stacked in the left column, node history beside them spanning both

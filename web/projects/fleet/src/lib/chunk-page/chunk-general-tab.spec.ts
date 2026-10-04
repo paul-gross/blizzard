@@ -89,6 +89,23 @@ describe('ChunkGeneralTab', () => {
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
   });
 
+  it("links this chunk's own events beside node history when eventsLinkBase is set, and not by default", async () => {
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="chunk-events-link"]')).toBeNull();
+
+    fixture.componentRef.setInput('eventsLinkBase', ['/events']);
+    await fixture.whenStable();
+    const link = el.querySelector('[data-testid="section-node-history"] [data-testid="chunk-events-link"]');
+    expect(link?.getAttribute('href')).toBe(`/events?chunk=${DETAIL.chunk_id}`);
+
+    fixture.componentRef.setInput('showNodeHistory', false);
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="chunk-events-link"]')?.getAttribute('href')).toBe(`/events?chunk=${DETAIL.chunk_id}`);
+  });
+
   it('forwards graphLinkBase to the facts section, defaulting to no link', async () => {
     const unlinked = TestBed.createComponent(ChunkGeneralTab);
     unlinked.componentRef.setInput('detail', DETAIL);

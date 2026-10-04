@@ -12,9 +12,10 @@
         <div
           class="step"
           [class.selected]="row.key !== null && row.key === selectedKey()"
-           [attr.data-testid]="row.kind === 'migration' ? 'selection-migration-step' : 'selection-step'"
+           [attr.data-testid]="row.kind === 'transition' ? 'selection-step' : 'selection-' + row.kind + '-step'"
            [attr.data-step-key]="row.key"
-          [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
+          [attr.data-choice]="rowChoice(row)"
+          [attr.title]="row.title"
           [attr.role]="row.key !== null ? 'button' : null"
           [attr.tabindex]="row.key !== null ? 0 : null"
           (click)="onActivate(row.key)"
@@ -22,7 +23,7 @@
           (keydown.space)="onActivate(row.key, $event)"
         >
           <div class="line1">
-            <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
+            <span class="att">{{ rowMark(row) }}</span>
             <span class="nd" [attr.title]="row.nodeName">
               @if (multiGraph() && row.graphName) {
                 @if (graphLinkBase(); as linkBase) {
@@ -45,7 +46,12 @@
           </div>
           <div class="line2">
             <span class="verdict" data-testid="selection-choice">{{ row.verdict ?? '·' }}</span>
-            <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            @if (row.toName !== null) {
+              <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            }
+            @if (row.actor !== null) {
+              <span class="jg-by" data-testid="selection-actor">by {{ row.actor }}</span>
+            }
             <span class="ts" data-testid="selection-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
           </div>
           @if (usageForStep(row); as u) {

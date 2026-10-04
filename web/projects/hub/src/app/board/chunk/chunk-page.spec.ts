@@ -127,6 +127,13 @@ describe('Mobile chunk drill-down', () => {
     return harness.fixture.nativeElement as HTMLElement;
   }
 
+  it("links the General tab to this chunk's own events, through the hub's port", async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const link = el.querySelector<HTMLAnchorElement>('[data-testid="chunk-events-link"]');
+    expect(link?.getAttribute('href')).toBe(`/events?chunk=${CHUNK_ID}`);
+  });
+
   it('keeps Node history in the desktop General tab', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 

@@ -227,6 +227,9 @@
  *     two node-history steps recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges beside their usage figures with no horizontal
  *     overflow at 390px.
+ *   - projects/fleet/src/lib/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts —
+ *     a chunk's bounce and restart rows render in time order on both the timeline and
+ *     the Node history Selection list with no horizontal overflow at 390px and 320px.
  *   - projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts — the
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
@@ -282,6 +285,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
 ];
 

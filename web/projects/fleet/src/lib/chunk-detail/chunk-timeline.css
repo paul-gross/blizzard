@@ -249,3 +249,27 @@ a.gr:focus-visible {
      `.jg-to` does, so this badge's own `[title]` and `cursor: help` stay live. */
   pointer-events: auto;
 }
+/* A bounce is a refused result — alarm red; a restart is an operator's deliberate
+   move — amber-hi, the same tone a parked operator verb reads. */
+.step[data-choice='bounced'] .verdict {
+  color: var(--red);
+}
+.step[data-choice='restarted'] .verdict {
+  color: var(--amber-hi);
+}
+/* Who restarted the chunk — attribution, so it reads dim like the routed-to column. */
+.step .jg-by {
+  color: var(--label-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: var(--fs-label);
+}
+/* A bounce's cause is free text, not a short graph choice name — it ellipsizes (the
+   row's own title carries the envelope) rather than widening the row past the panel. */
+.step[data-choice='bounced'] .verdict {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
