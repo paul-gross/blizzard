@@ -1,0 +1,592 @@
+import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { hubClient, ViewportService } from 'fleet';
+import { injectReopenFindingsMutation, injectResolveFindingsMutation } from '../core/finding.mutations';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
+
+import { GardeningFindingsPage } from './gardening-findings-page';
+
+const ROUTINES = [
+  { routine_id: 'rt_1', name: 'nightly', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
+  { routine_id: 'rt_2', name: 'weekly', graph_name: 'sweep', default_scope_slug: 'web', created_at: '2026-01-01T00:00:00Z' },
+];
+
+const SCOPES = [
+  { slug: 'blizzard', description: 'the blizzard repo', created_at: '2026-01-01T00:00:00Z' },
+  { slug: 'web', description: 'the web workspace', created_at: '2026-01-01T00:00:00Z' },
+];
+
+function findingFixture(overrides: { state: string } & Record<string, unknown>) {
+  return {
+    routine_name: 'nightly',
+    scope_slug: 'blizzard',
+    observed_count: 1,
+    last_seen_at: '2026-01-05T00:00:00Z',
+    introduced: '4ba7ef06d',
+    note: null,
+    live: overrides.state === 'live',
+    exit: null,
+    ...overrides,
+  };
+}
+
+const FINDING_LIVE = findingFixture({
+  finding_id: 'fnd_10',
+  class: 'stale-docstring',
+  locus: 'a.py:1',
+  summary: 'summary a',
+  state: 'live',
+});
+const FINDING_GONE = findingFixture({
+  finding_id: 'fnd_11',
+  class: 'unused-import',
+  locus: 'b.py:2',
+  summary: 'summary b',
+  state: 'gone',
+  note: 'not seen in the last sweep',
+});
+const FINDING_RESOLVED_1 = findingFixture({
+  finding_id: 'fnd_12',
+  class: 'stale-docstring',
+  locus: 'c.py:3',
+  summary: 'summary c',
+  state: 'resolved',
+  exit: 'outflow',
+  note: 'fixed',
+});
+const FINDING_GONE_CONFIRMED = findingFixture({
+  finding_id: 'fnd_14',
+  class: 'unused-import',
+  locus: 'e.py:5',
+  summary: 'summary e',
+  state: 'gone-confirmed',
+  exit: 'outflow',
+  note: 'confirmed gone',
+});
+/** A second routine/scope, distinct from the other three fixtures' `nightly`/
+ * `blizzard` — the disambiguation markup only means something once a
+ * bucket genuinely mixes rows from more than one of each. */
+const FINDING_OTHER_ROUTINE = findingFixture({
+  finding_id: 'fnd_20',
+  class: 'unused-import',
+  locus: 'w.py:1',
+  summary: 'summary w',
+  state: 'live',
+  routine_name: 'weekly',
+  scope_slug: 'web',
+});
+
+const BUCKET = [FINDING_LIVE, FINDING_GONE, FINDING_RESOLVED_1, FINDING_GONE_CONFIRMED, FINDING_OTHER_ROUTINE];
+
+/** Stands in for `GardeningFindingDetail`, whose own behavior is
+ * `gardening-finding-detail.spec.ts`'s. */
+@Component({
+  selector: 'app-test-finding-detail',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '<span data-testid="finding-detail-stub"></span>',
+})
+class TestFindingDetail {}
+
+@Component({
+  selector: 'app-test-findings-host',
+  imports: [RouterOutlet],
+  template: '<router-outlet />',
+})
+class TestFindingsHost {}
+
+/** The real route table's own shape for this tab (`app.routes.ts`), driven by the
+ * real router — the filters under test live in the URL, and the selection on a
+ * child route, so a stubbed `ActivatedRoute` could prove neither. */
+const routes: Routes = [
+  {
+    path: 'gardening/findings',
+    component: GardeningFindingsPage,
+    children: [
+      { path: '', component: TestFindingDetail },
+      { path: ':findingId', component: TestFindingDetail },
+    ],
+  },
+];
+
+/**
+ * Exercises the `/gardening/findings` list container — the triage list, its four
+ * filters, and the agreement it keeps between those filters and the finding the
+ * URL names. The detail pane beside it is `gardening-finding-detail.spec.ts`'s.
+ *
+ * All four filters (routine, scope, class, state) render inline as
+ * `fleet-kit-select` dropdowns — no accordion, no other gardening tab collapses its filters —
+ * and all four live in the query string, which is what lets a pick survive a row
+ * click and a filtered bucket be a shareable link.
+ */
+describe('GardeningFindingsPage', () => {
+  let stub: RequestClientStub;
+  let current: ComponentFixture<unknown> | undefined;
+
+  afterEach(() => stub?.restore());
+
+  async function mount(
+    opts: { url?: string; routeOverride?: (method: string, path: string) => unknown; mobile?: boolean } = {},
+  ) {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      const overridden = opts.routeOverride?.(method, path);
+      if (overridden !== undefined) return overridden;
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/routines') return ROUTINES;
+      if (method === 'GET' && path === '/api/scopes') return SCOPES;
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [TestFindingsHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes),
+      ],
+    }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(opts.mobile ? 'mobile' : 'desktop');
+    const fixture = TestBed.createComponent(TestFindingsHost);
+    current = fixture;
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(opts.url ?? '/gardening/findings');
+    await settle(fixture, 12);
+    return { fixture, router, el: fixture.nativeElement as HTMLElement };
+  }
+
+  /** Every fixture that needs rows in the bucket answers `/api/findings` with them. */
+  const withBucket = (method: string, path: string) =>
+    method === 'GET' && path === '/api/findings' ? { findings: BUCKET, next_cursor: null } : undefined;
+
+  /** The filter whose popup carries an option testid — its trigger's testid. */
+  function triggerOf(optionTestid: string): string {
+    const kind = /^gardening-findings?-(routine|scope|class|state)-/.exec(optionTestid)![1];
+    return `gardening-findings-${kind}-filter`;
+  }
+
+  const inOverlay = (testid: string) => document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+  /** Opens a filter's popup (rendered into a CDK overlay on `document.body`). */
+  async function openFilter(el: HTMLElement, triggerTestid: string) {
+    el.querySelector<HTMLElement>(`[data-testid="${triggerTestid}"]`)!.click();
+    await settle(current!);
+  }
+
+  /** Picks an option through its filter's dropdown. */
+  async function pick(el: HTMLElement, optionTestid: string) {
+    await openFilter(el, triggerOf(optionTestid));
+    inOverlay(optionTestid)!.click();
+    await settle(current!);
+  }
+
+  /** An option's `aria-selected`, read with its dropdown open, then closed again. */
+  async function pressed(el: HTMLElement, testid: string): Promise<string | null | undefined> {
+    const trigger = triggerOf(testid);
+    await openFilter(el, trigger);
+    const value = inOverlay(testid)?.getAttribute('aria-selected');
+    await openFilter(el, trigger);
+    return value;
+  }
+
+  it('renders all four filters — routine, scope, class, state — as dropdowns, with no accordion to expand', async () => {
+    const { el } = await mount({ routeOverride: withBucket });
+
+    expect(el.querySelector('[data-testid="accordion-section-head"]')).toBeNull();
+    for (const filter of ['routine', 'scope', 'class', 'state']) {
+      expect(el.querySelector(`[data-testid="gardening-findings-${filter}-filter"]`)).toBeTruthy();
+    }
+    await openFilter(el, 'gardening-findings-routine-filter');
+    expect(inOverlay('gardening-findings-routine-item-nightly')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-routine-filter');
+    await openFilter(el, 'gardening-findings-scope-filter');
+    expect(inOverlay('gardening-findings-scope-item-blizzard')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-scope-filter');
+    await openFilter(el, 'gardening-findings-class-filter');
+    expect(inOverlay('gardening-finding-class-all')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-class-filter');
+    await openFilter(el, 'gardening-findings-state-filter');
+    expect(inOverlay('gardening-finding-state-all')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-state-filter');
+    // Every filter carries an "All" option — the bucket read never requires a
+    // concrete routine/scope pair.
+    expect(await pressed(el, 'gardening-findings-routine-all')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-scope-all')).toBe('true');
+  });
+
+  it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
+    const { el } = await mount({ routeOverride: withBucket });
+
+    expect(el.querySelector('[data-testid="finding-detail-stub"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')?.classList.contains('selected')).toBe(
+      false,
+    );
+  });
+
+  it('drills into a finding and back to the filtered list in mobile mode', async () => {
+    const { fixture, router, el } = await mount({
+      url: '/gardening/findings?state=live',
+      routeOverride: withBucket,
+      mobile: true,
+    });
+
+    const page = el.querySelector('app-gardening-findings-page')!;
+    expect(page.classList).toContain('mobile');
+    expect(page.classList).not.toContain('detail-open');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_10"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings/fnd_10?state=live');
+    expect(page.classList).toContain('detail-open');
+    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-findings-back"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings?state=live');
+    expect(page.classList).not.toContain('detail-open');
+  });
+
+  it('highlights the row the child route names', async () => {
+    const { el } = await mount({ url: '/gardening/findings/fnd_10', routeOverride: withBucket });
+
+    expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')?.classList.contains('selected')).toBe(
+      true,
+    );
+  });
+
+  it('navigates to gardening/findings/:findingId when a finding row is picked', async () => {
+    const { fixture, router, el } = await mount({ routeOverride: withBucket });
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_10"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings/fnd_10');
+  });
+
+  it('keeps every active filter through a row pick, rather than resetting it', async () => {
+    const { fixture, router, el } = await mount({
+      url: '/gardening/findings?routine=weekly&scope=web&class=unused-import&state=gone',
+      routeOverride: withBucket,
+    });
+    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_11"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings/fnd_11?routine=weekly&scope=web&class=unused-import&state=gone');
+    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
+  });
+
+  describe('the findings triage bucket', () => {
+    it('rests on every routine and every scope with no query params — both "All" options selected, the bucket read firing with neither named', async () => {
+      const { el } = await mount({ routeOverride: withBucket });
+
+      expect(await pressed(el, 'gardening-findings-routine-all')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-scope-all')).toBe('true');
+
+      // The bucket read fires immediately, no seeded routine/scope required, and
+      // renders rows from more than one routine and scope at once.
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
+      expect(nightly).toBeTruthy();
+      expect(weekly).toBeTruthy();
+      const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_11"]');
+      const resolved = el.querySelector('[data-testid="gardening-finding-row-fnd_12"]');
+      expect(gone?.querySelector('.fl-body--gone')).toBeTruthy();
+      expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
+    });
+
+    it('reaches a scope literally named "all" through its own option, distinct from the "All scopes" sentinel (review:F1)', async () => {
+      // `stubRequestClient`'s own `CapturedRequest` drops each request's query
+      // string down to a bare path — this local fetch stub keeps the full URL
+      // alongside it (`finding.query.spec.ts`'s own `stubFetchCapturingUrl`
+      // shape), needed here to prove `scope=all` genuinely rides the bucket
+      // read rather than being read as the "every scope" sentinel and omitted.
+      const SCOPE_ALL = { slug: 'all', description: 'a scope literally named all', created_at: '2026-01-01T00:00:00Z' };
+      const FINDING_IN_SCOPE_ALL = findingFixture({
+        finding_id: 'fnd_30',
+        class: 'stale-docstring',
+        locus: 'z.py:1',
+        summary: 'summary z',
+        state: 'live',
+        scope_slug: 'all',
+      });
+      const urls: string[] = [];
+      const previousFetch = globalThis.fetch;
+      const fakeFetch = async (input: Request): Promise<Response> => {
+        const url = new URL(input.url);
+        if (url.pathname === '/api/findings') urls.push(input.url);
+        const method = input.method.toUpperCase();
+        let body: unknown = {};
+        if (method === 'GET' && url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
+        else if (method === 'GET' && url.pathname === '/api/findings')
+          body = { findings: [...BUCKET, FINDING_IN_SCOPE_ALL], next_cursor: null };
+        else if (method === 'GET' && url.pathname === '/api/garden-proposals') body = { proposals: [], next_cursor: null };
+        else if (method === 'GET' && url.pathname === '/api/routines') body = ROUTINES;
+        else if (method === 'GET' && url.pathname === '/api/scopes') body = [...SCOPES, SCOPE_ALL];
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      };
+      hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+      try {
+        await TestBed.configureTestingModule({
+          imports: [TestFindingsHost],
+          providers: [
+            provideZonelessChangeDetection(),
+            provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+            provideRouter(routes),
+          ],
+        }).compileComponents();
+        const fixture = TestBed.createComponent(TestFindingsHost);
+        const router = TestBed.inject(Router);
+        await router.navigateByUrl('/gardening/findings');
+        await settle(fixture, 12);
+        const el = fixture.nativeElement as HTMLElement;
+
+        await pick(el, 'gardening-findings-scope-item-all');
+        await settle(fixture);
+
+        expect(router.url).toBe('/gardening/findings?scope=all');
+        expect(await pressed(el, 'gardening-findings-scope-item-all')).toBe('true');
+        expect(await pressed(el, 'gardening-findings-scope-all')).toBe('false');
+        expect(el.querySelector('[data-testid="gardening-finding-row-fnd_30"]')).toBeTruthy();
+
+        const lastFindingsUrl = urls.at(-1)!;
+        expect(new URL(lastFindingsUrl).searchParams.get('scope')).toBe('all');
+      } finally {
+        hubClient.setConfig({ baseUrl: '', fetch: previousFetch });
+      }
+    });
+
+    it('takes an explicit routine/scope pair from the URL, so a filtered bucket is a shareable link', async () => {
+      const { el } = await mount({
+        url: '/gardening/findings?routine=weekly&scope=web',
+        routeOverride: withBucket,
+      });
+
+      expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-routine-all')).toBe('false');
+      expect(await pressed(el, 'gardening-findings-scope-all')).toBe('false');
+    });
+
+    it("renders the bucket's own empty rest state when the read resolves with no rows", async () => {
+      const { fixture, el } = await mount({
+        routeOverride: (method, path) => {
+          if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+          return undefined;
+        },
+      });
+
+      const list = fixture.debugElement.query(By.css('app-finding-list'));
+      expect(list.componentInstance.state()).toBe('empty');
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+    });
+
+    it("shows each row's own routine and scope while both dimensions are unnamed, so a widened bucket disambiguates itself", async () => {
+      const { el } = await mount({ routeOverride: withBucket });
+
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      expect(nightly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('nightly');
+      expect(nightly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
+
+      const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
+      expect(weekly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('weekly');
+      expect(weekly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('web');
+    });
+
+    it('omits the routine/scope markup once a concrete routine and scope are chosen', async () => {
+      const { el } = await mount({
+        url: '/gardening/findings?routine=nightly&scope=blizzard',
+        routeOverride: withBucket,
+      });
+
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      expect(nightly?.querySelector('.fl-routine')).toBeNull();
+      expect(nightly?.querySelector('.fl-scope')).toBeNull();
+    });
+
+    it('narrows the rendered rows via the class and state filters, naming each in the URL', async () => {
+      const { router, el } = await mount({ routeOverride: withBucket });
+
+      await pick(el, 'gardening-finding-class-item-unused-import');
+
+      expect(router.url).toBe('/gardening/findings?class=unused-import');
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeTruthy();
+
+      await pick(el, 'gardening-finding-state-item-gone');
+
+      expect(router.url).toBe('/gardening/findings?class=unused-import&state=gone');
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
+    });
+
+    it('clears the class and state filters on a routine or scope pick (F5)', async () => {
+      const { el } = await mount({
+        url: '/gardening/findings?class=unused-import&state=gone',
+        routeOverride: withBucket,
+      });
+      expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
+
+      await pick(el, 'gardening-findings-routine-item-weekly');
+
+      expect(await pressed(el, 'gardening-finding-class-all')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-state-all')).toBe('true');
+    });
+
+    it('clears a selected finding that a filter change removes from the bucket, keeping the filter itself', async () => {
+      const { router, el } = await mount({
+        url: '/gardening/findings/fnd_10',
+        routeOverride: withBucket,
+      });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')?.classList.contains('selected')).toBe(
+        true,
+      );
+
+      // fnd_10 is 'stale-docstring' — this class pick excludes it from the bucket's
+      // filtered rows without touching the routine/scope query itself.
+      await pick(el, 'gardening-finding-class-item-unused-import');
+
+      expect(router.url).toBe('/gardening/findings?class=unused-import');
+    });
+
+    it('does not clear a selection while the bucket read triggered by a routine/scope pick is still pending', async () => {
+      const { fixture, router } = await mount({
+        url: '/gardening/findings/fnd_10',
+        routeOverride: withBucket,
+      });
+
+      // Landing on a new routine starts a brand-new bucket query — pending until
+      // the stubbed fetch's own promise chain resolves. Rendered synchronously,
+      // with no `await` in between, so no microtask has run yet: the row list
+      // reads empty right now (no data for the new query key), which is exactly
+      // the state a naive "id not in rows" check would misread as "filtered out".
+      await router.navigateByUrl('/gardening/findings/fnd_10?routine=weekly&scope=web');
+      fixture.detectChanges();
+
+      expect(router.url).toContain('fnd_10');
+
+      // Once the read settles the stub answers `/api/findings` the same way
+      // regardless of the routine/scope query params, so fnd_10 is still present —
+      // the selection survives, proving the pending window never fired a
+      // premature clear.
+      await settle(fixture);
+      expect(router.url).toBe('/gardening/findings/fnd_10?routine=weekly&scope=web');
+    });
+  });
+
+  describe('a finding with a pending triage mutation drops from a state-filtered list', () => {
+    /** `gardening-finding-triage-dialog.ts` owns and fires the six triage mutations,
+     * not this page — a `mutationKey`-scoped read is exactly what lets this list see
+     * another component's in-flight mutation without owning it, so this fires it from
+     * the same root injector rather than through `GardeningFindingsPage` itself
+     * (`board-page.spec.ts`'s own `fireDeleteFrom` shape). */
+    function fireResolveFrom(findingIds: readonly string[]): { resolve: () => void } {
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectResolveFindingsMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ findingIds: [...findingIds], note: 'landed elsewhere' });
+      return { resolve: resolveInvalidate };
+    }
+
+    it("drops the row from the 'live' filter while Resolve is pending, and restores it once the resolve settles", async () => {
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=live', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      const { resolve } = fireResolveFrom(['fnd_10']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+
+      resolve();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("restores the row when the resolve is rejected", async () => {
+      const { fixture, el } = await mount({
+        url: '/gardening/findings?state=live',
+        routeOverride: (method, path) => {
+          if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'blank note' });
+          return withBucket(method, path);
+        },
+      });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectResolveFindingsMutation());
+      mutation.mutate({ findingIds: ['fnd_10'], note: 'landed elsewhere' });
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("does not drop the row under 'All states', where nothing is being predicted away from", async () => {
+      const { fixture, el } = await mount({ routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      fireResolveFrom(['fnd_10']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("drops the row from the 'resolved' filter while Reopen is pending — every one of the six verbs is total over the currently-filtered state, not just the exit five", async () => {
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=resolved', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectReopenFindingsMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ findingIds: ['fnd_12'], note: 'reproduces again' });
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeNull();
+
+      resolveInvalidate();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+    });
+
+    it("keeps the row visible on a same-state re-dispatch — Resolve fired again on an already-resolved row under the 'resolved' filter", async () => {
+      // `finding-panel.ts` renders every exit verb regardless of the finding's
+      // current state, so an operator can click Resolve again on a row that is
+      // already `resolved`. Unlike the Reopen case above, that call's own resulting
+      // state (`resolved`) is exactly the currently active filter state — it never
+      // actually leaves the filtered set, so hiding it while pending would be a bare
+      // guess, not a prediction, and the row must stay visible throughout.
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=resolved', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      const { resolve } = fireResolveFrom(['fnd_12']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      resolve();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+    });
+  });
+});

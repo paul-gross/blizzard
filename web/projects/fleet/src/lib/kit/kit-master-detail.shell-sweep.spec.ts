@@ -21,7 +21,7 @@ async function nextFrame(): Promise<void> {
  * app's build `styles`, never by a standalone component test — read the sheet's real
  * text server-side and inject it, the same as `hover-tint.shell-sweep.spec.ts`. */
 async function loadDesignTokens(): Promise<void> {
-  const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
   const styleEl = document.createElement('style');
   styleEl.textContent = css;
   document.head.appendChild(styleEl);

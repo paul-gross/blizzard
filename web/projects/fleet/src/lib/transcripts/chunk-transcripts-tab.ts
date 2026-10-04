@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { TransitionView } from '../api/hub';
-import { harnessName } from '../harness-name';
+import { harnessName } from '../core/harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBackBar } from '../kit/kit-back-bar';
 import { KitBadge } from '../kit/kit-badge';

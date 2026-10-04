@@ -5,7 +5,7 @@ import type { TranscriptSegmentContentView, TranscriptSegmentIndexView } from '.
 import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
 import * as runnerApi from '../api/runner';
-import { chunkTranscriptSegmentKey, chunkTranscriptsKey, type TranscriptPlane } from '../query-keys';
+import { chunkTranscriptSegmentKey, chunkTranscriptsKey, type TranscriptPlane } from '../core/query-keys';
 
 /** Each plane's own generated module, keyed by {@link TranscriptPlane} (`bzh:generated-
  * client`) — the two specs mirror each other's path shape, but calling through the

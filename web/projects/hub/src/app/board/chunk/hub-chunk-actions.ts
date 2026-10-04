@@ -1,8 +1,8 @@
 import { type Provider, computed, signal } from '@angular/core';
 import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
 import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
-import { answerQuestionMutationKey } from '../../mutation-keys';
-import { hasPermission, injectMeQuery } from '../../auth/me.query';
+import { answerQuestionMutationKey } from '../../core/mutation-keys';
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 
 /** The graphs view's own path segments — the target every hub composition site links a

@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { patchChunkApiChunksChunkIdPatch, hubChunkKey, hubChunksKey } from 'fleet';
-import { chunkSetGraphMutationKey } from '../../mutation-keys';
+import { chunkSetGraphMutationKey } from '../../core/mutation-keys';
 
 /** Repin a not-ready chunk's workflow graph — the target graph's id. */
 export interface ChunkGraphEditVars {

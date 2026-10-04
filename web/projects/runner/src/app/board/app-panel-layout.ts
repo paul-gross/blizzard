@@ -40,7 +40,7 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  * Owns no titlebar: the shared `BoardHeader` chrome, the pause
  * control/identity/profile-menu trailing cluster, and their narrow-tier
  * collapse all moved up to the app root's own `AppHeader`
- * (`../../runner/src/app/nav/app-header.ts`), the same shelf the hub board's
+ * (`../../runner/src/app/shell/nav/app-header.ts`), the same shelf the hub board's
  * header sits on — mounted once, above the routed tab strip, rather than
  * nested inside this routed layout where it used to render under the tabs on
  * `/board` and not at all on `/events`.

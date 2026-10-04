@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { promoteChunkApiChunksChunkIdPromotePost, hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { promoteChunkMutationKey } from '../../mutation-keys';
+import { promoteChunkMutationKey } from '../../core/mutation-keys';
 
 /** Promote a not-ready chunk to ready — the board's counterpart of `blizzard hub promote`. */
 export interface PromoteVars {

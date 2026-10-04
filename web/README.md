@@ -65,7 +65,7 @@ fails on any git diff. Do not edit the generated files, and do not lint them (th
 
 ## The design layer (the mission-control aesthetic)
 
-`projects/fleet/src/lib/design/` holds two **global** stylesheets — both listed ahead of each app's own in its build
+`projects/fleet/src/lib/core/design/` holds two **global** stylesheets — both listed ahead of each app's own in its build
 `styles`, because component styles are view-encapsulated and these must reach every component:
 
 | Sheet            | Owns                                                                                               |

@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type UserView, assignRoleApiUsersUserIdRolePost, hubUsersKey } from 'fleet';
-import { assignRoleMutationKey } from '../mutation-keys';
+import { assignRoleMutationKey } from '../core/mutation-keys';
 
 /** `POST /api/users/{id}/role`'s own variables — the target user and the role it is
  * being assigned to. Every hub-side rule (self-change, `superuser` grant/revoke,

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type EnvRow, EnvListView } from './env-list-view';
-import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
  * The environments rail **container**: one row per environment in the

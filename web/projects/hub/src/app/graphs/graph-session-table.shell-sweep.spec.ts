@@ -15,7 +15,7 @@ import { GraphSessionTable } from './graph-session-table';
  * Mounted at 800×600, `graph-detail.shell-sweep.spec.ts`'s own width — the widest this
  * table is ever framed at in the real graph detail page it lives on. Graph detail is not
  * reachable from the hub's mobile bottom tab bar
- * (`projects/hub/src/app/nav/mobile-tab-bar.ts` routes only Board, Asks, Fleet, Events, and
+ * (`projects/hub/src/app/shell/nav/mobile-tab-bar.ts` routes only Board, Asks, Fleet, Events, and
  * Gardening), so `bzh:narrow-viewport-tier-rule` does not bind here.
  *
  * Proven able to fail by widening `table.sessions th`/`td`'s `padding` far enough that the

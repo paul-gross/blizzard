@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { chunkPauseMutationKey } from '../../mutation-keys';
+import { chunkPauseMutationKey } from '../../core/mutation-keys';
 
 /** Toggle a chunk's operator pause brake: pausing holds the claim, kills
  * the active worker, and takes it off the ready queue; resuming clears the brake. */

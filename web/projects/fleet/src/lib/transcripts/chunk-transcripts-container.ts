@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { Client } from '../api/hub/client';
 import type { TransitionView } from '../api/hub';
-import { asyncState } from '../query-state';
+import { asyncState } from '../core/query-state';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
-import type { TranscriptPlane } from '../query-keys';
+import type { TranscriptPlane } from '../core/query-keys';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
 

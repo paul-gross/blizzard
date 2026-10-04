@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
 import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, deriveWorkItemsState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
-import { hasPermission, injectMeQuery } from '../../auth/me.query';
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
@@ -15,7 +15,7 @@ import {
   readDecisionFailure,
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
-import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../../mutation-keys';
+import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../../core/mutation-keys';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 /** Whether a pending Pause's predicted `paused` outcome is total over each status —

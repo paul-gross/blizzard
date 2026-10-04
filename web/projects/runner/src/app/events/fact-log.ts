@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { asyncState, KitAsyncState } from 'fleet';
 
 import { FactLogView } from './fact-log-view';
-import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
  * The local fact log **container** — "runner store": the newest hub-bound facts

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { UsersTable } from './users-table';
 import { asyncState, hubApi, KitAsyncState } from 'fleet';
 import { injectAssignRoleMutation } from './assign-role.mutations';
-import { injectMeQuery } from '../auth/me.query';
+import { injectMeQuery } from '../core/auth/me.query';
 import { injectUsersQuery } from './users.query';
 
 /**

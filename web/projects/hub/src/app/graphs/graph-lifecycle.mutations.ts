@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost, hubGraphKey, hubGraphsKey } from 'fleet';
-import { graphLifecycleMutationKey } from '../mutation-keys';
+import { graphLifecycleMutationKey } from '../core/mutation-keys';
 
 /** Retire or re-enable a graph's reversible lifecycle brake: a retired
  * graph is excluded from name resolution and refuses new re-pins, but the `graphs`

@@ -2,8 +2,8 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
-import { chunkPauseMutationKey } from '../../live/mutation-keys';
-import { runnerChunkDetailKey, runnerLeasesKey } from '../../live/query-keys';
+import { chunkPauseMutationKey } from '../../core/mutation-keys';
+import { runnerChunkDetailKey, runnerLeasesKey } from '../../core/query-keys';
 
 /** Toggle a chunk's operator pause brake from the machine panel: pausing
  * holds the claim, interrupts the active worker (force-stopping it only if it hasn't wound

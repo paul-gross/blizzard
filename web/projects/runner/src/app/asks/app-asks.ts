@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type AskRow, LocalAsksView } from './app-asks-view';
-import { injectRunnerDashboardQuery } from '../status/status.query';
+import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
  * The app-asks panel **container** — "answers live at the hub": every ask still

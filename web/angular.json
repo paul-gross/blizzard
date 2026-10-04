@@ -31,8 +31,8 @@
             ],
             "styles": [
               "node_modules/@angular/cdk/overlay-prebuilt.css",
-              "projects/fleet/src/lib/design/tokens.css",
-              "projects/fleet/src/lib/design/scrollbars.css",
+              "projects/fleet/src/lib/core/design/tokens.css",
+              "projects/fleet/src/lib/core/design/scrollbars.css",
               "projects/hub/src/styles.css"
             ]
           },
@@ -120,8 +120,8 @@
             ],
             "styles": [
               "node_modules/@angular/cdk/overlay-prebuilt.css",
-              "projects/fleet/src/lib/design/tokens.css",
-              "projects/fleet/src/lib/design/scrollbars.css",
+              "projects/fleet/src/lib/core/design/tokens.css",
+              "projects/fleet/src/lib/core/design/scrollbars.css",
               "projects/runner/src/styles.css"
             ]
           },

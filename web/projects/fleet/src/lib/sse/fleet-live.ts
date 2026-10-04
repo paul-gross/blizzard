@@ -25,7 +25,7 @@ import {
   hubDecisionsKey,
   hubQueueKey,
   hubRunnersKey,
-} from '../query-keys';
+} from '../core/query-keys';
 import { LiveInvalidationSpine } from './live-invalidation-spine';
 import { type SseStatus, SseService } from './sse.service';
 

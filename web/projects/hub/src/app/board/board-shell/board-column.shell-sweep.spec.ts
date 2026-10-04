@@ -27,7 +27,7 @@ const BACKLOG: Lane = { key: 'notready', label: 'BACKLOG', headerLabel: 'Backlog
 const RUNNING: Lane = { key: 'running', label: 'RUNNING', headerLabel: 'Running' };
 
 async function loadDesignTokens(): Promise<void> {
-  const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);

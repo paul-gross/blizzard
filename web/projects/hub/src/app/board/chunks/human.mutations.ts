@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type AnswerResult, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
-import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../mutation-keys';
+import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../core/mutation-keys';
 
 /** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
 export interface AnswerVars {

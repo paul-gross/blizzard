@@ -355,7 +355,7 @@ def test_case12c_committed_registry_cross_repo_agreement() -> None:
 
 
 def test_case13_chunk_escalation_leading_block_attributes_to_class() -> None:
-    path = _REPO_ROOT / "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts"
+    path = _REPO_ROOT / "web/projects/fleet/src/lib/chunk/chunk-detail/chunk-escalation.ts"
     spans = prose_spans.extract_spans(path)
     leading = [s for s in spans if s.start_line == 7]
     assert len(leading) == 1

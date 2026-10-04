@@ -1,0 +1,261 @@
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
+import { asyncState, injectPendingMutationVariables, compactRef, errorMessage, type FindingView, type GardenProposalClosureView, type GardenProposalView, type KitAsyncStateValue } from 'fleet';
+import { FleetProposalPanel, type ProposalClosureVm, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalOriginVm, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { injectHubFindingsQuery } from '../core/finding.query';
+import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { injectHubWorkItemQuery } from '../core/work-item.query';
+import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectResolveFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from '../core/finding.mutations';
+import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, resolveFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
+import { map } from 'rxjs';
+
+import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';
+import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
+
+/**
+ * The selected proposal's own detail — the right-hand child of
+ * `/gardening/proposals` (`gardening-proposals-page.ts` owns the docket beside
+ * it), and where passing and accepting are dispatched from. Mounted by both of
+ * that route's children, so the bare one renders the panel's own empty state; on
+ * a docket with anything in it the list route navigates to a row rather than
+ * leaving the operator on that bare path, so the empty state shows only on a
+ * genuinely empty docket.
+ *
+ * The selected proposal's own record already carries its full case and closure —
+ * the one list read returns every `GardenProposalView` field, so this pane needs
+ * no second by-id fetch of its own (the same client-side-filtering spirit
+ * applied to selection too), and reaching for that same cache-keyed read is what
+ * lets it resolve the routed proposal without a seam back to the list. Its
+ * evidence is different: a proposal carries finding *ids* only, so this container
+ * fans those out live through `injectHubFindingsQuery`, and, for an
+ * accepted-and-minted proposal, resolves the linked work item through its
+ * closure's `source`/`ref` pointer via `injectHubWorkItemQuery`.
+ *
+ * Owns the two closing dialogs' own dialog-open signals (both verbs
+ * gate on `chunk:control`, resolved here through `injectMeQuery` +
+ * `hasPermission` and forwarded to the panel as `canControl`).
+ */
+@Component({
+  selector: 'app-gardening-proposal-detail',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FleetProposalPanel, GardeningProposalAcceptDialog, GardeningProposalPassDialog],
+  templateUrl: './gardening-proposal-detail.html',
+  styleUrl: '../core/gardening-detail-host.css',
+})
+export class GardeningProposalDetail {
+  private readonly route = inject(ActivatedRoute);
+  private readonly proposalsQuery = injectHubGardenProposalsQuery();
+  private readonly meQuery = injectMeQuery();
+
+  private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
+
+  /** The `proposalId` route param, or `null` on the bare child route. A proposal is
+   * keyed by its own id (`gprop_…`, rendered compactly as `GP-…`). */
+  private readonly proposalId = toSignal(this.route.paramMap.pipe(map((params) => params.get('proposalId'))), {
+    initialValue: null,
+  });
+
+  /** The selected row's own full record — already carried by the one list read, so
+   * this is a lookup, never a second fetch. */
+  private readonly selectedProposal = computed<GardenProposalView | null>(() => {
+    const id = this.proposalId();
+    return id === null ? null : (this.proposals().find((p) => p.proposal_id === id) ?? null);
+  });
+
+  /** Panel state branches on selection before ever consulting the list read's own
+   * async state (`bzh:frontend-empty-state-gated`) — once something is selected its
+   * record is already in hand, synchronously, from {@link proposals}. */
+  protected readonly panelState = computed<KitAsyncStateValue>(() =>
+    this.selectedProposal() === null ? asyncState(this.proposalsQuery, true) : 'ready',
+  );
+
+  private readonly findingsQuery = injectHubFindingsQuery(() => this.selectedProposal()?.findings ?? []);
+
+  /** The (source, ref) pair naming an accepted-and-minted proposal's linked work
+   * item — `null` for a waiting, passed, or accepted-and-declined proposal, so the
+   * work-item query stays disabled for all three. */
+  private readonly acceptedItemPointer = computed<{ source: string; ref: string } | null>(() => {
+    const closure = this.selectedProposal()?.closure;
+    if (closure?.closure !== 'accepted' || closure.item_outcome !== 'minted') return null;
+    return { source: closure.source!, ref: closure.ref! };
+  });
+
+  private readonly workItemQuery = injectHubWorkItemQuery(
+    () => this.acceptedItemPointer()?.source ?? null,
+    () => this.acceptedItemPointer()?.ref ?? null,
+  );
+
+  /** The accepted-and-minted work item, resolved for display — `null` while the
+   * read is still in flight, so a loading window never shows a synthesized label
+   * that could pass for resolved data; once settled, `label`/`webUrl` come off the
+   * real record, or the bare pointer once the read has genuinely failed (the item
+   * is gone), and `web_url` alone reads `null` once the chunk is merely terminal. */
+  private readonly workItemVm = computed<ProposalWorkItemVm | null>(() => {
+    const pointer = this.acceptedItemPointer();
+    if (pointer === null || this.workItemQuery.isPending()) return null;
+    const item = this.workItemQuery.data();
+    return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
+  });
+
+  private closureVm(closure: GardenProposalClosureView): ProposalClosureVm {
+    if (closure.closure === 'passed') {
+      return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+    }
+    return {
+      kind: 'accepted',
+      closedBy: closure.closed_by,
+      closedAt: closure.closed_at,
+      reason: closure.reason,
+      workItem: closure.item_outcome === 'minted' ? this.workItemVm() : null,
+    };
+  }
+
+  private originVm(proposal: GardenProposalView): ProposalOriginVm {
+    if (proposal.origin === 'operator') {
+      return { kind: 'operator', createdBy: proposal.created_by!, routineName: proposal.routine_name };
+    }
+    return { kind: 'routine-run', routineName: proposal.routine_name! };
+  }
+
+  protected readonly panelVm = computed<ProposalPanelVm | null>(() => {
+    const proposal = this.selectedProposal();
+    if (proposal === null) return null;
+    return {
+      proposalId: proposal.proposal_id,
+      origin: this.originVm(proposal),
+      proposalClass: proposal.class,
+      title: proposal.title,
+      body: proposal.body,
+      closure: proposal.closure ? this.closureVm(proposal.closure) : null,
+      createdAt: proposal.created_at,
+      hasFindings: proposal.findings.length > 0,
+    };
+  });
+
+  private readonly evidenceFindings = computed<readonly FindingView[]>(() => this.findingsQuery.data() ?? []);
+
+  protected readonly evidenceRows = computed<readonly ProposalEvidenceRowVm[]>(() => {
+    const workItem = this.workItemVm();
+    return this.evidenceFindings().map((f) => ({
+      findingId: f.finding_id,
+      locus: f.locus,
+      summary: f.summary,
+      state: f.state,
+      exit: f.exit ?? null,
+      workItem,
+      pending: this.pendingTriage().some((vars) => vars.findingIds.includes(f.finding_id)),
+    }));
+  });
+
+  /** A proposal citing no findings leaves the findings query disabled, which reports
+   * `isPending()` forever — so that case is `empty` before the helper is consulted. */
+  protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
+    (this.selectedProposal()?.findings.length ?? 0) === 0
+      ? 'empty'
+      : asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
+  );
+
+  /** The variables of every inline triage mutation still in flight, across the four
+   * verbs (`bzh:frontend-pending-override`) — a row whose finding id is among them is
+   * not offered its buttons again. */
+  private readonly pendingTriage = computed<readonly FindingExitVars[]>(() => [
+    ...this.pendingResolve(),
+    ...this.pendingConfirmGone(),
+    ...this.pendingWontFix(),
+    ...this.pendingNotAFinding(),
+  ]);
+  private readonly pendingResolve = injectPendingMutationVariables<FindingExitVars>(resolveFindingsMutationKey);
+  private readonly pendingConfirmGone = injectPendingMutationVariables<FindingExitVars>(confirmGoneFindingsMutationKey);
+  private readonly pendingWontFix = injectPendingMutationVariables<FindingExitVars>(wontFixFindingsMutationKey);
+  private readonly pendingNotAFinding = injectPendingMutationVariables<FindingExitVars>(notAFindingFindingsMutationKey);
+
+  /** Whether the current identity may pass or accept (`chunk:control` — the same
+   * permission the hub's two closing routes require server-side);
+   * `null`/pending resolves to `false`. */
+  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  private readonly resolveFindings = injectResolveFindingsMutation();
+  private readonly confirmGoneFindings = injectConfirmGoneFindingsMutation();
+  private readonly wontFixFindings = injectWontFixFindingsMutation();
+  private readonly notAFindingFindings = injectNotAFindingFindingsMutation();
+
+  /** One entry per verb the evidence table offers, each closing over its own injected
+   * mutation — the same by-verb dispatch table `gardening-finding-triage-dialog.ts`
+   * uses, since a mutation must be injected in a field initializer and cannot be
+   * picked inside the handler. `label` is what the generated note names the change
+   * as. */
+  private readonly evidenceMutations: Record<
+    ProposalEvidenceVerb,
+    {
+      readonly label: string;
+      readonly mutate: (
+        vars: { findingIds: string[]; note: string },
+        opts: { onError: (error: unknown) => void },
+      ) => void;
+    }
+  > = {
+    resolve: { label: 'resolved', mutate: (vars, opts) => this.resolveFindings.mutate(vars, opts) },
+    'confirm-gone': {
+      label: 'gone (confirmed)',
+      mutate: (vars, opts) => this.confirmGoneFindings.mutate(vars, opts),
+    },
+    'wont-fix': { label: "won't fix", mutate: (vars, opts) => this.wontFixFindings.mutate(vars, opts) },
+    'not-a-finding': {
+      label: 'not a finding',
+      mutate: (vars, opts) => this.notAFindingFindings.mutate(vars, opts),
+    },
+  };
+
+  /** The most recent inline triage failure, or `null` — surfaced on the panel rather
+   * than swallowed, since a quick action has no dialog left open to report into. */
+  protected readonly evidenceError = signal<string | null>(null);
+
+  /**
+   * Apply one inline exit verb to one evidence row. The note is generated rather than
+   * asked for: every exit route rejects a blank one (422), and the point of these buttons is a decision made in one click
+   * — so the UI writes what it actually knows, which is the verb and the docket the
+   * operator was reading when they chose it. The mutations invalidate the evidence
+   * table's own cache (`finding.mutations.ts`), so the row's state re-renders itself
+   * with no local bookkeeping here.
+   */
+  protected onEvidenceTriage(triage: ProposalEvidenceTriage): void {
+    const proposal = this.selectedProposal();
+    if (proposal === null) return;
+    const entry = this.evidenceMutations[triage.verb];
+    this.evidenceError.set(null);
+    entry.mutate(
+      {
+        findingIds: [triage.findingId],
+        note: `Triaged as ${entry.label} from proposal ${compactRef(proposal.proposal_id)}'s evidence.`,
+      },
+      { onError: (error) => this.evidenceError.set(errorMessage(error, `${triage.verb} failed.`)) },
+    );
+  }
+
+  /** The proposal the Pass dialog is open against — `null` closes it. Only the
+   * panel's own `pass` output ever sets it, so it can only ever name the
+   * already-selected, still-waiting proposal. */
+  protected readonly passingProposal = signal<GardenProposalView | null>(null);
+
+  /** The proposal the Accept dialog is open against — `null` closes it, the same
+   * shape as {@link passingProposal}. */
+  protected readonly acceptingProposal = signal<GardenProposalView | null>(null);
+
+  protected openPass(): void {
+    this.passingProposal.set(this.selectedProposal());
+  }
+
+  protected openAccept(): void {
+    this.acceptingProposal.set(this.selectedProposal());
+  }
+
+  protected closePass(): void {
+    this.passingProposal.set(null);
+  }
+
+  protected closeAccept(): void {
+    this.acceptingProposal.set(null);
+  }
+}

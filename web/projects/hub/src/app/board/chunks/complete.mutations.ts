@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { completeChunkApiChunksChunkIdCompletePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { chunkCompleteMutationKey } from '../../mutation-keys';
+import { chunkCompleteMutationKey } from '../../core/mutation-keys';
 
 /** Manually complete a chunk — the board's counterpart of `blizzard hub chunk done`.
  * Reachable from any non-`done` status, including `stopped`: unlike Stop,

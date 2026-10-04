@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
-import { runnerChunkWorkItemsKey } from '../../live/query-keys';
+import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 
 /** The `GET /api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}.
  * The chunk page's full-fidelity read of the same endpoint is `fleet`'s plane-generic

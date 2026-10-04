@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { TranscriptSegmentIndexEntry } from '../api/hub';
-import { harnessName } from '../harness-name';
+import { harnessName } from '../core/harness-name';
 import { KitBadge } from '../kit/kit-badge';
 import type { SidechainOpenEvent } from './transcript-viewer';
 import { TranscriptViewer } from './transcript-viewer';

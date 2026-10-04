@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../when';
+import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../core/when';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
 /** The `<summary>` line's own cap — clamps visually via CSS too

@@ -27,7 +27,7 @@ def test_undeclared_read_is_rejected_until_its_path_is_copied() -> None:
 def test_mutmut_copy_parents_exist_without_copying_repo_roots(tmp_path: Path) -> None:
     prepare_mutant_tree(tmp_path / "mutants")
     assert (tmp_path / "mutants/.github/workflows").is_dir()
-    assert (tmp_path / "mutants/web/projects/fleet/src/lib/chunk-detail").is_dir()
+    assert (tmp_path / "mutants/web/projects/fleet/src/lib/chunk/chunk-detail").is_dir()
     assert not (tmp_path / "mutants/web/angular.json").exists()
     assert not (tmp_path / "mutants/web/node_modules").exists()
 
