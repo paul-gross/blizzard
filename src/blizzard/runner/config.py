@@ -20,6 +20,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
@@ -710,10 +711,6 @@ class RunnerConfig:
         return str((path if path.is_absolute() else self.root / path).resolve())
 
     @property
-    def provider_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        return self.effective_workspace_root if self.workspace_provider == "basic" else self.workspace_root
-
-    @property
     def socket_path(self) -> Path:
         return self.socket_path_for(self.root)
 
@@ -1129,8 +1126,9 @@ class RunnerConfig:
         if not claude_code_enabled and not opencode_enabled:
             raise ConfigError("'[claude_code].enabled' and '[opencode].enabled' are both false; enable at least one")
         provider = raw.get("workspace_provider", "winter")
-        if provider not in ("basic", "winter"):
-            raise ConfigError(f"workspace_provider must be 'basic' or 'winter', got {provider!r}")
+        if provider not in WORKSPACE_PROVIDERS:
+            names = " or ".join(repr(name) for name in WORKSPACE_PROVIDERS)
+            raise ConfigError(f"workspace_provider must be {names}, got {provider!r}")
         cap = raw.get("max_environments", DEFAULT_MAX_ENVIRONMENTS)
         if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
             raise ConfigError(f"max_environments must be a positive integer, got {cap!r}")

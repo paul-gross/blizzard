@@ -161,16 +161,12 @@ class LoopWiring:
             workspace_id=config.workspace_id,
             max_agents=config.max_agents,
             base_branch=config.base_branch,
-            env_capacity=(
-                config.max_environments if config.workspace_provider == "basic" else len(config.workspace_envs)
-            ),
+            env_capacity=provider.capacity(),
             public_url=config.public_url,  # this runner's own federation identity
             redirect_uris=config.redirect_uris,
             local_api_url=config.local_api_url,
             gates=config.gates,
-            # Basic workers run in their acquired workdir, away from shared clones.
-            # Winter keeps its configured workspace-wide spawn cwd.
-            workspace_root="" if config.workspace_provider == "basic" else config.workspace_root,
+            workspace_root=provider.spawn_root(),
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),

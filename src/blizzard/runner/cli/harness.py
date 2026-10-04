@@ -9,6 +9,7 @@ import click
 
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.harness.ambient_conflicts import claude_code_config_conflicts
 from blizzard.runner.harness.bundle import published_snapshot
 from blizzard.runner.harness.bundle_layouts import claude_code_delivery, inspect_harness_bundle
@@ -43,7 +44,9 @@ def harness_status(directory: str) -> None:
         config = RunnerConfig.load(Path(directory))
         click.echo(f"autonomy: {config.autonomy} (from {_autonomy_source(config)})")
         if config.claude_code_enabled:
-            for conflict in claude_code_config_conflicts(config):
+            for conflict in claude_code_config_conflicts(
+                config, spawn_root=build_workspace_provider(config).spawn_root()
+            ):
                 click.echo(f"claude-code config conflict: {conflict}")
         if config.harness_config_dir is None:
             click.echo("config_dir: none")

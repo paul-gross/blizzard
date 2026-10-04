@@ -19,11 +19,11 @@ from blizzard.runner.harness.internal.claude_code_settings_compose import resolv
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 
 
-def claude_code_ambient_sources(config: RunnerConfig) -> AmbientSources:
+def claude_code_ambient_sources(config: RunnerConfig, *, spawn_root: str) -> AmbientSources:
     """The settings locations a Claude Code worker spawned by ``config`` would load: the managed
     path(s), the user config dir its allowlisted env resolves (never the daemon's own), and the
-    spawn cwd."""
-    project = SpawnCwd(config.workspace_root, None).path
+    spawn cwd — ``spawn_root`` as the workspace provider answers it."""
+    project = SpawnCwd(spawn_root, None).path
     return AmbientSources(
         managed_paths=MANAGED_SETTINGS_PATHS,
         user_dir=user_config_dir(config.worker_env.variables),
@@ -36,7 +36,9 @@ def claude_code_permission_mode(config: RunnerConfig) -> str | None:
     return resolved_permission_mode(config.autonomy, config.harness_permission_mode)
 
 
-def claude_code_config_conflicts(config: RunnerConfig) -> tuple[str, ...]:
+def claude_code_config_conflicts(config: RunnerConfig, *, spawn_root: str) -> tuple[str, ...]:
     """Each ambient setting that defeats the runner's wiring, rendered as its file and key."""
-    found = detect_ambient_conflicts(claude_code_ambient_sources(config), claude_code_permission_mode(config))
+    found = detect_ambient_conflicts(
+        claude_code_ambient_sources(config, spawn_root=spawn_root), claude_code_permission_mode(config)
+    )
     return tuple(str(conflict) for conflict in found)

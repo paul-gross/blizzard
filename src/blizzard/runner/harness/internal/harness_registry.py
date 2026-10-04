@@ -62,7 +62,7 @@ def build_production_harness_registry(
     return HarnessRegistry(bindings)
 
 
-def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IHarnessHealthProbe]:
+def build_production_harness_health_probes(config: RunnerConfig, *, spawn_root: str) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, this module's own approved wiring site for the
     health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
@@ -72,7 +72,7 @@ def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IH
         probes[CLAUDE_CODE_HARNESS_ID] = ClaudeCodeHealthProbe(
             binary=config.harness_binary,
             credentials_path=config.claude_code_credentials_path,
-            ambient_sources=claude_code_ambient_sources(config),
+            ambient_sources=claude_code_ambient_sources(config, spawn_root=spawn_root),
             permission_mode=claude_code_permission_mode(config),
         )
     if config.opencode_enabled:

@@ -577,12 +577,23 @@ class FakeProvider:
         refuse: bool = False,
         prepare_fail: bool = False,
         repos: dict[str, Sequence[tuple[str, str]]] | None = None,
+        spawn_root: str = "",
     ) -> None:
         self._pool = pool  # env_id -> workdir
+        self._spawn_root = spawn_root
         self.refuse = refuse
         self.prepare_fail = prepare_fail
         self.released: list[str] = []
         self._repos = {env: tuple(entries) for env, entries in (repos or {}).items()}
+
+    def spawn_root(self) -> str:
+        return self._spawn_root
+
+    def capacity(self) -> int:
+        return len(self._pool)
+
+    def pool(self) -> tuple[str, ...]:
+        return tuple(self._pool)
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         if self.refuse:

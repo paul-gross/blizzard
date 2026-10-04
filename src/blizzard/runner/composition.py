@@ -172,7 +172,7 @@ def build_runner_process(
             harnesses.transcript_source(default_id)
         health = HarnessHealthCache(
             clock=clock,
-            probes=build_production_harness_health_probes(config),
+            probes=build_production_harness_health_probes(config, spawn_root=provider.spawn_root()),
             selftest_results=stores.selftest_results,
             configured_tiers={
                 CLAUDE_CODE_HARNESS_ID: config.model_aliases,
