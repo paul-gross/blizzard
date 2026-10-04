@@ -73,6 +73,12 @@ class IReadLeaseRecordRepository(Protocol):
         """The highest lease epoch minted for this chunk, or 0 — the fence source."""
         ...
 
+    def has_lease_in_binding_tenure(self, chunk_id: str, bound_at: datetime) -> bool:
+        """Whether a local lease was minted since the current binding began.
+
+        Release-time epoch floors distinguish an earlier tenure even if clock instants coincide."""
+        ...
+
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
         """Every lease id ever minted for this chunk, active or closed.
 

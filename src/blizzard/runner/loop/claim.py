@@ -19,6 +19,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
 from blizzard.wire.route import RouteClaim
@@ -202,10 +203,10 @@ class ReadyQueue:
 
 @dataclass(frozen=True)
 class InterruptedClaims:
-    """Bindings left by a crash in FILL's bind→claim→spawn window.
+    """Reconcile bindings left in FILL's bind→claim→spawn window.
 
-    A crash before the hub claim leaves a binding without an active lease. Before FILL
-    peeks new work, adopt a route still ours or release the orphaned binding."""
+    Before FILL peeks new work, recover a node entry ADVANCE will not make, or release
+    an orphan. A strictly newer hub epoch belongs to ADVANCE."""
 
     ctx: LoopContext
 
@@ -248,7 +249,8 @@ class InterruptedClaims:
             # claim; without this guard the adopt branch would bump the epoch under the human.
             return
         if view.status == ChunkStatus.RUNNING and ours:
-            self._adopt(chunk_id, view.latest_epoch)  # route ours — just spawn the current node
+            if self._owns_node_entry(chunk_id, view, bindings):
+                self._adopt(chunk_id, view.latest_epoch)
         elif view.status == ChunkStatus.READY:
             if braked:
                 return  # a claim is a new claim — the binding is durable; reclaimed once the brake lifts
@@ -264,8 +266,23 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
+    def _owns_node_entry(self, chunk_id: str, view: ChunkStatusView, bindings: list[EnvBindingRecord]) -> bool:
+        """Whether FILL, not ADVANCE, spawns this running chunk's lease-less current node.
+
+        ADVANCE enters a strictly newer hub epoch through the node's declared session, so
+        FILL keeps the runner's own epoch (a suppressed or interrupted respawn), the current
+        restart entry, and a first claim with no lease in this binding tenure."""
+        hub_epoch = view.latest_epoch
+        local_epoch = self.ctx.stores.lease_record.latest_epoch(chunk_id)
+        if hub_epoch == local_epoch:
+            return True
+        if hub_epoch is not None and hub_epoch > local_epoch and hub_epoch in view.restart_epochs:
+            return True
+        bound_at = min(binding.bound_at for binding in bindings)
+        return not self.ctx.stores.lease_record.has_lease_in_binding_tenure(chunk_id, bound_at)
+
     def _adopt(self, chunk_id: str, latest_epoch: int | None) -> None:
-        """Spawn the current node for a claimed chunk whose FILL crashed before the lease minted.
+        """Spawn the current node for a claimed chunk whose spawn never minted a lease.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
         a spawn of the current node from its idempotent envelope. Also the route-token recovery

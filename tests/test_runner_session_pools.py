@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import update
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
@@ -31,6 +32,7 @@ from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.schema import leases
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.wire.graph import RotatePolicyView
@@ -418,6 +420,123 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     # The inherited session model reaches the harness on the resume.
     assert h2.spawn_model_effort == [("sonnet", "medium")]
     assert h2.spawn_compaction_windows == ["150000"]
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("mode", ["bare", "named", "rotated", "fresh"])
+def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    first = _pooled("build", "nd_build", mode=SessionMode.FRESH, effort="medium")
+    if mode == "bare":
+        next_node = make_envelope("ch_1", "retro", node_id="nd_retro", choices=_CHOICES, session=SessionMode.RESUME)
+    else:
+        next_node = make_envelope(
+            "ch_1",
+            "retro",
+            node_id="nd_retro",
+            choices=_CHOICES,
+            session=SessionMode.FRESH if mode == "fresh" else SessionMode.RESUME,
+            session_source="code",
+            session_name="code",
+            session_model=["blizzard:basic"],
+            session_effort="high",
+            session_rotate=_rotate(max_invocations=0) if mode == "rotated" else None,
+        )
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", first)
+    initial = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    initial.resolved_model = "sonnet"
+    Fill(_ctx(store, hub, provider, initial)).run()
+    prior = store.active_lease_for_chunk("ch_1")
+    assert prior is not None
+    if mode == "rotated":
+        record_usage(
+            store,
+            lease_id=prior.lease_id,
+            chunk_id="ch_1",
+            node_id="nd_build",
+            epoch=prior.epoch,
+            generation=1,
+            sample=UsageSample(
+                kind="spawn",
+                model="sonnet",
+                input_tokens=1,
+                output_tokens=0,
+                cache_read_tokens=0,
+                cache_create_tokens=0,
+                cost_usd=None,
+            ),
+            recorded_at=_NOW,
+        )
+    hub.queue = []
+    hub.envelopes["ch_1"] = first
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    middle = _ctx(store, hub, provider, initial, minutes=1)
+    Advance(middle).run()
+    Advance(middle).run()
+    Pull(middle).run()
+    assert store.active_lease_for_chunk("ch_1") is None
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=prior.epoch + 2
+    )
+    hub.envelopes["ch_1"] = next_node
+    next_harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-next", pid=200, process_start_time="t2", pgid=200), verdict="pass"
+    )
+    next_harness.resolved_model = "sonnet"
+    ctx = _ctx(store, hub, provider, next_harness, minutes=2)
+    Fill(ctx).run()
+    assert next_harness.spawns == []  # recovery must leave the node entry to ADVANCE
+    Advance(ctx).run()
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "retro"
+    if mode in ("bare", "named"):
+        assert lease.session_id == prior.session_id == "sess-build"
+        assert next_harness.resume_froms == ["sess-build"]
+        assert (lease.resolved_model, lease.resolved_effort) == ("sonnet", "medium")
+        assert store.boundary(lease.lease_id, 1, "resume") is not None
+    else:
+        assert next_harness.resume_froms == [None]
+        assert lease.session_id == "sess-next"
+        assert lease.resolved_model == "sonnet"
+        assert store.boundary(lease.lease_id, 1, "spawn") is not None
+
+
+@pytest.mark.component
+def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    old = _pooled("build", "nd_build", mode=SessionMode.FRESH)
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", old)
+    first = FakeHarness(
+        handle=WorkerHandle(session_id="old", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    Fill(_ctx(store, hub, provider, first)).run()
+    previous = store.active_lease_for_chunk("ch_1")
+    assert previous is not None
+    store.record_closure(
+        lease_id=previous.lease_id, chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=_NOW
+    )
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    hub.queue = []
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=previous.epoch + 1
+    )
+    hub.envelopes["ch_1"] = old
+    recovered = FakeHarness(
+        handle=WorkerHandle(session_id="new", pid=200, process_start_time="t2", pgid=200), verdict="pass"
+    )
+    Fill(_ctx(store, hub, provider, recovered)).run()
+    assert recovered.resume_froms == [None]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id == "new"
 
 
 @pytest.mark.component

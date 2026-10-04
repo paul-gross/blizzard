@@ -22,6 +22,7 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
@@ -60,6 +61,40 @@ def test_migrate_up_and_down(daemon: Daemon, tmp_path: Path) -> None:
 
     daemon.runtime.migrate(tmp_path)
     assert runner.current_revision() == head
+
+
+def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_path: Path) -> None:
+    config = runner_runtime.init_environment(tmp_path)
+    migration = runner_runtime.migration_runner(config)
+    migration.downgrade("20261003_1000_runner_transcript_segment_spawn_cwd")
+    engine = create_engine_from_url(config.db_url)
+    instant = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    try:
+        with engine.begin() as conn:
+            for lease_id, epoch in (("old", 1), ("new", 3)):
+                conn.execute(
+                    runner_schema.leases.insert().values(
+                        lease_id=lease_id, chunk_id="ch_1", epoch=epoch, runner_id="r1", created_at=instant
+                    )
+                )
+            conn.execute(
+                runner_schema.lease_closures.insert().values(
+                    lease_id="old", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=instant
+                )
+            )
+            conn.execute(
+                runner_schema.binding_releases.insert().values(
+                    chunk_id="ch_1", environment_id="e1", released_at=instant
+                )
+            )
+        migration.upgrade("head")
+        with engine.connect() as conn:
+            floor = conn.execute(sa.select(runner_schema.binding_releases.c.lease_epoch_floor)).scalar_one()
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        assert floor == 1
+        assert store.has_lease_in_binding_tenure("ch_1", instant)
+    finally:
+        engine.dispose()
 
 
 def test_daemon_refuses_on_revision_mismatch(daemon: Daemon, tmp_path: Path) -> None:

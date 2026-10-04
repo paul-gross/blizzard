@@ -471,7 +471,7 @@ def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # t
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
 
 
-def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
+def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -494,8 +494,8 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     assert harness.spawns == []
     assert store.held_environment_ids() == ["e1"]
 
-    # Unpause; the next FILL's reconcile pass sees the same shape a crashed FILL
-    # would leave and adopts it — no deferred-spawn state was needed.
+    # Unpause; the hub already moved to a newer epoch, so FILL leaves the node entry to
+    # ADVANCE's held-chunk drive — no deferred-spawn state was needed.
     _pause_locally(store, ctx, paused=False)
     hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
@@ -505,6 +505,8 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     )
     hub.envelopes["ch_1"] = next_env
     Fill(ctx).run()
+    assert harness.spawns == []
+    Advance(ctx).run()
 
     assert len(harness.spawns) == 1
     lease = store.active_lease_for_chunk("ch_1")

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import EnvBindingRecord, IWriteEnvironmentRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import HELD_BINDING
-from blizzard.runner.store.schema import binding_releases, env_bindings
+from blizzard.runner.store.schema import binding_releases, env_bindings, leases
 
 _log = get_logger("blizzard.runner.store")
 
@@ -53,9 +53,13 @@ class EnvironmentStore:
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._store.begin() as conn:
+            floor = conn.execute(select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)).scalar_one()
             conn.execute(
                 binding_releases.insert().values(
-                    chunk_id=chunk_id, environment_id=environment_id, released_at=released_at
+                    chunk_id=chunk_id,
+                    environment_id=environment_id,
+                    released_at=released_at,
+                    lease_epoch_floor=floor,
                 )
             )
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)

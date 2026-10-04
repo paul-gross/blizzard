@@ -19,6 +19,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView
@@ -73,6 +74,29 @@ def test_heartbeat_staleness_probe_plans_as_an_index_search(tmp_path: Path) -> N
 
     plan = support.explain_query_plan(engine, *_one_select(statements))
     assert any("ix_heartbeats_lease_id_beat_at" in str(row) for row in plan), plan
+
+
+def test_binding_tenure_lease_probe_uses_the_chunk_epoch_index(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_1",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=1,
+            created_at=_NOW,
+        )
+    )
+    with support.capture_statements(engine) as statements:
+        assert store.has_lease_in_binding_tenure("ch_1", _NOW)
+
+    plan = support.explain_query_plan(engine, *_one_select(statements))
+    assert any("ix_leases_chunk_id_epoch" in str(row) for row in plan), plan
 
 
 def test_pending_outbound_plans_as_an_index_search(tmp_path: Path) -> None:

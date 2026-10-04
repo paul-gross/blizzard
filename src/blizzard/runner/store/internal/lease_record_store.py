@@ -21,6 +21,7 @@ from blizzard.runner.store.internal.base import (
     row_to_lease,
 )
 from blizzard.runner.store.schema import (
+    binding_releases,
     lease_closures,
     lease_context,
     leases,
@@ -129,6 +130,21 @@ class LeaseRecordStore:
             lease_max = conn.execute(lease_stmt).scalar_one_or_none()
             fence_max = conn.execute(fence_stmt).scalar_one_or_none()
         return max(int(lease_max) if lease_max is not None else 0, int(fence_max) if fence_max is not None else 0)
+
+    def has_lease_in_binding_tenure(self, chunk_id: str, bound_at: datetime) -> bool:
+        # A release's epoch floor is recorded in the release transaction, so it orders
+        # old and new tenures even when all their timestamps are identical.
+        release_floor = select(func.max(binding_releases.c.lease_epoch_floor)).where(
+            binding_releases.c.chunk_id == chunk_id
+        )
+        stmt = (
+            select(leases.c.lease_id)
+            .where(leases.c.chunk_id == chunk_id)
+            .where(leases.c.created_at >= bound_at)
+            .where(leases.c.epoch > func.coalesce(release_floor.scalar_subquery(), 0))
+            .limit(1)
+        )
+        return bool(self._store.all(stmt))
 
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
         stmt = select(leases.c.lease_id).where(leases.c.chunk_id == chunk_id)
