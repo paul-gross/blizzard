@@ -1285,3 +1285,72 @@ def test_frozen_table_lacks_a_later_revisions_columns(
         for column in columns:
             assert column in before
             assert column not in after
+
+
+def _spawn_cwd_round_trip(config, runner, parent: str, row: dict[str, object]) -> list[object]:  # type: ignore[no-untyped-def]
+    """Downgrade to ``parent``, seed one segment row there, upgrade — the column's value on that row."""
+    runner.downgrade(parent)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            assert "spawn_cwd" not in {c["name"] for c in sa.inspect(conn).get_columns("transcript_segments")}
+            columns = ", ".join(row)
+            params = ", ".join(f":{k}" for k in row)
+            conn.execute(sa.text(f"INSERT INTO transcript_segments ({columns}) VALUES ({params})"), row)
+    finally:
+        engine.dispose()
+    runner.upgrade("head")
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.connect() as conn:
+            return [r.spawn_cwd for r in conn.execute(sa.text("SELECT spawn_cwd FROM transcript_segments"))]
+    finally:
+        engine.dispose()
+
+
+def test_runner_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_path: Path) -> None:
+    config = runner_runtime.init_environment(tmp_path)
+    row: dict[str, object] = {
+        "segment_id": "sg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_1",
+        "epoch": 1,
+        "generation": 1,
+        "lease_id": "lease_1",
+        "session_id": "sess_1",
+        "harness_id": "claude_code",
+        "shipped_bytes": 0,
+        "shipped_turns": 0,
+        "normalizer_version": "v1",
+        "stamped_at": datetime(2026, 10, 3, tzinfo=UTC),
+    }
+
+    values = _spawn_cwd_round_trip(
+        config, runner_runtime.migration_runner(config), "20261002_1300_runner_lease_tokens_token_hash_index", row
+    )
+
+    assert values == [None]
+
+
+def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_path: Path) -> None:
+    config = hub_runtime.init_environment(tmp_path)
+    row: dict[str, object] = {
+        "segment_id": "sg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_1",
+        "epoch": 1,
+        "spawn_generation": 1,
+        "runner_id": "r1",
+        "turn_range_start": 0,
+        "turn_range_end": 0,
+        "final": False,
+        "rejected": False,
+        "byte_count": 0,
+        "normalizer_version": "v1",
+        "received_at": datetime(2026, 10, 3, tzinfo=UTC),
+        "content_digest": "d",
+    }
+
+    values = _spawn_cwd_round_trip(config, hub_runtime.migration_runner(config), "20261003_0900_egress_cursor", row)
+
+    assert values == [None]

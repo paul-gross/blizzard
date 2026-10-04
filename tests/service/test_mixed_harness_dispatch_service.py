@@ -23,7 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Fill, Pull
-from blizzard.runner.store.schema import leases, usage_facts
+from blizzard.runner.store.schema import leases, transcript_segments, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config
 from tests.runner_fakes import loop_graph
@@ -90,6 +90,16 @@ def _leases_for_chunk(config: RunnerConfig, chunk_id: str) -> list[dict]:
     try:
         with engine.connect() as conn:
             return [dict(row) for row in conn.execute(select(leases).where(leases.c.chunk_id == chunk_id)).mappings()]
+    finally:
+        engine.dispose()
+
+
+def _segment_spawn_cwds(config: RunnerConfig, chunk_id: str) -> list[str | None]:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.connect() as conn:
+            query = select(transcript_segments.c.spawn_cwd).where(transcript_segments.c.chunk_id == chunk_id)
+            return [row.spawn_cwd for row in conn.execute(query)]
     finally:
         engine.dispose()
 
@@ -489,6 +499,14 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
             opencode_lease_ids = {row["lease_id"] for row in opencode_leases}
             assert claude_lease_ids.isdisjoint(opencode_lease_ids)
 
+            # --- every segment froze its own spawn's working directory, per lineage ---
+            for chunk_id in (claude_id, opencode_id):
+                cwds = _segment_spawn_cwds(config, chunk_id)
+                assert cwds, chunk_id
+                assert all(cwds), cwds
+                if config.workspace_root:
+                    assert set(cwds) == {config.workspace_root}, cwds
+
             # --- usage recorded (judgement resolved into a completion means both a spawn
             # and a judge invocation earned their own facts), per lineage — never crossed ---
             claude_usage = _usage_facts_for_chunk(config, claude_id)
@@ -504,6 +522,7 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
                 claude_segments = runner_client.get(f"/api/chunks/{claude_id}/transcripts").json()["segments"]
                 opencode_segments = runner_client.get(f"/api/chunks/{opencode_id}/transcripts").json()["segments"]
                 assert claude_segments, "expected at least one claude_code segment"
+                assert not any("spawn_cwd" in s for s in claude_segments + opencode_segments)
                 assert opencode_segments, "expected at least one opencode segment"
                 assert all(s["harness_id"] == "claude_code" for s in claude_segments), claude_segments
                 assert all(s["harness_id"] == "opencode" for s in opencode_segments), opencode_segments
