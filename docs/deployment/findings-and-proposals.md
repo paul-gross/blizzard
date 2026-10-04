@@ -16,12 +16,14 @@ runs observe or lose it, or a person exits or reopens it.
 
 A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
 routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
-routine's bucket, and it needs no hub credential in its child environment at all. This bucket spans the routine's scopes: every finding not yet exited, in any of them, each row carrying its `scope_slug`
-and `state` — including a `delivered` one, a delivery-triggered closure the routine's own run has not yet re-checked,
-surfaced unconditionally so that check can happen. It is exactly what the run's delivery may cite: a proposal may name
-any finding in it, while `observed` and `gone` ops stay within the run's own scope. It is a pure client of the runner's local API, authorized by the spawn-injected lease identity,
-the same shape the `blizzard runner artifact` verbs take (see [artifacts.md](./artifacts.md));
-[openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
+routine's bucket, and it needs no hub credential in its child environment at all. This bucket spans the routine's
+scopes: every finding not yet exited, in any of them, each row carrying its `scope_slug` and `state` — including a
+`delivered` one, a delivery-triggered closure the routine's own run has not yet re-checked, surfaced unconditionally so
+that check can happen. It is exactly what the run's delivery may cite: a proposal may name any finding in it, while
+`observed` and `gone` ops stay within the run's own scope. It is a pure client of the runner's local API, authorized by
+the spawn-injected lease identity, the same shape the `blizzard runner artifact` verbs take (see
+[artifacts.md](./artifacts.md)); [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint
+shape.
 
 A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
 `blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the chunk's own
@@ -80,8 +82,9 @@ and an existing routine when `--routine` names one, or none at all. `edit <propo
 <text>] [--body-file <path>|-]` replaces the given fields in place, `attach <proposal_id> <finding_id>...` links more
 findings to it, and `detach <proposal_id> <finding_id>...` unlinks some — all three work on either origin while the
 proposal is still open, and each 409s once it carries a closure, since closure is terminal. `create`/`attach` refuse the
-whole call on an unknown, exited, or duplicate finding id — a `delivered` or `gone` finding is still attachable; `attach` also refuses one already linked to that same
-proposal, and `detach` one that is not linked — a finding may otherwise belong to more than one proposal at once.
+whole call on an unknown, exited, or duplicate finding id — a `delivered` or `gone` finding is still attachable;
+`attach` also refuses one already linked to that same proposal, and `detach` one that is not linked — a finding may
+otherwise belong to more than one proposal at once.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
 with a reason required.

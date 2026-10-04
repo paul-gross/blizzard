@@ -188,7 +188,12 @@ async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(
 
     sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
 
-    assert [sweep.reconciler for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"] == [annotator]
+    [sweep] = [sweep for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"]
+    assert sweep.reconciler is annotator
+    assert sweep.interval_seconds == app.state.config.annotation_interval_seconds
+    assert sweep.shutdown is app.state.shutdown
+    assert sweep.jitter_seconds is not None
+    assert 0 <= sweep.jitter_seconds < sweep.interval_seconds
 
 
 async def test_the_sweep_set_has_no_forge_status_sweep_without_an_annotator(tmp_path: Path) -> None:

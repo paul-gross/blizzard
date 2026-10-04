@@ -18,24 +18,23 @@ own guidance; read it with `blizzard runner artifact get ladder --scope graph --
 restatement below if that read fails or comes back empty. A check that graduates a rung (tier 4) **moves house rather
 than being copied** — the axis's own Criteria pointer moves to the mechanized check, and it stops re-judging by hand.
 One owner per check. Tiers 1 and 2 are research obligations, not options: before authoring anything bespoke, check
-whether tooling the project already runs, or widely available tooling it does not yet run, already covers the rule —
-and if a proposal reaches for one, its body must name the tool, the rule, and whether the project already runs it.
+whether tooling the project already runs, or widely available tooling it does not yet run, already covers the rule — and
+if a proposal reaches for one, its body must name the tool, the rule, and whether the project already runs it.
 
 ## Shape
 
 A `GardenProposalCandidate` is `ref`, `class`, `title`, `body`, and `findings`. `findings` may be empty on the wire, but
 this graph requires every proposal to cite at least one. Each entry names either an id already live on this routine — an
-`observed`/`gone` op in the delta carries one, or a neighbour scope's from `blizzard runner garden findings` that answers
-the same weed as this run's delta (not an invitation to draft for a neighbour's backlog) — or the `ref` an `add` op in
-this same delta carries: the hub resolves it to the minted id at delivery, so citing your own run's addition needs no id
-yet. Read the full shape
-live with `blizzard runner artifact get --scope system garden/proposal-format --content`; if that read fails or comes
-back empty, proceed on the restatement above. Publish the docket with `blizzard runner artifact create --name docket`
-(content on stdin) — even when it is empty, since an empty list is itself a statement. `class` is drawn from a closed
-set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never one invented for this run; the ladder artifact
-above carries what each means. Hold it self-consistent within this run — the same kind of response spells its class the
-same way twice in one docket. The ladder artifact also carries this surface's own register: the body is written for a
-person, not an agent. State the case, not the inventory.
+`observed`/`gone` op in the delta carries one, or a neighbour scope's from `blizzard runner garden findings` that
+answers the same weed as this run's delta (not an invitation to draft for a neighbour's backlog) — or the `ref` an `add`
+op in this same delta carries: the hub resolves it to the minted id at delivery, so citing your own run's addition needs
+no id yet. Read the full shape live with `blizzard runner artifact get --scope system garden/proposal-format --content`;
+if that read fails or comes back empty, proceed on the restatement above. Publish the docket with
+`blizzard runner artifact create --name docket` (content on stdin) — even when it is empty, since an empty list is
+itself a statement. `class` is drawn from a closed set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never
+one invented for this run; the ladder artifact above carries what each means. Hold it self-consistent within this run —
+the same kind of response spells its class the same way twice in one docket. The ladder artifact also carries this
+surface's own register: the body is written for a person, not an agent. State the case, not the inventory.
 
 ## When the delta is a bail-out
 

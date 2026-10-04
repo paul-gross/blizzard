@@ -297,9 +297,9 @@ def test_create_runner_seeds_a_declared_roster_that_reads_back_through_the_real_
 
 
 def test_create_garden_proposal_seeds_a_proposal_citing_no_findings(tmp_path: Path) -> None:
-    """``create garden-proposal`` is the only seam that can land a garden
-    proposal with no findings — the board's manual no-findings case needs one against a
-    real hub, and nothing else composes that shape."""
+    """``create garden-proposal`` seeds a garden proposal with no findings — the
+    board's manual no-findings case needs one against a real hub, and this verb composes
+    that shape without a hand-built API call."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
     port = _free_port()

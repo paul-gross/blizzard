@@ -232,7 +232,7 @@ def create_garden_proposal(
 ) -> GardenProposalView:
     """Mint an operator-authored proposal, naming `routine` when the
     caller names one, else none. 422 for a blank title/class/body, an unknown routine,
-    or an unknown, non-live, or duplicate finding id — the whole call is refused, nothing
+    or an unknown, exited, or duplicate finding id — the whole call is refused, nothing
     is linked."""
     routine = None
     if request.routine is not None:
@@ -293,7 +293,7 @@ def attach_garden_proposal_findings(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
     """Link the given finding ids to PROPOSAL_ID — works on either origin
-    while open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or
+    while open. 404 unknown proposal, 409 already closed, 422 an unknown, exited, or
     duplicate finding id, or one already linked to this proposal — the whole call is
     refused, nothing is linked."""
     proposal = _get_or_404(proposal_id, services)

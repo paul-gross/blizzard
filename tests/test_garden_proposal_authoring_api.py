@@ -146,7 +146,7 @@ def test_create_an_unknown_finding_id_is_422_and_creates_nothing(tmp_path: Path)
     assert hub.client.get("/api/garden-proposals").json()["proposals"] == []
 
 
-def test_create_a_exited_finding_is_422_and_creates_nothing(tmp_path: Path) -> None:
+def test_create_an_exited_finding_is_422_and_creates_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
     _seed_finding(hub, "fin_1", state="wont-fix")
@@ -349,7 +349,7 @@ def test_attach_an_unknown_finding_id_is_422_and_links_nothing(tmp_path: Path) -
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["findings"] == ["fin_1"]
 
 
-def test_attach_a_exited_finding_is_422(tmp_path: Path) -> None:
+def test_attach_an_exited_finding_is_422(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
     _seed_finding(hub, "fin_2", state="wont-fix")
