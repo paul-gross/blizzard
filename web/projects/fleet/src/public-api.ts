@@ -22,6 +22,7 @@ export * from './lib/design';
 export * from './lib/format';
 export * from './lib/when-display';
 export * from './lib/now-signal';
+export * from './lib/clipboard';
 export * from './lib/board-header';
 export * from './lib/chunk-detail';
 export * from './lib/chunk-artifacts-panel';

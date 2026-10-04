@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
+from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -115,6 +116,7 @@ class EscalationView:
     effort: str | None = None
     harness_id: str | None = None
     harness_version: str | None = None
+    wrapped_takeover_command: str | None = None
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,7 @@ class RunnerStatusService:
         harnesses: IHarnessLifecycleRegistry,
         workspace_root: str,
         gates: tuple[str, ...] = (),
+        runner_dir: str = "",
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._stores = stores
@@ -162,6 +165,7 @@ class RunnerStatusService:
         self._hub_url = hub_url
         self._env_pool = env_pool
         self._gates = gates
+        self._runner_dir = runner_dir
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
@@ -265,6 +269,12 @@ class RunnerStatusService:
                         # The escalation remains visible under its recorded owner, but cannot
                         # offer a command this runner cannot compose.
                         resume_command = ""
+            # Composed under the conditions `escalate` uses: a resume command exists and the runner dir is known.
+            wrapped = (
+                TakeoverCommand(escalation.chunk_id, self._runner_dir).wrapped
+                if resume_command and self._runner_dir
+                else None
+            )
             views.append(
                 EscalationView(
                     chunk_id=escalation.chunk_id,
@@ -278,6 +288,7 @@ class RunnerStatusService:
                     effort=escalation.resolved_effort,
                     harness_id=escalation.harness_id,
                     harness_version=escalation.harness_version,
+                    wrapped_takeover_command=wrapped,
                 )
             )
         return views

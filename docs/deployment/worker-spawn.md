@@ -204,7 +204,7 @@ with no recorded prior node there is nothing to name, and no line renders.
 That announcement is why `PUT /api/workspace-prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
 resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it
 wins over every config knob until removed, and replacing it with empty text sets a standing empty prompt rather than
-restoring the configured one; `DELETE /api/workspace-prompt` drops the override so config resolves again.
+restoring the configured one; `blizzard runner prompt clear` drops the override so config resolves again.
 
 ## Workspace prompt sources
 

@@ -39,6 +39,7 @@ def _app_with_status(
     max_agents: int = 2,
     env_pool: tuple[str, ...] | None = None,
     gates: tuple[str, ...] = (),
+    runner_dir: str = "",
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
@@ -56,6 +57,7 @@ def _app_with_status(
         env_pool=config.workspace_envs if env_pool is None else env_pool,
         workspace_root="",
         gates=gates,
+        runner_dir=runner_dir,
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
     return create_app(config, runner_stores=make_stores(store), runner_status=service), store
@@ -500,7 +502,31 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "effort": None,
         "harness_id": "claude_code",
         "harness_version": None,
+        # No runner dir is injected here, so the runner cannot compose the wrapped verb.
+        "wrapped_takeover_command": None,
     }
+
+
+@pytest.mark.component
+def test_an_escalation_carries_the_wrapped_takeover_command_when_the_runner_dir_is_known(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path, runner_dir="/opt/runner dir")
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+    with TestClient(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert item["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir '/opt/runner dir'"
+    assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a"
+    assert "BLIZZARD_LEASE_TOKEN" not in str(item)
 
 
 @pytest.mark.component

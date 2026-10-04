@@ -453,6 +453,7 @@ def _wire_hosted_app(
         harnesses=harnesses,
         workspace_root=config.provider_workspace_root,
         gates=config.gates,
+        runner_dir=str(config.root),
     )
     takeover = TakeoverService(
         runner_stores,

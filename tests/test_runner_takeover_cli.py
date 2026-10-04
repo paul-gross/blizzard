@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverCommand
@@ -278,3 +279,74 @@ def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> 
         assert click_ctx.params["chunk_id"] == "ch_1"
         # The whitespace-bearing dir round-trips through quote -> shell-split -> parse.
         assert click_ctx.params["directory"] == "/var/lib/blizzard/runner dir"
+
+
+def _open_stranded_takeover(store: SqlAlchemyRunnerStore) -> None:
+    """The dropped-SSH shape: a takeover fact opened with no session behind it."""
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+    )
+
+
+@pytest.mark.component
+def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    store = _store(root)
+    _seed_escalated_lease(store)
+    _open_stranded_takeover(store)
+    calls: list[str] = []
+    monkeypatch.setattr(subprocess, "call", lambda command, **_: calls.append(command) or 0)
+
+    with _serve_local_api(root):
+        first = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+        again = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+
+    assert first.exit_code == 0, first.output
+    assert "ended takeover tko_1" in first.output
+    assert store.open_takeover_for_chunk("ch_1") is None
+    assert calls == []
+    assert again.exit_code == 0, again.output
+    assert "no open takeover for chunk ch_1" in again.output
+
+
+@pytest.mark.component
+def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PATCH 404 is a clear message, not the generic could-not-reach-the-runner failure."""
+    root = _init_runner(tmp_path)
+    store = _store(root)
+    _seed_escalated_lease(store)
+    _open_stranded_takeover(store)
+    real_get = RunnerDaemon.get
+
+    def stale_list(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
+        resp = real_get(self, path, params=params)
+        if path == "/api/takeovers":
+            body = resp.json()
+            body["items"][0]["takeover_id"] = "tko_gone"
+            return httpx.Response(200, json=body)
+        return resp
+
+    monkeypatch.setattr(RunnerDaemon, "get", stale_list)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "already ended elsewhere" in result.output
+    assert "could not reach" not in result.output
+
+
+@pytest.mark.unit
+def test_takeover_end_rejects_force(tmp_path: Path) -> None:
+    result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--force", "--dir", str(tmp_path)])
+
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output

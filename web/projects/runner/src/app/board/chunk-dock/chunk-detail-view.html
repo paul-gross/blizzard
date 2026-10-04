@@ -17,7 +17,18 @@
       @if (escalation(); as esc) {
         <div class="resume-box" data-testid="detail-resume">
           <span class="resume-tag">escalated — resume session</span>
-          <code>{{ esc.resume_command || '(no session to resume)' }}</code>
+          @if (esc.wrapped_takeover_command; as wrapped) {
+            <span class="resume-line">
+              <code data-testid="detail-takeover-command">{{ wrapped }}</code>
+              <fleet-kit-button testid="copy-takeover" (click)="copy(wrapped)">{{ copied() ? 'Copied' : 'Copy' }}</fleet-kit-button>
+            </span>
+            <details class="resume-fallback" data-testid="detail-resume-fallback">
+              <summary>Unwrapped fallback</summary>
+              <code>{{ esc.resume_command || '(no session to resume)' }}</code>
+            </details>
+          } @else {
+            <code data-testid="detail-resume-command">{{ esc.resume_command || '(no session to resume)' }}</code>
+          }
           @if (esc.harness_id; as harnessId) {
             <fleet-kit-badge
               class="resume-harness"

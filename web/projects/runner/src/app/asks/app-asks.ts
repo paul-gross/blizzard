@@ -10,7 +10,7 @@ import { injectRunnerDashboardQuery } from '../status/status.query';
  * query, the resolved async-state triad, and the ticking clock
  * {@link AskRow.askedFor} is derived from; the presentational {@link LocalAsksView}
  * owns the row template (`bzh:frontend-container-presentational`). The answer verb
- * is a hub write (`blizzard hub answer` or the fleet board), so this panel is
+ * is a hub write (`blizzard hub question answer` or the fleet board), so this panel is
  * read-only by design — it surfaces the wait, it never answers.
  */
 @Component({

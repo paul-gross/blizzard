@@ -5,6 +5,8 @@
       <span class="asked">asked {{ row.askedFor }} ago</span>
     </div>
     <div class="q">{{ row.question }}</div>
-    <div class="route">answer is a hub write → <code>blizzard hub answer</code> or the fleet board</div>
+    <div class="route">
+      answer is a hub write → <code>blizzard hub question answer <span data-testid="ask-question-id">{{ row.questionId }}</span> &lt;answer&gt;</code> or the fleet board
+    </div>
   </div>
 }

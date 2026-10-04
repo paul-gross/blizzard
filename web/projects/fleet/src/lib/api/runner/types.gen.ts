@@ -1027,6 +1027,10 @@ export type EscalationView = {
      * Session Name
      */
     session_name?: string | null;
+    /**
+     * Wrapped Takeover Command
+     */
+    wrapped_takeover_command?: string | null;
 };
 
 /**
