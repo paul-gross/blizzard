@@ -21,7 +21,7 @@ from blizzard.hub.domain.work import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from tests.support import build_hub, count_queries, hub_store_connections, ingest
+from tests.support import build_hub, capture_statements, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
 
@@ -54,6 +54,46 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, path: str
 
     assert results == {"small": 3, "large": 9}
     assert small_count == large_count
+
+
+@pytest.mark.parametrize(("path", "promote"), _PEEKS)
+@pytest.mark.parametrize("fleet_size", [7, 25])
+def test_page_marks_only_its_dependents_but_resolves_off_page_prerequisites(
+    tmp_path: Path, path: str, promote: bool, fleet_size: int
+) -> None:
+    hub = build_hub(tmp_path)
+    prerequisite = ingest(hub, [{"source": "default", "ref": "prerequisite"}], promote=promote)
+    dependents = [ingest(hub, [{"source": "default", "ref": str(i)}], promote=promote) for i in range(fleet_size)]
+    for dependent in dependents:
+        assert (
+            hub.client.post(
+                f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite}
+            ).status_code
+            == 202
+        )
+
+    # The second page must name a dependent; otherwise an equal-rank prerequisite
+    # can land there and correctly have no blocked marking.
+    positioned = hub.client.post(f"{path}/position", json={"chunk_id": prerequisite, "after_chunk_id": None})
+    assert positioned.status_code == 200, positioned.text
+    page = hub.client.get(path, params={"limit": 1})
+    assert page.status_code == 200, page.text
+    assert page.json()["entries"][0]["chunk_id"] == prerequisite
+    with capture_statements(hub.engine) as statements:
+        page = hub.client.get(path, params={"limit": 1, "cursor": page.json()["next_cursor"]})
+    assert page.status_code == 200, page.text
+    entry = page.json()["entries"][0]
+    assert entry["blocked"] == {"prerequisite_chunk_id": prerequisite, "unmet_count": 1}
+    edge_reads = [(sql, params) for sql, params in statements if "FROM chunk_dependencies" in sql]
+    assert len(edge_reads) == 1
+    assert dependents.count(entry["chunk_id"]) == 1
+    assert sum(dependent in str(edge_reads[0][1]) for dependent in dependents) == 1
+
+    detail = hub.client.get(f"/api/chunks/{entry['chunk_id']}")
+    assert detail.json()["blocked"] == entry["blocked"]
+    reordered = hub.client.put(path, json={"chunk_ids": [entry["chunk_id"]]})
+    assert reordered.status_code == 200, reordered.text
+    assert any(row["blocked"] == entry["blocked"] for row in reordered.json()["entries"])
 
 
 class _CountingFactsStore(ChunkFactsStore):

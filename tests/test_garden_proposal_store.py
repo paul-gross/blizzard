@@ -13,13 +13,18 @@ from sqlalchemy import Engine
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalEdit, GardenProposalOrigin
+from blizzard.hub.domain.garden_proposals import (
+    GardenProposalCounts,
+    GardenProposalEdit,
+    GardenProposalOrigin,
+    RoutineProposalState,
+)
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import count_queries, hub_store_connections
+from tests.support import count_queries, count_rows_read, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -268,6 +273,45 @@ def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None
     )
 
     assert store.list_for_routine("ghost-routine") == []
+
+
+def test_open_routine_read_does_not_hydrate_closed_history(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    store.create(
+        "gprop_open",
+        origin=GardenProposalOrigin.OPERATOR,
+        routine_name="nightly",
+        created_by="operator",
+        class_="c",
+        title="open",
+        body="body",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+
+    def read_open() -> list[str]:
+        return [p.proposal_id for p in store.list_for_routine("nightly", state=RoutineProposalState.OPEN)]
+
+    small_rows = count_rows_read(engine, read_open)
+    small_queries = count_queries(engine, read_open)
+    for i in range(25):
+        proposal_id = f"gprop_closed_{i}"
+        store.create(
+            proposal_id,
+            origin=GardenProposalOrigin.ROUTINE_RUN,
+            routine_name="nightly",
+            class_="c",
+            title="closed",
+            body="large body",
+            findings=["fin_1"],
+            at=_NOW,
+        )
+        _pass(engine, proposal_id)
+    assert read_open() == ["gprop_open"]
+    assert count_rows_read(engine, read_open) == small_rows
+    assert count_queries(engine, read_open) == small_queries
+    assert len(store.list_for_routine("nightly", state=RoutineProposalState.CLOSED)) == 25
+    assert len(store.list_for_routine("nightly")) == 26
 
 
 def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
