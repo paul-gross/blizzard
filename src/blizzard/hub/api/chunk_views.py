@@ -30,6 +30,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
+from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
@@ -303,6 +304,7 @@ class ChunkView:
             status_if_paused=self.facts.status_if_paused(),
             completable=not is_completion_replay(self.facts),
             deletable=status in PRE_CLAIM_STATUSES,
+            graph_editable=is_graph_editable(self.facts),
             terminal=status in TERMINAL_STATUSES,
             current_node_terminal=node_id == RESERVED_TERMINAL,
             latest_epoch=self.facts.latest_epoch(),

@@ -541,6 +541,10 @@ export type ChunkDetail = {
      */
     graph_created_at?: string | null;
     /**
+     * Graph Editable
+     */
+    graph_editable?: boolean;
+    /**
      * Graph Id
      */
     graph_id: string;

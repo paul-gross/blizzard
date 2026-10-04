@@ -98,8 +98,8 @@ def _publish(broker: _HubEventBroker | _RunnerEventBroker, kind: str, payload: d
 
 
 class TestCorpusClosure:
-    """Each scope's own on-disk kind set, its manifest's kind list, and its broker's own
-    type constants must name the same kinds — a new kind with no golden goes red here,
+    """Each scope's own on-disk kind set, its manifest's kind list, and its broker's
+    event-type vocabulary must name the same kinds — a new kind with no golden goes red here,
     and neither scope's closure leaks into the other's."""
 
     @pytest.mark.parametrize("scope", _SCOPES, ids=[s.name for s in _SCOPES])

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
+from blizzard.foundation.hub_event_types import HubEventType
 from tests.support import build_hub, emitted_events
 
 pytestmark = pytest.mark.component
@@ -221,7 +221,7 @@ def test_run_publishes_one_minted_chunk_changed_frame_reading_not_ready(tmp_path
 
     created = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={}).json()
 
-    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == CHUNK_CHANGED]
+    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == HubEventType.CHUNK_CHANGED]
     assert len(frames) == 1
     assert frames[0]["chunk_id"] == created["chunk_id"]
     assert frames[0]["cause"] == "minted"
@@ -235,4 +235,4 @@ def test_run_also_publishes_queue_changed(tmp_path: Path) -> None:
 
     hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={})
 
-    assert [e["event"] for e in emitted_events(hub)] == [CHUNK_CHANGED, QUEUE_CHANGED]
+    assert [e["event"] for e in emitted_events(hub)] == [HubEventType.CHUNK_CHANGED, HubEventType.QUEUE_CHANGED]

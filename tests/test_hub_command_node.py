@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
@@ -48,7 +49,6 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points
 from tests.support import (
@@ -915,7 +915,7 @@ _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
 
 
 def _event_logged_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
-    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == EVENT_LOGGED]
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.EVENT_LOGGED]
 
 
 @pytest.mark.component

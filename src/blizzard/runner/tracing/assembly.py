@@ -12,6 +12,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id
 from blizzard.foundation.trace_spans import AttributeValue, FinishedSpan, SpanEvent
@@ -49,7 +50,7 @@ class _Window:
 
 def close_reason(reason: str) -> str:
     """The published close reason: either mint reason reads ``escalated``."""
-    return closure.ESCALATED if reason in closure.MINT_REASONS else reason
+    return LeaseClosureReason.ESCALATED if reason in closure.MINT_REASONS else reason
 
 
 def _dimensions(facts: LeaseTraceFacts) -> dict[str, AttributeValue]:

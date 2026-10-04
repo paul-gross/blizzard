@@ -16,6 +16,7 @@ from sqlalchemy import update
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -26,7 +27,6 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases import NewLease, WorkRefStamp
-from blizzard.runner.leases.closure import FAILED
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
@@ -1114,7 +1114,7 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
 
     # It fails — with its full budget available (`retried == 0 < retries_max == 1`), `fail`
     # retries rather than escalating a second time.
-    Attempt(replace(ctx, clock=FixedClock(now2)), real_lease).fail(reason=FAILED, via="test")
+    Attempt(replace(ctx, clock=FixedClock(now2)), real_lease).fail(reason=LeaseClosureReason.FAILED, via="test")
     requeued = store.active_lease_for_chunk("ch_1")
     assert requeued is not None and requeued.lease_id != "lease_real"  # a genuine retry, not an escalation
     assert requeued.session == SessionReference(CLAUDE_CODE_HARNESS_ID, "default")  # the requeue's own fresh spawn

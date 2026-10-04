@@ -8,16 +8,10 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.closure import (
-    ESCALATED,
-    ESCALATION_MINT,
-    FAILED,
-    NO_ACCEPTABLE_HARNESS_MINT,
-    REAPED,
-    cause_of,
-)
+from blizzard.runner.leases.closure import ESCALATION_MINT, NO_ACCEPTABLE_HARNESS_MINT, cause_of
 from blizzard.runner.leases.escalations import (
     ESCALATION_TRANSITIONS,
     EscalationState,
@@ -57,15 +51,15 @@ def test_a_mint_reason_outranks_whatever_was_recorded() -> None:
 
 
 def test_an_ordinary_escalation_reads_its_recorded_cause() -> None:
-    assert cause_of(ESCALATED, "retries-exhausted") == "retries-exhausted"
-    assert cause_of(ESCALATED, "owner-unresolvable") == "owner-unresolvable"
+    assert cause_of(LeaseClosureReason.ESCALATED, "retries-exhausted") == "retries-exhausted"
+    assert cause_of(LeaseClosureReason.ESCALATED, "owner-unresolvable") == "owner-unresolvable"
 
 
 def test_an_escalation_recorded_without_a_cause_has_none() -> None:
-    assert cause_of(ESCALATED) is None
+    assert cause_of(LeaseClosureReason.ESCALATED) is None
 
 
-@pytest.mark.parametrize("reason", [FAILED, REAPED, "transitioned"])
+@pytest.mark.parametrize("reason", [LeaseClosureReason.FAILED, LeaseClosureReason.REAPED, "transitioned"])
 def test_a_closure_that_escalated_nothing_has_no_cause(reason: str) -> None:
     assert cause_of(reason, "retries-exhausted") is None
 

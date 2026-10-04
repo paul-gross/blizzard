@@ -166,16 +166,26 @@ def _union_ref_names(schema: dict) -> set[str] | None:
     return {_ref_name(m["$ref"]) for m in members if "$ref" in m}
 
 
-def _narrows_string_to_enum(base: dict, head: dict, head_schemas: dict) -> bool:
-    """A plain ``string`` retyped onto a ``$ref`` to a string-enum component: every value the
-    head can send is a string an older ``str`` parse accepts, so a response may narrow this way."""
+def _inline_enum(schema: dict) -> list | None:
+    """The inline ``enum`` a property carries itself or on its non-null ``anyOf``/``oneOf`` member."""
+    if "enum" in schema:
+        return schema["enum"]
+    for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])):
+        if member.get("type") != "null" and "enum" in member:
+            return member["enum"]
+    return None
+
+
+def _string_enum_target(base: dict, head: dict, head_schemas: dict) -> dict | None:
+    """The string-enum component a ``string`` property is retyped onto, or None when the retype
+    is anything else. An inline-enum base (a ``Literal``) qualifies too; its values are diffed."""
     if _type_signature(base) != ("string",):
-        return False
+        return None
     head_sig = _type_signature(head)
     if head_sig is None or head_sig[0] != "$ref":
-        return False
+        return None
     target = head_schemas.get(_ref_name(head_sig[1]), {})
-    return target.get("type") == "string" and bool(target.get("enum"))
+    return target if target.get("type") == "string" and target.get("enum") else None
 
 
 def _diff_enum_and_union(
@@ -230,10 +240,15 @@ def _diff_schema(
         bp, hp = base_props[prop], head_props[prop]
         label = f"{name}.{prop}"
 
-        if not is_request and _narrows_string_to_enum(bp, hp, head_schemas or {}):
-            # A response-only narrowing: still held to the nullability rule, nothing else.
+        target = None if is_request else _string_enum_target(bp, hp, head_schemas or {})
+        if target is not None:
+            # A response-only narrowing: an older `str` parse accepts every value sent, but an older
+            # closed-`Literal` parse only its own, so an inline-enum base still holds the enum-gain rule.
             if not _is_nullable(bp) and _is_nullable(hp):
                 violations.append(Violation(label, "response property newly became nullable"))
+            base_enum = _inline_enum(bp)
+            if base_enum is not None:
+                _diff_enum_and_union(label, {"enum": base_enum}, target, is_request, is_response, violations)
             continue
 
         b_sig, h_sig = _type_signature(bp), _type_signature(hp)

@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.garden.proposals.closure import _compose_minted_body
-from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -220,8 +220,8 @@ def test_accept_publishes_the_mints_chunk_changed_and_queue_changed(tmp_path: Pa
 
     assert resp.status_code == 200, resp.text
     chunk_id = resp.json()["chunk_id"]
-    assert [e["event"] for e in emitted_events(hub)] == [CHUNK_CHANGED, QUEUE_CHANGED]
-    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == CHUNK_CHANGED]
+    assert [e["event"] for e in emitted_events(hub)] == [HubEventType.CHUNK_CHANGED, HubEventType.QUEUE_CHANGED]
+    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == HubEventType.CHUNK_CHANGED]
     assert frames[0]["chunk_id"] == chunk_id
     assert frames[0]["cause"] == "minted"
 

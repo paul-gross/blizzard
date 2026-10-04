@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.events.broker import CHUNK_CHANGED
+from blizzard.foundation.hub_event_types import HubEventType
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
@@ -114,14 +114,18 @@ def test_ask_and_answer_carry_distinct_causes(tmp_path: Path) -> None:
 
     before_ask = int(emitted_events(hub)[-1]["id"])
     _ask(hub, chunk_id)
-    ask_frames = [json.loads(e["data"]) for e in emitted_events(hub, since=before_ask) if e["event"] == CHUNK_CHANGED]
+    ask_frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=before_ask) if e["event"] == HubEventType.CHUNK_CHANGED
+    ]
     assert ask_frames[-1]["cause"] == "question-asked"
 
     before_answer = int(emitted_events(hub)[-1]["id"])
     answer = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
     assert answer.status_code == 201, answer.text
     answer_frames = [
-        json.loads(e["data"]) for e in emitted_events(hub, since=before_answer) if e["event"] == CHUNK_CHANGED
+        json.loads(e["data"])
+        for e in emitted_events(hub, since=before_answer)
+        if e["event"] == HubEventType.CHUNK_CHANGED
     ]
     assert answer_frames[-1]["cause"] == "question-answered"
 
@@ -334,7 +338,7 @@ def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path
     published = emitted_events(hub, since=before)
     frames = [(e["event"], json.loads(e["data"])) for e in published]
     # The delivery emits only this one frame — a regression adding a second shows up here.
-    assert [event for event, _ in frames] == [CHUNK_CHANGED]
+    assert [event for event, _ in frames] == [HubEventType.CHUNK_CHANGED]
     data = frames[0][1]
     assert data["chunk_id"] == chunk_id
     # It genuinely carries no news by itself: the status is unchanged across the delivery

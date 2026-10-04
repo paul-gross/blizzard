@@ -1,6 +1,31 @@
 {
   "components": {
     "schemas": {
+      "ActivityChunkChangeCause": {
+        "enum": [
+          "minted",
+          "promoted",
+          "grouped",
+          "claimed",
+          "node-completed",
+          "migrated",
+          "decision-submitted",
+          "decision-resolved",
+          "question-asked",
+          "question-answered",
+          "escalated",
+          "requeued",
+          "restarted",
+          "detached",
+          "paused",
+          "resumed",
+          "stopped",
+          "completed",
+          "hub-advanced",
+          "deleted"
+        ],
+        "type": "string"
+      },
       "ActivityResponse": {
         "description": "The activity feed, newest-first (bounded).",
         "properties": {
@@ -1743,6 +1768,11 @@
               }
             ],
             "title": "Graph Created At"
+          },
+          "graph_editable": {
+            "default": false,
+            "title": "Graph Editable",
+            "type": "boolean"
           },
           "graph_id": {
             "title": "Graph Id",
@@ -10878,6 +10908,14 @@
       "UserView": {
         "description": "One ``users`` row \u2014 the listing/assignment response shape.",
         "properties": {
+          "assignable_roles": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Assignable Roles",
+            "type": "array"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"

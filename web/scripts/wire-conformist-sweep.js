@@ -5,17 +5,20 @@
  * (`structural-gate.js`'s `main` calls them like any other sweep). Neither sweep has an
  * exemption list.
  *
- * The backend-citation sweep: hand-written TS never cites a backend `.py` file, in a comment
- * or a string. The wire contract is the generated client and its types, not the Python
+ * The backend-citation sweep: hand-written TS never cites a backend Python module — a `.py`
+ * file or a dotted `blizzard.<package>…` path — in a comment or a string. The wire contract is the generated client and its types, not the Python
  * module that happens to serve it today; a citation rots silently when the backend moves.
  * Scope is every `.ts` under `projects/` except specs and the generated `fleet/src/lib/api/`.
  *
  * The client-call placement sweep: a generated client function (every `export const` in
  * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts`, read at run time) is named only inside a
- * `*.query.ts` or `*.mutations.ts` file, so every wire call goes through a query or mutation
- * hook. Comments and `export … from` re-export statements are stripped first — a barrel
- * re-exports a function, it does not import or call it — then any whole-word occurrence of a
- * function name fails, catching both a named import and a `runnerApi.<name>` namespace access.
+ * `*.query.ts` or `*.mutations.ts` file. That is the whole guarantee: the call sits in a
+ * data-access file, not necessarily inside a query or mutation hook — a plain function a
+ * data-access file exports still wraps the call where the sweep allows it. Comments and
+ * `export … from` re-export statements are stripped first — a barrel re-exports a function, it
+ * does not import or call it — except a renaming re-export (`export { fn as alias } from …`),
+ * which would hide the name behind one the sweep cannot see. Then any whole-word occurrence of
+ * a function name fails, catching both a named import and a `runnerApi.<name>` namespace access.
  *
  * Run through `npm run structural-gate`; this module only exports.
  */
@@ -36,8 +39,17 @@ const SDK_FILES = [
   "fleet/src/lib/api/runner/sdk.gen.ts",
 ];
 
-/** A backend Python file named anywhere in a source: a path or bare module ending in `.py`. */
-const BACKEND_CITATION = /[\w./-]*\w\.py\b/g;
+/** The backend's top-level Python packages — a dotted module path cites the backend only
+ * under one of these, so a dotted storage key such as `blizzard.viewport.override` is not one. */
+const BACKEND_PACKAGES = ["auth_core", "cli", "foundation", "hub", "runner", "tools", "wire"];
+
+/** A backend Python module named anywhere in a source: a path or bare module ending in `.py`,
+ * or a dotted `blizzard.<package>…` module path. A dotted path stops at a dot that ends a
+ * sentence, and never ends inside a longer word or a hyphenated key. */
+const BACKEND_CITATION = new RegExp(
+  String.raw`[\w./-]*\w\.py\b|\bblizzard\.(?:${BACKEND_PACKAGES.join("|")})(?:\.[A-Za-z_]\w*)*(?![\w-]|\.\w)`,
+  "g",
+);
 
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join("/");
@@ -112,6 +124,10 @@ function assertBackendCitationDetectorWorks() {
     ["/** see `models.py` */", "models.py"],
     ["const origin = 'blizzard/runner/app.py';", "blizzard/runner/app.py"],
     ["// the _wire_shapes.py model", "_wire_shapes.py"],
+    ["// proxied by `blizzard.runner.api.chunk_detail`", "blizzard.runner.api.chunk_detail"],
+    ["// see blizzard.hub.config.", "blizzard.hub.config"],
+    ["/** mirrors blizzard.wire.chunk.ChunkDetail */", "blizzard.wire.chunk.ChunkDetail"],
+    ["// the blizzard.wire package", "blizzard.wire"],
   ];
   for (const [source, expected] of hits) {
     const found = backendCitations(source).map((c) => c.match);
@@ -132,6 +148,9 @@ function assertBackendCitationDetectorWorks() {
     "a.pyc",
     "numpy",
     "mypy.ini",
+    "const KEY = 'blizzard.viewport.override';",
+    "const KEY = 'blizzard.runner.session-renewal-attempted';",
+    "// the blizzard.hubris module",
   ]) {
     if (backendCitations(source).length > 0) {
       throw new Error(
@@ -187,7 +206,15 @@ function clientFunctionNames(projectsDir = PROJECTS_DIR) {
   return names;
 }
 
-/** `source` with every comment and every `export … from` re-export statement blanked to
+/** Whether an `export … from` statement re-exports any name under another name.
+ * @param {ts.ExportDeclaration} node
+ */
+function renamesAnExport(node) {
+  const clause = node.exportClause;
+  return !!clause && ts.isNamedExports(clause) && clause.elements.some((e) => e.propertyName);
+}
+
+/** `source` with every comment and every non-renaming `export … from` re-export statement blanked to
  * spaces, newlines kept so offsets and line numbers still hold.
  * @param {string} source
  */
@@ -208,7 +235,7 @@ function stripCommentsAndReExports(source) {
       node.kind <= ts.SyntaxKind.LastJSDocNode
     )
       return;
-    if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier && !renamesAnExport(node)) {
       ranges.push([node.getStart(sf), node.end]);
     }
     const children = node.getChildren(sf);
@@ -245,8 +272,8 @@ function clientCalls(source, names) {
   }));
 }
 
-/** Prove the client-call placement sweep catches a named import and a namespace access, and
- * ignores comments, re-export barrels, and longer identifiers (`bzh:case-pins-its-own-name`). */
+/** Prove the client-call placement sweep catches a named import, a namespace access, and a
+ * renaming re-export, and ignores comments, plain re-export barrels, and longer identifiers (`bzh:case-pins-its-own-name`). */
 function assertClientCallPlacementDetectorWorks() {
   const names = ["listChunksApiChunksGet", "getStatusStatusGet"];
   const hits = [
@@ -254,6 +281,7 @@ function assertClientCallPlacementDetectorWorks() {
     "import { foo,\n  listChunksApiChunksGet as list } from 'fleet';",
     "const r = await runnerApi.getStatusStatusGet({ throwOnError: true });",
     "const fns = { list: listChunksApiChunksGet }; // listChunksApiChunksGet",
+    "export { listChunksApiChunksGet as listChunks } from './sdk.gen';",
   ];
   for (const source of hits) {
     if (clientCalls(source, names).length === 0) {

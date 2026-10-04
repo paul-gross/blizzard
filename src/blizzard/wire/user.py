@@ -29,6 +29,8 @@ class UserView(BaseModel):
     role: Role
     created_at: str
     identities: list[UserIdentityView] = []
+    #: The roles the requesting actor may assign this user — empty when the role-change rules admit none.
+    assignable_roles: list[Role] = []
 
 
 class RoleAssignmentRequest(BaseModel):

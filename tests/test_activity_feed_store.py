@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import get_args
 
 import pytest
 import sqlalchemy as sa
@@ -26,6 +27,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.wire.sse import ActivityChunkChangeCause, ChunkChangeCause
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -397,6 +399,13 @@ def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
         )
     rows = store.events.activity_facts_since(_T0, limit=50)
     assert all(r.cause != "edited" for r in rows)
+
+
+def test_the_activity_cause_vocabulary_is_every_chunk_change_cause_but_edited() -> None:
+    """The board reads the generated ``ActivityChunkChangeCause`` to tell a live frame that is
+    an activity occurrence from one that is not."""
+    assert set(get_args(ChunkChangeCause)) - set(get_args(ActivityChunkChangeCause)) == {"edited"}
+    assert set(get_args(ActivityChunkChangeCause)) <= set(get_args(ChunkChangeCause))
 
 
 # --- the since window and the per-source limit bound -------------------------

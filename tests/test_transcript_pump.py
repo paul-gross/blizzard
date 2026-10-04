@@ -14,6 +14,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -26,7 +27,6 @@ from blizzard.runner.harness.transcript import (
     TranscriptPosition,
 )
 from blizzard.runner.leases import NewLease
-from blizzard.runner.leases.closure import FAILED
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.ledger import (
@@ -1057,7 +1057,7 @@ def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
-    Attempt(ctx, lease).close(FAILED, _NOW)
+    Attempt(ctx, lease).close(LeaseClosureReason.FAILED, _NOW)
 
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
@@ -1108,7 +1108,7 @@ def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
-    Attempt(ctx, lease).close(FAILED, _NOW)
+    Attempt(ctx, lease).close(LeaseClosureReason.FAILED, _NOW)
 
     assert source.turns_since_calls == []  # the bound elapsed before the read, not during it
     pending = ctx.stores.transcript_ledger.pending_transcript_outbound()
@@ -1165,7 +1165,7 @@ def test_lease_close_survives_a_raising_transcript_source() -> None:
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
-    Attempt(ctx, lease).close(FAILED, _NOW)  # must not raise
+    Attempt(ctx, lease).close(LeaseClosureReason.FAILED, _NOW)  # must not raise
 
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None

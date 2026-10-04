@@ -92,6 +92,31 @@ def test_list_users_renders_every_row(tmp_path: Path) -> None:
     assert ada["created_at"]
 
 
+def test_list_users_carries_the_roles_the_actor_may_assign_each_row(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    seed_user(hub, username="alan", role=Role.ADMIN)
+    seed_user(hub, username="grace", role=Role.GUEST)
+    root = seed_user(hub, username="root", role=Role.SUPERUSER)
+
+    def assignable(token: str) -> dict[str, list[str]]:
+        body = hub.client.get("/api/users", headers=_cookie(token)).json()
+        return {u["username"]: u["assignable_roles"] for u in body}
+
+    assert assignable(seed_session(hub, admin)) == {
+        "ada": [],
+        "alan": [],
+        "grace": ["pending", "guest", "contributor"],
+        "root": [],
+    }
+    assert assignable(seed_session(hub, root)) == {
+        "ada": ["pending", "guest", "contributor", "admin"],
+        "alan": ["pending", "guest", "contributor", "admin"],
+        "grace": ["pending", "guest", "contributor", "admin"],
+        "root": [],
+    }
+
+
 def test_list_users_query_count_is_independent_of_user_count(tmp_path: Path) -> None:
     """One batched identities read for the whole listing (``list_for_users``), not one
     per row — the statement count must not grow with the account count."""

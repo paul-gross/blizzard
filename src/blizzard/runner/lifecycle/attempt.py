@@ -11,6 +11,7 @@ from typing import Protocol
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
@@ -20,12 +21,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.closure import (
-    ESCALATED,
-    NO_ACCEPTABLE_HARNESS_MINT,
-    PREEMPTED,
-    RELEASED,
-)
+from blizzard.runner.leases.closure import NO_ACCEPTABLE_HARNESS_MINT
 from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.lifecycle.model import (
     FailureMove,
@@ -166,7 +162,7 @@ class Attempt:
             self._escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return
         self.close(
-            ESCALATED,
+            LeaseClosureReason.ESCALATED,
             now,
             self._event(_WORKER_LOST, f"worker lost — retries exhausted ({reason}, via {via})", reason, via, tail),
             escalation_cause=EscalationCause.RETRIES_EXHAUSTED,
@@ -331,7 +327,7 @@ class Attempt:
             "detail": {"via": via, "harness_id": session.harness_id, "owner_status": status},
         }
         self.close(
-            ESCALATED,
+            LeaseClosureReason.ESCALATED,
             now,
             event,
             closure_reason=closure.closure_reason,
@@ -368,7 +364,7 @@ class Attempt:
             },
         }
         self.close(
-            ESCALATED,
+            LeaseClosureReason.ESCALATED,
             now,
             event,
             closure_reason=NO_ACCEPTABLE_HARNESS_MINT,
@@ -401,7 +397,7 @@ class Attempt:
             self.ctx.stores.asks.record_park_resume(
                 lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
             )
-        self.close(RELEASED, now)
+        self.close(LeaseClosureReason.RELEASED, now)
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info(
             "abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via
@@ -491,7 +487,7 @@ class Attempt:
             self.ctx.stores.asks.record_park_resume(
                 lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
             )
-        self.close(PREEMPTED, now)
+        self.close(LeaseClosureReason.PREEMPTED, now)
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info("preempted by an operator restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
         self.reenter()
@@ -580,7 +576,7 @@ class Attempt:
                 self.lease.chunk_id,
                 cause=reason,
             )
-            if reason == ESCALATED:
+            if reason == LeaseClosureReason.ESCALATED:
                 # `open_escalations()`'s derivation — a closed-`escalated` lease not yet
                 # superseded — begins reading open at exactly this instant.
                 self.ctx.events.publish_escalation_changed(self.lease.chunk_id, cause="opened", lease_id=lease_id)

@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.trace_ids import RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
 from blizzard.foundation.trace_spans import FinishedSpan, SpanKind, SpanStatus
 from blizzard.runner.leases import closure
@@ -182,7 +183,7 @@ def test_mint_reasons_read_escalated(reason: str) -> None:
 
 def test_a_chunk_the_hub_stopped_closes_released_and_open_children_end_at_the_close() -> None:
     facts = fx.make_facts(
-        reason=closure.RELEASED,
+        reason=LeaseClosureReason.RELEASED,
         closed=60,
         parks=(ParkFact(1, "q1", fx.at(20)),),
         boundaries=(fx.boundary(1, 1, "spawn", 1, 60),),

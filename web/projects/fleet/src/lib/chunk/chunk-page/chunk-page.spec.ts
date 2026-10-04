@@ -443,7 +443,7 @@ describe('ChunkPage on a runner daemon', () => {
   it('renders no graph edit for a not-ready chunk', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready' };
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
       return routes()(method, path);
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);

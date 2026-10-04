@@ -5,7 +5,7 @@ import type { UserView } from 'fleet';
 import { OPERATOR_ME_RESPONSE } from 'fleet/testing';
 import { UsersTable } from './users-table';
 
-const USERS: readonly UserView[] = [
+const BASE_USERS: readonly UserView[] = [
   {
     user_id: 'usr_admin',
     username: 'ada',
@@ -43,6 +43,20 @@ const USERS: readonly UserView[] = [
   },
 ];
 
+type Actor = 'admin' | 'superuser';
+
+/** Each row as `GET /api/users` renders it for `actor` — the hub's own per-row `assignable_roles`. */
+function usersFor(actor: Actor): readonly UserView[] {
+  return BASE_USERS.map((user) => {
+    if (user.role === 'superuser') return { ...user, assignable_roles: [] };
+    if (actor === 'superuser') return { ...user, assignable_roles: ['pending', 'guest', 'contributor', 'admin'] };
+    if (user.role === 'admin') return { ...user, assignable_roles: [] };
+    return { ...user, assignable_roles: ['pending', 'guest', 'contributor'] };
+  });
+}
+
+const USERS = usersFor('admin');
+
 describe('UsersTable', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -51,11 +65,10 @@ describe('UsersTable', () => {
     }).compileComponents();
   });
 
-  function mount(inputs: Partial<{ users: readonly UserView[]; currentUserId: string | null; isSuperuser: boolean }> = {}) {
+  function mount(inputs: Partial<{ users: readonly UserView[]; currentUserId: string | null; actor: Actor }> = {}) {
     const fixture = TestBed.createComponent(UsersTable);
-    fixture.componentRef.setInput('users', inputs.users ?? USERS);
+    fixture.componentRef.setInput('users', inputs.users ?? usersFor(inputs.actor ?? 'admin'));
     fixture.componentRef.setInput('currentUserId', inputs.currentUserId ?? null);
-    fixture.componentRef.setInput('isSuperuser', inputs.isSuperuser ?? false);
     fixture.componentRef.setInput('assignableRoles', OPERATOR_ME_RESPONSE.assignable_roles ?? []);
     return fixture;
   }
@@ -113,7 +126,7 @@ describe('UsersTable', () => {
   });
 
   it('renders four role options in order for an ordinary row', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -123,7 +136,7 @@ describe('UsersTable', () => {
   });
 
   it("selects the row's current role by default, for every assignable role", async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -136,7 +149,7 @@ describe('UsersTable', () => {
   });
 
   it('renders a pending row with an enabled selector, not as static text', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -150,8 +163,8 @@ describe('UsersTable', () => {
     expect(adminOption?.disabled).toBe(false);
   });
 
-  it('disables the admin option for a non-superuser actor', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: false });
+  it('disables the admin option a row does not offer the actor', async () => {
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'admin' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -161,7 +174,7 @@ describe('UsersTable', () => {
   });
 
   it('enables the admin option for a superuser actor', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -170,8 +183,8 @@ describe('UsersTable', () => {
     expect(adminOption?.disabled).toBe(false);
   });
 
-  it('disables the whole selector on an already-admin row for a non-superuser actor (cannot revoke)', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: false });
+  it('disables the whole selector on a row that offers the actor no role', async () => {
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'admin' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -181,7 +194,7 @@ describe('UsersTable', () => {
   });
 
   it('emits assignRole with the userId and the newly selected role', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     const emitted: { userId: string; role: string }[] = [];

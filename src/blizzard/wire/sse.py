@@ -7,12 +7,12 @@ omitted when unset unless named in :attr:`SseFramePayload._null_when_absent`."""
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.hub_event_types import HubEventType
 
 #: What fact family drove a ``chunk-changed`` frame — each emit site names
 #: its own cause statically.
@@ -20,6 +20,30 @@ ChunkChangeCause = Literal[
     "minted",
     "promoted",
     "edited",
+    "grouped",
+    "claimed",
+    "node-completed",
+    "migrated",
+    "decision-submitted",
+    "decision-resolved",
+    "question-asked",
+    "question-answered",
+    "escalated",
+    "requeued",
+    "restarted",
+    "detached",
+    "paused",
+    "resumed",
+    "stopped",
+    "completed",
+    "hub-advanced",
+    "deleted",
+]
+
+#: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
+ActivityChunkChangeCause = Literal[
+    "minted",
+    "promoted",
     "grouped",
     "claimed",
     "node-completed",
@@ -136,21 +160,7 @@ class EventLoggedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
 
 
-class HubEventType(StrEnum):
-    """Every hub SSE frame kind — the ``event:`` name a frame carries."""
-
-    CHUNK_CHANGED = "chunk-changed"
-    QUESTION_ASKED = "question-asked"
-    QUESTION_ANSWERED = "question-answered"
-    DECISION_OPENED = "decision-opened"
-    DECISION_RESOLVED = "decision-resolved"
-    QUEUE_CHANGED = "queue-changed"
-    RUNNER_CHANGED = "runner-changed"
-    EVENT_LOGGED = "event-logged"
-
-
-#: Keyed by the broker's own event-type constants, duplicated here as literals. The key
-#: set is pinned against those constants by
+#: Keyed by :class:`HubEventType`. The key set is pinned against the broker's vocabulary by
 #: ``tests/test_sse_contract.py::TestCorpusClosure``.
 SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     HubEventType.CHUNK_CHANGED: ChunkChangedPayload,

@@ -16,11 +16,11 @@ export interface ChunkPauseVars {
 
 /**
  * `POST /api/chunks/{id}/pause|resume` — the runner's pass-through proxy onto the hub's
- * fleet-mounted counterpart (`blizzard.runner.api.chunk_detail`), routed to the pause or
- * resume verb by the desired `paused` state through the generated client
- * (bzh:generated-client). Server-refused for `{done, stopped, delivering}` — the header
- * mirrors that refusal so it never offers a 409, and surfaces one anyway if the race is
- * lost. On success it re-reads the chunk's detail (the pause fact the header renders off)
+ * fleet-mounted counterpart, called through the generated `pauseChunkApiChunksChunkIdPausePost`
+ * or `resumeChunkApiChunksChunkIdResumePost` by the desired `paused` state
+ * (bzh:generated-client). The hub refuses a chunk whose `ChunkDetail.pausable` is false — the
+ * header offers the toggle only while the wire's `pausable` holds, and surfaces a 409 anyway if
+ * the race is lost. On success it re-reads the chunk's detail (the pause fact the header renders off)
  * and the leases list (the derived machine status the row/dock summary render off).
  */
 export function injectChunkPauseMutation() {

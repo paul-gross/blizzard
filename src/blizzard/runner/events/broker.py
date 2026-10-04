@@ -8,6 +8,7 @@ calls — each wiring is covered by ``tests/runner_event_census.py``."""
 from __future__ import annotations
 
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
+from blizzard.foundation.runner_event_types import RunnerEventType
 from blizzard.wire.sse_runner import (
     AskChangeCause,
     AskChangedPayload,
@@ -18,29 +19,12 @@ from blizzard.wire.sse_runner import (
     FactChangedPayload,
     LeaseChangeCause,
     LeaseChangedPayload,
-    RunnerEventType,
     TakeoverChangeCause,
     TakeoverChangedPayload,
 )
 
-# SSE event-type names — the runner's live vocabulary.
-LEASE_CHANGED = RunnerEventType.LEASE_CHANGED
-ASK_CHANGED = RunnerEventType.ASK_CHANGED
-ESCALATION_CHANGED = RunnerEventType.ESCALATION_CHANGED
-TAKEOVER_CHANGED = RunnerEventType.TAKEOVER_CHANGED
-ENVIRONMENT_CHANGED = RunnerEventType.ENVIRONMENT_CHANGED
-FACT_CHANGED = RunnerEventType.FACT_CHANGED
-
-#: Every event-type name the broker can publish. This tuple, not the bare constants
-#: above, is the broker's declared vocabulary.
-EVENT_TYPES: tuple[str, ...] = (
-    LEASE_CHANGED,
-    ASK_CHANGED,
-    ESCALATION_CHANGED,
-    TAKEOVER_CHANGED,
-    ENVIRONMENT_CHANGED,
-    FACT_CHANGED,
-)
+#: Every event-type name the broker can publish — its declared vocabulary.
+EVENT_TYPES: tuple[str, ...] = tuple(RunnerEventType)
 
 
 class EventBroker(_EventBroker):
@@ -51,33 +35,33 @@ class EventBroker(_EventBroker):
     def publish_lease_changed(self, lease_id: str, chunk_id: str, *, cause: LeaseChangeCause) -> int:
         """A lease was minted or closed."""
         payload = LeaseChangedPayload(lease_id=lease_id, chunk_id=chunk_id, cause=cause).to_payload()
-        return self.publish(LEASE_CHANGED, payload)
+        return self.publish(RunnerEventType.LEASE_CHANGED, payload)
 
     def publish_ask_changed(self, lease_id: str, chunk_id: str, question_id: str, *, cause: AskChangeCause) -> int:
         """A worker's ask was recorded, or its answer landed."""
         payload = AskChangedPayload(
             lease_id=lease_id, chunk_id=chunk_id, question_id=question_id, cause=cause
         ).to_payload()
-        return self.publish(ASK_CHANGED, payload)
+        return self.publish(RunnerEventType.ASK_CHANGED, payload)
 
     def publish_escalation_changed(
         self, chunk_id: str, *, cause: EscalationChangeCause, lease_id: str | None = None
     ) -> int:
         """A chunk escalated to needs-human, or that escalation was superseded/closed."""
         payload = EscalationChangedPayload(chunk_id=chunk_id, cause=cause, lease_id=lease_id).to_payload()
-        return self.publish(ESCALATION_CHANGED, payload)
+        return self.publish(RunnerEventType.ESCALATION_CHANGED, payload)
 
     def publish_takeover_changed(self, chunk_id: str, takeover_id: str, *, cause: TakeoverChangeCause) -> int:
         """An operator takeover opened or closed."""
         payload = TakeoverChangedPayload(chunk_id=chunk_id, takeover_id=takeover_id, cause=cause).to_payload()
-        return self.publish(TAKEOVER_CHANGED, payload)
+        return self.publish(RunnerEventType.TAKEOVER_CHANGED, payload)
 
     def publish_environment_changed(self, chunk_id: str, environment_id: str, *, cause: EnvironmentChangeCause) -> int:
         """An environment-pool slot was bound to a chunk, or released."""
         payload = EnvironmentChangedPayload(chunk_id=chunk_id, environment_id=environment_id, cause=cause).to_payload()
-        return self.publish(ENVIRONMENT_CHANGED, payload)
+        return self.publish(RunnerEventType.ENVIRONMENT_CHANGED, payload)
 
     def publish_fact_changed(self, *, seq: int, kind: str, chunk_id: str | None, lease_id: str | None) -> int:
         """A hub-bound fact was enqueued onto the outbound buffer."""
         payload = FactChangedPayload(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id).to_payload()
-        return self.publish(FACT_CHANGED, payload)
+        return self.publish(RunnerEventType.FACT_CHANGED, payload)

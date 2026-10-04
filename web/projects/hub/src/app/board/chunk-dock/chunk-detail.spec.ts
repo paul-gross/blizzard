@@ -113,6 +113,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   pausable: true,
   completable: true,
   deletable: true,
+  graph_editable: true,
   current_node_id: null,
   latest_epoch: null,
   work_refs: [],

@@ -23,16 +23,16 @@
               {{ user.identities?.length ? user.identities!.map((i) => i.provider_name).join(', ') : '—' }}
             </td>
             <td>
-              @if (isSelf(user) || user.role === 'superuser') {
+              @if (isSelf(user) || !isAssignableRole(user.role)) {
                 <span data-testid="users-table-role-static">{{ user.role }}{{ isSelf(user) ? ' (you)' : '' }}</span>
               } @else {
                 <select
                   data-testid="users-table-role-select"
-                  [disabled]="user.role === 'admin' && !isSuperuser()"
+                  [disabled]="!user.assignable_roles?.length"
                   (change)="onRoleChange(user.user_id, $event)"
                 >
                   @for (role of assignableRoles(); track role) {
-                    <option [value]="role" [selected]="role === user.role" [disabled]="role === 'admin' && !isSuperuser()">
+                    <option [value]="role" [selected]="role === user.role" [disabled]="!user.assignable_roles?.includes(role)">
                       {{ role }}
                     </option>
                   }

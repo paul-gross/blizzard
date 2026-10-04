@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { UsersTable } from './users-table';
-import { asyncState, hubApi, KitAsyncState } from 'fleet';
+import { asyncState, KitAsyncState } from 'fleet';
 import { injectAssignRoleMutation } from './assign-role.mutations';
 import { injectMeQuery } from '../core/auth/me.query';
 import { injectUsersQuery } from './users.query';
@@ -8,12 +8,10 @@ import { assignRoleErrorText } from './admin-page.model';
 
 /**
  * The `/admin` route — a container reading `injectUsersQuery()` (`GET /api/users`)
- * and `injectMeQuery()` (the signed-in actor's own identity, for
- * `isSelf`/`isSuperuser` gating and the `assignable_roles` the selectors offer in
- * {@link UsersTable} — `isSuperuser` reads `me().role`, not a permission: `superuser`
- * and `admin` share one permission bundle server-side — the one thing `superuser`
- * can do that `admin` cannot is a per-action rule, not a distinct permission bit),
- * composing the presentational table (`bzh:frontend-container-presentational`).
+ * and `injectMeQuery()` (the signed-in actor's own identity, for `isSelf` gating and the
+ * `assignable_roles` the selectors offer in {@link UsersTable}; each user row carries its own
+ * actor-relative `assignable_roles`), composing the presentational table
+ * (`bzh:frontend-container-presentational`).
  * Routed behind the `user:manage` nav gate (`app-nav.ts`'s `showAdmin`); this page's own `GET /api/users` read
  * is refused (`403`) hub-side below that permission regardless of the nav gate, so a
  * direct navigation renders that as its own error state rather than a silent stub.
@@ -44,7 +42,6 @@ export class AdminPage {
   private readonly assignRoleMutation = injectAssignRoleMutation();
 
   protected readonly currentUserId = computed(() => this.meQuery.data()?.user_id ?? null);
-  protected readonly isSuperuser = computed(() => this.meQuery.data()?.role === hubApi.Role.SUPERUSER);
   protected readonly assignableRoles = computed(() => this.meQuery.data()?.assignable_roles ?? []);
 
   /** `KitAsyncState`'s own triad — `empty` is never reached here (an empty user list

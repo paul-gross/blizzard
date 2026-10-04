@@ -12,8 +12,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from blizzard.foundation.subscription_miss import SampleMissReason
-
 # Fact kinds the batched /events push accepts (``noun.verb`` names).
 LEASE_MINTED = "lease.minted"
 ESCALATION_RECORDED = "escalation.recorded"
@@ -38,8 +36,6 @@ EVENT_RECORDED = "event.recorded"
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
 # A sampler miss, upserted per (runner_id, slug) beside the sample. Payload: {slug, name, missed_at, reason} only.
 EXTERNAL_SUBSCRIPTION_USAGE_MISSED = "external_subscription_usage.missed"
-# The ``SampleMissReason`` value for a lapsed credential.
-CREDENTIAL_LAPSED_MISS_REASON = SampleMissReason.CREDENTIAL_LAPSED
 
 
 class ExternalSubscriptionUsageWindowFact(BaseModel):

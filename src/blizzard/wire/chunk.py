@@ -537,6 +537,8 @@ class ChunkDetail(BaseModel):
     completable: bool = False
     #: The chunk's status admits deletion (it has never been claimed).
     deletable: bool = False
+    #: The chunk's graph may be re-pinned: unclaimed and never moved off its graph's start.
+    graph_editable: bool = False
     #: The chunk's status is terminal.
     terminal: bool = False
     #: The chunk's current node is the graph's reserved terminal.

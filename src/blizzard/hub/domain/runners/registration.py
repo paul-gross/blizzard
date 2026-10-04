@@ -14,9 +14,9 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.domain.runners.activity import ActivityEntry
 from blizzard.hub.domain.runners.route import Route
-from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 #: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
 STALE_AFTER = timedelta(minutes=5)
@@ -31,8 +31,8 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
     return (as_utc(now) - as_utc(sampled_at)) > EXTERNAL_USAGE_STALE_AFTER
 
 
-#: The one miss reason surfaced as a per-slug ``condition``; the runner's own set shares it via ``blizzard.wire``.
-CREDENTIAL_LAPSED_CONDITION = CREDENTIAL_LAPSED_MISS_REASON
+#: The one miss reason surfaced as a per-slug ``condition``.
+CREDENTIAL_LAPSED_CONDITION = SampleMissReason.CREDENTIAL_LAPSED
 
 
 class RunnerState(StrEnum):
