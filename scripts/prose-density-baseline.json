@@ -1808,13 +1808,13 @@
    "comments": 10,
    "docstrings": 65,
    "over_cap": 3,
-   "total": 531
+   "total": 533
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 32,
    "docstrings": 86,
    "over_cap": 0,
-   "total": 823
+   "total": 827
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -2478,9 +2478,9 @@
   },
   "blizzard/hub/domain/chunk/model.py": {
    "comments": 82,
-   "docstrings": 422,
+   "docstrings": 427,
    "over_cap": 13,
-   "total": 1803
+   "total": 1816
   },
   "blizzard/hub/domain/chunk/ports/__init__.py": {
    "comments": 0,
@@ -6893,10 +6893,10 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 51,
-   "docstrings": 142,
+   "comments": 53,
+   "docstrings": 143,
    "over_cap": 20,
-   "total": 694
+   "total": 700
   },
   "blizzard/wire/chunk_asks.py": {
    "comments": 0,
@@ -7921,10 +7921,10 @@
    "total": 257
   },
   "test_board_window.py": {
-   "comments": 7,
+   "comments": 8,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 266
+   "total": 271
   },
   "test_check_version_tag.py": {
    "comments": 0,
@@ -9751,10 +9751,10 @@
    "total": 280
   },
   "test_operator_verb_rules.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 402
+   "total": 430
   },
   "test_operator_window_rules.py": {
    "comments": 8,

@@ -18,6 +18,7 @@ import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
+import { authState, connectionLabel } from './app.model';
 
 /**
  * The hub app shell — the titlebar, the top nav (or their mobile shell
@@ -123,12 +124,9 @@ export class App {
   protected readonly me = computed(() => this.meQuery.data() ?? null);
 
   /** The top-level session gate — see the class docstring. */
-  protected readonly authState = computed<'loading' | 'unauthenticated' | 'lobby' | 'ready'>(() => {
-    if (this.meQuery.isPending()) return 'loading';
-    const me = this.me();
-    if (me === null) return 'unauthenticated';
-    return me.permissions.length === 0 ? 'lobby' : 'ready';
-  });
+  protected readonly authState = computed<'loading' | 'unauthenticated' | 'lobby' | 'ready'>(() =>
+    authState(this.meQuery.isPending(), this.me()),
+  );
 
   /** The router's current URL as a signal — read only to decide whether the
    * `unauthenticated` branch's `<router-outlet>` is safe to render yet (see the
@@ -203,13 +201,9 @@ export class App {
   }
 
   /** Header status: the live stream's connection state, falling back to the health read. */
-  protected readonly connection = computed(() => {
-    const streamState = this.live.status();
-    if (streamState === 'reconnecting') return 'reconnecting…';
-    if (this.health.isPending()) return 'connecting…';
-    if (this.health.isError()) return 'offline';
-    return this.health.data()?.['status'] ?? 'ok';
-  });
+  protected readonly connection = computed(() =>
+    connectionLabel(this.live.status(), this.health.isPending(), this.health.isError(), this.health.data()?.['status']),
+  );
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly counts = computed(() => this.countsQuery.data() ?? null);

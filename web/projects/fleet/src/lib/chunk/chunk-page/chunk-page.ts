@@ -17,6 +17,7 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
+import { chunkTabOptions, openEdgeIds, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
 
@@ -47,14 +48,6 @@ import { ChunkPageShell } from './chunk-page-shell';
  * consult. The dock's destructive and structural operator actions are never mounted
  * here, port or not.
  */
-const BASE_TAB_OPTIONS: readonly KitTabOption[] = [
-  { value: 'general', label: 'General', testid: 'tab-general' },
-  { value: 'node-history', label: 'Node history', testid: 'tab-node-history' },
-  { value: 'artifacts', label: 'Artifacts', testid: 'tab-artifacts' },
-];
-
-const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Transcripts', testid: 'tab-transcripts' };
-
 @Component({
   selector: 'fleet-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -239,17 +232,13 @@ export class ChunkPage {
    * permission model serves its own transcripts to whoever reaches its panel. */
   protected readonly canReadTranscripts = computed(() => this.actions?.canReadTranscripts() ?? true);
 
-  protected readonly tabOptions = computed<readonly KitTabOption[]>(() =>
-    this.canReadTranscripts() ? [...BASE_TAB_OPTIONS, TRANSCRIPTS_TAB_OPTION] : BASE_TAB_OPTIONS,
-  );
+  protected readonly tabOptions = computed<readonly KitTabOption[]>(() => chunkTabOptions(this.canReadTranscripts()));
 
   /** The chunk aggregate, or `undefined` while the first read is in flight. */
   protected readonly detail = computed(() => this.detailQuery.data());
 
   /** Which pre-detail state renders — a failed read is not the same as a slow one. */
-  protected readonly state = computed<KitAsyncStateValue>(() =>
-    this.detailQuery.isError() ? 'error' : 'loading',
-  );
+  protected readonly state = computed<KitAsyncStateValue>(() => preDetailState(this.detailQuery.isError()));
 
   /** The chunk's related work-source items, in the shape the issue pane reads. */
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
@@ -259,12 +248,10 @@ export class ChunkPage {
    * the whole edge set the identity line names, rather than `blocked`'s one
    * representative. A satisfied edge blocks nothing and is left off. */
   protected readonly blockedBy = computed<readonly string[]>(() =>
-    (this.detail()?.neighborhood?.prerequisites ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
+    openEdgeIds(this.detail()?.neighborhood?.prerequisites ?? []),
   );
 
-  protected readonly blocking = computed<readonly string[]>(() =>
-    (this.detail()?.neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
-  );
+  protected readonly blocking = computed<readonly string[]>(() => openEdgeIds(this.detail()?.neighborhood?.dependents ?? []));
 
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.actions?.answer(event);

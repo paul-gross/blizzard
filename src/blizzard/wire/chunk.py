@@ -156,6 +156,8 @@ class ChunkSummary(BaseModel):
     chunk_id: str
     graph_id: str
     status: ChunkStatus
+    # The chunk's status is terminal — the hub's judgment, so no surface restates which statuses finish.
+    terminal: bool = False
     current_node_id: str | None
     current_node_name: str | None = None
     work_refs: list[WorkRefView] = []
@@ -193,7 +195,8 @@ class ChunksPageView(BaseModel):
 
 class ChunkCountsView(BaseModel):
     """``GET /api/chunk-counts`` — the all-time fleet count per derived status, over exactly
-    the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field."""
+    the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field,
+    plus ``terminal`` — the count over every terminal status, the hub's judgment of which statuses finish."""
 
     total: int
     not_ready: int
@@ -205,6 +208,7 @@ class ChunkCountsView(BaseModel):
     paused: int
     stopped: int
     done: int
+    terminal: int
 
 
 class RouteView(BaseModel):
@@ -527,6 +531,8 @@ class ChunkDetail(BaseModel):
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     #: The chunk's status admits an operator pause.
     pausable: bool = False
+    #: The status the chunk derives once a pause settles; its current status where a pause is refused or outranked.
+    status_if_paused: ChunkStatus | None = None
     #: The chunk's status admits a completion (it is not already ``done``).
     completable: bool = False
     #: The chunk's status admits deletion (it has never been claimed).

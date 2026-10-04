@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { Client } from '../api/hub/client';
 import type { TransitionView } from '../api/hub';
-import { asyncState } from '../core/query-state';
+import { asyncState, restingAsyncState } from '../core/query-state';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import type { TranscriptPlane } from '../core/query-keys';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
+import { segmentFinal } from './transcript-selection.model';
 
 /**
  * The Transcripts tab's own container (`bzh:frontend-container-presentational`)
@@ -71,10 +72,9 @@ export class ChunkTranscriptsContainer {
    * — `null` until the index names it, so the read below is never issued
    * against a placement that is only a guess. A segment the resolved index does not list
    * falls to `false`, the still-live placement, which is the safe way to be wrong. */
-  protected readonly selectedSegmentFinal = computed<boolean | null>(() => {
-    if (this.indexQuery.isPending()) return null;
-    return this.indexQuery.data()?.segments?.find((s) => s.segment_id === this.segmentId())?.final ?? false;
-  });
+  protected readonly selectedSegmentFinal = computed<boolean | null>(() =>
+    segmentFinal(this.indexQuery.isPending(), this.indexQuery.data()?.segments ?? [], this.segmentId()),
+  );
 
   /** One query, whose key placement (two keys) is chosen once finality is
    * actually known — `selectedSegmentFinal()`'s `null` holds it disabled until then, so the
@@ -97,8 +97,7 @@ export class ChunkTranscriptsContainer {
   /** `asyncState()`'s own documented trap (`query-state.ts`): a disabled query reports
    * `isPending()` forever, so the "no segment selected" rest state is branched here,
    * before falling into the query's own loading/error/ready fold. */
-  protected readonly segmentState = computed<KitAsyncStateValue>(() => {
-    if (this.segmentId() === null) return 'empty';
-    return asyncState(this.segmentQuery, false);
-  });
+  protected readonly segmentState = computed<KitAsyncStateValue>(() =>
+    restingAsyncState(this.segmentId() === null, this.segmentQuery, false),
+  );
 }

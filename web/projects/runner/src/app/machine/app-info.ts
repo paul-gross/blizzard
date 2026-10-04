@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
+import { asyncState, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { LocalInfoView } from './app-info-view';
+import { lastFlushLabel, lastTickLabel, wellFormedRunner } from './app-info.model';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
@@ -31,12 +32,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
 export class LocalInfo {
   protected readonly query = injectRunnerDashboardQuery();
 
-  protected readonly view = computed(() => {
-    const data = this.query.data()?.runner;
-    // A malformed body (e.g. `{}` from a misrouted proxy) must render the
-    // degraded state, not throw on `hub.endpoint` mid-template.
-    return data?.hub && data.capacities && data.pause ? data : null;
-  });
+  /** The runner status section, or `null` on a malformed body — see {@link wellFormedRunner}. */
+  protected readonly view = computed(() => wellFormedRunner(this.query.data()?.runner));
 
   /**
    * The fleet strip's own latch: under the composed read, a hub
@@ -75,17 +72,7 @@ export class LocalInfo {
   private readonly now = injectNowSignal(1000);
 
   /** `-34s` since the last successful PULL, or `never` before first contact. */
-  protected readonly lastFlushLabel = computed<string>(() => {
-    const contactAt = this.view()?.hub.last_contact_at ?? null;
-    if (contactAt === null) return 'never';
-    const age = ageMs(contactAt, this.now());
-    return age === null ? '—' : formatAge(age);
-  });
+  protected readonly lastFlushLabel = computed<string>(() => lastFlushLabel(this.view(), this.now()));
 
-  protected readonly lastTickLabel = computed<string>(() => {
-    const tickAt = this.view()?.last_tick_at ?? null;
-    if (tickAt === null) return '—';
-    const age = ageMs(tickAt, this.now());
-    return age === null ? '—' : formatAge(age);
-  });
+  protected readonly lastTickLabel = computed<string>(() => lastTickLabel(this.view(), this.now()));
 }

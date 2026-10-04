@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './proposals/garden-proposals.query';
+import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
+import { waitingProposalCount } from './gardening-page.model';
 import { KitCountBadge, KitTab, KitTabStrip } from 'fleet';
 
 /**
@@ -35,7 +36,5 @@ export class GardeningPage {
 
   /** How many proposals are waiting on a person right now — the strip's own
    * "urgent count" (only Proposals carries one, per the plan). */
-  protected readonly proposalsWaitingCount = computed(
-    () => (this.proposalsQuery.data() ?? []).filter(isGardenProposalWaiting).length,
-  );
+  protected readonly proposalsWaitingCount = computed(() => waitingProposalCount(this.proposalsQuery.data() ?? []));
 }

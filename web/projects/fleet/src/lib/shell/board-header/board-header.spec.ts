@@ -25,6 +25,7 @@ const ZERO_COUNTS: ChunkCountsView = {
   paused: 0,
   stopped: 0,
   done: 0,
+  terminal: 0,
 };
 
 /** The hub's counts read for a fleet of exactly these chunks. */

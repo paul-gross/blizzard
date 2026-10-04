@@ -1,29 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
 
-import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-list/chunk-status';
+import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { injectRunnerLeasesQuery } from '../core/leases.query';
+import {
+  activeLeases,
+  chunkLeasesFor,
+  chunksEmptyText,
+  chunkStatusFor,
+  escalationFor,
+  type MachineChunkRow,
+  machineChunkRows,
+  visibleChunkRows,
+} from './app-panel.model';
 import { LocalPanelLayout } from './app-panel-layout';
 import { LocalPanelMobile } from './app-panel-mobile';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
-/** One row in the machine-chunks list: a chunk's newest lease plus its derived
- * machine-side status, pre-folded so the layout needs no second read. `leases`
- * carries *every* attempt of the chunk (oldest → newest) — the detail dock
- * resolves its own summary off the newest entry without a second read of its
- * own; `lease` is that same newest entry, already resolved for the row. */
-export interface MachineChunkRow {
-  readonly lease: runnerApi.LeaseView;
-  readonly leases: readonly runnerApi.LeaseView[];
-  readonly status: MachineChunkStatus;
-}
+export type { MachineChunkRow } from './app-panel.model';
 
 /**
  * The runner's machine-local panel — the data-orchestration container.
  * Owns the leases query plus the one shared
  * {@link injectRunnerDashboardQuery} (the composed `GET
  * /api/dashboard` read, folding what were five separate query injections
- * here), the one derived-status fold ({@link deriveMachineChunkStatus}), and
+ * here), the one derived-status fold ({@link machineChunkRows}), and
  * the selection — which chunk is open, bound to the URL's `?chunk=` query
  * param so a link is shareable and a reload keeps its place.
  * Every panel below it (via {@link LocalPanelLayout}) is presentational or
@@ -83,7 +84,7 @@ export class LocalPanel {
    * The liveness rail shows *active* leases only — a closed lease is history,
    * carried by {@link machineChunks} as its chunk's newest attempt instead.
    */
-  protected readonly activeLeases = computed(() => this.leases().filter((lease) => lease.state !== 'closed'));
+  protected readonly activeLeases = computed(() => activeLeases(this.leases()));
 
   /** The leases rail's async triad state — loading/error take precedence, then
    * no active leases, else the agent rows render. */
@@ -104,12 +105,9 @@ export class LocalPanel {
   /** The desktop chunks pane's empty-state text — distinguishes "nothing on this
    * machine" from "the filter hid everything", naming the hidden count so the
    * operator knows to check "show all". */
-  protected readonly chunksEmptyText = computed<string>(() => {
-    const total = this.machineChunks().length;
-    if (total === 0) return 'NO CHUNKS ON THIS MACHINE';
-    const hidden = total - this.visibleChunks().length;
-    return `${hidden} CHUNK${hidden === 1 ? '' : 'S'} HIDDEN BY THE FILTER — CHECK SHOW ALL`;
-  });
+  protected readonly chunksEmptyText = computed<string>(() =>
+    chunksEmptyText(this.machineChunks().length, this.visibleChunks().length),
+  );
 
   /**
    * One row per chunk on this machine: the chunk's newest lease (the server
@@ -119,32 +117,9 @@ export class LocalPanel {
    * detail dock alike. Each row's `leases` is ordered oldest → newest, so
    * `lease` (the summary/status subject) is that list's own newest entry.
    */
-  protected readonly machineChunks = computed<MachineChunkRow[]>(() => {
-    const dashboard = this.dashboardQuery.data();
-    const facts = {
-      escalatedChunkIds: new Set((dashboard?.escalations?.items ?? []).map((esc) => esc.chunk_id)),
-      takeoverChunkIds: new Set((dashboard?.takeovers?.items ?? []).map((tko) => tko.chunk_id)),
-      askChunkIds: new Set((dashboard?.asks?.items ?? []).map((ask) => ask.chunk_id)),
-    };
-    // Group by chunk in server order (newest attempt first); the Map preserves
-    // first-seen insertion order, so the rows keep the newest-lease-first order.
-    const grouped = new Map<string, runnerApi.LeaseView[]>();
-    for (const lease of this.leases()) {
-      const group = grouped.get(lease.chunk_id);
-      if (group) group.push(lease);
-      else grouped.set(lease.chunk_id, [lease]);
-    }
-    const rows: MachineChunkRow[] = [];
-    for (const group of grouped.values()) {
-      const newest = group[0];
-      rows.push({
-        lease: newest,
-        leases: [...group].reverse(), // oldest → newest
-        status: deriveMachineChunkStatus(newest, facts),
-      });
-    }
-    return rows;
-  });
+  protected readonly machineChunks = computed<MachineChunkRow[]>(() =>
+    machineChunkRows(this.leases(), this.dashboardQuery.data()),
+  );
 
   /** The chunks list's "show all" filter state — plain UI state,
    * unchecked by default. Client-side only: narrows what {@link visibleChunks}
@@ -159,10 +134,9 @@ export class LocalPanel {
    * unfiltered {@link machineChunks}, so a hidden chunk is still deep-linkable.
    * Desktop-only — {@link LocalPanelMobile} takes the unfiltered
    * list directly; mobile's own filter is out of scope here. */
-  protected readonly visibleChunks = computed<MachineChunkRow[]>(() => {
-    if (this.showAllChunks()) return this.machineChunks();
-    return this.machineChunks().filter((chunk) => chunk.status.tone !== 'done' && chunk.status.tone !== 'idle');
-  });
+  protected readonly visibleChunks = computed<MachineChunkRow[]>(() =>
+    visibleChunkRows(this.machineChunks(), this.showAllChunks()),
+  );
 
   /** The open-ask count for the asks panel's header note — also read by the
    * app root's own mobile tab bar off the same shared dashboard
@@ -208,22 +182,16 @@ export class LocalPanel {
    * The selected chunk's attempts (oldest → newest) — what the detail dock's
    * summary/status renders off the newest. Empty when nothing is selected.
    */
-  protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() => {
-    const chunkId = this.selectedChunkId();
-    if (chunkId === null) return [];
-    return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.leases ?? [];
-  });
+  protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() =>
+    chunkLeasesFor(this.machineChunks(), this.selectedChunkId()),
+  );
 
-  protected readonly selectedStatus = computed<MachineChunkStatus | null>(() => {
-    const chunkId = this.selectedChunkId();
-    if (chunkId === null) return null;
-    return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.status ?? null;
-  });
+  protected readonly selectedStatus = computed<MachineChunkStatus | null>(() =>
+    chunkStatusFor(this.machineChunks(), this.selectedChunkId()),
+  );
 
   /** The open escalation for the selected chunk, when one exists — carries the resume command. */
-  protected readonly selectedEscalation = computed<runnerApi.EscalationView | null>(() => {
-    const chunkId = this.selectedChunkId();
-    if (chunkId === null) return null;
-    return (this.dashboardQuery.data()?.escalations?.items ?? []).find((esc) => esc.chunk_id === chunkId) ?? null;
-  });
+  protected readonly selectedEscalation = computed<runnerApi.EscalationView | null>(() =>
+    escalationFor(this.dashboardQuery.data(), this.selectedChunkId()),
+  );
 }

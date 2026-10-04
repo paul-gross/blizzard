@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { type ArtifactView as ArtifactModel, asyncState, compactRef, injectHubChunkDetailQuery } from 'fleet';
 
 import { ArtifactView } from './artifact-view';
+import { artifactByKey } from './artifact-page.model';
 
 /**
  * One artifact, full (`/board/chunk/:chunkId/artifact/:artifactKey`) — out of
@@ -42,11 +43,9 @@ export class ArtifactPage {
   /** The one artifact this page names, or `undefined` when the read has not
    * landed — or when the key names nothing in the store. {@link state} is what
    * tells those two apart. */
-  protected readonly artifact = computed<ArtifactModel | undefined>(() => {
-    const key = this.artifactKey();
-    if (key === null) return undefined;
-    return (this.detailQuery.data()?.artifacts ?? []).find((art) => art.key === key);
-  });
+  protected readonly artifact = computed<ArtifactModel | undefined>(() =>
+    artifactByKey(this.detailQuery.data()?.artifacts ?? [], this.artifactKey()),
+  );
 
   /** A resolved chunk whose store has no such key is a dead link (`empty`), not a
    * slow read (`loading`) and not a fault (`error`) — an operator following a

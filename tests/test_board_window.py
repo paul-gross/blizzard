@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.hub.api.chunks import BOARD_DONE_WINDOW
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -219,16 +219,21 @@ def test_chunk_counts_count_all_time_and_exclude_ephemeral_chunks(tmp_path: Path
     counts = hub.client.get("/api/chunk-counts")
     assert counts.status_code == 200
     body = counts.json()
-    assert set(body) == {"total"} | {status.value for status in ChunkStatus}
+    assert set(body) == {"total", "terminal"} | {status.value for status in ChunkStatus}
 
     unfiltered = _listed(hub, board_window=False)
     assert body["total"] == len(unfiltered) == sum(body[status.value] for status in ChunkStatus)
     assert "ch_deleted_done" not in unfiltered
 
-    statuses = Counter(c["status"] for c in hub.client.get("/api/chunks").json()["chunks"])
+    listed_rows = hub.client.get("/api/chunks").json()["chunks"]
+    statuses = Counter(c["status"] for c in listed_rows)
     assert {status.value: body[status.value] for status in ChunkStatus} == {
         status.value: statuses[status.value] for status in ChunkStatus
     }
+    # Terminal is the hub's judgment on both reads: the count sums exactly the rows flagged terminal.
+    assert body["terminal"] == sum(body[status.value] for status in TERMINAL_STATUSES) > 0
+    assert body["terminal"] == sum(1 for c in listed_rows if c["terminal"])
+    assert all(c["terminal"] == (ChunkStatus(c["status"]) in TERMINAL_STATUSES) for c in listed_rows)
     # The counts ignore the window: every old done chunk still counts.
     assert body["done"] > len(
         [c for c in hub.client.get("/api/chunks?board_window=true").json()["chunks"] if c["status"] == "done"]

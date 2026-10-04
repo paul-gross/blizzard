@@ -7,6 +7,7 @@ import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectRunRoutineMutation } from './routine-run.mutations';
 
 import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dialog-view';
+import { liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './gardening-run-dialog.model';
 
 /**
  * The gardening run dialog's container — kicks off a routine run
@@ -52,25 +53,17 @@ export class GardeningRunDialog {
   /** The routine's related, non-retired scopes — a retired scope stays related
    * but is offered to no run. */
   private readonly liveScopes = computed<readonly ScopeView[]>(() =>
-    (this.scopesQuery.data() ?? []).filter((s) => !s.retired && this.relatedSlugs().has(s.slug)),
+    liveRelatedScopes(this.scopesQuery.data() ?? [], this.relatedSlugs()),
   );
 
   /** The scope slugs this routine has swept. */
-  protected readonly sweptSlugs = computed<ReadonlySet<string>>(
-    () => new Set((this.baselinesQuery.data() ?? []).map((b) => b.scope_slug)),
-  );
+  protected readonly sweptSlugs = computed<ReadonlySet<string>>(() => sweptScopeSlugs(this.baselinesQuery.data() ?? []));
 
   /** Previously-swept scopes first, in newest-swept-first order; every other
    * live, related scope after, in the order `GET /api/scopes` served them. */
-  protected readonly orderedScopes = computed<readonly ScopeView[]>(() => {
-    const swept = this.sweptSlugs();
-    const bySlug = new Map(this.liveScopes().map((s) => [s.slug, s]));
-    const sweptOrdered = (this.baselinesQuery.data() ?? [])
-      .map((b) => bySlug.get(b.scope_slug))
-      .filter((s): s is ScopeView => s !== undefined);
-    const rest = this.liveScopes().filter((s) => !swept.has(s.slug));
-    return [...sweptOrdered, ...rest];
-  });
+  protected readonly orderedScopes = computed<readonly ScopeView[]>(() =>
+    orderScopesBySwept(this.liveScopes(), this.baselinesQuery.data() ?? [], this.sweptSlugs()),
+  );
 
   /** `isEmpty` reads the related set's own literal count — never hardcoded. */
   protected readonly state = computed(() =>

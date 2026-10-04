@@ -37,10 +37,16 @@
  * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or
  * `*.mutations.ts` file.
  *
- * Finally, the package-layers sweep (`bzh:frontend-package-layers`), with no exemption list: each
+ * Also the package-layers sweep (`bzh:frontend-package-layers`), with no exemption list: each
  * project's source root is cut into folder units, and `LAYERED_PROJECTS` declares as data which
  * units each may import. It fails an import outside the table, a file in no declared unit, a
  * relative import into another project, and a cycle in a table.
+ *
+ * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
+ * `bzh:frontend-containers-compose`), with no exemption list: in a `@Component` class that calls a
+ * query-bearing `inject*` helper, a `computed()` callback — and every same-class member it reaches
+ * through `this` — holds no branch, loop, or collection transform; that derivation belongs in a pure
+ * `*.model.ts` the container calls.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
@@ -55,6 +61,11 @@ const {
   assertClientCallPlacementDetectorWorks,
   clientCallPlacementViolations,
 } = require('./wire-conformist-sweep');
+const {
+  CONTAINERS_COMPOSE_HEADER,
+  assertContainersComposeDetectorWorks,
+  containersComposeViolations,
+} = require('./containers-compose-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROJECTS_DIR = path.join(ROOT, 'projects');
@@ -929,6 +940,7 @@ function main() {
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
   assertPackageLayersDetectorWorks();
+  assertContainersComposeDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -1011,6 +1023,7 @@ function main() {
     }
   }
   const packageLayerLines = packageLayerViolations(LAYERED_PROJECTS, layeredFiles);
+  const containersComposeLines = containersComposeViolations();
 
   if (
     realTimerViolations.length > 0 ||
@@ -1022,7 +1035,8 @@ function main() {
     placementLines.length > 0 ||
     backendCitationLines.length > 0 ||
     clientCallLines.length > 0 ||
-    packageLayerLines.length > 0
+    packageLayerLines.length > 0 ||
+    containersComposeLines.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -1108,6 +1122,16 @@ function main() {
           'new edge is a table change in LAYERED_PROJECTS, and the table stays acyclic.',
       );
     }
+    if (containersComposeLines.length > 0) {
+      console.error(`structural-gate: ${CONTAINERS_COMPOSE_HEADER}:\n`);
+      for (const line of containersComposeLines) console.error(line);
+      console.error(
+        "\nA container's computed() only composes — it reads signals and query results and calls imported " +
+          'functions. Move the branch, loop, or collection transform into a pure `*.model.ts` function beside the ' +
+          'feature, unit-tested without TestBed, and keep the computed() field calling it; a derivation that is ' +
+          'really a backend classification goes onto the wire instead.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -1122,6 +1146,7 @@ function main() {
   console.log('structural-gate: backend-citation sweep clean.');
   console.log('structural-gate: client-call placement sweep clean.');
   console.log('structural-gate: package-layers sweep clean.');
+  console.log('structural-gate: containers-compose sweep clean.');
 }
 
 main();

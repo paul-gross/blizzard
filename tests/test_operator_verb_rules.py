@@ -211,6 +211,34 @@ def test_pause_refuses_done_stopped_and_delivering(status: ChunkStatus) -> None:
     assert excinfo.value.status is status
 
 
+def test_status_if_paused_settles_paused_unless_refused_or_outranked_by_a_human_gate() -> None:
+    assert {status: facts.status_if_paused() for status, facts in _AT.items()} == {
+        ChunkStatus.NOT_READY: ChunkStatus.PAUSED,
+        ChunkStatus.READY: ChunkStatus.PAUSED,
+        ChunkStatus.RUNNING: ChunkStatus.PAUSED,
+        ChunkStatus.DELIVERING: ChunkStatus.DELIVERING,
+        ChunkStatus.PAUSED: ChunkStatus.PAUSED,
+        ChunkStatus.WAITING_ON_HUMAN: ChunkStatus.WAITING_ON_HUMAN,
+        ChunkStatus.NEEDS_HUMAN: ChunkStatus.NEEDS_HUMAN,
+        ChunkStatus.STOPPED: ChunkStatus.STOPPED,
+        ChunkStatus.DONE: ChunkStatus.DONE,
+    }
+
+
+def test_status_if_paused_predicts_a_re_pause_of_a_resumed_chunk() -> None:
+    # Newest-fact-wins: a resume ends the earlier pause, and a fresh pause re-derives ``paused``.
+    resumed = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_T0, set_by="op"),
+            PauseFact(paused=False, set_at=_T0, set_by="op"),
+        ],
+    )
+    assert resumed.status() is ChunkStatus.READY
+    assert resumed.status_if_paused() is ChunkStatus.PAUSED
+
+
 def test_pause_is_a_brake_not_a_fence_an_open_decision_does_not_refuse_it() -> None:
     gated = ChunkFacts(minted=True, promoted=True, decisions=[DecisionFact(decision_id="d1", submitted_at=_T0)])
     assert gated.status() is ChunkStatus.WAITING_ON_HUMAN

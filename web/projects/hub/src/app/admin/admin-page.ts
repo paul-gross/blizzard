@@ -4,6 +4,7 @@ import { asyncState, hubApi, KitAsyncState } from 'fleet';
 import { injectAssignRoleMutation } from './assign-role.mutations';
 import { injectMeQuery } from '../core/auth/me.query';
 import { injectUsersQuery } from './users.query';
+import { assignRoleErrorText } from './admin-page.model';
 
 /**
  * The `/admin` route — a container reading `injectUsersQuery()` (`GET /api/users`)
@@ -54,12 +55,7 @@ export class AdminPage {
   /** The last {@link assignRoleMutation} refusal's own `detail` (the hub's
    * `RoleAssignmentRefused` message), or `null` once a fresh `mutate()` call
    * clears the mutation's error state. */
-  protected readonly assignRoleError = computed<string | null>(() => {
-    const error = this.assignRoleMutation.error();
-    if (!error) return null;
-    const detail = (error as { detail?: unknown }).detail;
-    return typeof detail === 'string' ? detail : 'Failed to change role.';
-  });
+  protected readonly assignRoleError = computed<string | null>(() => assignRoleErrorText(this.assignRoleMutation.error()));
 
   protected onAssignRole(vars: { userId: string; role: string }): void {
     this.assignRoleMutation.mutate(vars);

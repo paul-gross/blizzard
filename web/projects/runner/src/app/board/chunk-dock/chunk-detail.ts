@@ -1,9 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import {
-  ageMs,
-  compactRef,
   errorMessage,
-  formatAge,
   injectChunkDetailQuery,
   injectNowSignal,
   KitPanel,
@@ -13,6 +10,7 @@ import {
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
+import { heartbeatLabel, leaseRefLabel } from './chunk-detail.model';
 import { MachineDetailView } from './chunk-detail-view';
 import { injectRunnerDashboardQuery } from '../../core/status.query';
 import type { MachineChunkStatus } from '../chunk-list/chunk-status';
@@ -147,25 +145,15 @@ export class MachineDetail {
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   protected readonly runnerName = computed<string | null>(() => this.dashboardQuery.data()?.runner?.runner_id ?? null);
 
-  protected readonly leaseRef = computed(() => {
-    const l = this.newestLease();
-    return l ? compactRef(l.lease_id) : '';
-  });
+  protected readonly leaseRef = computed(() => leaseRefLabel(this.newestLease()));
 
   /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
    * same cadence `HeartbeatFreshness`'s own bar reads (`bzh:frontend-formatters`). */
   private readonly now = injectNowSignal(1000);
 
-  /**
-   * `-34s` shorthand, or `—` before the first beat / past the skew bound —
-   * decoration only; the server-derived state carries liveness (`bzh:utc-instants`).
-   */
-  protected readonly heartbeatLabel = computed<string>(() => {
-    const l = this.newestLease();
-    if (!l || l.state === 'closed') return '—';
-    const age = ageMs(l.last_heartbeat_at, this.now());
-    return age === null ? '—' : formatAge(age);
-  });
+  /** `-34s` since the newest lease's last beat, or `—` — decoration only; the
+   * server-derived state carries liveness (`bzh:utc-instants`). */
+  protected readonly heartbeatLabel = computed<string>(() => heartbeatLabel(this.newestLease(), this.now()));
 
   /** Pause the given chunk — the header's `pauseChunk` output, once the operator has
    * already confirmed. Mirrors the hub's `board/chunk-dock/chunk-detail.ts`'s own `onPause`: a

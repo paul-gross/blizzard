@@ -5,6 +5,7 @@ import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';
+import { findingListRows } from './gardening-findings-page.model';
 
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
@@ -49,31 +50,10 @@ export class GardeningFindingsPage {
   /** The `findingId` the active detail child names (`route-state.ts`). */
   protected readonly findingId = injectChildRouteParam('findingId');
 
-  /** Pared to what the 320px master column renders — `observed_count` and
-   * `introduced` show in the detail pane once the row is picked, not here;
-   * `last_seen_at` rides both, since the row's own fourth line is the most recent
-   * observation. Only the dimension the active filter leaves unnamed shows on the
-   * row: a bucket widened to every routine or every scope needs each row to
-   * say which it came from, but a bucket already filtered to one doesn't need it
-   * repeated on every row. `source`/`severity`/`raised_by_chunk_id`
-   * ride every row verbatim — unlike routine/scope they carry no filter-dependent
-   * `null`-out, since `FleetFindingList` only renders them at all for a
-   * `source === 'review'` row. */
+  /** The bucket's rows, naming only the routine/scope dimension the active
+   * filter leaves unnamed. */
   protected readonly findingListRows = computed<readonly FindingListRowVm[]>(() =>
-    this.filters.filteredBucket().map((f) => ({
-      findingId: f.finding_id,
-      findingClass: f.class,
-      locus: f.locus,
-      summary: f.summary,
-      state: f.state,
-      exit: f.exit ?? null,
-      lastSeenAt: f.last_seen_at,
-      routineName: this.filters.selectedRoutine() === null ? (f.routine_name ?? null) : null,
-      scopeSlug: this.filters.selectedScope() === null ? f.scope_slug : null,
-      source: f.source ?? 'routine',
-      severity: f.severity ?? null,
-      raisedByChunkId: f.raised_by_chunk_id ?? null,
-    })),
+    findingListRows(this.filters.filteredBucket(), this.filters.selectedRoutine(), this.filters.selectedScope()),
   );
 
   protected readonly bucketState = computed<KitAsyncStateValue>(() =>

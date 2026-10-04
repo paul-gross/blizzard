@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, type FindingDetailView, type KitAsyncStateValue } from 'fleet';
+import { restingAsyncState, type FindingDetailView, type KitAsyncStateValue } from 'fleet';
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingQuery } from '../core/finding.query';
@@ -10,6 +10,7 @@ import { map } from 'rxjs';
 
 import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';
 import { injectFindingWorkItemLookup } from './gardening-finding-work-item-lookup';
+import { findingForSelection, findingPanelVm } from './gardening-finding-detail.model';
 
 /**
  * The selected finding's own detail — the right-hand child of
@@ -45,49 +46,22 @@ export class GardeningFindingDetail {
 
   private readonly findingQuery = injectHubFindingQuery(this.findingId);
 
-  private readonly selectedFinding = computed<FindingDetailView | null>(() => {
-    const id = this.findingId();
-    if (id === null) return null;
-    const finding = this.findingQuery.data() ?? null;
-    return finding?.finding_id === id ? finding : null;
-  });
+  private readonly selectedFinding = computed<FindingDetailView | null>(() =>
+    findingForSelection(this.findingId(), this.findingQuery.data() ?? null),
+  );
 
   /** Resolves an accepted-and-minted proposal's work item onto a finding id. */
   private readonly workItemLookup = injectFindingWorkItemLookup();
 
-  /** `introducedRev` carries `FindingView.introduced` verbatim — a git revision, not
-   * a timestamp (`finding-panel.ts`'s own doc comment on why it never rides
-   * `fleet-when`). `introducedAt` and `firstObservedAt` carry `FindingView`'s two
-   * instants verbatim; `introducedAt` is null wherever the hub never resolved the
-   * commit (`finding-panel.ts`'s own doc comment on what that means). */
-  protected readonly findingPanelVm = computed<FindingPanelVm | null>(() => {
-    const finding = this.selectedFinding();
-    if (finding === null) return null;
-    return {
-      findingId: finding.finding_id,
-      findingClass: finding.class,
-      locus: finding.locus,
-      state: finding.state,
-      exit: finding.exit ?? null,
-      observedCount: finding.observed_count,
-      introducedRev: finding.introduced ?? null,
-      introducedAt: finding.introduced_at ?? null,
-      firstObservedAt: finding.first_observed_at ?? null,
-      lastSeenAt: finding.last_seen_at,
-      summary: finding.summary,
-      note: finding.note ?? null,
-      facts: finding.facts,
-      workItem: this.workItemLookup.workItemFor(finding.finding_id),
-      source: finding.source ?? 'routine',
-      severity: finding.severity ?? null,
-      raisedByChunkId: finding.raised_by_chunk_id ?? null,
-    };
-  });
+  /** The panel's view model; `workItem` resolves through {@link workItemLookup}. */
+  protected readonly findingPanelVm = computed<FindingPanelVm | null>(() =>
+    findingPanelVm(this.selectedFinding(), (findingId) => this.workItemLookup.workItemFor(findingId)),
+  );
 
   /** "Nothing selected" is its own rest state, branched before consulting the
    * read's own async state (`bzh:frontend-empty-state-gated`). */
   protected readonly findingPanelState = computed<KitAsyncStateValue>(() =>
-    this.findingId() === null ? 'empty' : asyncState(this.findingQuery, this.findingPanelVm() === null),
+    restingAsyncState(this.findingId() === null, this.findingQuery, this.findingPanelVm() === null),
   );
 
   /** Whether the current identity may triage findings (`chunk:control`) — `null`/

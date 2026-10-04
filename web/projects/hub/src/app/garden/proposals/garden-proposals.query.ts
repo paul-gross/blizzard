@@ -23,10 +23,3 @@ export function injectHubGardenProposalsQuery() {
       ),
   }));
 }
-
-/** A proposal is still waiting on a person exactly when it carries no closure
- * (`GardenProposalView.closure`) — the gardening strip's own reading of
- * "waiting", shared here so the tab shell and any future docket sheet agree. */
-export function isGardenProposalWaiting(proposal: GardenProposalView): boolean {
-  return proposal.closure == null;
-}

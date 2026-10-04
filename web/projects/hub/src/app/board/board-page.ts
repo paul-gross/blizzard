@@ -16,19 +16,7 @@ import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-
-/**
- * A pending reposition's requested placement, replayed over a copy of `order` — `move.chunkId`
- * lands immediately after `move.afterChunkId`, or at the very top when that is `null`, mirroring
- * the anchor semantics `BoardColumn.dropped` computes when it emits a `BoardReposition`. `order`
- * itself is left untouched.
- */
-function withRequestedPosition(order: readonly string[], move: RepositionVars): string[] {
-  const withoutMoved = order.filter((id) => id !== move.chunkId);
-  const afterIndex = move.afterChunkId === null ? -1 : withoutMoved.indexOf(move.afterChunkId);
-  withoutMoved.splice(afterIndex + 1, 0, move.chunkId);
-  return withoutMoved;
-}
+import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 
 /**
  * The board route — the two-column mission-control surface:
@@ -150,7 +138,7 @@ export class BoardPage {
   /** Every chunk id with an open decision — joined here, in the container, so each
    * card takes a plain `gate` flag rather than reading the decisions itself. */
   protected readonly gatedChunkIds = computed<ReadonlySet<string>>(
-    () => new Set((this.decisionsQuery.data() ?? []).map((decision) => decision.chunk_id)),
+    () => gatedChunkIds(this.decisionsQuery.data() ?? []),
   );
 
   /** The board's async state (AC 1, AC 2) — derived from the chunks query
@@ -166,7 +154,7 @@ export class BoardPage {
    * list, because order is the queue's fact and the chunk list carries no rank.
    */
   protected readonly readyOrder = computed<readonly string[]>(() =>
-    (this.queueQuery.data() ?? []).map((entry) => entry.chunk_id),
+    orderedChunkIds(this.queueQuery.data() ?? []),
   );
 
   /**
@@ -176,7 +164,7 @@ export class BoardPage {
    * {@link backlogQuery}'s own `enabled` gate, not a fallback here.
    */
   protected readonly backlogOrder = computed<readonly string[]>(() =>
-    (this.backlogQuery.data() ?? []).map((entry) => entry.chunk_id),
+    orderedChunkIds(this.backlogQuery.data() ?? []),
   );
 
   /**
@@ -188,14 +176,9 @@ export class BoardPage {
    * settles". Fed to `BoardShell` in place of {@link chunks}; {@link boardState} and
    * {@link selected} stay off the real list.
    */
-  protected readonly boardChunks = computed<readonly ChunkSummary[]>(() => {
-    const pendingPromoted = this.pendingPromotes();
-    const deletingIds = new Set(this.pendingDeletes().map((vars) => vars.chunkId));
-    const visible = deletingIds.size === 0 ? this.chunks() : this.chunks().filter((c) => !deletingIds.has(c.chunk_id));
-    if (pendingPromoted.length === 0) return visible;
-    const pendingIds = new Set(pendingPromoted.map((vars) => vars.chunkId));
-    return visible.map((chunk) => (pendingIds.has(chunk.chunk_id) ? { ...chunk, status: 'ready' } : chunk));
-  });
+  protected readonly boardChunks = computed<readonly ChunkSummary[]>(() =>
+    withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes()),
+  );
 
   /**
    * {@link readyOrder}, with a pending reposition targeting the ready queue folded
@@ -211,25 +194,17 @@ export class BoardPage {
    * Purely computed off the reposition mutation's own variables; a rejected reposition
    * reverts to the real `readyOrder` for free the instant its `isPending()` flips false.
    */
-  protected readonly readyLaneOrder = computed<readonly string[]>(() => {
-    let order = this.readyOrder();
-    for (const move of this.pendingRepositionQueue()) {
-      order = withRequestedPosition(order, move);
-    }
-    return order;
-  });
+  protected readonly readyLaneOrder = computed<readonly string[]>(() =>
+    foldRepositions(this.readyOrder(), this.pendingRepositionQueue()),
+  );
 
   /** {@link backlogOrder}, with a pending backlog reposition's requested placement folded
    * in — the BACKLOG-lane counterpart of {@link readyLaneOrder}'s reposition half. No
    * promote override belongs here: a pending promote leaves the backlog lane entirely via
    * {@link boardChunks}' status override, so its old backlog rank is simply never consulted. */
-  protected readonly backlogLaneOrder = computed<readonly string[]>(() => {
-    let order = this.backlogOrder();
-    for (const move of this.pendingRepositionBacklog()) {
-      order = withRequestedPosition(order, move);
-    }
-    return order;
-  });
+  protected readonly backlogLaneOrder = computed<readonly string[]>(() =>
+    foldRepositions(this.backlogOrder(), this.pendingRepositionBacklog()),
+  );
 
   /** A READY or BACKLOG card dropped somewhere new — placed after the anchor it
    * landed on (`null` = the very top), routed to the matching list's mutation. */
@@ -261,12 +236,9 @@ export class BoardPage {
    * rewrites the URL to "correct" it, so a link that is merely early still
    * opens its chunk the moment a read lands.
    */
-  protected readonly selected = computed<string | null>(() => {
-    const chunkId = this.selection.chunkId();
-    if (chunkId === null) return null;
-    if (this.chunks().some((chunk) => chunk.chunk_id === chunkId)) return chunkId;
-    return this.linkedDetail.data()?.chunk_id === chunkId ? chunkId : null;
-  });
+  protected readonly selected = computed<string | null>(() =>
+    resolveSelectedChunk(this.selection.chunkId(), this.chunks(), this.linkedDetail.data()?.chunk_id),
+  );
 
   /** Open a chunk in the dock — or clear it — by writing the URL. */
   protected select(chunkId: string | null): void {

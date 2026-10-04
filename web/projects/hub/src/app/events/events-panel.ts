@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, output, signal } from '@a
 import { type KitAsyncStateValue, asyncState } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
 import { EventsView } from './events-view';
+import { eventChunkIds, eventRunnerIds } from './events-panel.model';
 import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
@@ -75,30 +76,11 @@ export class EventsPanel {
    * Falsy ids are stripped, mirroring the chunk side below: a projected escalation names
    * no runner, and an id-less row must not become a label-less chip whose `''` value
    * collides with the "All" chip's own reset sentinel. */
-  protected readonly runnerIds = computed(() =>
-    this.filterUniverse(
-      (this.optionsQuery.data() ?? []).map((e) => e.runner_id).filter((r): r is string => !!r),
-      this.runnerId(),
-    ),
-  );
+  protected readonly runnerIds = computed(() => eventRunnerIds(this.optionsQuery.data() ?? [], this.runnerId()));
 
   /** The chunk-id universe for the filter chips — same rule as {@link runnerIds}, over
    * the non-null `chunk_id`s (a runner-scoped event names no chunk). */
-  protected readonly chunkIds = computed(() =>
-    this.filterUniverse(
-      (this.optionsQuery.data() ?? []).map((e) => e.chunk_id).filter((c): c is string => !!c),
-      this.chunkId(),
-    ),
-  );
-
-  /** Distinct ids ∪ the active selection, sorted — or `[]` when there is nothing worth
-   * filtering (≤1 distinct id and no active selection), which hides the chip row. */
-  private filterUniverse(ids: readonly string[], active: string | null): readonly string[] {
-    const distinct = new Set(ids);
-    if (active) distinct.add(active);
-    if (distinct.size < 2 && active === null) return [];
-    return [...distinct].sort();
-  }
+  protected readonly chunkIds = computed(() => eventChunkIds(this.optionsQuery.data() ?? [], this.chunkId()));
 
   protected onFilterChange(severity: string): void {
     this.severity.set(severity === '' ? null : narrowEventSeverity(severity));

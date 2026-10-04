@@ -3,6 +3,7 @@ import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton } fro
 
 import { localPauseMutationKey } from '../core/mutation-keys';
 import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../core/status.query';
+import { pendingLocalPause } from './app-pause-control.model';
 
 /**
  * The runner top bar's pause/unpause control — the local brake's
@@ -68,10 +69,9 @@ export class LocalPauseControl {
    * touches nothing else that could outrank it. Purely computed off the mutation's
    * own pending variables, never a cache write, so a rejected flip reverts to the
    * real `pause.local` for free the instant it settles. */
-  protected readonly overridePaused = computed<boolean | null>(() => {
-    const runnerId = this.runnerId();
-    return this.pendingLocalPauses().find((vars) => vars.runnerId === runnerId)?.paused ?? null;
-  });
+  protected readonly overridePaused = computed<boolean | null>(() =>
+    pendingLocalPause(this.pendingLocalPauses(), this.runnerId()),
+  );
 
   /** This runner's own brake — "I won't try". `false` before the first read
    * resolves or on a malformed body, matching {@link LocalInfo}'s guard.

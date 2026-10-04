@@ -4,6 +4,7 @@ import { KitAsyncState } from 'fleet';
 import { LoginButtons } from '../core/auth/login-buttons';
 import { consumeReturnUrl, safeAuthorizeReturnTo } from '../core/auth/auth-redirect';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
+import { providersState } from './login-page.model';
 
 /** `localStorage` key the last provider signed in with is remembered under —
  * pinned by `login-page.spec.ts`'s "writes the last-used provider to
@@ -45,11 +46,9 @@ export class LoginPage {
 
   protected readonly providers = computed(() => this.providersQuery.data() ?? []);
 
-  protected readonly state = computed<'loading' | 'error' | 'empty' | 'ready'>(() => {
-    if (this.providersQuery.isPending()) return 'loading';
-    if (this.providersQuery.isError()) return 'error';
-    return this.providers().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly state = computed<'loading' | 'error' | 'empty' | 'ready'>(() =>
+    providersState(this.providersQuery.isPending(), this.providersQuery.isError(), this.providers()),
+  );
 
   private readonly lastUsedSignal = signal<string | null>(
     typeof localStorage === 'undefined' ? null : localStorage.getItem(LAST_PROVIDER_KEY),

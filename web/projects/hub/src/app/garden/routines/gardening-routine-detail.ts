@@ -4,6 +4,18 @@ import { ActivatedRoute } from '@angular/router';
 import { asyncState, errorMessage, injectPendingMutationVariables, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
+import {
+  lastSweptRows,
+  measurementReadings,
+  proposalCountsRows,
+  relatedScopeRows,
+  routineByName,
+  routineEffectiveGraph,
+  routineOverrideRetired,
+  routinePanelState,
+  routinePanelVm,
+  strategySteps,
+} from './gardening-routine-detail.model';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
@@ -12,7 +24,7 @@ import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './rou
 import { routineLifecycleMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
 
-import { effectiveGraphByName, isRoutineBlocked } from './gardening-effective-graph';
+import { isRoutineBlocked } from './gardening-effective-graph';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 
 /**
@@ -72,16 +84,13 @@ export class GardeningRoutineDetail {
     { initialValue: null },
   );
 
-  private readonly selectedRoutine = computed<RoutineView | null>(() => {
-    const name = this.routineNameParam();
-    return name === null ? null : (this.routines().find((r) => r.name === name) ?? null);
-  });
+  private readonly selectedRoutine = computed<RoutineView | null>(() =>
+    routineByName(this.routineNameParam(), this.routines()),
+  );
 
-  private readonly effectiveGraph = computed<GraphSummaryView | null>(() => {
-    const routine = this.selectedRoutine();
-    if (routine === null) return null;
-    return effectiveGraphByName(this.graphs(), this.graphsQuery.isPending(), routine.graph_name);
-  });
+  private readonly effectiveGraph = computed<GraphSummaryView | null>(() =>
+    routineEffectiveGraph(this.selectedRoutine(), this.graphs(), this.graphsQuery.isPending()),
+  );
 
   protected readonly blocked = computed<boolean>(() => {
     const routine = this.selectedRoutine();
@@ -96,12 +105,9 @@ export class GardeningRoutineDetail {
   /** The selected routine's `retired` flag as it will read once a currently pending
    * Retire/Enable settles (`bzh:frontend-pending-override`) — `GardeningScopeDetail
    * .overrideRetired`'s own shape. */
-  private readonly overrideRetired = computed<boolean | null>(() => {
-    const routine = this.selectedRoutine();
-    if (routine === null) return null;
-    const pending = this.pendingRoutineLifecycle().find((vars) => vars.routineId === routine.routine_id);
-    return pending ? pending.retired : null;
-  });
+  private readonly overrideRetired = computed<boolean | null>(() =>
+    routineOverrideRetired(this.selectedRoutine(), this.pendingRoutineLifecycle()),
+  );
 
   private readonly graphQuery = injectHubGraphQuery(() => this.effectiveGraph()?.graph_id ?? null);
   private readonly trendQuery = injectHubRoutineTrendQuery(
@@ -123,53 +129,25 @@ export class GardeningRoutineDetail {
     () => this.window.until,
   );
 
-  private readonly strategy = computed<readonly StrategyStepVm[]>(() =>
-    (this.graphQuery.data()?.nodes ?? []).map((n) => ({ name: n.name, prompt: n.prompt ?? null })),
-  );
+  private readonly strategy = computed<readonly StrategyStepVm[]>(() => strategySteps(this.graphQuery.data()));
 
   private readonly measurements = computed<readonly MeasurementReadingVm[]>(() =>
-    (this.sweepsQuery.data()?.measurements ?? []).map((m) => ({
-      scopeSlug: m.scope_slug,
-      producedAt: m.produced_at,
-      measurement: m.measurement,
-    })),
+    measurementReadings(this.sweepsQuery.data()),
   );
 
-  private readonly lastSwept = computed<readonly LastSweptRowVm[]>(() =>
-    (this.sweepsQuery.data()?.last_swept ?? []).map((row) => ({
-      scopeSlug: row.scope_slug,
-      findingSetId: row.finding_set_id,
-      producedAt: row.produced_at,
-      revisionsLabel:
-        Object.entries(row.revisions)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([repo, rev]) => `${repo}@${rev}`)
-          .join(', ') || '—',
-    })),
-  );
+  private readonly lastSwept = computed<readonly LastSweptRowVm[]>(() => lastSweptRows(this.sweepsQuery.data()));
 
   /** The selected routine's related scopes, each marked whether it is the routine's
    * own default — `null` until the routine-scopes read resolves. */
-  private readonly relatedScopes = computed<readonly RelatedScopeVm[] | null>(() => {
-    const slugs = this.scopesQuery.data();
-    const routine = this.selectedRoutine();
-    if (slugs === undefined || routine === null) return null;
-    return slugs.map((slug) => ({ slug, isDefault: slug === routine.default_scope_slug }));
-  });
+  private readonly relatedScopes = computed<readonly RelatedScopeVm[] | null>(() =>
+    relatedScopeRows(this.scopesQuery.data(), this.selectedRoutine()),
+  );
 
   /** The proposal-counts table's own rows — mapped off the read's
    * `rows`, already scoped to the one selected routine by the query's own `routine`
    * filter. */
   protected readonly proposalCountsRows = computed<readonly ProposalCountsRowVm[]>(() =>
-    (this.proposalCountsQuery.data()?.rows ?? []).map((row) => ({
-      origin: row.origin,
-      proposalClass: row.class,
-      created: row.created,
-      open: row.open,
-      passed: row.passed,
-      acceptedWithItem: row.accepted_with_item,
-      acceptedWithoutItem: row.accepted_without_item,
-    })),
+    proposalCountsRows(this.proposalCountsQuery.data()),
   );
 
   /** The proposal-counts panel's own async state, independent of {@link panelState}
@@ -180,36 +158,18 @@ export class GardeningRoutineDetail {
     asyncState(this.proposalCountsQuery, (this.proposalCountsQuery.data()?.rows.length ?? 0) === 0),
   );
 
-  protected readonly panelVm = computed<RoutinePanelVm | null>(() => {
-    const routine = this.selectedRoutine();
-    if (routine === null) return null;
-    const trend = this.trendQuery.data();
-    return {
-      record: {
-        name: routine.name,
-        graphName: routine.graph_name,
-        defaultScopeSlug: routine.default_scope_slug,
-        defaultModel: routine.default_model ?? [],
-        defaultEffort: routine.default_effort ?? null,
-      },
-      blockedReason: this.blocked() ? `graph ${routine.graph_name} has no effective mint` : null,
+  protected readonly panelVm = computed<RoutinePanelVm | null>(() =>
+    routinePanelVm(this.selectedRoutine(), {
+      blocked: this.blocked(),
       strategy: this.strategy(),
-      trend: trend
-        ? {
-            created: trend.periods.reduce((sum, p) => sum + p.created, 0),
-            outflow: trend.periods.reduce((sum, p) => sum + p.outflow, 0),
-            withdrawn: trend.periods.reduce((sum, p) => sum + p.withdrawn, 0),
-            reopened: trend.periods.reduce((sum, p) => sum + p.reopened, 0),
-          }
-        : null,
+      trend: this.trendQuery.data(),
       measurements: this.measurements(),
       lastSwept: this.lastSwept(),
       windowLabel: this.window.label,
       relatedScopes: this.relatedScopes(),
-      retired: routine.retired ?? false,
-      renderedRetired: this.overrideRetired() ?? (routine.retired ?? false),
-    };
-  });
+      overrideRetired: this.overrideRetired(),
+    }),
+  );
 
   /** Gates only on what the record and `blocked` need — `routinesQuery` to know
    * there is a routine at all, `graphsQuery` to resolve `effectiveGraph`/`blocked`
@@ -217,13 +177,15 @@ export class GardeningRoutineDetail {
    * fully derivable from those two once resolved, so it is never held behind the
    * slower, independent `trendQuery`/`sweepsQuery`/`graphQuery` reads their own
    * sections already render around individually. */
-  protected readonly panelState = computed<KitAsyncStateValue>(() => {
-    if (this.routineNameParam() === null) return 'empty';
-    if (this.selectedRoutine() === null) return asyncState(this.routinesQuery, true);
-    if (this.graphsQuery.isPending()) return 'loading';
-    if (this.graphsQuery.isError()) return 'error';
-    return 'ready';
-  });
+  protected readonly panelState = computed<KitAsyncStateValue>(() =>
+    routinePanelState(
+      this.routineNameParam(),
+      this.selectedRoutine(),
+      this.routinesQuery,
+      this.graphsQuery.isPending(),
+      this.graphsQuery.isError(),
+    ),
+  );
 
   /** The routine currently running the dialog against — `null` closes it.
    * Only {@link FleetRoutinePanel}'s own `run` output ever sets it, so it can only

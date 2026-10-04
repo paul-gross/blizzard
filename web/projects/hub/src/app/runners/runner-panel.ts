@@ -6,6 +6,7 @@ import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { RunnerPanelView } from './runner-view';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 import { injectRunnerRows, type RunnerRow } from './runner-rows';
+import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
 
 /**
  * The runner panel — the fleet registry in the board's right rail: each
@@ -50,7 +51,7 @@ export class RunnerPanel {
    * per-row predicate threaded down, since every input on that view is a
    * value, never a callback. */
   protected readonly pendingRunnerIds = computed<readonly string[]>(() =>
-    this.pendingPauses().map((vars) => vars.runnerId),
+    pendingRunnerIds(this.pendingPauses()),
   );
 
   /**
@@ -67,15 +68,9 @@ export class RunnerPanel {
    * {@link injectRunnerRows}'s `rows` place, so a rejected pause/resume reverts to the
    * real `hub_paused` for free the instant `isPending()` clears.
    */
-  protected readonly rows = computed<readonly RunnerRow[]>(() => {
-    const pending = this.pendingPauses();
-    if (pending.length === 0) return this.runnerRows.rows();
-    const requested = new Map(pending.map((vars) => [vars.runnerId, vars.paused]));
-    return this.runnerRows.rows().map((row) => {
-      const override = requested.get(row.runner_id);
-      return override === undefined ? row : { ...row, hub_paused: override };
-    });
-  });
+  protected readonly rows = computed<readonly RunnerRow[]>(() =>
+    withPendingRunnerPauses(this.runnerRows.rows(), this.pendingPauses()),
+  );
 
   /** The panel's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */

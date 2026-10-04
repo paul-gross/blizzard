@@ -1128,6 +1128,19 @@ class ChunkFacts:
         completion — not the landed
         fact, since an authored ``merged -> <node>`` edge can land every repo and keep the
         chunk running post-merge."""
+        return self._status_with(paused=self._is_paused())
+
+    def status_if_paused(self) -> ChunkStatus:
+        """The status this chunk derives once an operator Pause on it settles — :meth:`status`'s
+        own ladder with the pause fact holding. Its current status where
+        :attr:`ChunkVerb.PAUSE` refuses the pause, and where a rung above ``paused`` (a human
+        gate) outranks the pause fact."""
+        if not self.admits(ChunkVerb.PAUSE):
+            return self.status()
+        return self._status_with(paused=True)
+
+    def _status_with(self, *, paused: bool) -> ChunkStatus:
+        """:meth:`status`'s precedence ladder, with whether the pause fact holds as an input."""
         if self.stopped and not self._operator_completion_outranks_stop():
             return ChunkStatus.STOPPED
         if self.operator_completed or self.newest_transition_is_terminal():
@@ -1138,7 +1151,7 @@ class ChunkFacts:
             # An open question or an open decision (gate); the
             # reap clock is stopped and the answer/resolution flips it back.
             return ChunkStatus.WAITING_ON_HUMAN
-        if self._is_paused():
+        if paused:
             # Below the human-gated states (a chunk both parked on a question and paused
             # is still, first, waiting on a human) and above delivering/running.
             return ChunkStatus.PAUSED
