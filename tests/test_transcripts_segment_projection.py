@@ -11,8 +11,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.transcripts import TurnKind
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
-from blizzard.runner.transcripts.repository import Sidechain, ToolCall, TurnKind
+from blizzard.runner.transcripts.repository import Sidechain, ToolCall
 from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
 
 

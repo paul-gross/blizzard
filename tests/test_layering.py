@@ -24,6 +24,11 @@ _HUB_STORE_ERRORS_FILE = _HUB_DIR / "store" / "errors.py"
 _RUNNER_STORE_DIR = _RUNNER_DIR / "store"
 _RUNNER_DOMAIN_DIR = _RUNNER_DIR / "domain"
 _WIRE_DIR = _SRC_DIR / "wire"
+_AUTH_CORE_DIR = _SRC_DIR / "auth_core"
+
+#: ``bzh:shared-kernel`` — the packages both daemons import and that import no daemon.
+_KERNEL_DIRS = (_FOUNDATION_DIR, _WIRE_DIR, _AUTH_CORE_DIR)
+_NON_KERNEL_PACKAGES = ("blizzard.hub", "blizzard.runner", "blizzard.cli", "blizzard.tools")
 
 _MOVED_HOMES = {
     "ChunkStatus": "blizzard.foundation.chunk_status",
@@ -61,6 +66,16 @@ _MOVED_HOMES = {
     "first_pass_jump": "blizzard.foundation.trace_export.cursor",
     "lag_cap_jump": "blizzard.foundation.trace_export.cursor",
     "BACKOFF_CAP": "blizzard.foundation.trace_export.cursor",
+    "WorkItemPriority": "blizzard.foundation.work_items",
+    "WorkItemClosure": "blizzard.foundation.work_items",
+    "MigrationMode": "blizzard.foundation.chunk_migration",
+    "GardenProposalOrigin": "blizzard.foundation.garden_proposals",
+    "GardenProposalClosureKind": "blizzard.foundation.garden_proposals",
+    "GardenProposalItemOutcome": "blizzard.foundation.garden_proposals",
+    "LeaseState": "blizzard.foundation.leases",
+    "TurnKind": "blizzard.foundation.transcripts",
+    "TranscriptUnavailable": "blizzard.foundation.transcripts",
+    "TranscriptProvenance": "blizzard.foundation.transcripts",
 }
 
 
@@ -102,9 +117,9 @@ def _misrouted_moved_names(root: Path) -> list[str]:
     return violations
 
 
-def test_foundation_imports_neither_daemon() -> None:
-    violations = _violations(_FOUNDATION_DIR, ("blizzard.hub", "blizzard.runner"))
-    assert not violations, f"A — foundation must not import either daemon: {violations}"
+def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
+    violations = [v for root in _KERNEL_DIRS for v in _violations(root, _NON_KERNEL_PACKAGES)]
+    assert not violations, f"A — wire/, foundation/ and auth_core/ must import no daemon, CLI or tool: {violations}"
 
 
 def test_hub_does_not_import_runner() -> None:
@@ -115,6 +130,46 @@ def test_hub_does_not_import_runner() -> None:
 def test_runner_does_not_import_hub() -> None:
     violations = _violations(_RUNNER_DIR, ("blizzard.hub",))
     assert not violations, f"C — the runner must not import the hub: {violations}"
+
+
+def _kernel_modules() -> list[str]:
+    return [
+        ".".join(path.relative_to(_SRC_DIR.parent).with_suffix("").parts).removesuffix(".__init__")
+        for root in _KERNEL_DIRS
+        for path in sorted(root.rglob("*.py"))
+    ]
+
+
+def _loaded_after_importing_all(modules: list[str]) -> set[str]:
+    return _loaded_after_importing(", ".join(modules))
+
+
+def _loaded_non_kernel(loaded: set[str], prefixes: tuple[str, ...]) -> list[str]:
+    return sorted(m for m in loaded if any(m == p or m.startswith(f"{p}.") for p in prefixes))
+
+
+def test_kernel_loads_no_non_kernel_blizzard_module_transitively() -> None:
+    """A, transitively: a static scan sees only a module's own imports, not what they pull in."""
+    loaded = _loaded_after_importing_all(_kernel_modules())
+    leaked = _loaded_non_kernel(loaded, _NON_KERNEL_PACKAGES)
+    assert not leaked, f"A — importing the kernel loaded: {leaked}"
+
+
+def test_neither_daemon_root_loads_the_other_daemon() -> None:
+    """B and C, transitively: no composition root drags in the other daemon through the kernel."""
+    hub_roots = ["blizzard.hub.app", "blizzard.hub.composition"]
+    runner_roots = ["blizzard.runner.app", "blizzard.runner.composition", "blizzard.runner.loop.build"]
+    leaks = [
+        f"{root} loads {m}"
+        for root in hub_roots
+        for m in _loaded_non_kernel(_loaded_after_importing(root), ("blizzard.runner",))
+    ]
+    leaks += [
+        f"{root} loads {m}"
+        for root in runner_roots
+        for m in _loaded_non_kernel(_loaded_after_importing(root), ("blizzard.hub",))
+    ]
+    assert not leaks, f"B/C — a daemon root loaded the other daemon: {leaks}"
 
 
 def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
@@ -506,7 +561,7 @@ def _wire_cross_model_constructions() -> list[str]:
 
 
 def test_no_wire_model_projects_into_another() -> None:
-    """O (plan: hold wire/ to its stated contract): a wire model is a pydantic shape,
+    """O (``bzh:shared-kernel``): a wire model is a pydantic shape,
     never a projection — no method under ``wire/`` may instantiate another wire model,
     only its own class (a classmethod's bare ``cls(...)``, or a ``default_factory``
     supplying a sibling default outside any method body, are model config, not this)."""

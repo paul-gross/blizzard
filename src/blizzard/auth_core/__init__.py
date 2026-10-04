@@ -1,4 +1,4 @@
-"""The shared authz vocabulary both daemons import.
+"""The shared authz vocabulary both daemons import — a member of the shared kernel (``bzh:shared-kernel``).
 
 A **dependency-free** domain package — no FastAPI, no SQLAlchemy (``bzh:domain-core``).
 :class:`Role` is a total order, carried declaratively as :data:`ROLE_PERMISSIONS`: a

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
 
 

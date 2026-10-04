@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.hub.domain.garden_proposal_closure import _compose_minted_body
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore

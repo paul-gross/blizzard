@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.runner.transcripts.repository import TranscriptProvenance, TranscriptUnavailable
+from blizzard.foundation.transcripts import TranscriptProvenance, TranscriptUnavailable
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 

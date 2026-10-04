@@ -17,17 +17,17 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.findings import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
-from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalClosure,
+from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
+    GardenProposalOrigin,
 )
+from blizzard.hub.domain.findings import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure
 from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden_proposals import (
     GardenProposal,
     GardenProposalCounts,
-    GardenProposalOrigin,
     GardenProposalPage,
     RoutineProposalState,
 )

@@ -6,12 +6,13 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
+from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET, ChunkEdit, UnsetType
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.harnesses import InvalidHarnesses
-from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
+from blizzard.hub.domain.work import Chunk, IntendedMigration
 from blizzard.wire.chunk import ChunkPatchRequest
 
 

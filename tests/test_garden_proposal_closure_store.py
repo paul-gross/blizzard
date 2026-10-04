@@ -14,9 +14,12 @@ from typing import cast
 import pytest
 from sqlalchemy import select
 
+from blizzard.foundation.garden_proposals import (
+    GardenProposalClosureKind,
+    GardenProposalItemOutcome,
+    GardenProposalOrigin,
+)
 from blizzard.foundation.store import batching as batching_module
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s

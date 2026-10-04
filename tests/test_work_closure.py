@@ -16,6 +16,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
@@ -25,12 +26,7 @@ from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery_read import DeliverySources, DeliveryTrace
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import (
-    PendingCloseIntent,
-    WorkItemCloseOutcome,
-    WorkItemClosure,
-    WorkRef,
-)
+from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.work_closure import CLOSE_DRAIN_BACKOFF_BASE_SECONDS, CloseIntentDrainer, close_intent_is_due
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

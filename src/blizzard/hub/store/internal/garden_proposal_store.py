@@ -11,21 +11,20 @@ from typing import Any
 
 from sqlalchemy import Select, and_, delete, func, insert, or_, select, update
 
+from blizzard.foundation.garden_proposals import (
+    GardenProposalClosureKind,
+    GardenProposalItemOutcome,
+    GardenProposalOrigin,
+)
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.edit import UnsetType
-from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalClosureKind,
-    GardenProposalCountBucket,
-    GardenProposalItemOutcome,
-    classify_proposal_count_bucket,
-)
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalCountBucket, classify_proposal_count_bucket
 from blizzard.hub.domain.garden_proposals import (
     GardenProposal,
     GardenProposalCounts,
     GardenProposalEdit,
     GardenProposalFindingAlreadyLinkedError,
-    GardenProposalOrigin,
     GardenProposalPage,
     IWriteGardenProposalRepository,
     RoutineProposalState,

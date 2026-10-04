@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.runner.domain.leases import LeaseState
+from blizzard.foundation.leases import LeaseState
 
 
 class LeaseView(BaseModel):

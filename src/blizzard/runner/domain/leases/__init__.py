@@ -14,9 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.leases import LeaseState
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.leases.liveness import (
     IReadLeaseLivenessRepository,
@@ -60,7 +61,6 @@ __all__ = [
     "LeaseActivity",
     "LeaseLivenessFacts",
     "LeaseRecord",
-    "LeaseState",
     "Liveness",
     "LocalLeaseService",
     "NewLease",
@@ -180,10 +180,6 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 #: A **list-length affordance**, not a retention policy: it bounds how many closed rows
 #: are returned, never how long a closure fact lives.
 RECENT_LEASE_LIMIT = 20
-
-#: The panel's derived state — one of seven, computed at read time and never stored
-#: (``bzh:facts-not-status``).
-LeaseState = Literal["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
 
 
 class _Unread:

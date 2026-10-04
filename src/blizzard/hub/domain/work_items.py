@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
@@ -25,8 +26,6 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     IWriteWorkItemRepository,
     WorkItemAuthor,
-    WorkItemClosure,
-    WorkItemPriority,
     WorkItemRecord,
     WorkRef,
     mint_chunk,

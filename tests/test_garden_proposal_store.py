@@ -10,15 +10,14 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
 
+from blizzard.foundation.garden_proposals import (
+    GardenProposalClosureKind,
+    GardenProposalItemOutcome,
+    GardenProposalOrigin,
+)
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.hub.domain.garden_proposals import (
-    GardenProposalCounts,
-    GardenProposalEdit,
-    GardenProposalOrigin,
-    RoutineProposalState,
-)
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalEdit, RoutineProposalState
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore

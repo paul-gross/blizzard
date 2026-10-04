@@ -14,8 +14,10 @@ from sqlalchemy import Engine, insert, select
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
@@ -24,9 +26,8 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
+from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemEditService,

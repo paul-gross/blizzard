@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -21,7 +22,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalOrigin
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.harnesses import InvalidHarnesses

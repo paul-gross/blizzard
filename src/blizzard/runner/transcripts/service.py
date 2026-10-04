@@ -9,18 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.transcripts import TranscriptProvenance
 from blizzard.runner.domain.leases import IReadLeaseRecordRepository, LeaseRecord
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentLedgerRow
-from blizzard.runner.transcripts.repository import (
-    ITranscriptRepositoryResolver,
-    Transcript,
-    TranscriptProvenance,
-    Turn,
-)
+from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript, Turn
 
 
 @dataclass(frozen=True)

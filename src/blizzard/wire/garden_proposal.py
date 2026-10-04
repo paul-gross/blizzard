@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.garden_proposals import (
+    GardenProposalClosureKind,
+    GardenProposalItemOutcome,
+    GardenProposalOrigin,
+)
 
 
 class GardenProposalCandidate(BaseModel):

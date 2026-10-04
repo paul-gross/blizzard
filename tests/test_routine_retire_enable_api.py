@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support import build_hub, hub_store_connections

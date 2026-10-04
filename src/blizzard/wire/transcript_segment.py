@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.runner.transcripts.repository import TurnKind
+from blizzard.foundation.transcripts import TurnKind
 
 
 class ToolCallSegmentView(BaseModel):

@@ -15,8 +15,9 @@ import pytest
 from sqlalchemy import Engine, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkItemClosure, WorkRef
+from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
