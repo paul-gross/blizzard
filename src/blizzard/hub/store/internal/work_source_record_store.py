@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.hub.domain.config.changes import ConfigChange, ISecretReferences, RecordKind, RecordRef
+from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     IWriteWorkSourceRepository,
@@ -24,47 +24,21 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.schema import secret_lifecycle_facts, secrets, work_source_lifecycle_facts, work_sources
+from blizzard.hub.store.internal.secret_referrers import retired_names_query
+from blizzard.hub.store.internal.secret_store import secret_unavailable
+from blizzard.hub.store.schema import work_source_lifecycle_facts, work_sources
 
 
 def _retired_names_query():  # type: ignore[no-untyped-def]
-    """Work sources whose newest lifecycle fact reads retired."""
-    newest = select(func.max(work_source_lifecycle_facts.c.id)).group_by(work_source_lifecycle_facts.c.name)
-    return select(work_source_lifecycle_facts.c.name).where(
-        work_source_lifecycle_facts.c.id.in_(newest), work_source_lifecycle_facts.c.retired.is_(True)
-    )
-
-
-def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, list[RecordRef]]:
-    """The active work sources naming each secret — shared with the secret adapter, which
-    checks it inside the retire transaction."""
-    found: dict[str, list[RecordRef]] = {name: [] for name in secret_names}
-    if not secret_names:
-        return found
-    rows = conn.execute(
-        select(work_sources.c.secret_name, work_sources.c.name)
-        .where(work_sources.c.secret_name.in_(secret_names), work_sources.c.name.not_in(_retired_names_query()))
-        .order_by(work_sources.c.name)
-    ).all()
-    for row in rows:
-        found[row.secret_name].append(RecordRef(RecordKind.WORK_SOURCE, row.name))
-    return found
+    return retired_names_query(work_source_lifecycle_facts)
 
 
 def _check_secret(conn: Connection, secret: str | None) -> None:
     if secret is None:
         return
-    exists = conn.execute(select(secrets.c.name).where(secrets.c.name == secret)).first()
-    if exists is None:
-        raise WorkSourceSecretUnavailable(secret, retired=False)
-    newest = conn.execute(
-        select(secret_lifecycle_facts.c.retired)
-        .where(secret_lifecycle_facts.c.name == secret)
-        .order_by(secret_lifecycle_facts.c.id.desc())
-        .limit(1)
-    ).first()
-    if newest is not None and newest.retired:
-        raise WorkSourceSecretUnavailable(secret, retired=True)
+    retired = secret_unavailable(conn, secret)
+    if retired is not None:
+        raise WorkSourceSecretUnavailable(secret, retired=retired)
 
 
 def _columns(record: WorkSourceRecord) -> dict[str, object]:
@@ -192,10 +166,6 @@ class WorkSourceRecordStore:
             self._of(row, retired=row.name in retired) for row in rows if include_retired or row.name not in retired
         ]
 
-    def referrers_of(self, names: list[str]) -> dict[str, list[RecordRef]]:
-        with self._store.read("referrers_of") as conn:
-            return active_referrers(conn, names)
-
     @staticmethod
     def _of(row, *, retired: bool) -> WorkSourceRecord:  # type: ignore[no-untyped-def]
         return WorkSourceRecord(
@@ -216,8 +186,4 @@ class WorkSourceRecordStore:
 
 
 def _conforms_work_source_store(x: WorkSourceRecordStore) -> IWriteWorkSourceRepository:
-    return x
-
-
-def _conforms_secret_references(x: WorkSourceRecordStore) -> ISecretReferences:
     return x

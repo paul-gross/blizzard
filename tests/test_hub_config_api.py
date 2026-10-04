@@ -225,7 +225,18 @@ def test_the_schema_endpoint_describes_the_document_model(hub: HubHarness) -> No
     assert set(_DEMO) <= set(body["properties"])
     assert body["required"] == ["name", "provider", "locator"]
     assert body["additionalProperties"] is False
-    assert hub.client.get("/api/config/schema/repositories").status_code == 404
+    repositories = hub.client.get("/api/config/schema/repositories")
+    assert repositories.status_code == 200
+    assert repositories.json()["required"] == [
+        "name",
+        "forge_api_url",
+        "owner",
+        "repo",
+        "base_branch",
+        "secret_name",
+    ]
+    assert repositories.json()["additionalProperties"] is False
+    assert hub.client.get("/api/config/schema/nope").status_code == 404
 
 
 def test_no_secret_value_reaches_a_change_row_or_the_log_route(hub: HubHarness) -> None:
@@ -268,3 +279,123 @@ def test_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> No
         assert hub.client.get(path).status_code == 401, path
     row = hub.client.get("/api/config/changes", headers=guest).json()["changes"][0]
     assert row["actor"] != "operator"
+
+
+# --- Repositories ------------------------------------------------------------------
+
+_REPO = {
+    "name": "blizzard",
+    "forge_api_url": "https://api.github.com",
+    "owner": "acme",
+    "repo": "blizzard",
+    "base_branch": "master",
+    "secret_name": "gh",
+}
+
+
+def _create_repo(hub: HubHarness, **overrides: object):  # type: ignore[no-untyped-def]
+    return hub.client.post("/api/repositories", json={**_REPO, **overrides})
+
+
+def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
+    created = _create_repo(hub)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert {k: body[k] for k in _REPO} == _REPO
+    assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
+    assert hub.client.get("/api/repositories/blizzard").json() == body
+    assert hub.client.get("/api/repositories").json()["repositories"] == [body]
+    assert hub.client.get("/api/repositories/missing").status_code == 404
+
+
+def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) -> None:
+    for overrides, field in (
+        ({"name": " "}, "name"),
+        ({"owner": ""}, "owner"),
+        ({"forge_api_url": "ftp://forge"}, "forge_api_url"),
+        ({"forge_api_url": "api.github.com"}, "forge_api_url"),
+        ({"secret_name": "absent"}, "secret_name"),
+        ({"secret_name": None}, "secret_name"),
+    ):
+        resp = _create_repo(hub, **overrides)
+        assert resp.status_code == 422, (overrides, resp.text)
+        assert resp.json()["detail"][0]["loc"][-1] == field, overrides
+    assert hub.client.post("/api/repositories", json={**_REPO, "bogus": 1}).status_code == 422
+    assert _changes(hub, record_kind="repository") == []
+
+
+def test_a_taken_repository_name_or_coordinate_is_a_409(hub: HubHarness) -> None:
+    assert _create_repo(hub).status_code == 201
+    assert _create_repo(hub).status_code == 409
+    hub.client.post("/api/repositories/blizzard/retire")
+    held = _create_repo(hub, name="other")
+    assert held.status_code == 409
+    assert "repository blizzard" in held.json()["detail"]
+    assert _create_repo(hub, name="other", forge_api_url="https://ghe.example/api/v3").status_code == 201
+
+
+def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) -> None:
+    _create_repo(hub)
+    assert hub.client.patch("/api/repositories/blizzard", json={}).json()["revision"] == 1
+    assert hub.client.patch("/api/repositories/blizzard", json={"owner": "acme"}).json()["revision"] == 1
+    edited = hub.client.patch("/api/repositories/blizzard", json={"base_branch": "main"}, headers={"If-Match": "1"})
+    assert (edited.json()["revision"], edited.json()["base_branch"], edited.json()["owner"]) == (2, "main", "acme")
+    for field in ("forge_api_url", "owner", "repo", "base_branch", "secret_name"):
+        resp = hub.client.patch("/api/repositories/blizzard", json={field: None})
+        assert resp.status_code == 422, field
+        assert resp.json()["detail"][0]["loc"][-1] == field
+    assert hub.client.patch("/api/repositories/blizzard", json={"name": "other"}).status_code == 422
+    assert hub.client.patch("/api/repositories/blizzard", json={"secret_name": "absent"}).status_code == 422
+    assert hub.client.patch("/api/repositories/nope", json={}).status_code == 404
+    for call in (
+        lambda h: hub.client.patch("/api/repositories/blizzard", json={"base_branch": "dev"}, headers=h),
+        lambda h: hub.client.post("/api/repositories/blizzard/retire", headers=h),
+        lambda h: hub.client.post("/api/repositories/blizzard/enable", headers=h),
+    ):
+        stale = call({"If-Match": "1"})
+        assert stale.status_code == 409
+        assert "revision 2" in stale.json()["detail"]
+
+
+def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub: HubHarness) -> None:
+    _create_repo(hub)
+    assert hub.client.get("/api/secrets/gh").json()["references"] == [{"kind": "repository", "key": "blizzard"}]
+    refused = hub.client.post("/api/secrets/gh/retire")
+    assert refused.status_code == 409
+    assert "repository blizzard" in refused.json()["detail"]
+
+    retired = hub.client.post("/api/repositories/blizzard/retire").json()
+    assert (retired["revision"], retired["retired"]) == (2, True)
+    assert hub.client.get("/api/repositories").json()["repositories"] == []
+    assert len(hub.client.get("/api/repositories", params={"include_retired": True}).json()["repositories"]) == 1
+    assert hub.client.post("/api/secrets/gh/retire").status_code == 200
+    enabled = hub.client.post("/api/repositories/blizzard/enable")
+    assert enabled.status_code == 422
+    assert enabled.json()["detail"][0]["loc"][-1] == "secret_name"
+    assert [c["op"] for c in _changes(hub, record_kind="repository")] == ["retire", "create"]
+
+
+def test_repository_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
+    contributor = {
+        "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
+    }
+    guest = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='gus', role=Role.GUEST))}"}
+    hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=admin)
+
+    assert hub.client.post("/api/repositories", json=_REPO).status_code == 401
+    assert hub.client.post("/api/repositories", json=_REPO, headers=contributor).status_code == 403
+    assert (
+        hub.client.post("/api/repositories", json=_REPO, headers={**admin, "X-Blizzard-Door": "cli"}).status_code == 201
+    )
+    for path in ("/api/repositories/blizzard/retire", "/api/repositories/blizzard/enable"):
+        assert hub.client.post(path, headers=contributor).status_code == 403
+    assert hub.client.patch("/api/repositories/blizzard", json={}, headers=contributor).status_code == 403
+    for path in ("/api/repositories", "/api/repositories/blizzard", "/api/config/schema/repositories"):
+        assert hub.client.get(path, headers=guest).status_code == 200, path
+        assert hub.client.get(path).status_code == 401, path
+    (row,) = hub.client.get("/api/config/changes", params={"record_kind": "repository"}, headers=guest).json()[
+        "changes"
+    ]
+    assert (row["door"], row["actor"] != "operator") == ("cli", True)

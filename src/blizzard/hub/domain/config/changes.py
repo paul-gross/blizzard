@@ -26,6 +26,7 @@ class Door(StrEnum):
 class RecordKind(StrEnum):
     WORK_SOURCE = "work_source"
     SECRET = "secret"
+    REPOSITORY = "repository"
 
 
 class ChangeOp(StrEnum):

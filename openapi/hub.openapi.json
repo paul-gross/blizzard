@@ -6931,7 +6931,8 @@
       "RecordKind": {
         "enum": [
           "work_source",
-          "secret"
+          "secret",
+          "repository"
         ],
         "title": "RecordKind",
         "type": "string"
@@ -6953,6 +6954,183 @@
           "key"
         ],
         "title": "RecordRefView",
+        "type": "object"
+      },
+      "RepositoriesListView": {
+        "description": "Every stored repository \u2014 ``GET /api/repositories``.",
+        "properties": {
+          "repositories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RepositorySummary"
+            },
+            "title": "Repositories",
+            "type": "array"
+          }
+        },
+        "title": "RepositoriesListView",
+        "type": "object"
+      },
+      "RepositoryDocument": {
+        "additionalProperties": false,
+        "description": "A repository as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``secret_name`` names a stored secret.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "forge_api_url": {
+            "title": "Forge Api Url",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "forge_api_url",
+          "owner",
+          "repo",
+          "base_branch",
+          "secret_name"
+        ],
+        "title": "RepositoryDocument",
+        "type": "object"
+      },
+      "RepositoryPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. ``name`` is immutable, so a body carrying it is refused.",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "forge_api_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge Api Url"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          },
+          "secret_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret Name"
+          }
+        },
+        "title": "RepositoryPatchRequest",
+        "type": "object"
+      },
+      "RepositorySummary": {
+        "description": "One repository \u2014 the ``GET /api/repositories`` listing row and every record verb's view.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "forge_api_url": {
+            "title": "Forge Api Url",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "forge_api_url",
+          "owner",
+          "repo",
+          "base_branch",
+          "secret_name",
+          "revision",
+          "created_at",
+          "created_by"
+        ],
+        "title": "RepositorySummary",
         "type": "object"
       },
       "RestartView": {
@@ -18467,6 +18645,384 @@
         "summary": "Ready",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/repositories": {
+      "get": {
+        "description": "Every stored repository by name, retired ones hidden unless `include_retired`.",
+        "operationId": "list_repositories_api_repositories_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoriesListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Repositories",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Store a new repository at revision 1. 422 naming the field for a blank field, a\nnon-http(s) `forge_api_url`, or a missing or retired secret; 409 for a taken name or a\ntaken `(forge_api_url, owner, repo)`, naming the holder.",
+        "operationId": "create_repository_api_repositories_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/repositories/{name}": {
+      "get": {
+        "description": "One repository, retired or not. 404 on an unknown name.",
+        "operationId": "get_repository_api_repositories__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Repository",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. 404 unknown; 409 for a stale `If-Match` (naming the\ncurrent revision) or a taken `(forge_api_url, owner, repo)`; 422 naming the field.",
+        "operationId": "patch_repository_api_repositories__name__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/repositories/{name}/enable": {
+      "post": {
+        "description": "Re-enable a retired repository; enabling an active one changes nothing. 404 unknown,\n409 for a stale `If-Match`, 422 when its secret has since been retired.",
+        "operationId": "enable_repository_api_repositories__name__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/repositories/{name}/retire": {
+      "post": {
+        "description": "Retire a repository \u2014 a reversible brake that keeps its coordinate claim. Retiring a\nretired repository changes nothing. 404 unknown, 409 for a stale `If-Match`.",
+        "operationId": "retire_repository_api_repositories__name__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Repository",
+        "tags": [
+          "repositories"
         ]
       }
     },

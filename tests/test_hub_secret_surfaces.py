@@ -118,6 +118,34 @@ def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient, monke
     assert "revision 2" in _cli(["show", "gh-test"]).output
 
 
+def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_by(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _route_cli_through(monkeypatch, client)
+    assert _cli(["set", "gh-test"], stdin=f"{_SENTINEL}\n").exit_code == 0
+    created = client.post(
+        "/api/repositories",
+        json={
+            "name": "blizzard",
+            "forge_api_url": "https://api.github.com",
+            "owner": "acme",
+            "repo": "blizzard",
+            "base_branch": "master",
+            "secret_name": "gh-test",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    refused = _cli(["retire", "gh-test"])
+    assert refused.exit_code != 0
+    assert "repository blizzard" in refused.output
+    assert "repository blizzard" in _cli(["show", "gh-test"]).output
+
+    assert client.post("/api/repositories/blizzard/retire").status_code == 200
+    assert "repository blizzard" not in _cli(["show", "gh-test"]).output
+    assert _cli(["retire", "gh-test"]).exit_code == 0
+
+
 def test_a_planted_value_appears_on_no_surface(
     config: HubConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

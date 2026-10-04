@@ -59,6 +59,7 @@ from blizzard.hub.domain.chunks.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
 from blizzard.hub.domain.egress.repository import EgressCursorRecord, IReadEgress, UsagePosition
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
@@ -96,6 +97,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
@@ -1096,6 +1098,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     secret_store = SecretStore(store_connections)
     config = ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store_connections),
+        repositories=RepositoryRecordStore(store_connections),
         secrets=secret_store,
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
         clock=clock,
@@ -1108,6 +1111,17 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         "census-source",
         WorkSourceFields(
             provider="github", locator="acme/census", api_base=None, web_base=None, annotate=False, secret="gh-token"
+        ),
+        operator,
+    )
+    config.create_repository(
+        "census-repo",
+        RepositoryFields(
+            forge_api_url="https://api.github.com",
+            owner="acme",
+            repo="census",
+            base_branch="master",
+            secret_name="gh-token",
         ),
         operator,
     )
@@ -2035,6 +2049,13 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get("census-source"),
     (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many(["census-source"]),
     (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
+        include_retired=True
+    ),
+    (IReadRepositoryRecordRepository, "get"): lambda w: w.hub.services.repository_records.get("census-repo"),
+    (IReadRepositoryRecordRepository, "get_many"): lambda w: w.hub.services.repository_records.get_many(
+        ["census-repo"]
+    ),
+    (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
         include_retired=True
     ),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(

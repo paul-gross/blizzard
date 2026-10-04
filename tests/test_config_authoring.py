@@ -14,6 +14,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind, RecordRef
+from blizzard.hub.domain.config.repositories import (
+    RepositoryCoordinateTaken,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryNameTaken,
+    RepositoryRecord,
+    RepositorySecretUnavailable,
+)
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     WorkSourceEdit,
@@ -27,6 +35,8 @@ from blizzard.hub.domain.secrets import SecretName, SecretReferenced
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import config_changes
@@ -37,6 +47,9 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _FIELDS = WorkSourceFields(
     provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
+)
+_REPO = RepositoryFields(
+    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
 )
 _CLI = ChangeContext(actor="alice", door=Door.CLI)
 
@@ -49,6 +62,8 @@ class _World:
         connections = hub_store_connections(self.engine)
         self.secrets = SecretStore(connections)
         self.sources = WorkSourceRecordStore(connections)
+        self.repos = RepositoryRecordStore(connections)
+        self.referrers = SecretReferrersStore(connections)
         self.log = ConfigChangeStore(connections)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         self.authoring: ConfigAuthoring = config_authoring(self.engine, keys=keys, clock=FixedClock(_NOW))
@@ -63,6 +78,11 @@ class _World:
 
     def source(self, name: str = "demo") -> WorkSourceRecord:
         record = self.sources.get(name)
+        assert record is not None
+        return record
+
+    def repo(self, name: str = "demo") -> RepositoryRecord:
+        record = self.repos.get(name)
         assert record is not None
         return record
 
@@ -247,14 +267,14 @@ def test_a_retired_referrer_no_longer_blocks_the_secret(world: _World) -> None:
     record = world.authoring.create_work_source("demo", _FIELDS, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
-    assert world.sources.referrers_of(["gh", "other"]) == {
+    assert world.referrers.referrers_of(["gh", "other"]) == {
         "gh": [RecordRef(RecordKind.WORK_SOURCE, "demo")],
         "other": [],
     }
 
     world.authoring.retire_work_source(record, OP)
 
-    assert world.sources.referrers_of(["gh"]) == {"gh": []}
+    assert world.referrers.referrers_of(["gh"]) == {"gh": []}
     assert world.authoring.retire_secret(secret, OP) is True
 
 
@@ -270,3 +290,129 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     assert [c.id for c in older] == [ids[1]]
     only = world.log.page(before=None, limit=100, record_kind=RecordKind.WORK_SOURCE, record_key="demo")
     assert [c.op for c in only] == [ChangeOp.EDIT, ChangeOp.CREATE]
+
+
+# --- Repositories ------------------------------------------------------------------
+
+
+def test_a_repository_create_records_the_diff_and_revision_one(world: _World) -> None:
+    created = world.authoring.create_repository("demo", _REPO, _CLI)
+
+    assert (created.revision, created.created_by, created.retired) == (1, "alice", False)
+    assert world.repo() == created
+    row = world.changes()[-1]
+    assert (row.record_kind, row.record_key, row.op, row.revision, row.door) == (
+        RecordKind.REPOSITORY,
+        "demo",
+        ChangeOp.CREATE,
+        1,
+        Door.CLI,
+    )
+    assert {d.field: (d.old, d.new) for d in row.diff} == {
+        "forge_api_url": (None, "https://api.github.com"),
+        "owner": (None, "acme"),
+        "repo": (None, "demo"),
+        "base_branch": (None, "master"),
+        "secret_name": (None, "gh"),
+    }
+
+
+def test_repository_edit_retire_and_enable_each_move_the_revision_and_append_one_row(world: _World) -> None:
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    edited = world.authoring.edit_repository(record, RepositoryEdit(base_branch="main"), _CLI, if_match=1)
+    retired = world.authoring.retire_repository(edited, _CLI)
+    enabled = world.authoring.enable_repository(retired, _CLI)
+
+    assert [r.revision for r in (edited, retired, enabled)] == [2, 3, 4]
+    assert world.repo() == enabled
+    tail = [(c.op, c.revision, c.record_kind) for c in world.changes()[-3:]]
+    assert tail == [
+        (ChangeOp.EDIT, 2, RecordKind.REPOSITORY),
+        (ChangeOp.RETIRE, 3, RecordKind.REPOSITORY),
+        (ChangeOp.ENABLE, 4, RecordKind.REPOSITORY),
+    ]
+    assert world.changes()[-3].diff == (FieldChange("base_branch", "master", "main"),)
+    assert world.repos.list_all(include_retired=False) == [enabled]
+
+
+def test_a_repository_write_that_changes_nothing_writes_nothing(world: _World) -> None:
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    before = world.count()
+
+    assert world.authoring.edit_repository(record, RepositoryEdit(owner="acme"), OP) == record
+    assert world.authoring.enable_repository(record, OP) == record
+    assert world.count() == before
+
+
+def test_a_stale_repository_revision_conflicts_and_writes_nothing(world: _World) -> None:
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    world.authoring.edit_repository(record, RepositoryEdit(base_branch="main"), OP)
+    before = world.count()
+
+    with pytest.raises(ConfigRevisionConflict) as caught:
+        world.authoring.edit_repository(record, RepositoryEdit(base_branch="dev"), OP)
+    assert caught.value.current == 2
+    assert "repository demo" in str(caught.value)
+    with pytest.raises(ConfigRevisionConflict):
+        world.authoring.retire_repository(world.repo(), OP, if_match=1)
+    assert world.count() == before
+
+
+def test_a_taken_repository_name_or_coordinate_is_refused_naming_the_holder(world: _World) -> None:
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    world.authoring.retire_repository(record, OP)
+    before = world.count()
+
+    with pytest.raises(RepositoryNameTaken):
+        world.authoring.create_repository("demo", _REPO, OP)
+    with pytest.raises(RepositoryCoordinateTaken) as caught:
+        world.authoring.create_repository("demo2", _REPO, OP)
+    assert caught.value.holder == "demo"
+    other = world.authoring.create_repository("other", RepositoryFields(**{**_REPO.__dict__, "repo": "other"}), OP)
+    with pytest.raises(RepositoryCoordinateTaken):
+        world.authoring.edit_repository(other, RepositoryEdit(repo="demo"), OP)
+    assert world.count() == before + 1
+
+
+def test_a_repository_with_a_missing_or_retired_secret_is_refused(world: _World) -> None:
+    before = world.count()
+    with pytest.raises(RepositorySecretUnavailable, match="unknown") as caught:
+        world.authoring.create_repository("demo", RepositoryFields(**{**_REPO.__dict__, "secret_name": "nope"}), OP)
+    assert caught.value.field == "secret_name"
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    retired = world.authoring.retire_repository(record, OP)
+    secret = world.secrets.get("gh")
+    assert secret is not None
+    world.authoring.retire_secret(secret, OP)
+    after = world.count()
+
+    with pytest.raises(RepositorySecretUnavailable, match="retired"):
+        world.authoring.enable_repository(retired, OP)
+    assert world.count() == after == before + 3
+    assert world.repo().retired is True
+
+
+def test_an_active_repository_blocks_retiring_its_secret_until_it_is_retired(world: _World) -> None:
+    source = world.authoring.create_work_source("demo", _FIELDS, OP)
+    world.authoring.retire_work_source(source, OP)
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    secret = world.secrets.get("gh")
+    assert secret is not None
+
+    assert world.referrers.referrers_of(["gh"]) == {"gh": [RecordRef(RecordKind.REPOSITORY, "demo")]}
+    with pytest.raises(SecretReferenced) as caught:
+        world.authoring.retire_secret(secret, OP)
+    assert caught.value.referrers == [RecordRef(RecordKind.REPOSITORY, "demo")]
+
+    world.authoring.retire_repository(record, OP)
+    assert world.referrers.referrers_of(["gh"]) == {"gh": []}
+    assert world.authoring.retire_secret(secret, OP) is True
+
+
+def test_referrers_union_every_kind_ordered_by_kind_then_key(world: _World) -> None:
+    world.authoring.create_work_source("demo", _FIELDS, OP)
+    world.authoring.create_repository("demo", _REPO, OP)
+
+    assert world.referrers.referrers_of(["gh"]) == {
+        "gh": [RecordRef(RecordKind.REPOSITORY, "demo"), RecordRef(RecordKind.WORK_SOURCE, "demo")]
+    }

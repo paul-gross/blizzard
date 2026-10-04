@@ -227,6 +227,34 @@ work_source_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
+# --- Repositories (configured records; secret_name references a secret, never a value) ---
+
+repositories = Table(
+    "repositories",
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("forge_api_url", String, nullable=False),
+    Column("owner", String, nullable=False),
+    Column("repo", String, nullable=False),
+    Column("base_branch", String, nullable=False),
+    Column("secret_name", String, ForeignKey("secrets.name"), nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+    UniqueConstraint("forge_api_url", "owner", "repo", name="uq_repositories_coordinate"),
+)
+
+# Repository retire/enable facts: append-only, newest wins.
+repository_lifecycle_facts = Table(
+    "repository_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, ForeignKey("repositories.name"), nullable=False),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Configuration change log (one fact row per committed write to a configured record) ---
 
 config_changes = Table(

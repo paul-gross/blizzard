@@ -907,11 +907,14 @@ def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> Non
         assert _secret_plaintext_imports(module), statement
 
 
-_CONFIGURED_WRITE_NAMES = frozenset({"IWriteSecretRepository", "IWriteWorkSourceRepository"})
+_CONFIGURED_WRITE_NAMES = frozenset(
+    {"IWriteSecretRepository", "IWriteWorkSourceRepository", "IWriteRepositoryRecordRepository"}
+)
 _CONFIGURED_WRITE_HOMES = frozenset(
     {
         _HUB_DIR / "domain" / "config" / "authoring.py",
         _HUB_DIR / "domain" / "config" / "work_sources.py",
+        _HUB_DIR / "domain" / "config" / "repositories.py",
         _HUB_DIR / "domain" / "secrets.py",
         _HUB_DIR / "composition.py",
     }
@@ -948,6 +951,7 @@ def test_only_config_authoring_holds_a_configured_write_repository() -> None:
 def test_configured_write_guard_catches_a_second_holder(tmp_path: Path) -> None:
     for statement in (
         "from blizzard.hub.domain.config.work_sources import IWriteWorkSourceRepository",
+        "from blizzard.hub.domain.config.repositories import IWriteRepositoryRecordRepository",
         "from blizzard.hub.domain.secrets import IWriteSecretRepository as Writer",
     ):
         module = tmp_path / "rogue.py"

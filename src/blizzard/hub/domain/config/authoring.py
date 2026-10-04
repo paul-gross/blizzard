@@ -22,6 +22,16 @@ from blizzard.hub.domain.config.changes import (
     FieldChange,
     RecordKind,
 )
+from blizzard.hub.domain.config.repositories import (
+    IWriteRepositoryRecordRepository,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryRecord,
+)
+from blizzard.hub.domain.config.repositories import diff as repository_diff
+from blizzard.hub.domain.config.repositories import merge as repository_merge
+from blizzard.hub.domain.config.repositories import validate_fields as validate_repository_fields
+from blizzard.hub.domain.config.repositories import validate_name as validate_repository_name
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     IWriteWorkSourceRepository,
@@ -51,11 +61,13 @@ class ConfigAuthoring:
         self,
         *,
         work_sources: IWriteWorkSourceRepository,
+        repositories: IWriteRepositoryRecordRepository,
         secrets: IWriteSecretRepository,
         cipher: ISecretCipher,
         clock: IClock,
     ) -> None:
         self._work_sources = work_sources
+        self._repositories = repositories
         self._secrets = secrets
         self._cipher = cipher
         self._clock = clock
@@ -119,9 +131,68 @@ class ConfigAuthoring:
         )
 
     @staticmethod
-    def _check_match(record: WorkSourceRecord, if_match: int | None) -> None:
+    def _check_match(record: WorkSourceRecord | RepositoryRecord, if_match: int | None) -> None:
         if if_match is not None and if_match != record.revision:
-            raise ConfigRevisionConflict("work source", record.name, current=record.revision)
+            kind = "repository" if isinstance(record, RepositoryRecord) else "work source"
+            raise ConfigRevisionConflict(kind, record.name, current=record.revision)
+
+    # --- Repositories ------------------------------------------------------------
+
+    def create_repository(self, name: str, fields: RepositoryFields, ctx: ChangeContext) -> RepositoryRecord:
+        validate_repository_name(name)
+        validate_repository_fields(fields)
+        now = self._clock.now()
+        record = RepositoryRecord(name=name, fields=fields, revision=1, created_at=now, created_by=ctx.actor)
+        change = self._change(ctx, RecordKind.REPOSITORY, name, 1, ChangeOp.CREATE, repository_diff(None, fields), now)
+        return self._repositories.create(record, change=change)
+
+    def edit_repository(
+        self, record: RepositoryRecord, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> RepositoryRecord:
+        """Apply a sparse edit. A retired repository is edited too — the revision moves, the
+        fact does not — but a retired secret is refused, as a write that enables would be."""
+        self._check_match(record, if_match)
+        merged = repository_merge(record.fields, edit)
+        changes = repository_diff(record.fields, merged)
+        if not changes:
+            return record
+        validate_repository_fields(merged)
+        now = self._clock.now()
+        edited = replace(record, fields=merged, revision=record.revision + 1)
+        change = self._change(ctx, RecordKind.REPOSITORY, record.name, edited.revision, ChangeOp.EDIT, changes, now)
+        return self._repositories.update(edited, from_revision=record.revision, change=change)
+
+    def retire_repository(
+        self, record: RepositoryRecord, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> RepositoryRecord:
+        return self._set_repository_retired(record, True, ctx, if_match)
+
+    def enable_repository(
+        self, record: RepositoryRecord, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> RepositoryRecord:
+        return self._set_repository_retired(record, False, ctx, if_match)
+
+    def _set_repository_retired(
+        self, record: RepositoryRecord, retired: bool, ctx: ChangeContext, if_match: int | None
+    ) -> RepositoryRecord:
+        self._check_match(record, if_match)
+        if record.retired == retired:
+            return record
+        now = self._clock.now()
+        moved = replace(record, revision=record.revision + 1, retired=retired)
+        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
+        change = self._change(
+            ctx,
+            RecordKind.REPOSITORY,
+            record.name,
+            moved.revision,
+            op,
+            (FieldChange(_RETIRED, record.retired, retired),),
+            now,
+        )
+        return self._repositories.record_lifecycle(
+            moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
+        )
 
     # --- Secrets -----------------------------------------------------------------
 

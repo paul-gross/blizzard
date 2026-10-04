@@ -58,6 +58,7 @@ from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
+from blizzard.hub.api.repositories import router as repositories_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.scopes import router as scopes_router
@@ -347,6 +348,7 @@ def create_app(
     app.include_router(traces_router)
     app.include_router(egress_router)
     app.include_router(work_sources_router)
+    app.include_router(repositories_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)

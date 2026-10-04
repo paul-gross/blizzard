@@ -22,8 +22,8 @@ whether the secret is retired.
 `retire` is a reversible brake: a retired secret is hidden from `list` unless `--include-retired` is given, and cannot
 be replaced until `enable` lifts it. Retirement never deletes the stored value.
 
-A work source names the secret it reads with, and `show` and `list` report the active records that do, as `used by` in
-`show` and `references` in `--json`. `retire` is refused while any active record still uses the secret, and the refusal
+A work source names the secret it reads with, and a [repository](./repositories.md) names the one it lands with. `show`
+and `list` report the active records that do, as `used by` in `show` and `references` in `--json`. `retire` is refused while any active record still uses the secret, and the refusal
 names them; retire or repoint those records first. A record that is itself retired no longer counts.
 
 Every create, replace, retire, and enable is also recorded in the [change log](./config-changes.md), without the value.
