@@ -95,7 +95,6 @@ from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_
 from blizzard.runner.stores import (
     IReadRunnerStore,
     IWriteRunnerStore,
-    RunnerReadStores,
     RunnerStores,
 )
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, RenewalOutcomeKind
@@ -278,12 +277,6 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         selftest_results=store,
         lease_traces=store,
     )
-
-
-def make_read_stores(store: IWriteRunnerStore) -> RunnerReadStores:
-    """The :class:`RunnerReadStores` bundle over one flat store — :func:`make_stores`
-    narrowed the way :meth:`RunnerReadStores.of` narrows a wired ``RunnerStores``."""
-    return RunnerReadStores.of(make_stores(store))
 
 
 def _create_all(md: MetaData, engine: object) -> None:
