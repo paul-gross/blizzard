@@ -16,6 +16,14 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
+    LEASE_MINTED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
+)
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -28,14 +36,7 @@ from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
-    LEASE_MINTED,
-    RUNNER_LOCALLY_PAUSED,
-    RUNNER_LOCALLY_RESUMED,
-)
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaimPausedDenial, RouteClaimTerminalDenial

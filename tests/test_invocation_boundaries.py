@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -22,7 +23,7 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (

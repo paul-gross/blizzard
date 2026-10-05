@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.outbound import COMPLETION_KIND
@@ -17,8 +18,7 @@ from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

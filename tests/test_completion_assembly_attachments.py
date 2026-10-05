@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -21,7 +22,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.operator.attachments import AttachmentService
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

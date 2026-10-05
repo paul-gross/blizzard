@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
-from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.foundation.hub_event_types import ChunkChangeCause, HubEventType, RunnerChangeKind
 from blizzard.wire.sse import (
-    ChunkChangeCause,
     ChunkChangedPayload,
     DecisionOpenedPayload,
     DecisionResolvedPayload,
@@ -19,7 +18,6 @@ from blizzard.wire.sse import (
     QuestionAskedPayload,
     QueueChangedPayload,
     RunnerChangedPayload,
-    RunnerChangeKind,
 )
 
 #: Every event-type name the broker can publish — its declared vocabulary.

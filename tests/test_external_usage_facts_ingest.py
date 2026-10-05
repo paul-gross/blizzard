@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService
@@ -22,12 +23,7 @@ from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.wire.facts import (
-    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    RunnerFact,
-    RunnerFactBatch,
-)
+from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component

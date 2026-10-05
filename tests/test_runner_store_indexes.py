@@ -17,13 +17,14 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests import support
 from tests.runner_fakes import (

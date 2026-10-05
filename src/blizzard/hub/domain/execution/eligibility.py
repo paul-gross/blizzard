@@ -10,13 +10,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.node_steps import TIER_PREFIX, Executor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.execution.envelope import EffectiveSession
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.runners.registration import RunnerCapability
-from blizzard.wire.envelope import TIER_PREFIX
 
 
 @domain_model

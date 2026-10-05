@@ -7,77 +7,16 @@ omitted when unset unless named in :attr:`SseFramePayload._null_when_absent`."""
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.hub_event_types import HubEventType
-
-#: What fact family drove a ``chunk-changed`` frame — each emit site names
-#: its own cause statically.
-ChunkChangeCause = Literal[
-    "minted",
-    "promoted",
-    "edited",
-    "grouped",
-    "claimed",
-    "node-completed",
-    "migrated",
-    "decision-submitted",
-    "decision-resolved",
-    "question-asked",
-    "question-answered",
-    "escalated",
-    "requeued",
-    "restarted",
-    "detached",
-    "paused",
-    "resumed",
-    "stopped",
-    "completed",
-    "hub-advanced",
-    "deleted",
-]
-
-#: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
-ActivityChunkChangeCause = Literal[
-    "minted",
-    "promoted",
-    "grouped",
-    "claimed",
-    "node-completed",
-    "migrated",
-    "decision-submitted",
-    "decision-resolved",
-    "question-asked",
-    "question-answered",
-    "escalated",
-    "requeued",
-    "restarted",
-    "detached",
-    "paused",
-    "resumed",
-    "stopped",
-    "completed",
-    "hub-advanced",
-    "deleted",
-]
-
-#: What a ``runner-changed`` frame reports — see
-#: :func:`blizzard.hub.events.broker.EventBroker.publish_runner_changed`.
-RunnerChangeKind = Literal[
-    "registered",
-    "heartbeat",
-    "paused",
-    "resumed",
-    "locally-paused",
-    "locally-resumed",
-    "external-usage",
-    "retired",
-    "reinstated",
-    "token-revoked",
-]
+from blizzard.foundation.hub_event_types import (
+    ChunkChangeCause,
+    HubEventType,
+    RunnerChangeKind,
+)
 
 
 class SseFramePayload(BaseModel):

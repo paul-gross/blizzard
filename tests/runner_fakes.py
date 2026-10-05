@@ -19,7 +19,7 @@ from sqlalchemy import Engine, MetaData
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
@@ -112,13 +112,7 @@ from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import (
-    ApplyOutcome,
-    ApplyResponse,
-    GraphArtifact,
-    NodeConfig,
-    NodeEnvelope,
-)
+from blizzard.wire.envelope import ApplyResponse, GraphArtifact, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView

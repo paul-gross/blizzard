@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.outbound import COMPLETION_KIND
@@ -20,8 +22,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
+from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

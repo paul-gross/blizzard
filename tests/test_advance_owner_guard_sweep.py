@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, RUNNER_LOCALLY_PAUSED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -24,7 +25,6 @@ from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.steps import Advance
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, RUNNER_LOCALLY_PAUSED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

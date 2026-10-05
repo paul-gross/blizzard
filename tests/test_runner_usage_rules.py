@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
@@ -28,7 +29,6 @@ from blizzard.runner.usage.repository import (
     soonest_exhausted_reset,
     usage_kind_for,
 )
-from blizzard.wire.facts import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 
 pytestmark = pytest.mark.unit
 

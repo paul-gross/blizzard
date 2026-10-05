@@ -6,12 +6,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.events.broker import ChunkChangeCause
 
 
 @dto

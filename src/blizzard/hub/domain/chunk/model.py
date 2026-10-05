@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
@@ -26,7 +27,6 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.runners.registration import RecordedPause
-from blizzard.wire.sse import ActivityChunkChangeCause
 
 if TYPE_CHECKING:
     # Deferred: ``ports.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/

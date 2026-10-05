@@ -1,12 +1,12 @@
-"""Every runner fact kind the wire declares is classified for the ingest broadcast exactly once —
+"""Every runner fact kind the kernel declares is classified for the ingest broadcast exactly once —
 runner-scoped (published by its own arm) or chunk-scoped (routed by its payload's ``chunk_id``)."""
 
 from __future__ import annotations
 
 import pytest
 
+from blizzard.foundation import fact_kinds
 from blizzard.hub.api.ingest_broadcast import _CHUNK_SCOPED_FACT_KINDS, _RUNNER_ARM_BY_FACT_KIND, IngestBroadcast
-from blizzard.wire import facts as wire_facts
 from blizzard.wire.facts import RunnerFact
 
 pytestmark = pytest.mark.unit
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.unit
 def _declared_fact_kinds() -> set[str]:
     return {
         value
-        for name, value in vars(wire_facts).items()
+        for name, value in vars(fact_kinds).items()
         if name.isupper() and isinstance(value, str) and "." in value and not name.startswith("_")
     }
 

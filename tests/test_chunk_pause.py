@@ -15,7 +15,13 @@ from sqlalchemy import select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.fact_kinds import (
+    ESCALATION_RECORDED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
+    USAGE_RECORDED,
+)
+from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -29,8 +35,6 @@ from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.envelope import ApplyOutcome
-from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED, USAGE_RECORDED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
     FakeHarness,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -29,7 +30,6 @@ from blizzard.runner.usage.repository import (
     effective_model,
     usage_kind_for,
 )
-from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.loop")
 

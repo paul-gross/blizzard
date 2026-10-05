@@ -17,6 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.node_steps import TIER_PREFIX
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
@@ -39,7 +40,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
+from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
 

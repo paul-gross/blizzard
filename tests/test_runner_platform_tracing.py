@@ -41,6 +41,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.platform_tracing.received_export import (
     IReceivedTelemetryExport,
@@ -78,7 +79,7 @@ from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
 from tests.runner_fakes import (

@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.leases import LeaseClosureReason, LeaseState
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError
 from blizzard.runner.hub.client import RouteClaimOutcome
@@ -91,7 +91,7 @@ from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.takeover import OpenTakeover
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.wire.chunk import BlockedView, ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView, PauseView
-from blizzard.wire.envelope import ApplyOutcome, NodeConfig, RotatePolicyView
+from blizzard.wire.envelope import NodeConfig, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import (

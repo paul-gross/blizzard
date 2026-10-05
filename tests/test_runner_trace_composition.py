@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from blizzard.runner.tracing.trace_driver import TraceSweepDriver
-from blizzard.wire.facts import EVENT_RECORDED
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
