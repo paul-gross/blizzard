@@ -287,6 +287,25 @@ def test_transcripts_root_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.unit
+def test_env_passthrough_env_seeds_scaffold_and_round_trips(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_RUNNER_ENV_PASSTHROUGH", " FENCE_VAR , ,TMPDIR,")
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffolded = RunnerConfig.scaffold(root)
+    assert scaffolded.worker_env_passthrough == ("FENCE_VAR", "TMPDIR")
+    (root / "blizzard-runner.toml").write_text(scaffolded.to_toml())
+    assert RunnerConfig.load(root).worker_env_passthrough == ("FENCE_VAR", "TMPDIR")
+
+
+@pytest.mark.unit
+def test_env_passthrough_unset_scaffolds_the_empty_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BZ_RUNNER_ENV_PASSTHROUGH", raising=False)
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.worker_env_passthrough == ()
+    assert "env_passthrough = []" in config.to_toml()
+
+
+@pytest.mark.unit
 def test_transcripts_ship_defaults_false(tmp_path: Path) -> None:
     # Off by default — a fresh scaffold ships no transcript content.
     assert RunnerConfig.scaffold(tmp_path).transcripts_ship is False
