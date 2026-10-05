@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 
 __all__ = [
@@ -170,7 +170,7 @@ class TranscriptSegmentState:
         return transition in SEGMENT_TRANSITIONS[self.state]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TruncationMarkUpdate:
     """What one truncation mark writes: the displayed reason and its severity when they change,
@@ -215,7 +215,7 @@ class TruncationMark:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
     """One pending record in the transcript lane's own buffer — ``BufferedFact``'s counterpart. Non-final
@@ -231,7 +231,7 @@ class BufferedTranscriptDelta:
     created_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptBackfillLease:
     """One session-bearing lease the backfill may import, with whether that

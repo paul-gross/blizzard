@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Literal
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, IReadEgress, IReadEgressEvents
@@ -36,7 +36,7 @@ FreeSpaceProbe = Callable[[], int | None]
 _FAILED = "egress-write-failed"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DatasetStatus:
     """``cursor_at`` is the dataset's position in time; ``lag_seconds`` the age of the oldest row past it,
@@ -47,7 +47,7 @@ class DatasetStatus:
     lag_seconds: float | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressStatus:
     """``last_pass_*`` is the newest cursor row of any dataset; ``last_file`` the last data file the newest

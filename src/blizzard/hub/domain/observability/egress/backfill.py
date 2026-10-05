@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.assembly import (
@@ -91,7 +91,7 @@ def files_needed(partition_rows: Sequence[int], max_rows_per_file: int) -> int:
     return sum(-(-rows // max_rows_per_file) for rows in partition_rows)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DatasetCount:
     """What a backfill wrote, or with ``dry_run`` would have written, of one dataset: rows and data files."""
@@ -101,7 +101,7 @@ class DatasetCount:
     files: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class BackfillResult:
     """The per-dataset counts. ``failure`` is set when the writer refused or raised: the counts are then what was

@@ -19,7 +19,7 @@ from concurrent.futures import Executor
 from dataclasses import dataclass
 from typing import IO, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.process.probe import IProcessProbe
 
 # ``man 2 prctl`` — arms the child's own death signal (the trampoline clears it with a literal 0).
@@ -64,7 +64,7 @@ os.execvp(argv[0], argv)
 """
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LaunchedProcess:
     """The OS facts known the instant a child exists — before any identity is known.

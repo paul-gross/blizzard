@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import USER_MANAGE
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import dto
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolve_identity
 from blizzard.hub.api.deps import get_services
@@ -41,7 +41,7 @@ _CLI_LOOPBACK_REDIRECT_RE = re.compile(r"^http://127\.0\.0\.1:\d+/callback$")
 CLI_OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 
 
-@domain_model
+@dto
 @dataclass(frozen=True)
 class CliRedirect:
     """The ``cli`` client id's built-in redirect form — an ephemeral ``127.0.0.1``

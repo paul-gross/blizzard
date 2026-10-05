@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Literal
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import (
     DerivationMarker,
     DropFact,
@@ -96,7 +96,7 @@ def _relative_to(path: str, working_directory: str) -> str | None:
     return resolved[len(prefix) :]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EventDerivation:
     """One derivation as the store holds it: the marker, the segment's frozen identity, and its events.
@@ -112,7 +112,7 @@ class EventDerivation:
     spawn_cwd: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExportedEventsEntry:
     """One ``events`` row; field order is the column order. A column that does not apply to the record type is

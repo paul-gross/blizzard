@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EventQueryCriteria:
     """Every filter this API owes, all optional and freely combinable.
@@ -40,7 +40,7 @@ class EventQueryCriteria:
     effort: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class QueriedEvent:
     """One event row as the query layer renders it — the wire layer shapes
@@ -66,7 +66,7 @@ class QueriedEvent:
     effort: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EventPage:
     """A bounded, keyset-paginated page — ``next_cursor`` is ``None``
@@ -77,7 +77,7 @@ class EventPage:
     next_cursor: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class KeyedCount:
     """One grouping key's count — the four canned aggregations share this shape."""

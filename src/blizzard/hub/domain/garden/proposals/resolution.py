@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.garden.findings.model import Finding, IFindingExitResolver, IReadFindingRepository
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IReadGardenProposalClosureRepository
@@ -41,7 +41,7 @@ def ordered_findings(
     return [f for f in rows if f is not None and (not live_only or f.allows("delivered"))]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveryClosure:
     """The findings a delivered item closes to `delivered`, with the note and actor the

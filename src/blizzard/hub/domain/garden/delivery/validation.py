@@ -16,7 +16,7 @@ from typing import Protocol
 from pydantic import TypeAdapter, ValidationError
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.proposals.model import GardenProposalBlankFieldError, require_text
 from blizzard.hub.domain.garden.run_context import RunContext
@@ -43,7 +43,7 @@ LiveFindings = Mapping[str, str]
 
 # The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
 # `CommitResolver` to return it costs no extra forge round trip.
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CommitResolution:
     exists: bool
@@ -55,7 +55,7 @@ class CommitResolution:
 CommitResolver = Callable[[str, str], CommitResolution | None]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ValidatedDelivery:
     """What a passing :func:`validate_delivery` hands the next phase: the run it was
@@ -73,7 +73,7 @@ class ValidatedDelivery:
     gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SelectedArtifacts:
     """The named artifacts a delivery reads: artifact name → raw content, and name →

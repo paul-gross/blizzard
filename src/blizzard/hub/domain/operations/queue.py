@@ -20,7 +20,7 @@ from enum import Enum
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.dependencies import FoldEdgePlan, plan_fold, would_close_a_cycle
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, verb_legal_from
@@ -62,7 +62,7 @@ class QueueMatchPolicy(Enum):
         return cls.HOLD if value == cls.HOLD.value else cls.PASS_OVER
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MatchedEntry:
     """The one ready chunk :func:`select_matched_entry` returns, at its own position in
@@ -157,7 +157,7 @@ def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
     return float(parts[0]), parts[1]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class QueueEntry:
     """One paged queue/backlog row — the chunk plus its absolute
@@ -167,7 +167,7 @@ class QueueEntry:
     position: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class QueuePage:
     """A bounded, keyset-paginated page of :meth:`QueueService.page` —
@@ -452,7 +452,7 @@ class QueueService:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GroupResult:
     """A completed group: the survivor and the status it is left at.

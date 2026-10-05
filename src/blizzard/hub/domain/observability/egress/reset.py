@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.chunk.event_log import EventLogService
@@ -39,7 +39,7 @@ class ResetUnavailable(Exception):
     """The export is off or rejected, so there is no cursor to move."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResetResult:
     """``previous`` is where the dataset stood, ``None`` before its first pass; ``direction`` says whether the

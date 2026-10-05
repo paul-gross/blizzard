@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model, domain_model
 
 OpenCodeEventType = Literal[
     "step_start", "text", "reasoning", "tool_use", "step_finish", "error", "permission", "compaction"
@@ -119,7 +119,7 @@ def _epoch_ms(container: object, key: str) -> int | None:
     return int(value)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeTokenUsage:
     """The token breakdown carried by an OpenCode ``step-finish`` shape."""
@@ -153,7 +153,7 @@ def _child_session_id(metadata: object) -> str | None:
     return None
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeToolState:
     """A pending, running, completed, or failed tool invocation state."""
@@ -196,7 +196,7 @@ class OpenCodeToolState:
         )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodePart:
     """The stable identity and contract fields of one exported message part."""
@@ -272,7 +272,7 @@ class OpenCodePart:
         )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeError:
     """The provider/process error envelope used by a JSON run event."""
@@ -297,7 +297,7 @@ class OpenCodeError:
         return cls(name=name, message=message, status_code=status_code, raw=error)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodePermissionRequest:
     """The permission event shape retained for the proof's deny-path evidence."""
@@ -331,7 +331,7 @@ _EVENT_PART_TYPES: dict[str, str] = {
 }
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeRunEvent:
     """One line emitted by ``opencode run --format json``."""
@@ -401,7 +401,7 @@ def parse_run_jsonl(value: str) -> tuple[OpenCodeRunEvent, ...]:
     return tuple(events)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeSessionInfo:
     """The session metadata in an export or child-session response."""
@@ -426,7 +426,7 @@ class OpenCodeSessionInfo:
         )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeMessageInfo:
     """The identity, role, model, and optional step usage in one exported message."""
@@ -473,7 +473,7 @@ class OpenCodeMessageInfo:
         )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeMessage:
     """An exported message with its ordered stable parts."""
@@ -499,7 +499,7 @@ class OpenCodeMessage:
         return cls(info=info, parts=parts, raw=message)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeSessionExport:
     """The documented ``{info, messages[{info, parts}]}`` export shape."""
@@ -534,7 +534,7 @@ def parse_session_export(value: object) -> OpenCodeSessionExport:
     return OpenCodeSessionExport.parse(value)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeChildSession:
     """A child returned by ``GET /session/:id/children``."""
@@ -565,7 +565,7 @@ def parse_child_sessions(value: object) -> tuple[OpenCodeChildSession, ...]:
     )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeModelReference:
     """A provider/model selection used by the model-and-variant contract."""
@@ -608,7 +608,7 @@ def parse_model_reference(value: object) -> OpenCodeModelReference:
     return OpenCodeModelReference.parse(value)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeWorkerConfig:
     """Runner-owned permission and plugin configuration used for isolation evidence."""
@@ -660,7 +660,7 @@ def parse_worker_config(value: object) -> OpenCodeWorkerConfig:
     return OpenCodeWorkerConfig.parse(value)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodePermissionRule:
     """One resolved ``{permission, pattern, action}`` rule of an agent's ordered ruleset."""

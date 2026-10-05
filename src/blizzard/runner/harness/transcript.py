@@ -14,7 +14,7 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 #: The normalized turn vocabulary — :data:`~blizzard.foundation.transcripts.TurnKind`
 #: carries every one of these, plus its own ``"sidechain"``.
@@ -32,7 +32,7 @@ TranscriptReadReason = Literal["not_found", "unreadable"]
 ToolInputShape = Literal["object", "absent", "string", "other"]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptPosition:
     """An opaque forward-read cursor into a session's transcript. ``token`` is minted and interpreted
@@ -41,7 +41,7 @@ class TranscriptPosition:
     token: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ToolCall:
     """A tool invocation, structured — never flattened to a ``json.dumps`` string. ``input`` is the
@@ -58,7 +58,7 @@ class ToolCall:
     output_truncated: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LateToolOutput:
     """A tool result whose own ``tool_use`` fell outside this read window, so no
@@ -70,7 +70,7 @@ class LateToolOutput:
     output_truncated: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SidechainConversation:
     """A subagent's private conversation, nested under its spawning tool call.
@@ -83,7 +83,7 @@ class SidechainConversation:
     turns: list[NormalizedTurn]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NormalizedTurn:
     """One normalized conversation turn. ``tool``/``sidechain`` populate only on a ``kind="tool"`` turn;
@@ -101,7 +101,7 @@ class NormalizedTurn:
     truncated: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptBatch:
     """:meth:`IHarnessTranscriptSource.turns_since`'s return; ``available=False`` carries ``reason`` and

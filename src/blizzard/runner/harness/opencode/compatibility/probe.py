@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 from packaging.specifiers import SpecifierSet
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.compatibility import (
     PROBE_ROSTER,
@@ -116,7 +116,7 @@ TRANSCRIPT_POLL_SECONDS = 0.1
 TRANSCRIPT_MAX_LIVE_EXPORTS = 32
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class _TurnResult:
     events: tuple[OpenCodeRunEvent, ...] | None

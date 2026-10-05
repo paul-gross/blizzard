@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from blizzard.hub.domain.observability.egress.event_rows import EventDerivation
 
 
-@dto
+@domain_model
 @dataclass(frozen=True, order=True)
 class UsagePosition:
     """A position in the total order of usage facts: the time the hub received it, then its id."""
@@ -30,7 +30,7 @@ class UsagePosition:
     usage_id: int = 0
 
 
-@dto
+@domain_model
 @dataclass(frozen=True, order=True)
 class EventsPosition:
     """A position in the ``events`` dataset's total order: the source's time (``derived_at`` or ``dropped_at``),
@@ -41,7 +41,7 @@ class EventsPosition:
     extractor_version: str = ""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressCheckpoint:
     """One ``egress_cursor`` row: where a dataset stood after a pass, and what that pass wrote.
@@ -71,7 +71,7 @@ class EgressCheckpoint:
         return self.usage.recorded_at
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressWriteFailure:
     """The newest ``egress-write-failed`` event: when it was recorded and what it said."""
@@ -106,7 +106,7 @@ class IWriteEgressCursor(IReadEgress, Protocol):
     def append_cursor(self, record: EgressCheckpoint) -> None: ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True, order=True)
 class EpochKey:
     """One chunk epoch, the events backfill's keyset order."""

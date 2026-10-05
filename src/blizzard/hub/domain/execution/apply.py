@@ -19,7 +19,7 @@ from blizzard.foundation.ids import (
     WORK_ITEM_PROPOSAL_PREFIX,
     Id,
 )
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -66,7 +66,7 @@ _CP_MIGRATE_AFTER_RECORD = crashpoint(
 )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ApplyResult:
     """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus the

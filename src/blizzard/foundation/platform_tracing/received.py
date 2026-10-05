@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "JSON_CONTENT_TYPE",
@@ -44,7 +44,7 @@ class OtlpDecodeError(ValueError):
     """The body is not a well-formed OTLP export in the encoding its content type names."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReceivedSpan:
     """One decoded span. ``kind`` and ``status_code`` are OTLP's own numbers; ``parent_span_id`` is ``None``
@@ -77,7 +77,7 @@ def encode_export_response(rejected_spans: int, content_type: str) -> bytes:
     return encode_response(rejected_spans, content_type)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExponentialBuckets:
     """An exponential histogram point's buckets: its ``scale``, the count at zero, and each side's offset and
@@ -91,7 +91,7 @@ class ExponentialBuckets:
     negative_counts: Sequence[int] = ()
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReceivedDataPoint:
     """One decoded metric data point with its metric. ``temporality`` is OTLP's own number (1 delta, 2 cumulative);
@@ -120,7 +120,7 @@ class ReceivedDataPoint:
     attributes: dict[str, Scalar] = field(default_factory=dict)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReceivedMetrics:
     """A decoded metrics export: its ``points``, and how many points it carried of a kind the runner cannot
@@ -130,7 +130,7 @@ class ReceivedMetrics:
     unsupported: int = 0
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReceivedLogRecord:
     """One decoded log record. ``trace_id`` and ``span_id`` are ``None`` when the record names no trace; a

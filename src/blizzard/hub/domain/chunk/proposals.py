@@ -7,13 +7,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 if TYPE_CHECKING:
     from blizzard.wire.completion import WorkItemProposal
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StampedWorkItemProposal:
     """One proposed work item's flat storage row — riding a node-step's completion

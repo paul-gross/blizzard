@@ -8,12 +8,12 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TraceCheckpoint:
     """One ``trace_cursor`` row: where the cursor stood after a pass, and what that pass told."""
@@ -23,7 +23,7 @@ class TraceCheckpoint:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ClosingCandidates:
     """The chunks holding a closing fact in a window, and how far that read is complete.
@@ -36,7 +36,7 @@ class ClosingCandidates:
     newest: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TraceExportFailure:
     """One ``trace-export-failed`` event: when it was recorded and its fixed message."""

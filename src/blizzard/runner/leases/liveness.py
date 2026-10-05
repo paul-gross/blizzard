@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseLivenessFacts:
     """One lease's :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` and

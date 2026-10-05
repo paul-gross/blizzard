@@ -15,7 +15,7 @@ from pathlib import Path
 
 import click
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 #: The declared surface (docs/versioning.md's hub↔runner skew row): fleet calls, plus federation.
 _SURFACE_PREFIX = "/api/fleet"
@@ -27,7 +27,7 @@ _BREAKING_COMMIT_MARKER = re.compile(r"^\w+(\([^)]*\))?!:")
 _SPEC_PATH = "openapi/hub.openapi.json"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Violation:
     """One breaking-change finding: the surface path or schema it names, and why."""

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 
 class EpochAdmission(Enum):
@@ -31,7 +31,7 @@ class EpochAdmission(Enum):
         return epoch > newest
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FenceRefusal:
     """Why a fenced write was refused and never recorded: the chunk is terminal, or the

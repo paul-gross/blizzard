@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.bundle import (
     BundleSnapshot,
     EntryPoint,
@@ -41,7 +41,7 @@ def claude_code_bundle_layout(permission_mode: str | None = None) -> HarnessLayo
     )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class ClaudeCodeBundleDelivery:
     """The Claude Code files of a published snapshot, as the flags that deliver them."""

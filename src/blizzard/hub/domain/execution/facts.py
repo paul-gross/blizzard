@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, narrow_event_log_kind
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.config import ROUTE_TOKEN_WARN
@@ -171,7 +171,7 @@ class LocalPause:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck` plus, per

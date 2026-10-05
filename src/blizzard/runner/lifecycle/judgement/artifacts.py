@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.wire.envelope import WorkerArtifact
 
 __all__ = [
@@ -123,7 +123,7 @@ class ArtifactRead:
         return ("--node",) if node_scoped else ()
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PinnedGraphArtifact:
     """One graph-scoped ``artifacts:`` declaration, pinned to the mint it was baked into

@@ -16,7 +16,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenAsk:
     """The worker's local open-ask fact.
@@ -63,7 +63,7 @@ class OpenAsk:
         return SessionReference(self.harness_id, self.session_id)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class QuestionPark:
     """A lease's park on a question — dormant, no live worker."""

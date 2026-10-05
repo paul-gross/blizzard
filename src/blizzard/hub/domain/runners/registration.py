@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.domain.runners.route import Route
@@ -70,7 +70,7 @@ RUNNER_VERBS: Mapping[RunnerState, frozenset[RunnerVerb]] = {
 }
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LifecycleFact:
     """A retire (``retired=True``) or reinstate (``retired=False``) fact to append."""
@@ -81,7 +81,7 @@ class LifecycleFact:
     by: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RecordedPause:
     """One pause-family fact as recorded: the fleet brake (``local=False``) or the runner's own
@@ -97,7 +97,7 @@ class RecordedPause:
     reason: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TokenRevocation:
     """Revoke the runner's current token: record its hash as revoked and null it, in one write."""
@@ -107,7 +107,7 @@ class TokenRevocation:
     by: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TokenRotation:
     """Enroll a fresh token hash. Any hash it replaces is recorded as revoked in the same write,
@@ -255,7 +255,7 @@ class DeclaredSubscription:
     provider: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunnerLiveness:
     """A registration paired with its clock-relative liveness."""
@@ -272,7 +272,7 @@ class RunnerLiveness:
         return cls(registration, (as_utc(now) - as_utc(registration.last_seen_at)) <= threshold)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
     """One rate-limit window's utilization, read back off ``runner_external_usage``. A
@@ -286,7 +286,7 @@ class ExternalSubscriptionUsageWindow:
     window_seconds: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SubscriptionUsageSample:
     """One declared subscription's newest reported sample, raw —
@@ -300,7 +300,7 @@ class SubscriptionUsageSample:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SubscriptionUsageMiss:
     """One declared subscription's newest reported miss, raw — staleness

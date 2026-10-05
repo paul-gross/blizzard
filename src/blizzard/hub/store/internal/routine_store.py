@@ -13,13 +13,13 @@ from datetime import datetime
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.foundation.roles import entity
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import routine_lifecycle_facts, routines
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class ModelColumn:
     """``routines.default_model``'s column shape — a JSON ``list[str]``, the

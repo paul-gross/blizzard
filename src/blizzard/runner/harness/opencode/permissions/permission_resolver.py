@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodePermissionRule,
     OpenCodeShapeError,
@@ -30,7 +30,7 @@ class OpenCodePermissionResolveError(RuntimeError):
     """Raised when OpenCode's effective permissions cannot be established."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeEffectivePermissions:
     """The merged configuration plus every agent's ordered resolved ruleset."""

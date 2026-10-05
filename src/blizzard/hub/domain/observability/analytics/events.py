@@ -14,7 +14,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: :attr:`TranscriptEvent.kind` values this build's extractors mint — open to a
@@ -24,7 +24,7 @@ KIND_SKILL_INVOCATION = "skill_invocation"
 KIND_AGENT_SPAWN = "agent_spawn"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentProvenance:
     """A segment's own frozen harness identity — one per
@@ -38,7 +38,7 @@ class SegmentProvenance:
     effort: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptEvent:
     """One derived occurrence, ready to store. ``segment_id``/``extractor_version`` are
@@ -62,7 +62,7 @@ class TranscriptEvent:
     occurred_at: datetime | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DerivationMarker:
     """One ``(segment_id, extractor_version)`` pair's most recent derivation."""
@@ -75,7 +75,7 @@ class DerivationMarker:
     complete: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DropFact:
     """One segment's drop: the moment its events stopped counting, with the segment's own position."""
@@ -165,7 +165,7 @@ def segment_complete(rejected: Iterable[bool]) -> bool:
     return not any(rejected)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CandidacyRead:
     """One candidacy pass's whole visibility evaluation: the visible
@@ -177,7 +177,7 @@ class CandidacyRead:
     candidate_segment_ids: list[str]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DerivationSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
@@ -191,7 +191,7 @@ class DerivationSignature:
     chunk_count: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service: decoded once,
@@ -211,7 +211,7 @@ class SegmentDerivationInput:
     provenance: SegmentProvenance
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentContext:
     """:class:`SegmentDerivationInput` with ``turns`` dropped — every field a caller can

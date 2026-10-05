@@ -20,7 +20,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, Even
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
@@ -79,7 +79,7 @@ class WorkItemAuthor:
         return cls(kind=WorkItemAuthorKind.FLEET, runner_id=runner_id, chunk_id=chunk_id, node_name=node_name)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HubWorkItem:
     """One hub-owned work item — the ``work_items`` row. A mutable
@@ -130,7 +130,7 @@ class WorkItemMaterializationOutcome(StrEnum):
     UNRESOLVED = "unresolved"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PendingCloseIntent:
     """One ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row
@@ -516,7 +516,7 @@ class UsageFact:
         return self.cost_usd is None and self.estimated_cost_usd is None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OperationalEvent:
     """One ``event_log`` row — a durable, typed operational fact.
@@ -614,7 +614,7 @@ class EventFeed:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ActivityEntry:
     """One row of the activity feed — a historical fact reshaped into the
@@ -698,7 +698,7 @@ class ActivityFeed:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome."""
@@ -707,7 +707,7 @@ class DecisionChoice:
     description: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DocketEntry:
     """One of a chunk's not-yet-materialized proposals, as it stands at a gate — a
@@ -1440,7 +1440,7 @@ class RouteHistory:
         return max(candidates, key=lambda t: (t.minted_at, t.seq))
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChunkChange:
     """A ``chunk-changed`` frame's derived content — the current status
@@ -1499,7 +1499,7 @@ class ChunkChange:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class UsageTotal:
     """A usage/cost total summed at read time, never a stored column. **The one canonical owner of the
@@ -1568,7 +1568,7 @@ class UsageTotal:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FleetSummary:
     """Fleet-pulse counts — every chunk's derived status folded to four
@@ -1690,7 +1690,7 @@ class QuestionClosed(Exception):
     """An answer reached a question whose chunk has ended."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AnswerOutcome:
     """The result of an answer write — first-write-wins CAS. ``won`` is True for the

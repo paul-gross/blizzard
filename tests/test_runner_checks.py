@@ -382,7 +382,8 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
 
 @pytest.mark.unit
 def test_checks_gate_violated_predicate() -> None:
-    from blizzard.wire.completion import CheckResult, ChecksGate
+    from blizzard.foundation.completion_gates import ChecksGate
+    from blizzard.wire.completion import CheckResult
 
     green = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=True)]
     red = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=False)]

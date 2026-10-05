@@ -17,7 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -81,7 +81,7 @@ def _matches_model(expected: str, observed: str) -> bool:
     return observed == expected or observed.startswith(f"{expected}-") or observed.startswith(f"claude-{expected}-")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResultEnvelope:
     """A worker invocation's final ``--output-format json`` envelope.

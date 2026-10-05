@@ -12,7 +12,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -90,7 +90,7 @@ _CP_AFTER_IDENTITY = crashpoint(
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Environments:
     """A chunk's held env bindings, as the spawn primitives want them."""
@@ -102,7 +102,7 @@ class Environments:
         return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in self.bindings]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MintedLease:
     """A lease recorded and announced to the hub, with no worker behind it yet."""

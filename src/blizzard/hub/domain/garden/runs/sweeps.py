@@ -11,13 +11,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository, Routine
 from blizzard.hub.domain.garden.runs.window import require_until_after_since
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SweepFact:
     """One `finding_sets` row for a routine, joined to its own artifact's `produced_at`
@@ -30,7 +30,7 @@ class SweepFact:
     measurement: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ScopeSweep:
     """One row of the last-swept table — `finding_set_id`/`produced_at` `None`
@@ -42,7 +42,7 @@ class ScopeSweep:
     revisions: dict[str, str]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MeasurementReading:
     """One recorded measurement inside the window — opaque text, never parsed."""
@@ -52,7 +52,7 @@ class MeasurementReading:
     measurement: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GardenSweeps:
     routine_name: str

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.transcripts import TranscriptProvenance
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.ledger import TranscriptSegmentState
@@ -31,7 +31,7 @@ def home_is_local(*, lease_active: bool, unshipped: bool) -> bool:
     return lease_active or unshipped
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResolvedTranscript:
     """A lease's transcript, resolved to a home. ``provenance`` and
@@ -78,7 +78,7 @@ def session_start_cursor(
     return siblings[index - 1].cursor if index > 0 else None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResolvedSegmentContent:
     """One segment's resolved content, read straight from its session file — never

@@ -15,7 +15,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery, is_finding_id_shaped, single_repo_of
@@ -34,7 +34,7 @@ class DeliveryOutcome(Enum):
     FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewFinding:
     """A fully-formed ``findings`` row — id already minted (`bzh:domain-takes-objects`)."""
@@ -51,7 +51,7 @@ class NewFinding:
     introduced_at: datetime | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewFindingFact:
     """A fully-formed ``finding_facts`` row, minus ``recorded_at`` — every fact in one
@@ -68,7 +68,7 @@ class NewFindingFact:
     actor: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewFindingSet:
     """A fully-formed ``finding_sets`` row, minus ``chunk_id`` — every set in one delivery
@@ -82,7 +82,7 @@ class NewFindingSet:
     measurement: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewProposal:
     """A fully-formed ``garden_proposals`` row plus its ``garden_proposal_findings`` link
@@ -100,7 +100,7 @@ class NewProposal:
     finding_ids: list[str] = field(default_factory=list)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeltaMaterialization:
     """One delivered delta's own contribution to the plan — its `finding_sets` row and
@@ -113,7 +113,7 @@ class DeltaMaterialization:
     facts: list[NewFindingFact] = field(default_factory=list)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveryPlan:
     """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes — every

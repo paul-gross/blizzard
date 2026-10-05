@@ -10,14 +10,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 
 _ASK = "ask"
 _DENY = "deny"
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class ResidualAsk:
     """An ``ask`` rule that can still decide a request for ``agent``."""

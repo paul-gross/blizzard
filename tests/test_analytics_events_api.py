@@ -321,7 +321,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     """The batch boundary is the stream's only moving part, and the default 500 puts it
     out of reach of any fixture — so the body is served here one event per batch."""
     hub, token, _chunk_id = _seeded_hub(tmp_path)
-    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria()
+    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
 
     body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
     lines = [json.loads(line) for line in body.splitlines()]

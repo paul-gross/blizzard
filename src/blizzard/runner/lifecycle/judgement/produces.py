@@ -6,8 +6,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.completion_gates import Coverage
 from blizzard.foundation.roles import domain_model
-from blizzard.wire.completion import Coverage, SubmittedArtifact
+from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.graph import ProducesEntry
 

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -50,7 +50,7 @@ _log = get_logger("blizzard.runner.loop")
 DEFAULT_RETRIES_MAX = 2
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LoopConfig:
     """The reconciliation loop's static configuration."""

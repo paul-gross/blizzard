@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from urllib.parse import quote, urlsplit
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts
 
@@ -16,7 +16,7 @@ def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
     return f"{public_url.rstrip('/')}/board/chunk/{chunk_id}" if public_url else None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliverySources:
     """The narrowed, page-keyed delivery read (not the chunk's whole artifact history).
@@ -28,7 +28,7 @@ class DeliverySources:
     legacy_landed: dict[str, str] = field(default_factory=dict)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveryPr:
     repo: str
@@ -36,7 +36,7 @@ class DeliveryPr:
     url: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LandedRepo:
     repo: str
@@ -62,7 +62,7 @@ def _commit_url(repo: str, sha: str, pr_url: str) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}/{'/'.join(parts[:2])}/commit/{quote(sha, safe='')}"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveryRead:
     open_prs: list[DeliveryPr]
@@ -128,7 +128,7 @@ class DeliveryRead:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TraceLanding:
     """One landed repo as a source's note names it: merged PR, commit, and commit address."""
@@ -139,7 +139,7 @@ class TraceLanding:
     commit_url: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveryTrace:
     """What landed a chunk's work, forge-neutral; each source renders it in its own format."""

@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import (
     DatasetSchema,
@@ -44,7 +44,7 @@ class RowEncoder(Protocol):
     def encode(self, schema: DatasetSchema, rows: Sequence[EgressValues], out: BinaryIO) -> None: ...
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class _Placed:
     sha256: str

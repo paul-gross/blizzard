@@ -14,7 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingState
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 FACT_KINDS = frozenset(FindingFactKind)
 
@@ -328,7 +328,7 @@ def finding_exit(state: str) -> FindingExit | None:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FindingPage:
     """A bounded, keyset-paginated page of :meth:`IReadFindingRepository.list_page`
@@ -452,7 +452,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FactEntry:
     """One `record_facts` row — the bulk-write shape for a single finding's fact."""

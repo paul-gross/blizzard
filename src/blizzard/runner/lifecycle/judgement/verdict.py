@@ -10,10 +10,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from blizzard.foundation.completion_gates import ChecksGate
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
-from blizzard.wire.completion import ChecksGate
 from blizzard.wire.envelope import EnvelopeChoice
 
 __all__ = ["Verdict", "VerdictOutcome"]

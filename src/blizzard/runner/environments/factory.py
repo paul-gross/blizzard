@@ -10,11 +10,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkspaceSettings:
     """What a workspace binding is built from: the ``provider`` name, the runner ``root``, the

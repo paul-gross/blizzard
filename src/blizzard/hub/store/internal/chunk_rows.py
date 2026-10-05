@@ -16,7 +16,7 @@ from typing import Protocol, cast
 from sqlalchemy import ColumnElement, Connection, Select, func, insert, or_, select
 
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.roles import entity
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     IntendedMigration,
@@ -36,7 +36,7 @@ from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class MigrationColumn:
     """``chunks.intended_migration``'s JSON shape — ``None`` writes and reads ``NULL``."""
@@ -55,7 +55,7 @@ class MigrationColumn:
         )
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class ModelColumn:
     """``chunks.default_model``'s column shape — a JSON ``list[str]``.
@@ -70,7 +70,7 @@ class ModelColumn:
         return [str(m) for m in json.loads(value)] if value else []
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class QuestionQuery:
     """A question row with its derived answer and delivery state, in one query.

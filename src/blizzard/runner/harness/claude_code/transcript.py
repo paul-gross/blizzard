@@ -12,7 +12,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION, NormalizedFile, TranscriptEntry
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
@@ -40,7 +40,7 @@ _CONTEXT_WIDEN = 8
 _RESOLVED_PATH_CACHE_MAX_ENTRIES = 2048
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Position:
     """A decoded read cursor: the main file's byte offset, plus one per known sidecar."""

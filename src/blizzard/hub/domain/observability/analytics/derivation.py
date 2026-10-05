@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import TransitionFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -88,7 +88,7 @@ class ReDeriveScope:
         return to_derive, len(candidates) - len(to_derive)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReDeriveOutcome:
     """How many segments a re-derive derived — successes only — and how many candidates remain."""

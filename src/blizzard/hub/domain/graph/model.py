@@ -18,7 +18,7 @@ from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 
 class GraphParseError(ValueError):
@@ -672,7 +672,7 @@ class Graph:
         return GraphPolicyFact(graph_id=self.graph_id, follow_latest=follow_latest, at=at, by=by)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GraphLifecycleFact:
     """One appended retire or enable fact over a graph id."""
@@ -683,7 +683,7 @@ class GraphLifecycleFact:
     by: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GraphPolicyFact:
     """One appended follow-latest policy fact over a graph id."""
@@ -769,7 +769,7 @@ class GraphStanding:
             raise TargetGraphRetired(self.graph.graph_id)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GraphSummary:
     """One minted graph's listing-shape fields — :meth:`IReadGraphRepository.list_summaries`'s

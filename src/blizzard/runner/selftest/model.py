@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import ClassVar, Literal
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.selftest_result import LatestSelfTestResult, SelfTestTerminalStatus
 
 SelfTestStatus = Literal["running", SelfTestTerminalStatus]
@@ -31,7 +31,7 @@ class SelfTestTransitionError(RuntimeError):
     """A selftest run was asked for a transition its status does not allow."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SelfTestCheck:
     """One pass/fail check within a selftest run, with a human-readable detail."""

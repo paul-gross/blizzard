@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -118,7 +118,7 @@ def _split_admissions(
     return frozenset(admitted), late_outputs
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class _ChildLinkResult:
     """One tick's child-session linking pass — see

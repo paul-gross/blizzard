@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.opencode.compatibility.proof_script import (
     CONFIG_PERMISSION_COMMAND,
@@ -75,7 +75,7 @@ class OpenCodeScratchError(RuntimeError):
     """The disposable scopes or the runner-owned config could not be established."""
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class IsolationRoots:
     """Every disposable path one run owns, so no caller re-derives one by string."""
@@ -120,7 +120,7 @@ class IsolationRoots:
 _ISOLATION_FIELDS = tuple(IsolationRoots.__dataclass_fields__)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class WrittenRunnerConfig:
     """The written runner-owned config and what the probe must remember about writing it."""

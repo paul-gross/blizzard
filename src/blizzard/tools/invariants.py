@@ -17,7 +17,7 @@ from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -36,7 +36,7 @@ from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KI
 _HUB_LEASE_RUNNER_ID = "hub"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Violation:
     invariant: str

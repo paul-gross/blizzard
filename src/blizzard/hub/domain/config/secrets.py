@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ConfigChange, RecordRef
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
@@ -128,7 +128,7 @@ class SecretValue:
     __str__ = __repr__
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SecretMetadata:
     """A secret's metadata — never its value or ciphertext."""
@@ -228,7 +228,7 @@ class ISealedSecretRepository(Protocol):
     def get_sealed(self, name: str) -> SealedSecret | None: ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Reseal:
     """One row's value re-sealed under another key generation at the same revision."""

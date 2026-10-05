@@ -12,7 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository
@@ -30,7 +30,7 @@ class GraphSyncStatus(StrEnum):
     FAILED = "failed"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GraphSyncOutcome:
     """One packaged graph's reconciliation result — a row of the report.

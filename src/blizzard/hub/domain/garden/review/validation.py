@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.scopes import ScopeSlug, ScopeSlugError
 from blizzard.wire.finding import DeferredReviewFindingEntry, ReviewFindingDelta
 
@@ -33,7 +33,7 @@ def require_review_delta[A](artifact: A | None, *, chunk_id: str) -> A:
     return artifact
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ValidatedReviewFindings:
     """What a passing :func:`validate_review_findings` hands the materializer: only the

@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.runner.harness.opencode.shapes import OpenCodeSessionExport
 
 CURSOR_VERSION = 1
@@ -38,7 +38,7 @@ class MessagePartIdentity:
             raise CursorError("part identity must be non-empty when present")
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class MessagePartRevision:
     """One identity and its current shape, ready for admission."""
@@ -66,7 +66,7 @@ class CursorMark:
     fingerprint: str
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class CursorAdmission:
     """A record admitted as genuinely new or as a state update to a known identity."""
@@ -75,7 +75,7 @@ class CursorAdmission:
     kind: Literal["new", "updated"]
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class CursorRead:
     """The forward delta and the cursor to persist for the next read."""

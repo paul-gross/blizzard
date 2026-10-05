@@ -13,7 +13,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 
 class Door(StrEnum):
@@ -97,7 +97,7 @@ SECRET_TRANSITIONS: Mapping[RecordState, Mapping[ChangeOp, Verdict]] = MappingPr
 )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChangeContext:
     """Who is writing and through which door — built at the edge, never from a body field."""
@@ -106,7 +106,7 @@ class ChangeContext:
     door: Door
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FieldChange:
     """One field's change, named by its wire name."""
@@ -116,7 +116,7 @@ class FieldChange:
     new: object
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ConfigChange:
     """One row of the change log. ``id`` is ``None`` until the store assigns it."""
@@ -156,7 +156,7 @@ class ConfigChange:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RecordRef:
     """A configured record named by kind and key."""

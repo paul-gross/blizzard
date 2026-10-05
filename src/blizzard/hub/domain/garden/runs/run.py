@@ -14,7 +14,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.model import HubWorkItem, IWriteWorkItemRepository, WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
@@ -175,7 +175,7 @@ def plan_run(
     )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunResult:
     """The result of one routine run — the minted item, its chunk, and how the

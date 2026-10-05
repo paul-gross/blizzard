@@ -6,7 +6,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import collaborator, dto
 
 
 @dto
@@ -102,7 +102,7 @@ class QuestionLine:
         return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Listing:
     rows: Sequence[Any]

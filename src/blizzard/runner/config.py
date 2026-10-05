@@ -17,7 +17,7 @@ from pathlib import Path
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.auth.roles import RolePolicy
@@ -193,7 +193,7 @@ def _cap_line(key: str, value: int | None, default: int) -> str:
     return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Spend:
     """The ``[cost]`` table's spend controls (epic #57) — absent means uncapped."""
@@ -219,7 +219,7 @@ class Spend:
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Context:
     """The ``[context]`` table — the live session-context warn lane.
@@ -244,7 +244,7 @@ class Context:
         return self.table.count("sample_interval_seconds", DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExternalUsage:
     """The ``[external_subscription_usage]`` table."""
@@ -338,7 +338,7 @@ class SubscriptionDeclaration:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Queue:
     """The ``[queue]`` table — this runner's selection policy over the peeked
@@ -358,7 +358,7 @@ class Queue:
         return self.table.boolean("strict", False)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkerStdout:
     """The ``[worker_stdout]`` table — the periodic sweep's own retention window
@@ -419,7 +419,7 @@ class Transcripts:
         return value
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Auth:
     """The ``[auth]`` table — runner-local role resolution, keyed by hub username."""

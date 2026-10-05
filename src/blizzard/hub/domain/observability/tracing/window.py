@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
 from blizzard.hub.domain.observability.tracing.chunk_spans import (
@@ -26,7 +26,7 @@ from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, identify_steps
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ClosedStep:
     key: CursorKey
@@ -35,7 +35,7 @@ class ClosedStep:
     steps: tuple[NodeStep, ...]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FinishedChunk:
     """A chunk told as a whole at its finish, or with ``completion`` at a later hand-completion."""
@@ -48,7 +48,7 @@ class FinishedChunk:
 TraceItem = ClosedStep | FinishedChunk
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TraceWindow:
     """Up to a limit of items in cursor order, and ``position`` — where a pass that told every

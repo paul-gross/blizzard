@@ -12,7 +12,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.signals import TelemetrySignal
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.tracing.cursor import LeaseCursorKey
@@ -21,7 +21,7 @@ from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, LeaseTrace
 from blizzard.runner.tracing.sweep import FAILED_MESSAGE
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessTelemetryStatus:
     """The Claude Code binding's plan, and what each signal's receiver has taken in since start, in that
@@ -31,7 +31,7 @@ class HarnessTelemetryStatus:
     receivers: dict[TelemetrySignal, ReceiverCount]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseTraceStatus:
     """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed lease the cursor
