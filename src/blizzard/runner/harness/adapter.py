@@ -314,19 +314,35 @@ class IHarnessUsageAccounting(Protocol):
         ...
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + its cost figure into a sample.
 
         ``kind`` names which invocation produced ``output`` — never inferred; ``model`` is the expected session
         model for comparison or a fallback where the binding supports it. ``transcript_lines`` are this
         invocation's own assistant records for bindings whose envelope omits the observed model. ``None``
-        when no envelope.
+        when no envelope. ``invocation_start`` and ``invocation_end`` bound descendant
+        work in a session shared across invocations.
         Cost rides verbatim, its scope on ``cost_scope_tokens`` — unresolved, and never
         folded into the sample's separate ``estimated_cost_usd``."""
         ...
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
         """Sum per-message ``usage`` across a session transcript's raw JSONL lines.
 
         The envelope-less fallback for a worker killed before its result envelope: token counts

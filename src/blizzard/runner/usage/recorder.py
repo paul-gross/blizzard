@@ -75,7 +75,15 @@ class UsageRecorder:
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         # The judge's own transcript range is read for what actually ran only when the lease asked for nothing.
         model = effective_model(requested, harness.observed_model(lines) if requested is None and lines else None)
-        judge_sample = harness.parse_usage(judge_output, "judge", model=model, transcript_lines=lines)
+        judge_start = self.invocation_boundaries.current_start(lease.lease_id, generation, "judge")
+        judge_sample = harness.parse_usage(
+            judge_output,
+            "judge",
+            model=model,
+            transcript_lines=lines,
+            invocation_start=judge_start.at if judge_start is not None else None,
+            invocation_end=self.clock.now(),
+        )
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
@@ -139,14 +147,24 @@ class UsageRecorder:
         lines = self.worker_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         # Observed before `parse_usage`, which prices a model-less stdout envelope only off this model.
         model = effective_model(requested, harness.observed_model(lines) if requested is None and lines else None)
-        sample = harness.parse_usage(output, kind, model=model, transcript_lines=lines) if output else None
+        boundary = self._worker_boundary(lease.lease_id, generation)
+        judge = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
+        start = boundary.opened_at if boundary is not None else None
+        end = min(self.clock.now(), judge.opened_at) if judge is not None else self.clock.now()
+        sample = (
+            harness.parse_usage(
+                output, kind, model=model, transcript_lines=lines, invocation_start=start, invocation_end=end
+            )
+            if output
+            else None
+        )
         if sample is not None:
             return sample
         if not lines:
             lines = self.worker_transcript_lines(lease, bindings, generation=generation)
         if not lines:
             return None
-        return harness.sum_transcript_usage(lines, kind, model=model)
+        return harness.sum_transcript_usage(lines, kind, model=model, invocation_start=start, invocation_end=end)
 
     def worker_transcript_lines(self, lease: Lease, bindings: list[EnvBinding], *, generation: int) -> list[str]:
         """This generation's own worker-starting-to-judge-or-tail transcript range,

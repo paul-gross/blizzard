@@ -422,11 +422,26 @@ class _HangingAdapter:
         return False
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
         raise AssertionError("unreachable — spawn never returns")
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
@@ -592,14 +607,29 @@ class _FixedPidAdapter:
         return False
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
         return None
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
         return None
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
         return UsageSample(
             kind=kind,
             model="",

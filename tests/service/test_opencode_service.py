@@ -490,6 +490,65 @@ def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_p
     assert by_lease[retried_lease_id]["judge"]["cost_usd"] is not None
 
 
+def test_opencode_crash_mid_task_records_child_without_a_stdout_tool_use(tmp_path: Path) -> None:
+    """A crashed task whose tool_use never reached stdout still contributes its child's
+    completed steps to the exited worker's usage fact through the root export."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    transcripts_root = tmp_path / "transcripts"
+    fenced = _tick_env()
+    fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+    old_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
+    os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+    hub_port = _free_port()
+    try:
+        with mock_hub(bin_dir, hub_port) as hub:
+            spec = _opencode_crash_chunk_spec(_WORK_REF_URL)
+            spec["nodes"]["build"]["prompt"] = _OPENCODE_CRASH_BUILD_SCRIPT.replace(
+                "    tool_call('Edit', {'path': 'partial.txt'}, output='edited just before the crash')",
+                "    import json\n"
+                "    from blizzard_mock.harness.engine import current_context\n"
+                "    sid = current_context().session.session_id\n"
+                "    print(json.dumps({'type': 'step_finish', 'sessionID': sid, 'part': {\n"
+                "        'id': 'prt_before_task', 'sessionID': sid, 'messageID': 'msg_before_task',\n"
+                "        'type': 'step-finish', 'reason': 'stop', 'cost': 0,\n"
+                "        'tokens': {'input': 7, 'output': 1, 'reasoning': 0,\n"
+                "                   'cache': {'read': 0, 'write': 0}}}}), flush=True)\n"
+                "    tool_call('task', {'subagent_type': 'explorer', 'prompt': 'look around'}, output='delegated')",
+            )
+            seeded = hub.post("/_seed/chunk", json=spec)
+            assert seeded.status_code == 201, seeded.text
+            chunk_id = seeded.json()["chunk_id"]
+            config = dataclasses.replace(
+                _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port),
+                transcripts_root=str(transcripts_root),
+            )
+            landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+            assert landed, f"chunk did not land after the crash (status {_status(hub, chunk_id)!r})"
+    finally:
+        if old_root is None:
+            os.environ.pop("BZ_TRANSCRIPTS_ROOT", None)
+        else:
+            os.environ["BZ_TRANSCRIPTS_ROOT"] = old_root
+
+    docs = [json.loads(path.read_text()) for path in (transcripts_root / "mock-opencode").glob("*.json")]
+    [child] = [doc for doc in docs if doc["info"].get("parentID")]
+    crashed_lease = min(_leases_for_chunk(config, chunk_id), key=lambda row: row["epoch"])
+    root = next(doc for doc in docs if doc["info"]["id"] == crashed_lease["session_id"])
+    assert any(
+        part["type"] == "tool" and part["tool"] == "task" for message in root["messages"] for part in message["parts"]
+    )
+    stdout = next(path for path in (tmp_path / "runner").rglob("*.1.stdout") if "prt_before_task" in path.read_text())
+    assert '"tool_use"' not in stdout.read_text()
+    crashed = [row for row in _usage_facts_for_chunk(config, chunk_id) if row["lease_id"] == crashed_lease["lease_id"]]
+    [worker] = [row for row in crashed if row["kind"] == "spawn"]
+    assert worker["input_tokens"] == 7 + _step_tokens(child)
+    child_cost = sum(
+        part["cost"] for message in child["messages"] for part in message["parts"] if part["type"] == "step-finish"
+    )
+    assert worker["cost_usd"] == pytest.approx(child_cost)
+
+
 def _step_tokens(doc: dict) -> int:
     return sum(
         part["tokens"]["input"]
