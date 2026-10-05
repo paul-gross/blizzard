@@ -89,7 +89,7 @@ Major version 1; identity column `step_key`; partitioned by the UTC date of `end
 | `billed_partial`      | `bool`         | no   | Some invocation carried no billed cost                                                 |                                                                                                                                    |
 | `exported_at`         | `timestamp`    | no   | When this copy of the row was written                                                  |                                                                                                                                    |
 
-Newest copy of each `step_key`:
+View `steps_newest`:
 
 ```sql
 SELECT *
@@ -129,13 +129,91 @@ Major version 1; identity column `usage_id`; partitioned by the UTC date of `rec
 | `recorded_at`         | `timestamp` | no   | When the hub received it                          |                                  |
 | `exported_at`         | `timestamp` | no   | When this copy of the row was written             |                                  |
 
-Newest copy of each `usage_id`:
+View `invocations_newest`:
 
 ```sql
 SELECT *
 FROM (
   SELECT i.*, row_number() OVER (PARTITION BY usage_id ORDER BY exported_at DESC) AS copy_rank
   FROM invocations AS i
+) AS ranked
+WHERE copy_rank = 1
+```
+
+### `events`
+
+Major version 1; identity columns `derivation_id`, `kind`, `turn_path`, `occurrence`; partitioned by the UTC date of `step_started_at`.
+
+| Column              | Type        | On                | Null | Meaning                                                                                 | Values                                               |
+| ------------------- | ----------- | ----------------- | ---- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `record_type`       | `string`    | all               | no   | derivation, event or dropped                                                            | closed: `derivation`, `event`, `dropped`             |
+| `segment_id`        | `string`    | all               | no   | The transcript segment                                                                  |                                                      |
+| `extractor_version` | `string`    | derivation, event | yes  | The extractor that derived it; null on a dropped row                                    |                                                      |
+| `derivation_id`     | `string`    | derivation, event | yes  | The derivation's identity, as 32 hex characters; null on a dropped row                  |                                                      |
+| `derived_at`        | `timestamp` | derivation, event | yes  | When the hub derived it; null on a dropped row                                          |                                                      |
+| `complete`          | `bool`      | derivation        | yes  | The marker's own flag: false when the derivation stopped short; derivation rows only    |                                                      |
+| `event_count`       | `int64`     | derivation        | yes  | How many event rows the derivation holds; derivation rows only                          |                                                      |
+| `dropped_at`        | `timestamp` | dropped           | yes  | When the hub dropped the segment's events; dropped rows only                            |                                                      |
+| `kind`              | `string`    | event             | yes  | file_read, skill_invocation or agent_spawn; extensible; event rows only                 | open: `file_read`, `skill_invocation`, `agent_spawn` |
+| `subject`           | `string`    | event             | yes  | The path, the skill name, or the spawned agent type; null when the extractor names none |                                                      |
+| `tool`              | `string`    | event             | yes  | The tool the turn called                                                                |                                                      |
+| `turn_path`         | `string`    | event             | yes  | The event's place in the segment; event rows only                                       |                                                      |
+| `occurrence`        | `int64`     | event             | yes  | The event's place in the segment; event rows only                                       |                                                      |
+| `occurred_at`       | `timestamp` | event             | yes  | The turn's own time, when the transcript carries one                                    |                                                      |
+| `depth`             | `int64`     | event             | yes  | 0 for the main conversation, plus one per subagent nesting; event rows only             |                                                      |
+| `agent_type`        | `string`    | event             | yes  | The nearest enclosing subagent's type; null at depth 0                                  |                                                      |
+| `step_key`          | `string`    | all               | no   | The runner step the segment came from, by chunk and epoch                               |                                                      |
+| `trace_id`          | `string`    | all               | no   | That step's derived trace id, as 32 hex characters                                      |                                                      |
+| `step_started_at`   | `timestamp` | all               | no   | When that step started; the row's partition and backfill time                           |                                                      |
+| `chunk_id`          | `string`    | all               | no   | The segment's chunk                                                                     |                                                      |
+| `epoch`             | `int64`     | all               | no   | The segment's epoch                                                                     |                                                      |
+| `spawn_generation`  | `int64`     | all               | no   | Which worker spawn on the lease produced the segment                                    |                                                      |
+| `graph_id`          | `string`    | all               | no   | The graph the step stood in                                                             |                                                      |
+| `graph_name`        | `string`    | all               | no   | The graph's name                                                                        |                                                      |
+| `node_id`           | `string`    | all               | no   | The node                                                                                |                                                      |
+| `node_name`         | `string`    | all               | no   | The node's name                                                                         |                                                      |
+| `harness_id`        | `string`    | event             | yes  | As derived; event rows only                                                             |                                                      |
+| `harness_version`   | `string`    | event             | yes  | As derived; event rows only                                                             |                                                      |
+| `model`             | `string`    | event             | yes  | As derived; event rows only                                                             |                                                      |
+| `effort`            | `string`    | event             | yes  | As derived; event rows only                                                             |                                                      |
+| `exported_at`       | `timestamp` | all               | no   | When this copy of the row was written                                                   |                                                      |
+
+View `events_current`:
+
+```sql
+SELECT *
+FROM (
+  SELECT m.*, row_number() OVER (PARTITION BY m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
+  FROM (
+    SELECT
+      e.*,
+      max(CASE WHEN e.record_type = 'derivation' THEN e.derived_at END) OVER (PARTITION BY e.segment_id) AS newest_derived_at,
+      max(CASE WHEN e.record_type = 'dropped' THEN e.dropped_at END) OVER (PARTITION BY e.segment_id) AS last_dropped_at
+    FROM events AS e
+  ) AS m
+  WHERE m.record_type = 'event'
+    AND m.derived_at = m.newest_derived_at
+    AND (m.last_dropped_at IS NULL OR m.last_dropped_at <= m.newest_derived_at)
+) AS ranked
+WHERE copy_rank = 1
+```
+
+View `events_by_version`:
+
+```sql
+SELECT *
+FROM (
+  SELECT m.*, row_number() OVER (PARTITION BY m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
+  FROM (
+    SELECT
+      e.*,
+      max(CASE WHEN e.record_type = 'derivation' THEN e.derived_at END) OVER (PARTITION BY e.segment_id, e.extractor_version) AS newest_derived_at,
+      max(CASE WHEN e.record_type = 'dropped' THEN e.dropped_at END) OVER (PARTITION BY e.segment_id) AS last_dropped_at
+    FROM events AS e
+  ) AS m
+  WHERE m.record_type = 'event'
+    AND m.derived_at = m.newest_derived_at
+    AND (m.last_dropped_at IS NULL OR m.last_dropped_at <= m.newest_derived_at)
 ) AS ranked
 WHERE copy_rank = 1
 ```

@@ -43,8 +43,9 @@ the shape for operators. A raised schema version comes with an upgrade note; sch
 
 ## The egress contract
 
-[`contracts/egress/`](../contracts/egress/README.md) pins the shape of the `steps` and `invocations` datasets the hub
-exports: `dictionary.json` is the authored contract, and `golden/` and `_schema/` are generated from it.
+[`contracts/egress/`](../contracts/egress/README.md) pins the shape of the `steps`, `invocations` and `events` datasets
+and the views over them that the hub exports: `dictionary.json` is the authored contract, and `golden/` and `_schema/`
+are generated from it.
 `blizzard:egress-contract` fails when the code, the writer's output, `_schema/` or the published dictionary in
 [`docs/deployment/egress.md`](./deployment/egress.md) drift from it, so a shape change is always a deliberate edit to
 the dictionary.

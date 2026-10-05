@@ -1,0 +1,17 @@
+{
+  "pass_started_at": "2026-01-02T00:00:00.000000Z",
+  "backfill": false,
+  "extractor_version": "blizzard-analytics/3",
+  "files": [
+    {
+      "path": "events/v1/date=2026-01-01/events-20260102T000000Z-gold-000007.ndjson",
+      "dataset": "events",
+      "version": 1,
+      "partition": "2026-01-01",
+      "rows": 19,
+      "first_position": "2026-01-01T01:00:00.000000Z|seg-upgraded|blizzard-analytics/3",
+      "last_position": "2026-01-01T08:00:00.000000Z|seg-sidechain|blizzard-analytics/3",
+      "sha256": "<normalized>"
+    }
+  ]
+}
