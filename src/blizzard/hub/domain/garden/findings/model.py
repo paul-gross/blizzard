@@ -102,7 +102,7 @@ class FindingAlreadyExited(FindingTransitionRefused):
 
     def __init__(self, finding_id: str, kind: str, state: str) -> None:
         super().__init__(
-            finding_id, kind, state, f"finding {finding_id!r} is already {state!r}; reopen it before {kind!r}"
+            finding_id, kind, state, f"finding {finding_id!r} is already {state}; reopen it before {kind!r}"
         )
 
 

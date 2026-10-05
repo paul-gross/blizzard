@@ -18,7 +18,8 @@ class IReadChunkQuestionsRepository(Protocol):
         ...
 
     def list_open_questions(self) -> list[NodeQuestion]:
-        """Every unanswered question across the fleet — the ``hub status`` surface."""
+        """Every unanswered question on a chunk not yet stopped or done, across the fleet — the
+        ``hub status`` surface."""
         ...
 
     def load_questions(self, chunk_id: str) -> list[NodeQuestion]:

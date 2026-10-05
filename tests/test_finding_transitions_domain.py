@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.findings import FindingState
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.findings.model import (
     EXIT_KINDS,
@@ -115,6 +116,20 @@ def test_an_exit_on_an_exited_finding_is_refused(kind: str, exited: str) -> None
         _finding(state=exited).exit_fact(kind, note="n", actor="u1", at=_AT)
 
     assert (info.value.finding_id, info.value.kind, info.value.state) == ("fin_1", kind, exited)
+
+
+def test_an_exit_refusal_names_the_plain_state() -> None:
+    with pytest.raises(FindingAlreadyExited) as info:
+        _finding(state=FindingState.RESOLVED).exit_fact("wont-fix", note="n", actor="u1", at=_AT)
+
+    assert str(info.value) == "finding 'fin_1' is already resolved; reopen it before 'wont-fix'"
+
+
+def test_a_reopen_refusal_names_the_live_state() -> None:
+    with pytest.raises(FindingNotReopenable) as info:
+        _finding(state=FindingState.LIVE).exit_fact("reopened", note="n", actor="u1", at=_AT)
+
+    assert str(info.value) == "finding 'fin_1' is already live; nothing to reopen"
 
 
 @pytest.mark.parametrize("state", ["gone", "delivered", *sorted(EXIT_KINDS)])
