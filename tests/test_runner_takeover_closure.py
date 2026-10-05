@@ -17,7 +17,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -71,7 +71,7 @@ def _seed_taken_over(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
 
 
 def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=status,
         latest_epoch=1,

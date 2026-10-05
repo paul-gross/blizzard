@@ -16,11 +16,11 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Pull, Reap
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.question import QuestionView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.unit
@@ -71,14 +71,14 @@ def _ctx(store, *, hub=None, probe=None, clock=None):  # type: ignore[no-untyped
     )
 
 
-def _open_question(question_id="qn_1") -> QuestionView:  # type: ignore[no-untyped-def]
-    return QuestionView(
+def _open_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-untyped-def]
+    return HubQuestion(
         question_id=question_id, chunk_id="ch_1", runner_id="r1", epoch=1, question="Which API?", asked_at="t"
     )
 
 
-def _answered_question(question_id="qn_1") -> QuestionView:  # type: ignore[no-untyped-def]
-    return QuestionView(
+def _answered_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-untyped-def]
+    return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
         runner_id="r1",
@@ -363,7 +363,7 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.STOPPED,
         latest_epoch=1,

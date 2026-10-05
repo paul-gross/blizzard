@@ -22,7 +22,8 @@ from blizzard.runner.environments.repository import (
     group_bindings_by_chunk,
     require_unheld,
 )
-from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError
+from blizzard.runner.harness.capability_snapshot import HarnessCapability
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError, QueueEntry
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.operator_requests import IReadRequeueRepository
 from blizzard.runner.lifecycle.model import (
@@ -39,10 +40,8 @@ from blizzard.runner.lifecycle.model import (
     recovery_owner,
 )
 from blizzard.runner.lifecycle.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
-from blizzard.wire.runner import RunnerCapability
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -84,7 +83,7 @@ class ClaimContext(SpawnContext, Protocol):
     def config(self) -> ClaimConfig: ...
     @property
     def provider(self) -> IWorkspaceProvider: ...
-    def capability_snapshot(self) -> tuple[RunnerCapability, ...]: ...
+    def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
 
 
 @dataclass
@@ -95,21 +94,20 @@ class ReadyQueue:
     peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
 
     ctx: ClaimContext
-    _entries: list[QueuePeekEntry] = field(default_factory=list)
+    _entries: list[QueueEntry] = field(default_factory=list)
 
     @classmethod
     def peeked(cls, ctx: ClaimContext) -> ReadyQueue:
-        request = QueuePeekRequest(
-            capabilities=list(ctx.capability_snapshot()),
-            # The same knob `_next` reach-ahead already honors locally, sent per call
-            # rather than read hub-side, so both dimensions get the identical policy.
-            policy="hold" if ctx.config.queue_strict else "pass-over",
-        )
         try:
-            peeked = ctx.hub.peek_queue(request)
+            peeked = ctx.hub.peek_queue(
+                ctx.capability_snapshot(),
+                # The same knob `_next` reach-ahead already honors locally, sent per call
+                # rather than read hub-side, so both dimensions get the identical policy.
+                policy="hold" if ctx.config.queue_strict else "pass-over",
+            )
         except HubClientError:
             return cls(ctx, _entries=[])
-        return cls(ctx, _entries=list(peeked.entries))
+        return cls(ctx, _entries=list(peeked))
 
     def claim_one(self) -> bool:
         """Claim and start one chunk. ``False`` when nothing more can be filled this tick;
@@ -154,7 +152,7 @@ class ReadyQueue:
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
-    def _next(self) -> QueuePeekEntry | None:
+    def _next(self) -> QueueEntry | None:
         """Pick this runner's entry out of this fill's one peeked snapshot,
         left in place until ``claim_one()`` knows the outcome and drops it itself —
         a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
@@ -162,7 +160,7 @@ class ReadyQueue:
         reach-ahead scans for the first unmarked entry."""
         return pick_claim_entry(self._entries, strict=self.ctx.config.queue_strict)
 
-    def _acquire(self, entry: QueuePeekEntry) -> list[AcquiredEnvironment] | None:
+    def _acquire(self, entry: QueueEntry) -> list[AcquiredEnvironment] | None:
         held = self.ctx.stores.environments.held_environment_ids()
         _CP_BEFORE_ACQUIRE.reached()
         try:
@@ -205,9 +203,7 @@ class ReadyQueue:
                 self.ctx.events.publish_environment_changed(chunk_id, env.environment_id, cause="bound")
         _CP_AFTER_BIND.reached()
 
-    def _refuse_held(
-        self, entry: QueuePeekEntry, acquired: list[AcquiredEnvironment], exc: EnvironmentHeldError
-    ) -> None:
+    def _refuse_held(self, entry: QueueEntry, acquired: list[AcquiredEnvironment], exc: EnvironmentHeldError) -> None:
         """The provider handed back an environment another chunk still holds: record no binding,
         give back every acquired environment no other chunk holds, and drop the entry so the rest
         of the tick still runs. A held environment stays with its holder — releasing it at the
@@ -236,7 +232,7 @@ class ReadyQueue:
             environment_ids=[env.environment_id for env in acquired],
         )
 
-    def _environments_wanted(self, entry: QueuePeekEntry) -> int:
+    def _environments_wanted(self, entry: QueueEntry) -> int:
         """How many environments this queue entry's chunk should be acquired.
 
         The single place the count is decided, so raising it above one is a change here rather
@@ -298,7 +294,7 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
-    def _owns_node_entry(self, chunk_id: str, view: ChunkStatusView, bindings: list[EnvBinding]) -> bool:
+    def _owns_node_entry(self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding]) -> bool:
         """Whether FILL, not ADVANCE, spawns this running chunk's lease-less current node.
 
         ADVANCE enters a strictly newer hub epoch through the node's declared session, so
@@ -313,7 +309,7 @@ class InterruptedClaims:
             lease_in_binding_tenure=self.ctx.stores.lease_record.has_lease_in_binding_tenure(chunk_id, bound_at),
         )
 
-    def _adopt(self, chunk_id: str, view: ChunkStatusView) -> None:
+    def _adopt(self, chunk_id: str, view: ChunkState) -> None:
         """Spawn the current node for a claimed chunk whose spawn never minted a lease.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
@@ -332,7 +328,7 @@ class InterruptedClaims:
             except HubClientError:
                 return  # hub unreachable — the binding is durable; retry next tick
             self.ctx.chunk_views.invalidate(chunk_id)  # named alongside the other writes
-            self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
+            self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed, at=self.ctx.clock.now())
         envelope = self._envelope(chunk_id, "adopted", view.latest_epoch)
         if envelope is None:
             return

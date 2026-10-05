@@ -32,6 +32,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.client import HubQuestion, QueueEntry
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
@@ -39,14 +40,12 @@ from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
+from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     SampleMissReason,
 )
-from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -125,7 +124,7 @@ def test_fill_claim_publishes_lease_created_environment_bound_and_fact_changed(t
     events = EventBroker()
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     ctx = make_context(
         store,
@@ -220,7 +219,7 @@ def test_pull_abandon_publishes_environment_released(tmp_path: Path) -> None:
     events = EventBroker()
     _seed_lease(store, retries_max=2)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.STOPPED,
         latest_epoch=1,
@@ -315,7 +314,7 @@ def test_dormant_on_answer_publishes_ask_answered(tmp_path: Path) -> None:
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     hub = FakeHub()
-    hub.questions["qn_1"] = QuestionView(
+    hub.questions["qn_1"] = HubQuestion(
         question_id="qn_1",
         chunk_id="ch_1",
         runner_id="r1",
@@ -360,7 +359,7 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.STOPPED,
         latest_epoch=1,
@@ -432,12 +431,12 @@ def test_pull_reconcile_leases_publishes_lease_changed_dormant_on_operator_pause
     events = EventBroker()
     _seed_lease(store, retries_max=2)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.PAUSED,
         latest_epoch=1,
         route_runner_id="r1",
-        pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
+        pause=ChunkPause(by="operator", set_at="2026-07-16T12:00:00Z"),
     )
     ctx = make_context(
         store,
@@ -486,7 +485,7 @@ def test_pull_reconcile_escalations_publishes_escalation_closed(tmp_path: Path) 
     )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.STOPPED,
         latest_epoch=1,
@@ -596,7 +595,7 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
         opened_at=_NOW,
     )
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.STOPPED,
         latest_epoch=1,
@@ -900,7 +899,7 @@ def test_no_broker_wired_publishes_nothing_and_raises_nothing(tmp_path: Path) ->
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     ctx = make_context(
         store,

@@ -20,7 +20,7 @@ from blizzard.runner.leases.escalations import (
     resume_workdir,
 )
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 
 pytestmark = pytest.mark.unit
 
@@ -34,8 +34,8 @@ def _escalation() -> ParkedEscalation:
     )
 
 
-def _view(status: ChunkStatus = ChunkStatus.NEEDS_HUMAN, *, route: str | None = "r1") -> ChunkStatusView:
-    return ChunkStatusView(chunk_id="ch_1", status=status, route_runner_id=route, latest_epoch=3)
+def _view(status: ChunkStatus = ChunkStatus.NEEDS_HUMAN, *, route: str | None = "r1") -> ChunkState:
+    return ChunkState(chunk_id="ch_1", status=status, route_runner_id=route, latest_epoch=3)
 
 
 # --- cause_of ---------------------------------------------------------------------------

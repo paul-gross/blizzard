@@ -11,6 +11,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,7 +41,7 @@ from blizzard.runner.harness.adapter import (
     WorkerIdentityError,
     WorkerPreamble,
 )
-from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
+from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.overload import ProviderOverload
@@ -55,9 +56,12 @@ from blizzard.runner.hub.client import (
     ClaimRequest,
     FactPushAck,
     HubClientError,
+    HubQuestion,
     IHubClient,
     PushedFact,
+    QueueEntry,
     RouteClaimOutcome,
+    SubscriptionDeclaration,
 )
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -66,6 +70,7 @@ from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFil
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode, GraphArtifact, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.runner.process.probe import IProcessProbe
@@ -115,11 +120,7 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.runner.usage.repository import derive_invocation_cost
 from blizzard.tools.invariants import RunnerInvariants, Violation
-from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.route import RouteTokenRekeyResponse
-from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
+from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
@@ -341,6 +342,14 @@ def runner_invariant_violations(store: object) -> list[Violation]:
     return RunnerInvariants(store._engine).run()
 
 
+@dataclass(frozen=True)
+class PeekCall:
+    """One ``peek_queue`` call the fake recorded: the capabilities and the policy it was sent."""
+
+    capabilities: list[HarnessCapability]
+    policy: str
+
+
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
@@ -352,18 +361,18 @@ class FakeHub:
         # The runner id the unscripted `chunk_statuses` fallback's route reports as holding
         # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id`.
         self.default_runner_id = default_runner_id
-        self.queue: list[QueuePeekEntry] = []
+        self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
-        self.queue_responses: list[list[QueuePeekEntry]] = []
+        self.queue_responses: list[list[QueueEntry]] = []
         self.peek_queue_calls = 0  # counts `peek_queue` calls — one per Fill.run()
         # One entry per `peek_queue` call, naming the request it carried —
         # lets a test assert on the capabilities/policy the call site sends.
-        self.peek_queue_requests: list[QueuePeekRequest] = []
+        self.peek_queue_requests: list[PeekCall] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyReply] = []
         self.envelopes: dict[str, Envelope] = {}
-        self.chunks: dict[str, ChunkStatusView] = {}
+        self.chunks: dict[str, ChunkState] = {}
         # One entry per `chunk_statuses` call, naming the ids it requested —
         # lets a test assert on the per-tick batching the cache is built for.
         self.chunk_statuses_calls: list[list[str]] = []
@@ -386,16 +395,16 @@ class FakeHub:
         # size/budget/rate rejection, which no fake could otherwise surface to a test.
         self.reject_transcript_seqs: set[int] = set()
         self.refuse_transcript_seqs: set[int] = set()  # acked, never stored: another owner's (chunk, epoch)
-        self.questions: dict[str, QuestionView] = {}
-        self.delivered: list[tuple[str, QuestionView]] = []
+        self.questions: dict[str, HubQuestion] = {}
+        self.delivered: list[tuple[str, HubQuestion]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
         self.registered_capacities: list[int | None] = []  # env_capacity per register call
         self.registered_urls: list[str | None] = []  # url per register call
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call
         # capabilities per register call
-        self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
+        self.registered_capabilities: list[tuple[HarnessCapability, ...]] = []
         # subscriptions per register call
-        self.registered_subscriptions: list[tuple[RunnerSubscriptionDeclaration, ...]] = []
+        self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
         self.registered_gates: list[tuple[str, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
@@ -410,12 +419,12 @@ class FakeHub:
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
-    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
         self.peek_queue_calls += 1
-        self.peek_queue_requests.append(request)
+        self.peek_queue_requests.append(PeekCall(capabilities=list(capabilities), policy=policy))
         if self.queue_responses:
-            return QueuePeekResponse(entries=self.queue_responses.pop(0))
-        return QueuePeekResponse(entries=list(self.queue))
+            return self.queue_responses.pop(0)
+        return list(self.queue)
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         self.claims.append(claim)
@@ -497,12 +506,12 @@ class FakeHub:
             raise ChunkEndedError(f"chunk {chunk_id} ended", detail="chunk has ended")
         return self.envelopes[chunk_id]
 
-    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         if self.down:
             raise HubClientError("fake hub is down")
         ids = list(chunk_ids)
         self.chunk_statuses_calls.append(ids)
-        found: dict[str, ChunkStatusView] = {}
+        found: dict[str, ChunkState] = {}
         for chunk_id in ids:
             if chunk_id in self.not_found:
                 continue  # omitted, never a 404 — mirrors the real hub's batch-read semantics
@@ -511,7 +520,7 @@ class FakeHub:
                 continue
             # Default a hub-node-held chunk to `delivering` with its route still ours — the
             # common case — unless a test scripts something else (e.g. a released route).
-            found[chunk_id] = ChunkStatusView(
+            found[chunk_id] = ChunkState(
                 chunk_id=chunk_id,
                 status=ChunkStatus.DELIVERING,
                 route_runner_id=self.default_runner_id,
@@ -529,7 +538,7 @@ class FakeHub:
             chunk_id=chunk_id, status=ChunkStatus.DELIVERING, ran=False, detail="scripted default"
         )
 
-    def get_question(self, question_id: str) -> QuestionView:
+    def get_question(self, question_id: str) -> HubQuestion:
         return self.questions[question_id]
 
     def register_runner(
@@ -540,8 +549,8 @@ class FakeHub:
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
-        capabilities: tuple[RunnerCapability, ...] = (),
-        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        capabilities: tuple[HarnessCapability, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
     ) -> None:
         if self.down:
@@ -559,7 +568,7 @@ class FakeHub:
             raise HubClientError("fake hub is down")
         return self.paused
 
-    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+    def rekey_route_token(self, chunk_id: str) -> str:
         if chunk_id in self.not_found:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         if chunk_id in self.ended:
@@ -568,7 +577,7 @@ class FakeHub:
             raise HubClientError("fake hub is down")
         self.rekey_calls.append(chunk_id)
         token = self.rekey_responses.get(chunk_id, "rtok_rekeyed")
-        return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=token)
+        return token
 
 
 class FakeProvider:

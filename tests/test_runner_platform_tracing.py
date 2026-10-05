@@ -62,6 +62,7 @@ from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.runner.tracing.attributes import RUNNER_ID
 from blizzard.runner.tracing.platform import (
@@ -77,7 +78,6 @@ from blizzard.runner.tracing.receiver_limits import (
     SpanRateLimiter,
 )
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
-from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
 from tests.runner_fakes import (
@@ -738,12 +738,12 @@ def _held(ctx: LoopContext) -> None:
 
 def test_a_resolved_gate_applies_under_its_gate_step_root(tmp_path: Path) -> None:
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,
         latest_epoch=2,
         route_runner_id=_RUNNER,
-        decision=ChunkDecisionStatusView(
+        decision=ChunkGate(
             decision_id="dec_1", node_id="nd_gate", epoch=2, resolved_choice="approve", transitioned=False
         ),
     )
@@ -754,7 +754,7 @@ def test_a_resolved_gate_applies_under_its_gate_step_root(tmp_path: Path) -> Non
 
 def _advanced_to(epoch: int) -> FakeHub:
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=epoch, route_runner_id=_RUNNER
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=[("pass", "done")])
@@ -784,7 +784,7 @@ def test_a_hub_node_poll_parents_one_past_the_views_latest_epoch_even_ahead_of_t
     tmp_path: Path, latest_epoch: int
 ) -> None:
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.DELIVERING, latest_epoch=latest_epoch, route_runner_id=_RUNNER
     )
     spans = _ticked(tmp_path, hub, _held_after_lease_1)

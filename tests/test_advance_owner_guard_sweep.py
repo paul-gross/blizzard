@@ -24,7 +24,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.steps import Advance
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -66,8 +66,8 @@ def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:
     return HarnessRegistry(bindings)
 
 
-def _done_chunk(chunk_id: str) -> ChunkStatusView:
-    return ChunkStatusView(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
+def _done_chunk(chunk_id: str) -> ChunkState:
+    return ChunkState(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
 
 
 def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
@@ -310,7 +310,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
     assert launched is not None and launched.pid is not None
 
     # The recorded owner stops resolving, AND the hub has reassigned the chunk elsewhere.
-    hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="other-runner")
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="other-runner")
     blocked_ctx = replace(ctx, harnesses=HarnessRegistry({}))
 
     Advance(blocked_ctx).run()  # must not raise, and must not escalate
@@ -485,11 +485,11 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable, so `Attempt.detached`'s
     # own check (now taken ahead of the escalation too) must not read this as reassigned.
-    hub.chunks["ch_pool"] = ChunkStatusView(
+    hub.chunks["ch_pool"] = ChunkState(
         chunk_id="ch_pool", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=2
     )
     hub.envelopes["ch_pool"] = _pooled_envelope("ch_pool", "verify", "nd_verify")
-    hub.chunks["ch_sibling"] = ChunkStatusView(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
+    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
     hub.envelopes["ch_sibling"] = make_envelope(
         "ch_sibling", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.FRESH
     )
@@ -552,7 +552,7 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
 
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable.
-    hub.chunks["ch_plain"] = ChunkStatusView(
+    hub.chunks["ch_plain"] = ChunkState(
         chunk_id="ch_plain", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=2
     )
     hub.envelopes["ch_plain"] = make_envelope(
@@ -563,7 +563,7 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
         session=SessionMode.RESUME,
         session_source="build",  # a targeted, un-pooled resume — no `session_name`
     )
-    hub.chunks["ch_sibling"] = ChunkStatusView(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
+    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
     hub.envelopes["ch_sibling"] = make_envelope(
         "ch_sibling", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.FRESH
     )

@@ -13,6 +13,7 @@ import httpx
 from pydantic import TypeAdapter
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     ChunkEndedError,
     ChunkNotFoundError,
@@ -22,11 +23,16 @@ from blizzard.runner.hub.client import (
     DependencyDenial,
     FactPushAck,
     HubClientError,
+    HubQuestion,
     IHubClient,
     IncompatibleDenial,
     PausedDenial,
     PushedFact,
+    QueueBlock,
+    QueueEntry,
+    QueueWorkRef,
     RouteClaimOutcome,
+    SubscriptionDeclaration,
     TerminalDenial,
 )
 from blizzard.runner.hub.node_steps import (
@@ -35,6 +41,7 @@ from blizzard.runner.hub.node_steps import (
     decision_submission,
     envelope_of,
 )
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
@@ -80,8 +87,9 @@ class HttpHubClient:
     def __init__(self, client: httpx.Client) -> None:
         self._client = client
 
-    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
         path = f"{_FLEET_API}/queue/peek"
+        request = QueuePeekRequest(capabilities=[_capability(c) for c in capabilities], policy=policy)
         try:
             resp = self._client.post(path, json=request.model_dump(mode="json"))
         except httpx.HTTPError as exc:
@@ -89,9 +97,9 @@ class HttpHubClient:
         if resp.status_code == httpx.codes.UNAUTHORIZED:
             # No token, or the matched verb's own always-raising demand for a principal
             # — the legacy verb serves this caller in every auth mode instead.
-            return QueuePeekResponse.model_validate(self._get(path).json())
+            return _queue(QueuePeekResponse.model_validate(self._get(path).json()))
         self._raise_for_status(resp, f"POST {path}")
-        return QueuePeekResponse.model_validate(resp.json())
+        return _queue(QueuePeekResponse.model_validate(resp.json()))
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         body = RouteClaim(
@@ -158,14 +166,14 @@ class HttpHubClient:
         )
         return envelope_of(NodeEnvelope.model_validate(resp.json()))
 
-    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         ids = list(dict.fromkeys(chunk_ids))
-        result: dict[str, ChunkStatusView] = {}
+        result: dict[str, ChunkState] = {}
         for start in range(0, len(ids), _CHUNK_STATUSES_BATCH_LIMIT):
             batch = ids[start : start + _CHUNK_STATUSES_BATCH_LIMIT]
             resp = self._get(f"{_FLEET_API}/chunk-statuses", params={"chunk_id": batch})
             for view in TypeAdapter(list[ChunkStatusView]).validate_python(resp.json()):
-                result[view.chunk_id] = view
+                result[view.chunk_id] = _chunk_state(view)
         return result
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
@@ -177,9 +185,9 @@ class HttpHubClient:
         self._raise_for_status(resp, f"POST {path}")
         return HubAdvanceResponse.model_validate(resp.json())
 
-    def get_question(self, question_id: str) -> QuestionView:
+    def get_question(self, question_id: str) -> HubQuestion:
         resp = self._get(f"{_FLEET_API}/questions/{question_id}")
-        return QuestionView.model_validate(resp.json())
+        return _question(QuestionView.model_validate(resp.json()))
 
     def register_runner(
         self,
@@ -189,8 +197,8 @@ class HttpHubClient:
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
-        capabilities: tuple[RunnerCapability, ...] = (),
-        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        capabilities: tuple[HarnessCapability, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
     ) -> None:
         self._post(
@@ -201,8 +209,10 @@ class HttpHubClient:
                 env_capacity=env_capacity,
                 url=url,
                 redirect_uris=list(redirect_uris),
-                capabilities=list(capabilities),
-                subscriptions=list(subscriptions),
+                capabilities=[_capability(c) for c in capabilities],
+                subscriptions=[
+                    RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider) for d in subscriptions
+                ],
                 gates=list(gates),
             ).model_dump(mode="json"),
         )
@@ -211,9 +221,9 @@ class HttpHubClient:
         resp = self._get(f"{_FLEET_API}/runners/{runner_id}")
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
-    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+    def rekey_route_token(self, chunk_id: str) -> str:
         resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True)
-        return RouteTokenRekeyResponse.model_validate(resp.json())
+        return RouteTokenRekeyResponse.model_validate(resp.json()).route_token
 
     # --- plumbing -----------------------------------------------------------
 
@@ -315,3 +325,80 @@ def _incompatible(wire: RouteClaimIncompatibleDenial) -> IncompatibleDenial:
 
 def _paused(wire: RouteClaimPausedDenial) -> PausedDenial:
     return PausedDenial(chunk_id=wire.chunk_id, runner_id=wire.runner_id, detail=wire.detail)
+
+
+def _capability(capability: HarnessCapability) -> RunnerCapability:
+    return RunnerCapability(
+        harness_id=capability.harness_id,
+        version=capability.version,
+        tiers=list(capability.tiers),
+        default=capability.default,
+        available=capability.available,
+    )
+
+
+def _queue(wire: QueuePeekResponse) -> list[QueueEntry]:
+    return [
+        QueueEntry(
+            chunk_id=e.chunk_id,
+            graph_id=e.graph_id,
+            position=e.position,
+            work_refs=[QueueWorkRef(source=r.source, ref=r.ref) for r in e.work_refs],
+            blocked=QueueBlock(prerequisite_chunk_id=e.blocked.prerequisite_chunk_id, unmet_count=e.blocked.unmet_count)
+            if e.blocked is not None
+            else None,
+        )
+        for e in wire.entries
+    ]
+
+
+def _chunk_state(wire: ChunkStatusView) -> ChunkState:
+    cost, decision, pause = wire.cost, wire.decision, wire.pause
+    return ChunkState(
+        chunk_id=wire.chunk_id,
+        status=wire.status,
+        route_runner_id=wire.route_runner_id,
+        pause=ChunkPause(by=pause.by, set_at=pause.set_at) if pause is not None else None,
+        latest_epoch=wire.latest_epoch,
+        restart_epochs=list(wire.restart_epochs),
+        cost=ChunkSpend(
+            input_tokens=cost.input_tokens,
+            output_tokens=cost.output_tokens,
+            cache_read_tokens=cost.cache_read_tokens,
+            cache_create_tokens=cost.cache_create_tokens,
+            cost_usd=cost.cost_usd,
+            cost_partial=cost.cost_partial,
+            estimated_cost_usd=cost.estimated_cost_usd,
+            billed_partial=cost.billed_partial,
+        ),
+        decision=ChunkGate(
+            decision_id=decision.decision_id,
+            node_id=decision.node_id,
+            epoch=decision.epoch,
+            resolved_choice=decision.resolved_choice,
+            transitioned=decision.transitioned,
+        )
+        if decision is not None
+        else None,
+    )
+
+
+def _question(wire: QuestionView) -> HubQuestion:
+    return HubQuestion(
+        question_id=wire.question_id,
+        chunk_id=wire.chunk_id,
+        runner_id=wire.runner_id,
+        epoch=wire.epoch,
+        question=wire.question,
+        asked_at=wire.asked_at,
+        node_id=wire.node_id,
+        session_id=wire.session_id,
+        harness_id=wire.harness_id,
+        options=list(wire.options),
+        answered=wire.answered,
+        answer=wire.answer,
+        answered_by=wire.answered_by,
+        answered_at=wire.answered_at,
+        delivered=wire.delivered,
+        delivered_at=wire.delivered_at,
+    )

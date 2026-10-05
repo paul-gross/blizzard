@@ -18,6 +18,7 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.capability_snapshot import (
+    HarnessCapability,
     HarnessVersionCache,
     TickCapabilities,
     capability_snapshot,
@@ -41,7 +42,6 @@ from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.runner.usage.recorder import UsageRecorder
-from blizzard.wire.runner import RunnerCapability
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -205,7 +205,7 @@ class LoopContext:
     #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
     retention_passes: RetentionPasses | None = None
 
-    def capability_snapshot(self) -> tuple[RunnerCapability, ...]:
+    def capability_snapshot(self) -> tuple[HarnessCapability, ...]:
         """This runner's capabilities as the registration push and the matched fleet peek
         both carry them — served from this tick's memo when ``tick()`` wired one, since
         building one probes every bound harness binary."""

@@ -31,8 +31,8 @@ from blizzard.runner.lifecycle.model import (
     spend_cap_reached,
 )
 from blizzard.runner.lifecycle.spawn import SpawnConfig
+from blizzard.runner.node_steps.chunk_state import ChunkSpend
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.wire.chunk import ChunkUsageTotalView
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -195,7 +195,7 @@ class OutboundDrain:
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         )
 
-    def _spend_cap_breach(self, lease: Lease) -> tuple[ChunkUsageTotalView, float] | None:
+    def _spend_cap_breach(self, lease: Lease) -> tuple[ChunkSpend, float] | None:
         """The chunk's spend and the cap it reached, when it has (:func:`spend_cap_reached`).
 
         Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is

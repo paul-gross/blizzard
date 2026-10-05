@@ -11,10 +11,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.registry import IHarnessRegistry
-from blizzard.wire.runner import RunnerCapability
+
+
+@domain_model
+@dataclass(frozen=True)
+class HarnessCapability:
+    """One harness binding this runner can execute — its id, its observed version (``None`` when
+    the binding exposes none), the tier ids it resolves, whether it is the runner's default, and
+    whether it is available."""
+
+    harness_id: str
+    version: str | None = None
+    tiers: list[str] = field(default_factory=list)
+    default: bool = False
+    available: bool = True
 
 
 @dataclass
@@ -51,14 +65,14 @@ def capability_snapshot(
     harnesses: IHarnessRegistry,
     versions: HarnessVersionCache | None = None,
     health: HarnessHealthCache | None = None,
-) -> tuple[RunnerCapability, ...]:
+) -> tuple[HarnessCapability, ...]:
     """One entry per known harness binding, each carrying the tier ids its adapter can resolve, its observed
     version, and its computed availability. The entry matching :func:`default_harness_id` is marked
     ``default``. ``versions`` routes the version probe through the cross-tick cache when wired; omitted, this probes
     directly (a one-shot caller with no "next tick" a cache would pay off). ``health`` omitted reports every entry
     unprobed (:func:`~blizzard.runner.harness.health.reported_health`): a caller with no health cache asserts none."""
     default_id = default_harness_id(harnesses)
-    snapshot: list[RunnerCapability] = []
+    snapshot: list[HarnessCapability] = []
     for harness_id in harnesses.known_harnesses:
         observe_version = harnesses.lifecycle(harness_id).observe_version
         model = harnesses.model_resolution(harness_id)
@@ -66,7 +80,7 @@ def capability_snapshot(
         refreshed = health.refresh(harness_id, adapter=model, observed_version=version) if health is not None else None
         result = reported_health(harness_id, refreshed)
         snapshot.append(
-            RunnerCapability(
+            HarnessCapability(
                 harness_id=harness_id,
                 version=version,
                 tiers=list(model.resolvable_tier_ids()),
@@ -86,9 +100,9 @@ class TickCapabilities:
     harnesses: IHarnessRegistry
     versions: HarnessVersionCache | None = None
     health: HarnessHealthCache | None = None
-    _snapshot: tuple[RunnerCapability, ...] | None = field(default=None, compare=False)
+    _snapshot: tuple[HarnessCapability, ...] | None = field(default=None, compare=False)
 
-    def get(self) -> tuple[RunnerCapability, ...]:
+    def get(self) -> tuple[HarnessCapability, ...]:
         if self._snapshot is None:
             self._snapshot = capability_snapshot(self.harnesses, self.versions, self.health)
         return self._snapshot

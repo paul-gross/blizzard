@@ -18,14 +18,13 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.transcript import TranscriptPosition
+from blizzard.runner.hub.client import HubQuestion, QueueEntry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -78,7 +77,7 @@ def test_fresh_spawn_opens_a_spawn_boundary_at_generation_one(tmp_path: Path) ->
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
@@ -110,9 +109,7 @@ def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path:
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
     tail = TranscriptPosition(token='{"main": 4096, "sidecars": {}}')
     transcript_source = FakeTranscriptSource(tail_positions_by_session={"sess-a": tail})
     harness = FakeHarness(
@@ -347,7 +344,7 @@ def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_bou
     store.record_park(lease_id="lease_r", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
     hub = FakeHub()
-    hub.questions["qn_1"] = QuestionView(
+    hub.questions["qn_1"] = HubQuestion(
         question_id="qn_1",
         chunk_id="ch_1",
         runner_id="r1",

@@ -19,7 +19,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -66,7 +66,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
         latest_epoch=1,
@@ -445,7 +445,7 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(  # detached: re-derived ready, route released
+    hub.chunks["ch_1"] = ChunkState(  # detached: re-derived ready, route released
         chunk_id="ch_1",
         status=ChunkStatus.READY,
         latest_epoch=1,

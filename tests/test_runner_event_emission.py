@@ -18,10 +18,10 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, 
 from blizzard.runner.environments.worktree import WorktreeGitError
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.loop.steps import Advance, Fill, Reap
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.queue import QueuePeekEntry
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -174,7 +174,7 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
     hub = FakeHub()
     hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
     # The hub now routes ch_1 to a DIFFERENT runner — a reassignment, not a detach.
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,
         latest_epoch=1,
@@ -218,7 +218,7 @@ def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignor
 def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     ctx = make_context(
         store,
         hub=hub,
@@ -289,7 +289,7 @@ def test_spawn_launch_failure_emits_a_command_failed_and_reraises(tmp_path):  # 
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     ctx = make_context(
         store,

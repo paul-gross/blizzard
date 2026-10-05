@@ -19,13 +19,13 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Fill
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.operator.requeue import (
     ChunkNotRequeueable,
     RequeueBlockedByOpenTakeover,
     RequeueScope,
     RequeueService,
 )
-from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.component
@@ -268,7 +268,7 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
     _service(store).requeue(_scope(store))
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.NEEDS_HUMAN,
         latest_epoch=1,

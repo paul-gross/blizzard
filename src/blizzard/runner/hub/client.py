@@ -7,17 +7,15 @@ under ``internal/`` is the reference binding, and a test injects a fake.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.capability_snapshot import HarnessCapability
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
-from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.route import RouteTokenRekeyResponse
-from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
+from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 
@@ -46,6 +44,71 @@ class ChunkEndedError(HubClientError):
     def __init__(self, message: str, *, detail: str) -> None:
         super().__init__(message)
         self.detail = detail
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueWorkRef:
+    """One work pointer a ready chunk carries: its source and the source-native ref."""
+
+    source: str
+    ref: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueBlock:
+    """A ready chunk's blocked marking: its earliest-declared unmet prerequisite, and how many
+    prerequisites are unmet."""
+
+    prerequisite_chunk_id: str
+    unmet_count: int = 1
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueEntry:
+    """One ready chunk, in the hub's queue order."""
+
+    chunk_id: str
+    graph_id: str
+    position: int
+    work_refs: list[QueueWorkRef] = field(default_factory=list)
+    blocked: QueueBlock | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class SubscriptionDeclaration:
+    """One provider subscription this runner declares at registration — the key every usage
+    fact names it by."""
+
+    slug: str
+    name: str
+    provider: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class HubQuestion:
+    """A worker's question as the hub holds it, with its derived answer and delivery state."""
+
+    question_id: str
+    chunk_id: str
+    runner_id: str
+    epoch: int
+    question: str
+    asked_at: str
+    node_id: str | None = None
+    session_id: str | None = None
+    harness_id: str | None = None
+    options: list[str] = field(default_factory=list)
+    answered: bool = False
+    answer: str | None = None
+    answered_by: str | None = None
+    answered_at: str | None = None
+    delivered: bool = False
+    delivered_at: str | None = None
 
 
 @domain_model
@@ -189,7 +252,7 @@ class IChunkStatusReader(Protocol):
     composes this rather than re-declaring the method — one contract, not two copies free
     to drift."""
 
-    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
         present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
         absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
@@ -200,7 +263,7 @@ class IChunkStatusReader(Protocol):
 class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
-    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
         """The FILL read — at most one matched entry while this runner holds a token
         (``POST /api/fleet/queue/peek``); the reference binding falls back to the legacy,
         unfiltered ``GET`` on a ``401``, so every caller here sees one uniform call
@@ -246,7 +309,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         later :class:`~blizzard.runner.loop.steps.Advance` tick."""
         ...
 
-    def get_question(self, question_id: str) -> QuestionView:
+    def get_question(self, question_id: str) -> HubQuestion:
         """``GET /api/fleet/questions/{id}`` — the runner's answer poll, by question id."""
         ...
 
@@ -258,8 +321,8 @@ class IHubClient(IChunkStatusReader, Protocol):
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
-        capabilities: tuple[RunnerCapability, ...] = (),
-        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        capabilities: tuple[HarnessCapability, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
@@ -275,7 +338,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         Read on the outbound pull; never a push into the box."""
         ...
 
-    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+    def rekey_route_token(self, chunk_id: str) -> str:
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
         capability token. Why it exists: `src/blizzard/hub/domain/execution/claim.py`'s
         ``ClaimService.rekey``. Raises :class:`ChunkEndedError` when the live route sits on an

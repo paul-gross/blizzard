@@ -12,18 +12,17 @@ from collections.abc import Callable, Container, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from pydantic import ValidationError
-
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
+from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, SubscriptionDeclaration
 from blizzard.runner.leases import Lease, Liveness, as_utc
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -63,8 +62,6 @@ from blizzard.runner.throttle.overload import (
 )
 from blizzard.runner.throttle.pause import PauseService, spend_ceiling_reason
 from blizzard.runner.usage.repository import ContextSampleState, external_usage_attempt
-from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
-from blizzard.wire.runner import RunnerSubscriptionDeclaration
 
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
@@ -344,8 +341,7 @@ class Pull(Step):
                 redirect_uris=ctx.config.redirect_uris,
                 capabilities=ctx.capability_snapshot(),
                 subscriptions=tuple(
-                    RunnerSubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider)
-                    for s in ctx.subscriptions
+                    SubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider) for s in ctx.subscriptions
                 ),
                 gates=ctx.config.gates,
             )
@@ -818,14 +814,10 @@ class ExternalUsageSample(Step):
                 "resets_at": iso_utc(window.resets_at),
                 "window_seconds": window.window_seconds,
             }
-            try:
-                ExternalSubscriptionUsageWindowFact.model_validate(payload)
-            except ValidationError as exc:
+            admitted = admit_usage_window(payload)
+            if isinstance(admitted, str):
                 _log.warning(
-                    "dropped malformed external usage window",
-                    slug=resolved.slug,
-                    window=window.window,
-                    reason=exc.errors()[0]["type"] if exc.errors() else "invalid",
+                    "dropped malformed external usage window", slug=resolved.slug, window=window.window, reason=admitted
                 )
                 continue
             windows.append(payload)

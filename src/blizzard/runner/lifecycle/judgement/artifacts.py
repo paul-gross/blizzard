@@ -10,10 +10,10 @@ from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import domain_model
-from blizzard.wire.envelope import WorkerArtifact
 
 __all__ = [
     "ArtifactAmbiguous",
+    "ArtifactCandidate",
     "ArtifactNotFound",
     "ArtifactRead",
     "ArtifactReadContradiction",
@@ -48,7 +48,17 @@ class ArtifactAmbiguous(Exception):
         self.levers = tuple(levers)
 
 
-def _label(candidate: WorkerArtifact) -> str:
+class ArtifactCandidate(Protocol):
+    """What a read's resolution reads off one candidate artifact: its scope, and for a
+    node-scoped one, its producing node."""
+
+    @property
+    def scope(self) -> ArtifactScope: ...
+    @property
+    def node_name(self) -> str | None: ...
+
+
+def _label(candidate: ArtifactCandidate) -> str:
     if candidate.scope is ArtifactScope.NODE:
         return f"node {candidate.node_name}"
     if candidate.scope is ArtifactScope.SYSTEM:
@@ -85,7 +95,7 @@ class ArtifactRead:
     def searches_system(self) -> bool:
         return self.scope is ArtifactScope.SYSTEM or (self.scope is None and self.node is None)
 
-    def resolve(self, candidates: Sequence[WorkerArtifact]) -> WorkerArtifact:
+    def resolve[C: ArtifactCandidate](self, candidates: Sequence[C]) -> C:
         """The one candidate the searched scopes found, else :class:`ArtifactNotFound`
         naming what was searched, or :class:`ArtifactAmbiguous` for several."""
         if not candidates:
@@ -109,7 +119,7 @@ class ArtifactRead:
         )
         return f"no artifact {self.name!r}{qualifier} for this node-step{where}"
 
-    def _levers(self, candidates: Sequence[WorkerArtifact]) -> tuple[str, ...]:
+    def _levers(self, candidates: Sequence[ArtifactCandidate]) -> tuple[str, ...]:
         """The narrowing flags that could actually change this result. ``--node`` names a
         *producing* node, which only a node-scoped candidate has, so it is offered only when
         the ambiguous set actually holds one — a graph/system-only collision has no producing

@@ -41,7 +41,7 @@ from blizzard.runner.lifecycle.takeover import (
     TakeoverService,
 )
 from blizzard.runner.loop.steps import Advance, Fill, Reap
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -542,9 +542,7 @@ def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_p
     probe = FakeProbe(alive={(200, "start-200")})
     clock = FixedClock(_NOW + HEARTBEAT_STALENESS_THRESHOLD * 2)  # long stale
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=3, route_runner_id="r1"
-    )
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=3, route_runner_id="r1")
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=3)
     ctx = make_context(
         store,
@@ -602,7 +600,7 @@ def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path) -> 
     hub = FakeHub()
     # Scripted DONE: an open takeover suppresses only the session-starting moves, so an ended
     # chunk still gives its binding back.
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.DONE,
         latest_epoch=1,
@@ -644,7 +642,7 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
         opened_at=_NOW,
     )
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1)
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1)
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     hub.claim_outcome = claimed_outcome("ch_1", env)
     hub.queue = []  # nothing new to fill — only the interrupted-claim reclaim should act
@@ -676,7 +674,7 @@ def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp
         opened_at=_NOW,
     )
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=2, route_runner_id="r1", restart_epochs=[2]
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2)

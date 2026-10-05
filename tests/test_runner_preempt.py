@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -17,8 +18,8 @@ from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion
-from blizzard.wire.chunk import ChunkStatusView, PauseView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -67,8 +68,8 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # ty
 
 def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):  # type: ignore[no-untyped-def]
     """The hub's view after a restart: still routed here, at a strictly higher epoch."""
-    del node_id  # no runner-loop-visible field carries the node id on ChunkStatusView
-    return ChunkStatusView(
+    del node_id  # no runner-loop-visible field carries the node id on ChunkState
+    return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
         latest_epoch=epoch,
@@ -266,9 +267,7 @@ def test_an_operator_pause_outranks_a_restart(tmp_path):  # type: ignore[no-unty
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk().model_copy(
-        update={"pause": PauseView(by="operator", set_at="2026-07-13T12:00:00Z")}
-    )
+    hub.chunks["ch_1"] = replace(_moved_chunk(), pause=ChunkPause(by="operator", set_at="2026-07-13T12:00:00Z"))
     ctx = _ctx(store, hub)
 
     Pull(ctx).run()
@@ -336,7 +335,7 @@ def test_a_restart_level_with_the_lease_still_fences_it(tmp_path):  # type: igno
     store = _store(tmp_path)
     _seed_running_lease(store)  # epoch 1, its mint not yet drained to the hub
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk(epoch=1).model_copy(update={"restart_epochs": [1]})
+    hub.chunks["ch_1"] = replace(_moved_chunk(epoch=1), restart_epochs=[1])
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, probe=probe)
 
@@ -354,7 +353,7 @@ def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path
     store = _store(tmp_path)
     _seed_running_lease(store, epoch=2)  # the lease a restart at epoch 1 already produced
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk(epoch=2).model_copy(update={"restart_epochs": [1]})
+    hub.chunks["ch_1"] = replace(_moved_chunk(epoch=2), restart_epochs=[1])
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, probe=probe)
 
@@ -369,9 +368,7 @@ def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_p
     store = _store(tmp_path)
     _seed_running_lease(store)
     paused = _restarted_hub()
-    paused.chunks["ch_1"] = _moved_chunk().model_copy(
-        update={"pause": PauseView(by="operator", set_at="2026-07-13T12:00:00Z")}
-    )
+    paused.chunks["ch_1"] = replace(_moved_chunk(), pause=ChunkPause(by="operator", set_at="2026-07-13T12:00:00Z"))
     Pull(_ctx(store, paused)).run()
     assert "lease_1" in store.pause_parked_lease_ids()
     assert store.active_lease("lease_1") is not None  # parked, not yet preempted
@@ -409,7 +406,7 @@ def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: igno
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk(epoch=3).model_copy(update={"restart_epochs": [2]})
+    hub.chunks["ch_1"] = replace(_moved_chunk(epoch=3), restart_epochs=[2])
     handle = WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300)
     harness = FakeHarness(handle=handle, verdict=None)
 

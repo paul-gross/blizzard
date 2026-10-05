@@ -17,8 +17,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -156,12 +156,12 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
     # A chunk parked at a gate: envs bound, no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
         latest_epoch=1,
         route_runner_id="r1",
-        decision=ChunkDecisionStatusView(
+        decision=ChunkGate(
             decision_id="dec_1",
             node_id="nd_gate",
             epoch=1,
@@ -198,12 +198,12 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.WAITING_ON_HUMAN,
         latest_epoch=1,
         route_runner_id="r1",
-        decision=ChunkDecisionStatusView(
+        decision=ChunkGate(
             decision_id="dec_1",
             node_id="nd_gate",
             epoch=1,
@@ -235,14 +235,14 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     # A chunk parked at a gate the human just resolved: env bound, no active lease, RUNNING.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
         latest_epoch=1,
         # The route is still live and held by THIS runner — the fact that makes a resolved
         # gate look exactly like an interrupted claim to the reconciler (route ours, RUNNING).
         route_runner_id="r1",
-        decision=ChunkDecisionStatusView(
+        decision=ChunkGate(
             decision_id="dec_1",
             node_id="nd_gate",
             epoch=1,
@@ -274,12 +274,12 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
 
 
 def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id="ch_1",
         status=status,
         latest_epoch=1,
         route_runner_id=route_runner_id,
-        decision=ChunkDecisionStatusView(
+        decision=ChunkGate(
             decision_id="dec_1",
             node_id="nd_gate",
             epoch=1,

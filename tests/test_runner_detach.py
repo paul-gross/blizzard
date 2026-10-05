@@ -18,11 +18,11 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, 
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.queue import QueuePeekEntry
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -90,7 +90,7 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
 
 
 def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=status,
         latest_epoch=1,
@@ -99,7 +99,7 @@ def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[
 
 
 def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=status,
         latest_epoch=1,
@@ -433,7 +433,7 @@ def test_a_chunk_detached_mid_node_and_reclaimed_starts_a_fresh_session_not_a_re
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2, session=SessionMode.RESUME
     )
     hub.claim_outcome = claimed_outcome("ch_1", env)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     Fill(ctx).run()
 
     assert len(hub.claims) == 1

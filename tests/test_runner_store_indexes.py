@@ -21,11 +21,11 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.queue import QueuePeekEntry
 from tests import support
 from tests.runner_fakes import (
     FakeHarness,
@@ -195,7 +195,7 @@ def test_runner_loop_scenario_never_plans_an_automatic_covering_index(tmp_path: 
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
@@ -212,7 +212,7 @@ def test_runner_loop_scenario_never_plans_an_automatic_covering_index(tmp_path: 
         tick(ctx)  # PULL flushes lease.minted; ADVANCE launches the detached elicitation
         tick(ctx)  # ADVANCE collects the elicitation and buffers the completion
         tick(ctx)  # PULL flushes the completion -> deliver hub node; envs held
-        hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.DONE, latest_epoch=1)
+        hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.DONE, latest_epoch=1)
         hub.queue = []
         tick(ctx)  # the hub-node poll sees `done` and releases the environment
 

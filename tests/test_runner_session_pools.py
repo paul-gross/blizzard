@@ -27,22 +27,22 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store.schema import leases
-from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
-    QueuePeekEntry,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -108,7 +108,7 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
     build_env = _pooled("build", "nd_build", mode=SessionMode.FRESH)
     verify_env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t100", pgid=100), verdict="pass"
@@ -143,7 +143,7 @@ def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # 
     provider = FakeProvider({"e1": "/ws/e1"})
     env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t", pgid=100), verdict="pass"
@@ -167,7 +167,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     build_env = _pooled("build", "nd_build", mode=SessionMode.FRESH)
     verify_env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -245,7 +245,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
     build_env = _pooled("build", "nd_build", mode=SessionMode.RESUME)
     verify_env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME, pool="verification")
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -300,7 +300,7 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     build_env = _pooled("build", "nd_build", mode=SessionMode.FRESH)
     verify_env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-attempt-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -354,7 +354,7 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
         compaction_window="150000",
     )
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t", pgid=100), verdict="pass"
@@ -391,7 +391,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     # Bare `resume` — belongs to no pool and declares nothing.
     retro_env = make_envelope("ch_1", "retrospective", node_id="nd_retro", choices=_CHOICES, session=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -444,7 +444,7 @@ def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode)
             session_effort="high",
             session_rotate=_rotate(max_invocations=0) if mode == "rotated" else None,
         )
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", first)
     initial = FakeHarness(
         handle=WorkerHandle(session_id="sess-build", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -480,7 +480,7 @@ def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode)
     Advance(middle).run()
     Pull(middle).run()
     assert store.active_lease_for_chunk("ch_1") is None
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=prior.epoch + 2
     )
     hub.envelopes["ch_1"] = next_node
@@ -512,7 +512,7 @@ def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     old = _pooled("build", "nd_build", mode=SessionMode.FRESH)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", old)
     first = FakeHarness(
         handle=WorkerHandle(session_id="old", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -526,7 +526,7 @@ def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
     hub.queue = []
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=previous.epoch + 1
     )
     hub.envelopes["ch_1"] = old
@@ -550,7 +550,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     build_env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.FRESH)
     resume_env = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.RESUME)
 
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -583,7 +583,7 @@ def _mint_lease(tmp_path, **envelope_kwargs):  # type: ignore[no-untyped-def]
     env = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.FRESH, **envelope_kwargs
     )
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
@@ -631,7 +631,7 @@ def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unk
         graph_name="advanced",
         work_refs=[{"source": "gh", "ref": "1"}],
     )
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"

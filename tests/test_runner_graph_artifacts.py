@@ -11,10 +11,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.node_steps.envelope import GraphArtifact
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -37,7 +37,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 def _fill_ctx(store, env):  # type: ignore[no-untyped-def]
     hub = FakeHub()
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id=env.graph_id, position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id=env.graph_id, position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")

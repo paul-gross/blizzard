@@ -10,13 +10,13 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, IChunkStatusReader
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 
 
 class IChunkViews(Protocol):
     """One tick's (or one step's, standalone) view onto the hub's chunk statuses."""
 
-    def get(self, chunk_id: str) -> ChunkStatusView:
+    def get(self, chunk_id: str) -> ChunkState:
         """Raises ``ChunkNotFoundError`` if the hub doesn't know this id, ``HubClientError``
         on transport failure."""
         ...
@@ -39,7 +39,7 @@ class ReadThroughChunkViews:
 
     hub: IChunkStatusReader
 
-    def get(self, chunk_id: str) -> ChunkStatusView:
+    def get(self, chunk_id: str) -> ChunkState:
         found = self.hub.chunk_statuses([chunk_id])
         view = found.get(chunk_id)
         if view is None:
@@ -63,9 +63,9 @@ class MemoizingChunkViewCache:
     re-read the hub only to raise the same ``ChunkNotFoundError`` again."""
 
     hub: IChunkStatusReader
-    _cache: dict[str, ChunkStatusView | None] = field(default_factory=dict)
+    _cache: dict[str, ChunkState | None] = field(default_factory=dict)
 
-    def get(self, chunk_id: str) -> ChunkStatusView:
+    def get(self, chunk_id: str) -> ChunkState:
         if chunk_id not in self._cache:
             # Left uncached on failure (not `except`-caught): a transport failure must not
             # poison the cache with a false absence — the next get() in this tick retries.

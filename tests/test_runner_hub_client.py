@@ -11,6 +11,7 @@ import json
 import httpx
 import pytest
 
+from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
@@ -31,8 +32,8 @@ def test_peek_queue_parses_entries() -> None:
         assert request.url.path == "/api/fleet/queue/peek"
         return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
-    peek = _client(handler).peek_queue(QueuePeekRequest())
-    assert [e.chunk_id for e in peek.entries] == ["ch_1"]
+    peek = _client(handler).peek_queue((), policy="pass-over")
+    assert [e.chunk_id for e in peek] == ["ch_1"]
 
 
 @pytest.mark.unit
@@ -44,9 +45,9 @@ def test_peek_queue_posts_the_request_body() -> None:
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json={"entries": []})
 
-    request = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
-    _client(handler).peek_queue(request)
-    assert seen["body"] == request.model_dump(mode="json")
+    _client(handler).peek_queue([HarnessCapability(harness_id="claude", default=True)], policy="hold")
+    expected = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
+    assert seen["body"] == expected.model_dump(mode="json")
 
 
 @pytest.mark.unit
@@ -63,9 +64,9 @@ def test_peek_queue_falls_back_to_the_legacy_get_on_a_401() -> None:
         assert request.url.path == "/api/fleet/queue/peek"
         return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
-    peek = _client(handler).peek_queue(QueuePeekRequest())
+    peek = _client(handler).peek_queue((), policy="pass-over")
     assert calls == ["POST", "GET"]
-    assert [e.chunk_id for e in peek.entries] == ["ch_1"]
+    assert [e.chunk_id for e in peek] == ["ch_1"]
 
 
 @pytest.mark.unit
@@ -280,7 +281,7 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
         ],
     )
     client.push_transcripts(batch)
-    client.peek_queue(QueuePeekRequest())  # a plain route, to prove it still rides the client's own default
+    client.peek_queue((), policy="pass-over")  # a plain route, to prove it still rides the client's own default
 
     assert seen_timeouts[0] == 5.0  # the transcript route's own short override
     assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
@@ -444,7 +445,7 @@ def test_transport_failure_raises_hub_client_error() -> None:
         return httpx.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
-        _client(handler).peek_queue(QueuePeekRequest())
+        _client(handler).peek_queue((), policy="pass-over")
 
 
 @pytest.mark.unit
