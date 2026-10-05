@@ -204,8 +204,7 @@ def _read(path: str, turn: str) -> TranscriptEvent:
     return _event("file_read", path, turn)
 
 
-# The segments of the events scenario, and what each exercises. Nothing here is re-derived by a second implementation
-# of the views' rule: the expected outcome of each is stated beside its test.
+# The events scenario's segments; each one's expected outcome is stated beside its test.
 _UPGRADED = _derivation("seg-upgraded", _NEW_VERSION, _hour(2, 1), _read("new.py", "t1"))
 _UPGRADED_FROM = _derivation(
     "seg-upgraded", _OLD_VERSION, _hour(1, 1), _read("old.py", "t1"), _event("skill_invocation", "lint", "t2")
@@ -707,9 +706,7 @@ def test_events_current_counts_each_segment_by_its_newest_derivation_unless_drop
         "seg-upgraded": [("file_read", "new.py")],
         # still only under the old version: it keeps counting through the upgrade
         "seg-old-only": [("file_read", "kept.py")],
-        # re-derived to an empty derivation: its older event stops counting and nothing replaces it
-        # (absent: "seg-emptied")
-        # dropped after its derivation: nothing counts (absent: "seg-dropped")
+        # absent: seg-emptied (re-derived to nothing) and seg-dropped (dropped after its derivation)
         # dropped, then derived again: only the derivation newer than the drop counts
         "seg-revived": [("file_read", "after.py")],
         # one derivation exported twice: counted once

@@ -6,6 +6,9 @@ context, sidechain depth, nearest-enclosing agent type, and extractor version. T
 operational numbers as read-shaped bulk datasets — step durations, tokens and spend, node failure/retry outcomes —
 storing no new facts, each derived at read time from the primary fact tables.
 
+These are read through the hub. To keep the event stream beyond what the hub holds, or to analyse it in a warehouse,
+export it: [`egress.md`](./egress.md#events) writes the same events to files, with the views that read them.
+
 ## Derivation
 
 Derivation is automatic: a standing in-process sweep derives every final, not-superseded segment on its own interval,

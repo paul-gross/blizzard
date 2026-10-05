@@ -1,9 +1,11 @@
 # Fact egress
 
 The hub can write its operational facts to a directory of immutable files, so a warehouse, a notebook or DuckDB can
-answer cost by node by day, or the slowest station of the week, without calling the hub. Two datasets leave: `steps`,
-one row per closed node-step, and `invocations`, one row per usage report. This is a push export to files you own. The
-pull-based HTTP exports are in [`analytics.md`](./analytics.md).
+answer cost by node by day, the slowest station of the week, or which files a station read, without calling the hub.
+Three datasets leave: `steps`, one row per closed node-step, `invocations`, one row per usage report, and `events`, the
+file reads, skill invocations and agent spawns derived from the fleet's transcripts. This is a push export to files you
+own. The pull-based HTTP exports are in [`analytics.md`](./analytics.md), which is the place to look for a quick
+answer rather than a persistent one.
 
 ## Turning it on
 
@@ -226,19 +228,23 @@ WHERE copy_rank = 1
 <directory>/
   steps/v1/date=2026-10-01/steps-20261001T061500Z-k7q2-000042.ndjson.gz
   invocations/v1/date=2026-10-01/invocations-20261001T061500Z-k7q2-000042.ndjson.gz
+  events/v1/date=2026-10-01/events-20261001T061500Z-k7q2-000042.ndjson.gz
   _manifests/20261001T061500Z-k7q2-000042.json
   _schema/steps.v1.json
   _schema/invocations.v1.json
+  _schema/events.v1.json
   .staging/
 ```
 
 - **Partitions.** Each dataset has its own tree under its major version, partitioned by the UTC date of the row's own
-  time. A backfilled row lands in its own date's partition, in a new file.
+  time. A backfilled row lands in its own date's partition, in a new file. An `events` row's own time is the start of
+  the step its transcript came from, so a re-derivation lands beside the copy it supersedes.
 - **Files are immutable.** A file is staged under `.staging/`, then placed under its final name by an operation that
   fails rather than replace. A reader never sees a half-written file, and blizzard never deletes or overwrites anything
   in the directory: pruning it is yours.
 - **Manifests.** A pass writes its manifest last. It lists every file the pass placed, with dataset, version, partition,
-  row count, first and last cursor position and SHA-256.
+  row count, first and last cursor position and SHA-256. A manifest that holds `events` files also records the
+  `extractor_version` the hub was on.
 - **Schemas.** `_schema/` holds each dataset's columns, types, nullability and meanings, which are the same as the
   dictionary above. NDJSON carries no schema of its own, so this is its schema.
 
@@ -256,19 +262,74 @@ totals. Copies of one identity are identical or newer, so a reader keeps the cop
 dictionary above carries that view for each dataset; every recipe below runs it unchanged over a relation named after
 the dataset.
 
+## Events
+
+The `events` dataset answers questions about what a station's workers did: which files, which skills, which agents. It
+reads the transcripts the runners ship, so it is only as complete as that shipping.
+
+### Record types
+
+One file holds three record types, told apart by `record_type`, so a derivation and its events land in the same file and
+the same pass:
+
+- `derivation`, one per exported derivation, even one that found no events.
+- `event`, one per file read, skill invocation or agent spawn in that derivation.
+- `dropped`, once when a segment stops counting, which voids every derivation of it under every extractor version.
+
+The hub derives a segment's events as a whole, and the export writes a derivation whole. Re-deriving a segment writes a
+new derivation beside the old one rather than editing it, so a reader can always tell which copy is the newest. The
+`derivation` row is what makes an emptied segment visible: without it, a segment re-derived to nothing would leave its
+older events standing.
+
+### Reading current truth
+
+An event counts when its derivation is the newest of its segment, whatever the extractor version, and no `dropped` row
+of the segment is later than that derivation. The dictionary's `events_current` view says exactly this, and also keeps
+one copy of an event delivered twice. A segment dropped and derived again counts again. `events_by_version` is the
+second view: the newest derivation of each segment under each extractor version, for comparing one version against
+another, filtered by `extractor_version`.
+
+### Extractor versions
+
+`[egress] extractor_versions` chooses whether the export writes only derivations under the hub's current extractor
+version or every version's. After an upgrade the hub re-derives every segment, a batch per sweep, and each derivation is
+exported when it lands, so the burst is bounded by `batch_limit` per pass. `events_current` rides through it untouched:
+a segment the sweep has not reached keeps counting under its old version until its new derivation arrives, so totals do
+not dip. Each manifest records the hub's extractor version; compare it with the versions present in `events_current` to
+see how far the re-derivation has got.
+
+### File paths
+
+A file read's path is stored as the tool was given it, usually absolute, naming the machine's user and the worktree's
+location. `[egress] file_paths` decides what leaves as the event's `subject`: the path relative to the worker's working
+directory, a keyed hash, the path as stored, or nothing. A hashed or relative setting needs a key, read from the
+environment variable `[egress] path_key_env` names. When it is unset or empty the hub refuses only the `events` dataset
+and keeps exporting the others, and `egress status` says why.
+
+The working directory itself never leaves, but even a relative path names the repository's layout. Give the export
+directory the same care as the `transcript:read` permission.
+
+### Backfill
+
+A backfill of `events` selects by the start of the step the segment came from, so a window names the work done in it
+rather than when the hub last derived it.
+
 ## Recipes
 
 ### DuckDB
 
-Read the directory in place. Bind the dataset's name to the files, then run the dictionary's view over it. For NDJSON:
+Read the directory in place. Bind the dataset's name to the files, then run the dictionary's view over it. For NDJSON,
+`events` also needs `union_by_name = true` and `sample_size = -1`, since a column that is null throughout one file is
+typed by another:
 
 ```sql
 CREATE VIEW steps AS
 SELECT * FROM read_json_auto('<directory>/steps/v1/*/*.ndjson.gz', format = 'newline_delimited');
 ```
 
-For Parquet, `SELECT * FROM read_parquet('<directory>/steps/v1/*/*.parquet')`. Wrap the dictionary's newest-copy view
-around that relation. Both recipes below read that view as `steps_newest`, and a station is a graph and a node name.
+For Parquet, `SELECT * FROM read_parquet('<directory>/steps/v1/*/*.parquet')`. Wrap the dictionary's view
+around that relation. The cost and slowest recipes read the newest-copy view as `steps_newest`, the events recipes read
+`events_current` the same way, and a station is a graph and a node name.
 
 Cost by node by day, billed and estimated kept apart as the spend surface keeps them. NDJSON carries money as a string,
 so the recipe reads it as a decimal; Parquet already is one:
@@ -295,6 +356,32 @@ WHERE ended_at >= now() - INTERVAL 7 DAY
 GROUP BY graph_name, node_name
 ORDER BY mean_duration_ms DESC
 LIMIT 1
+```
+
+The files a station read in the last seven days, most read first. A path is relative to the worker's working directory
+under the default `file_paths`:
+
+<!-- recipe:files-a-station-read-last-week -->
+
+```sql
+SELECT graph_name, node_name, subject AS path, count(*) AS reads
+FROM events_current
+WHERE kind = 'file_read'
+  AND step_started_at >= now() - INTERVAL 7 DAY
+GROUP BY graph_name, node_name, subject
+ORDER BY graph_name, node_name, reads DESC, path
+```
+
+How often each skill is invoked, by station:
+
+<!-- recipe:skills-by-station -->
+
+```sql
+SELECT graph_name, node_name, subject AS skill, count(*) AS invocations
+FROM events_current
+WHERE kind = 'skill_invocation'
+GROUP BY graph_name, node_name, subject
+ORDER BY graph_name, node_name, invocations DESC, skill
 ```
 
 ### Object storage with `rclone`
@@ -336,14 +423,14 @@ The verbs' flags are in `--help`.
 
 No row carries:
 
-- prompt text, transcript content or check output
+- prompt text, transcript content or check output, and an event's raw payload, the tool input and output behind it
 - an ask's question or answer, or a gate's choice descriptions
 - a bounce's envelope
 - the name or login of anyone who resolved a gate or answered an ask
 - a chunk's or work item's title or body
 - an escalation's takeover command
 
-Ids, names, counts, times and costs are the whole of what leaves.
+Ids, names, counts, times and costs are the whole of what leaves, plus an event's subject as `file_paths` allows.
 
 ## Changes to the shape
 
