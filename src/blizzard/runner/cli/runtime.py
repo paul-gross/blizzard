@@ -14,6 +14,7 @@ import click
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.periodic_pass_driver import PeriodicPassDriver
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
@@ -35,7 +36,6 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
-from blizzard.runner.tracing.trace_driver import TraceSweepDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
@@ -141,12 +141,7 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
-    # Built only here, so `runner tick` never runs a sweep.
-    trace_driver = (
-        TraceSweepDriver(graph.trace_sweep, interval_seconds=config.tracing.sweep_seconds)
-        if graph.trace_sweep is not None
-        else None
-    )
+    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval)
     announce_rejected_tracing(graph.trace_settings, graph.stores.outbound, graph.clock.now())
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
@@ -179,16 +174,16 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
 
         driver.start()  # startup recovery is REAP running first inside the tick
         started = True
-        if trace_driver is not None:
-            trace_driver.start()
+        for pass_driver in pass_drivers:
+            pass_driver.start()
         server.run(sockets=sockets)
     finally:
         try:
             if started:
                 # Quiesce before marking; the spawner executor and engine outlive
                 # the drain and are closed by the outer host frame.
-                if trace_driver is not None:
-                    trace_driver.stop()
+                for pass_driver in pass_drivers:
+                    pass_driver.stop()
                 driver.stop()
                 marked = hosted.resume.on_shutdown()
                 if marked:
@@ -196,6 +191,35 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
         finally:
             # uvicorn closes a pre-bound socket but does not unlink its file.
             Uds(config.socket_path).unlink()
+
+
+def _pass_drivers(config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float) -> list[PeriodicPassDriver]:
+    """The off-tick drivers, built only here so `runner tick` never runs a trace sweep or a
+    credential renewal. Renewal passes on the tick's own interval with no jitter, so a credential
+    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass."""
+    drivers: list[PeriodicPassDriver] = []
+    if graph.trace_sweep is not None:
+        drivers.append(
+            PeriodicPassDriver(
+                graph.trace_sweep.sweep,
+                name="blizzard-runner-trace-sweep",
+                label="lease trace sweep",
+                log=get_logger("blizzard.runner.trace_export"),
+                interval_seconds=config.tracing.sweep_seconds,
+            )
+        )
+    if graph.credential_renewal is not None:
+        drivers.append(
+            PeriodicPassDriver(
+                graph.credential_renewal.run,
+                name="blizzard-runner-credential-renewal",
+                label="credential renewal pass",
+                log=get_logger("blizzard.runner.subscriptions"),
+                interval_seconds=tick_seconds,
+                jitter_seconds=0,
+            )
+        )
+    return drivers
 
 
 @click.command("tick")

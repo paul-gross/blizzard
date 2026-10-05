@@ -1155,16 +1155,31 @@ def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscrip
 
 
 class FakeCredentialRenewer:
-    """A scriptable :class:`ICredentialRenewer`: a canned outcome reply.
-    ``renew_calls`` counts every call, so a test can prove it was invoked before the
-    sampler, and in what order relative to the cadence gate."""
+    """A scriptable :class:`ICredentialRenewer`: a canned due answer and a canned outcome.
+    ``due_calls`` and ``renew_calls`` count every call, so a test can prove which half of the
+    seam was reached; ``on_renew`` runs inside ``renew()`` (to block it, or to observe the store)."""
 
-    def __init__(self, *, outcome: RenewalOutcome | None = None) -> None:
-        self.outcome = outcome if outcome is not None else RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
+    def __init__(
+        self,
+        *,
+        due: bool = True,
+        outcome: RenewalOutcome | None = None,
+        on_renew: Callable[[], None] | None = None,
+    ) -> None:
+        self.due = due
+        self.outcome = outcome if outcome is not None else RenewalOutcome(RenewalOutcomeKind.RENEWED)
+        self.on_renew = on_renew
+        self.due_calls = 0
         self.renew_calls = 0
 
-    def renew_if_due(self) -> RenewalOutcome:
+    def renewal_due(self) -> bool:
+        self.due_calls += 1
+        return self.due
+
+    def renew(self) -> RenewalOutcome:
         self.renew_calls += 1
+        if self.on_renew is not None:
+            self.on_renew()
         return self.outcome
 
 

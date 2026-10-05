@@ -76,6 +76,8 @@ from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLed
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
+from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
@@ -89,6 +91,7 @@ from blizzard.runner.tracing.platform import (
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 
 
 @dataclass(frozen=True)
@@ -129,6 +132,8 @@ class RunnerProcess:
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
     #: What the Claude Code binding does with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
+    #: The credential-renewal pass, ``None`` when no provider binds a renewer; only ``runner host`` drives it.
+    credential_renewal: CredentialRenewalPass | None = None
 
     def close(self) -> None:
         try:
@@ -141,6 +146,24 @@ class RunnerProcess:
                     self.received_telemetry.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
                 finally:
                     self.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+
+
+def _credential_renewal_pass(
+    config: RunnerConfig, stores: RunnerStores, clock: SystemClock
+) -> CredentialRenewalPass | None:
+    """Every declared subscription paired with its provider's renewer binding, sharing one
+    one-shot subprocess seam; ``None`` when no provider binds one."""
+    subprocess = SubprocessOneShotProcess()
+    renewable = [
+        RenewableSubscription(
+            slug=declaration.slug, sample_interval_seconds=declaration.sample_interval_seconds, renewer=renewer
+        )
+        for declaration in config.resolved_subscriptions()
+        if (renewer := select_renewer(declaration, clock=clock, subprocess=subprocess)) is not None
+    ]
+    if not renewable:
+        return None
+    return CredentialRenewalPass(subscriptions=renewable, renewals=stores.usage, clock=clock)
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -230,6 +253,7 @@ def build_runner_process(
             if exporter is not None
             else None
         )
+        credential_renewal = _credential_renewal_pass(config, stores, clock)
         trace_replay = LeaseTraceReplay(leases=stores.lease_traces, exporter=exporter, config=config.tracing)
         return RunnerProcess(
             engine,
@@ -253,6 +277,7 @@ def build_runner_process(
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry or DisabledReceivedTelemetryExport(),
             harness_telemetry=plan,
+            credential_renewal=credential_renewal,
         )
     except BaseException:
         try:

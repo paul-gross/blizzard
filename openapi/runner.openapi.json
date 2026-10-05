@@ -3641,6 +3641,27 @@
         "title": "ReceiverStatus",
         "type": "object"
       },
+      "RenewalFailureReason": {
+        "description": "The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,\nthe vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its\ntimeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;\n``PROTOCOL_ERROR``, a response this binding could not make sense of at all.",
+        "enum": [
+          "renewer_unavailable",
+          "timed_out",
+          "vendor_refused",
+          "protocol_error"
+        ],
+        "title": "RenewalFailureReason",
+        "type": "string"
+      },
+      "RenewalResult": {
+        "description": "What one renewal attempt is known to have come to. ``RENEWED`` and ``FAILED`` are a\nrecorded outcome; ``UNRECORDED`` is an attempt with no outcome on record \u2014 still in flight,\nor its outcome lost to a crash or a failed write.",
+        "enum": [
+          "renewed",
+          "failed",
+          "unrecorded"
+        ],
+        "title": "RenewalResult",
+        "type": "string"
+      },
       "RequeueResponse": {
         "description": "``POST /chunks/{id}/requeues`` \u2014 the local hold is cleared.",
         "properties": {
@@ -4400,7 +4421,7 @@
         "type": "object"
       },
       "SubscriptionView": {
-        "description": "One declared subscription's runner-local diagnostics, served by\n``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first\nattempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is\nthat attempt's own renewal outcome \u2014 ``renewed``, ``failed:<reason>``, or ``None``.",
+        "description": "One declared subscription's runner-local diagnostics, served by\n``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the\n``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure.",
         "properties": {
           "miss_reason": {
             "anyOf": [
@@ -4431,7 +4452,7 @@
             "title": "Provider",
             "type": "string"
           },
-          "renewal": {
+          "renewal_attempted_at": {
             "anyOf": [
               {
                 "type": "string"
@@ -4440,7 +4461,27 @@
                 "type": "null"
               }
             ],
-            "title": "Renewal"
+            "title": "Renewal Attempted At"
+          },
+          "renewal_failure_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalFailureReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "renewal_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sampled_at": {
             "anyOf": [
@@ -7794,7 +7835,7 @@
     },
     "/api/subscriptions": {
       "get": {
-        "description": "Every declared subscription's own newest sampling attempt.",
+        "description": "Every declared subscription's own newest sampling attempt and credential renewal.",
         "operationId": "list_subscriptions_api_subscriptions_get",
         "responses": {
           "200": {

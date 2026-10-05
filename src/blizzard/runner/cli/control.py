@@ -9,12 +9,14 @@ from dataclasses import dataclass
 
 import click
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
+from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEXT
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
 
 # The operator's TCP door onto the local API — the override for when the socket is not
@@ -159,18 +161,17 @@ def status(directory: str, runner_url: str | None) -> None:
     subscriptions = subscriptions_resp.json().get("items", [])
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
-        renewal_suffix = f", renewal: {sub['renewal']}" if sub["renewal"] is not None else ""
         if sub["sampled_at"] is None:
             click.echo(f"  {sub['slug']} ({sub['provider']}): never sampled")
         elif sub["ok"]:
-            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}{renewal_suffix}")
+            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}")
         else:
             reason = sub["miss_reason"]
             miss_text = MISS_REASON_TEXT.get(SampleMissReason(reason), reason) if reason in SampleMissReason else reason
-            click.echo(
-                f"  {sub['slug']} ({sub['provider']}): miss ({miss_text}), "
-                f"last attempt {sub['sampled_at']}{renewal_suffix}"
-            )
+            click.echo(f"  {sub['slug']} ({sub['provider']}): miss ({miss_text}), last attempt {sub['sampled_at']}")
+        renewal = renewal_text(sub)
+        if renewal is not None:
+            click.echo(f"    renewal: {renewal}")
 
     harness = traces_resp.json().get("harness_telemetry") if traces_resp.is_success else None
     harness_lines = harness_telemetry_lines(harness)
@@ -375,3 +376,19 @@ def selftest(coding_harness: str, directory: str, runner_url: str | None) -> Non
         click.echo(f"selftest {run['id']} FAILED for {coding_harness}", err=True)
         raise click.exceptions.Exit(1)
     click.echo(f"selftest {run['id']} passed for {coding_harness}")
+
+
+def renewal_text(sub: dict[str, object]) -> str | None:
+    """One subscription's newest credential renewal in operator words, from the wire's typed
+    fields alone — ``None`` when it was never renewed."""
+    result = RenewalResult.recognized(sub.get("renewal_result"))
+    if result is None:
+        return None
+    attempted_at = sub.get("renewal_attempted_at")
+    if result is RenewalResult.RENEWED:
+        return f"renewed at {attempted_at}"
+    if result is RenewalResult.FAILED:
+        reason = RenewalFailureReason.recognized(sub.get("renewal_failure_reason"))
+        cause = RENEWAL_FAILURE_TEXT[reason] if reason is not None else "unknown cause"
+        return f"failed ({cause}) at {attempted_at}"
+    return f"attempted at {attempted_at}, outcome not recorded"

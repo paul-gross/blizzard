@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Float,
     Index,
@@ -649,14 +650,47 @@ external_usage_samples = Table(
     # The closed-set SampleMissReason value on a miss, NULL on a successful sample.
     # Read-only for this table's own writer — never derived at read time.
     Column("miss_reason", String, nullable=True),
-    # This attempt's own renewal outcome: "renewed", "failed:<reason>", or NULL — no
-    # renewal was due, or no renewer is wired for this slug's provider.
-    Column("renewal", String, nullable=True),
 )
 
 # `prune_external_usage_samples`'s per-slug newest-attempt lookup reads
 # `max(sampled_at) WHERE slug = ?`, mirroring `ix_heartbeats_lease_id_beat_at`.
 Index("ix_external_usage_samples_slug_sampled_at", external_usage_samples.c.slug, external_usage_samples.c.sampled_at)
+
+# --- Credential renewals: append-only claim, then outcome (IWriteCredentialRenewalRepository) ---
+# A claim lands before the vendor CLI fires and is never updated; an outcome lands after it returns.
+
+credential_renewal_claims = Table(
+    "credential_renewal_claims",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, nullable=False),
+    Column("claimed_at", UtcDateTime, nullable=False),
+)
+
+Index(
+    "ix_credential_renewal_claims_slug_claimed_at",
+    credential_renewal_claims.c.slug,
+    credential_renewal_claims.c.claimed_at,
+)
+
+credential_renewal_outcomes = Table(
+    "credential_renewal_outcomes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    # The claim this outcome closes; at most one outcome per claim.
+    Column("claim_id", Integer, nullable=False, unique=True),
+    # The closed-set RenewalOutcomeKind value: "renewed" or "failed".
+    Column("kind", String, nullable=False),
+    # The closed-set RenewalFailureReason value on a failure, NULL on a renewal.
+    Column("failure_reason", String, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    CheckConstraint("kind IN ('renewed', 'failed')", name="ck_credential_renewal_outcomes_kind"),
+    CheckConstraint(
+        "failure_reason IS NULL OR failure_reason IN "
+        "('renewer_unavailable', 'timed_out', 'vendor_refused', 'protocol_error')",
+        name="ck_credential_renewal_outcomes_failure_reason",
+    ),
+)
 
 # --- Live session-context samples (the warn lane) ----------------------------
 # Append-only, one row per successful sample of a running lease's session context.

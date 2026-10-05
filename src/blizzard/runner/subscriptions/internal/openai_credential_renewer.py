@@ -43,8 +43,8 @@ _ACCOUNT_READ_ID = 2
 
 
 class OpenAICredentialRenewer:
-    """Asks ``codex app-server`` to proactively refresh a ChatGPT plan's credential when
-    it is at or near expiry. Never raises, never writes the credential file."""
+    """Reports a ChatGPT plan's credential due once it is at or near expiry, and asks
+    ``codex app-server`` to proactively refresh it. Never raises, never writes the credential file."""
 
     def __init__(
         self,
@@ -59,13 +59,14 @@ class OpenAICredentialRenewer:
         self._subprocess = subprocess
         self._clock: IClock = clock
 
-    def renew_if_due(self) -> RenewalOutcome:
+    def renewal_due(self) -> bool:
         expires_at = self._read_access_token_expiry()
         # An unreadable, malformed, or missing token is never due — the sampler's own next
         # attempt reports why; this binding has nothing due to ask for.
-        if expires_at is None or not renewal_due(expires_at, self._clock.now(), _RENEWAL_LEAD_WINDOW):
-            return RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
-        return self._request_refresh(expires_at)
+        return expires_at is not None and renewal_due(expires_at, self._clock.now(), _RENEWAL_LEAD_WINDOW)
+
+    def renew(self) -> RenewalOutcome:
+        return self._request_refresh(self._read_access_token_expiry())
 
     def _read_access_token_expiry(self) -> datetime | None:
         try:
@@ -79,7 +80,7 @@ class OpenAICredentialRenewer:
             return None
         return parse_jwt_expiry(access_token)
 
-    def _request_refresh(self, expires_at: datetime) -> RenewalOutcome:
+    def _request_refresh(self, expires_at: datetime | None) -> RenewalOutcome:
         codex_home = str(Path(self._credentials_path).parent)
         request = _rpc_request(_INITIALIZE_ID, "initialize", {"clientInfo": _CLIENT_INFO}) + _rpc_request(
             _ACCOUNT_READ_ID, "account/read", {"refreshToken": True}
@@ -115,7 +116,7 @@ class OpenAICredentialRenewer:
             _log.warning("credential renewal vendor CLI reports no login to refresh", codex_home=codex_home)
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         renewed_until = self._read_access_token_expiry()
-        if renewed_until is None or renewed_until <= expires_at:
+        if renewed_until is None or (expires_at is not None and renewed_until <= expires_at):
             _log.warning("credential renewal vendor CLI answered but the credential's expiry did not advance")
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         return RenewalOutcome(RenewalOutcomeKind.RENEWED)

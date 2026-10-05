@@ -1,4 +1,4 @@
-"""``OpenAICredentialRenewer.renew_if_due``, driven with an injected
+"""``OpenAICredentialRenewer``'s due check and renewal, driven with an injected
 :class:`~blizzard.runner.subscriptions.one_shot_process.IOneShotProcess` fake and a
 ``FixedClock`` — no real credential file location, no real vendor CLI. Confirms the lead-window
 test, the ``initialize``-then-``account/read`` JSON-RPC request shape, and that every
@@ -86,9 +86,7 @@ def test_no_credentials_file_is_not_due_and_never_runs_the_subprocess(tmp_path: 
         credentials_path=str(tmp_path / "absent-auth.json"), subprocess=subprocess, clock=FixedClock(_NOW)
     )
 
-    outcome = renewer.renew_if_due()
-
-    assert outcome.kind is RenewalOutcomeKind.NOT_DUE
+    assert renewer.renewal_due() is False
     assert subprocess.calls == []
 
 
@@ -97,9 +95,7 @@ def test_a_token_far_from_expiry_is_not_due(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(_renewed_result())
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
-
-    assert outcome.kind is RenewalOutcomeKind.NOT_DUE
+    assert renewer.renewal_due() is False
     assert subprocess.calls == []
 
 
@@ -108,7 +104,10 @@ def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    assert renewer.renewal_due()
+    assert subprocess.calls == []  # the due check never runs the vendor CLI
+
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.RENEWED
     assert len(subprocess.calls) == 1
@@ -119,7 +118,10 @@ def test_an_already_expired_token_is_due(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    assert renewer.renewal_due()
+    assert subprocess.calls == []  # the due check never runs the vendor CLI
+
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.RENEWED
 
@@ -135,7 +137,7 @@ def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_tru
         credentials_path=str(creds), codex_binary="codex", subprocess=subprocess, clock=FixedClock(_NOW)
     )
 
-    renewer.renew_if_due()
+    renewer.renew()
 
     assert len(subprocess.calls) == 1
     argv, stdin, _timeout, env, settle_seconds = subprocess.calls[0]
@@ -161,7 +163,7 @@ def test_a_timeout_is_failed_timed_out(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=None, stdout="", stderr="", timed_out=True))
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.TIMED_OUT
@@ -174,7 +176,7 @@ def test_a_launch_failure_is_failed_renewer_unavailable(tmp_path: Path) -> None:
     )
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.RENEWER_UNAVAILABLE
@@ -185,7 +187,7 @@ def test_a_nonzero_exit_is_failed_vendor_refused(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=1, stdout="", stderr="boom", timed_out=False))
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
@@ -197,7 +199,7 @@ def test_no_matching_response_is_failed_protocol_error(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.PROTOCOL_ERROR
@@ -209,7 +211,7 @@ def test_a_json_rpc_error_is_failed_vendor_refused(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
@@ -221,7 +223,7 @@ def test_a_null_account_is_failed_vendor_refused(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
@@ -233,7 +235,7 @@ def test_a_reply_that_leaves_the_expiry_unchanged_is_failed_vendor_refused(tmp_p
     subprocess = _ScriptedSubprocess(_renewed_result())
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
@@ -256,6 +258,6 @@ def test_an_interleaved_notification_before_the_matching_response_is_skipped(tmp
     )
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.RENEWED

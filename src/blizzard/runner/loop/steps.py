@@ -609,6 +609,7 @@ class Retention(Step):
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
             ("external usage sample", lambda: ctx.stores.usage.prune_external_usage_samples(now=now)),
+            ("credential renewal", lambda: ctx.stores.usage.prune_credential_renewals(now=now)),
             (
                 "worker stdout",
                 lambda: ctx.worker_files.sweep(
@@ -758,10 +759,7 @@ class ExternalUsageSample(Step):
             # A declaration its provider binds no sampler to stays declared and unsampled, with no
             # attempt row, since no sampler failed.
             return
-        # Renewal, if this provider binds one, runs before the sample on this same cadence
-        # gate, never its own; a failed or not-due renewal never stops the sample.
-        renewal = self._renewal_value(resolved)
-        attempt = external_usage_attempt(sampler.sample(), slug=resolved.slug, renewal=renewal, at=ctx.clock.now())
+        attempt = external_usage_attempt(sampler.sample(), slug=resolved.slug, at=ctx.clock.now())
         result = attempt.result
         if isinstance(result, SampleMissReason):
             payload = None
@@ -775,25 +773,9 @@ class ExternalUsageSample(Step):
             report_kind=attempt.report_kind,
             report_payload=report_payload,
             miss_reason=attempt.miss_reason.value if attempt.miss_reason is not None else None,
-            renewal=attempt.renewal,
         )
         if seq is not None and ctx.events is not None:
             ctx.events.publish_fact_changed(seq=seq, kind=attempt.report_kind, chunk_id=None, lease_id=None)
-
-    @staticmethod
-    def _renewal_value(resolved: ResolvedSubscription) -> str | None:
-        """Asks this slug's renewer, if it has one, and reduces its outcome to the single
-        string the attempt row's ``renewal`` column carries — ``None`` for both "no
-        renewer" and "not due", since neither is a renewal outcome worth showing;
-        never raises, so a broken renewer never stops the sample that follows it."""
-        if resolved.renewer is None:
-            return None
-        try:
-            outcome = resolved.renewer.renew_if_due()
-        except Exception as exc:  # second line of defense — the renewer contract already promises this
-            _log.warning("credential renewal failed unexpectedly", slug=resolved.slug, detail=str(exc))
-            return None
-        return outcome.recorded_value
 
     @staticmethod
     def _miss_payload(

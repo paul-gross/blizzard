@@ -143,7 +143,7 @@ from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscr
 from blizzard.runner.transcripts.invocation_boundaries import IReadInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
-from blizzard.runner.usage.repository import IReadUsageRepository
+from blizzard.runner.usage.repository import IReadCredentialRenewalRepository, IReadUsageRepository
 from tests.runner_fakes import record_usage
 from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk_record, seed_work_item
 
@@ -755,6 +755,12 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
         w.read.usage.latest_external_usage_attempts_by_slug([w.usage_slug])
+    ),
+    (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
+        w.read.usage.last_credential_renewal_claim_at(w.usage_slug)
+    ),
+    (IReadCredentialRenewalRepository, "latest_credential_renewals_by_slug"): lambda w: (
+        w.read.usage.latest_credential_renewals_by_slug([w.usage_slug])
     ),
     (IReadAttachmentRepository, "attachments_for_lease"): lambda w: w.read.attachments.attachments_for_lease(w.lease_2),
     (IReadAttachmentRepository, "attachment_names_for_lease"): lambda w: w.read.attachments.attachment_names_for_lease(

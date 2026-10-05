@@ -7,10 +7,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
@@ -21,9 +23,12 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 __all__ = [
     "ChargeRange",
     "ContextSampleState",
+    "CredentialRenewalSummary",
     "ExternalUsageAttempt",
     "ExternalUsageAttemptSummary",
+    "IReadCredentialRenewalRepository",
     "IReadUsageRepository",
+    "IWriteCredentialRenewalRepository",
     "IWriteUsageRepository",
     "InvocationCost",
     "UsageTotals",
@@ -67,13 +72,25 @@ class ExternalUsageAttemptSummary:
     """This ``slug``'s own newest sampling attempt — what the probe, ``runner
     status``, and ``GET /api/subscriptions`` all show. ``miss_reason`` is a
     :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason` value or
-    ``None`` on success; ``renewal`` is the renewal outcome recorded with it, or ``None``."""
+    ``None`` on success."""
 
     slug: str
     sampled_at: datetime
     ok: bool
     miss_reason: str | None
-    renewal: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class CredentialRenewalSummary:
+    """This ``slug``'s own newest credential renewal, for the runner-local diagnostics.
+    ``attempted_at`` is its claim, just before it fired; ``result`` is ``UNRECORDED`` while that
+    claim has no outcome on record; ``failure_reason`` is set only on a failed one."""
+
+    slug: str
+    attempted_at: datetime
+    result: RenewalResult
+    failure_reason: RenewalFailureReason | None
 
 
 @domain_model
@@ -186,8 +203,6 @@ class ExternalUsageAttempt:
     sampled_at: datetime
     snapshot: ExternalSubscriptionUsageSnapshot | None
     miss_reason: SampleMissReason | None
-    #: This attempt's own renewal outcome, as :attr:`RenewalOutcome.recorded_value` reduces it.
-    renewal: str | None
 
     @property
     def missed(self) -> bool:
@@ -216,16 +231,56 @@ class ExternalUsageAttempt:
 
 
 def external_usage_attempt(
-    result: ExternalSubscriptionUsageSnapshot | SampleMiss, *, slug: str, renewal: str | None, at: datetime
+    result: ExternalSubscriptionUsageSnapshot | SampleMiss, *, slug: str, at: datetime
 ) -> ExternalUsageAttempt:
     """The attempt row one sampler result records. A miss is still an attempt: its slug's
     cadence advances, it stores no payload, and its reason feeds the runner-local diagnostics."""
     if isinstance(result, SampleMiss):
-        return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=None, miss_reason=result.reason, renewal=renewal)
-    return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=result, miss_reason=None, renewal=renewal)
+        return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=None, miss_reason=result.reason)
+    return ExternalUsageAttempt(slug=slug, sampled_at=at, snapshot=result, miss_reason=None)
 
 
-class IReadUsageRepository(Protocol):
+class IReadCredentialRenewalRepository(Protocol):
+    """Read-only credential-renewal queries: the renewal cadence's anchor and the newest
+    renewal per slug for the runner-local diagnostics."""
+
+    def last_credential_renewal_claim_at(self, slug: str) -> datetime | None:
+        """``max(claimed_at)`` across this ``slug``'s own renewal claims, or ``None`` — the
+        renewal cadence's anchor. A claim counts whether or not its outcome was recorded."""
+        ...
+
+    def latest_credential_renewals_by_slug(self, slugs: Sequence[str]) -> dict[str, CredentialRenewalSummary]:
+        """Each slug's newest renewal claim with its outcome, if one is recorded, in one batched
+        read (`bzh:bulk-reconstitution`). A slug never renewed is absent, which the caller reads
+        as ``None``."""
+        ...
+
+
+class IWriteCredentialRenewalRepository(IReadCredentialRenewalRepository, Protocol):
+    """Read-write credential-renewal facts — held only by the renewal pass and retention.
+    The claim and the outcome are separate immutable facts: a claim is never updated."""
+
+    def claim_credential_renewal(self, *, slug: str, claimed_at: datetime) -> int:
+        """Durably record that a renewal of ``slug`` is about to fire, returning the claim's id.
+        Committed before the vendor CLI is invoked, so a lost outcome can never permit a
+        repeat renewal inside the cadence."""
+        ...
+
+    def record_credential_renewal_outcome(
+        self, *, claim_id: int, outcome: RenewalOutcome, recorded_at: datetime
+    ) -> None:
+        """Record the outcome of the renewal ``claim_id`` claimed — at most once per claim."""
+        ...
+
+    def prune_credential_renewals(self, *, now: datetime) -> int:
+        """Compact renewal claims older than the store's own retention window, with their
+        outcomes, keeping each slug's newest claim regardless of age — ``max(claimed_at)``
+        per slug is unchanged, so :meth:`~IReadCredentialRenewalRepository.last_credential_renewal_claim_at`
+        answers identically before and after. Returns the number of claims pruned."""
+        ...
+
+
+class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
     """Read-only usage/context-sample queries (held by read-path edges)."""
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
@@ -290,7 +345,7 @@ class IReadUsageRepository(Protocol):
         ...
 
 
-class IWriteUsageRepository(IReadUsageRepository, Protocol):
+class IWriteUsageRepository(IReadUsageRepository, IWriteCredentialRenewalRepository, Protocol):
     """Read-write usage/context-sample store — held only by the domain."""
 
     def record_usage(
@@ -339,13 +394,11 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         report_kind: str,
         report_payload: str,
         miss_reason: str | None = None,
-        renewal: str | None = None,
     ) -> int | None:
         """Append one declared subscription's sampling attempt and, when it carries a report,
         buffer that report — atomically, returning the buffered seq or ``None``.
         ``slug`` is the cadence's join key. ``miss_reason`` is a
-        ``SampleMissReason`` value on a miss, ``None`` on success; ``renewal`` is this attempt's
-        own renewal outcome, ``None`` when this slug has no renewer or none was due."""
+        ``SampleMissReason`` value on a miss, ``None`` on success."""
         ...
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:

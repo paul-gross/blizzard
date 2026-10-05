@@ -39,7 +39,6 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
-from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -125,17 +124,16 @@ class LoopConfig:
 
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription with its resolved sampler and renewer bindings — the loop
-    step's own view. ``sampler``/``renewer`` are ``None`` for an
-    unbound or unknown provider; ``provider`` rides along because the registration push
-    reads it, though no view reaches it yet."""
+    """One declared subscription with its resolved sampler binding — the loop step's own
+    view. ``sampler`` is ``None`` for an unbound or unknown provider. Credential renewal is
+    not the tick's: it runs on its own driver. ``provider`` rides along because the
+    registration push reads it, though no view reaches it yet."""
 
     slug: str
     name: str
     provider: str
     sample_interval_seconds: int
     sampler: ISubscriptionSampler | None
-    renewer: ICredentialRenewer | None
 
 
 class ICloseableUsageHttpClient(Protocol):

@@ -69,7 +69,6 @@ const OK: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:59:30.000Z',
   ok: true,
   miss_reason: null,
-  renewal: null,
 };
 
 const MISS: runnerApi.SubscriptionView = {
@@ -79,7 +78,6 @@ const MISS: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:58:00.000Z',
   ok: false,
   miss_reason: 'credential_lapsed',
-  renewal: null,
 };
 
 const RENEWED: runnerApi.SubscriptionView = {
@@ -89,7 +87,9 @@ const RENEWED: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:59:30.000Z',
   ok: true,
   miss_reason: null,
-  renewal: 'renewed',
+  renewal_attempted_at: '2026-07-16T11:59:00.000Z',
+  renewal_result: 'renewed',
+  renewal_failure_reason: null,
 };
 
 describe('LocalSubscriptions', () => {
@@ -121,10 +121,10 @@ describe('LocalSubscriptions', () => {
     const { el } = await render([RENEWED]);
 
     const row = el.querySelector('[data-testid="subscription-row"]');
-    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toBe('renewal: renewed');
+    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toMatch(/^renewal: renewed /);
   });
 
-  it('renders no renewal line when the attempt carries no renewal outcome', async () => {
+  it('renders no renewal line for a subscription never renewed', async () => {
     const { el } = await render([OK]);
 
     const row = el.querySelector('[data-testid="subscription-row"]');

@@ -98,7 +98,7 @@ def test_subscription_list_statement_count_is_flat_in_the_declared_subscriptions
 
     count = count_queries(store._engine, lambda: _subscription_list(config, store))
 
-    assert count == 1
+    assert count == 2  # one batched read each: the newest attempts, the newest renewals
 
 
 @pytest.mark.parametrize("declared", [1, 3])
@@ -113,7 +113,6 @@ def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tm
             provider=PROVIDER_ANTHROPIC,
             sample_interval_seconds=300,
             sampler=None,
-            renewer=None,
         )
         for i in range(declared)
     )

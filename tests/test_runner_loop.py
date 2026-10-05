@@ -4161,7 +4161,6 @@ def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp
                 provider="anthropic",
                 sample_interval_seconds=300,
                 sampler=FakeSubscriptionSampler(),
-                renewer=None,
             ),
             ResolvedSubscription(
                 slug="probe",
@@ -4169,7 +4168,6 @@ def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp
                 provider="none-such",
                 sample_interval_seconds=300,
                 sampler=None,
-                renewer=None,
             ),
         ),
     )

@@ -190,26 +190,30 @@ Each binding reads the credential file its own vendor CLI writes: `~/.claude/.cr
 `~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Blizzard never writes
 that file** — the vendor CLI owns the refresh flow, its lock, and its refresh-token rotation — but renewal is delegated
 to it, per provider. `openai` carries a renewal binding: once the access token is within ten minutes of its own expiry,
-the runner asks `codex app-server` for a proactive refresh on the subscription's own sampling cadence, before that
-cadence's sample, so an idle runner keeps sampling without anyone running `codex` by hand. It needs the `codex` binary
-reachable from the runner's environment; a renewal that times out or is refused is recorded as a failed outcome, never a
-raise, and the sample still follows it. `anthropic` carries none: a fleet's own Claude Code workers renew that token
-continuously, and an idle Anthropic runner whose token lapses shows the lapsed condition below until its next worker
-refreshes the file.
+the runner asks `codex app-server` for a proactive refresh, at most once per the subscription's own sampling interval,
+so an idle runner keeps sampling without anyone running `codex` by hand. Renewal runs on its own schedule inside
+`blizzard runner host`, apart from sampling, so a slow or hung `codex` never holds up the runner's other work; a sample
+taken just before a renewal lands can still miss as `credential_lapsed`, and the next sample after it succeeds.
+`blizzard runner tick` never renews. The runner records each renewal attempt before asking `codex`, so a renewal whose
+outcome is lost, to a crash or a failed write, is never repeated within that interval. It needs the `codex` binary
+reachable from the runner's environment; a renewal that times out or is refused is recorded as a failed outcome with its
+reason, never a raise. `anthropic` carries none: a fleet's own Claude Code workers renew that token continuously, and an
+idle Anthropic runner whose token lapses shows the lapsed condition below until its next worker refreshes the file.
 
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
 read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and
-`GET /api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe
-below prints the reason in operator words. Every miss crosses to the hub the same way a sample does — reporting
-`{slug, name, missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
-slug whose newest lapsed miss postdates its newest sample shows on the board as "credential lapsed — log in again on
-this runner" in place of its pace bars. Its refreshed-age label and tier still render alongside the notice — they
-describe the last good sample, not the lapse — and once a runner has declared its roster the notice carries no age
-gate of its own: it stays until a fresh sample or a different miss reason supersedes it, rather than ageing out. Any
-other reason leaves the row reading "no sample yet" with that reason named, exactly as a never-sampled slug's, even
-though the hub has stored it.
+`GET /api/subscriptions` show the newest attempt's outcome and its miss reason, and beside it the newest renewal: when
+it was attempted, and whether it renewed, failed (with its reason: vendor CLI unavailable, timed out, vendor refused, or
+an unreadable vendor response), or has no outcome recorded. The probe below prints the miss reason in operator words.
+Every miss crosses to the hub the same way a sample does — reporting `{slug, name, missed_at, reason}`, never a token, a
+refresh token, or a path — but only `credential_lapsed` renders: a slug whose newest lapsed miss postdates its newest
+sample shows on the board as "credential lapsed — log in again on this runner" in place of its pace bars. Its
+refreshed-age label and tier still render alongside the notice — they describe the last good sample, not the lapse — and
+once a runner has declared its roster the notice carries no age gate of its own: it stays until a fresh sample or a
+different miss reason supersedes it, rather than ageing out. Any other reason leaves the row reading "no sample yet"
+with that reason named, exactly as a never-sampled slug's, even though the hub has stored it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never

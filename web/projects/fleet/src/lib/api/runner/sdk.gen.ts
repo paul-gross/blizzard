@@ -472,7 +472,7 @@ export const getSelftestApiSelftestsSelftestIdGet = <ThrowOnError extends boolea
 /**
  * List Subscriptions
  *
- * Every declared subscription's own newest sampling attempt.
+ * Every declared subscription's own newest sampling attempt and credential renewal.
  */
 export const listSubscriptionsApiSubscriptionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListSubscriptionsApiSubscriptionsGetData, ThrowOnError>): RequestResult<ListSubscriptionsApiSubscriptionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListSubscriptionsApiSubscriptionsGetResponses, unknown, ThrowOnError>({ url: '/api/subscriptions', ...options });
 

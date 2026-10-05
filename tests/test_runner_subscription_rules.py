@@ -1,6 +1,5 @@
 """Runner subscription rules (unit tier, by value): the sample cadence, a lapsed
-credential, a usage window still holding a limit, credential-renewal timing,
-and the renewal outcome an attempt row records."""
+credential, a usage window still holding a limit, and credential-renewal timing."""
 
 from __future__ import annotations
 
@@ -9,12 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.runner.loop.context import ResolvedSubscription
-from blizzard.runner.subscriptions.credential_renewer import (
-    RenewalFailureReason,
-    RenewalOutcome,
-    RenewalOutcomeKind,
-    renewal_due,
-)
+from blizzard.runner.subscriptions.credential_renewer import renewal_due
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
@@ -45,7 +39,7 @@ class _Sampler:
 
 def _resolved(sampler: _Sampler | None) -> ResolvedSubscription:
     return ResolvedSubscription(
-        slug="max", name="Max", provider="anthropic", sample_interval_seconds=300, sampler=sampler, renewer=None
+        slug="max", name="Max", provider="anthropic", sample_interval_seconds=300, sampler=sampler
     )
 
 
@@ -72,17 +66,3 @@ def test_due_inside_lead_window() -> None:
     assert renewal_due(expires_at, _NOW, lead)
     assert not renewal_due(expires_at + timedelta(seconds=1), _NOW, lead)
     assert renewal_due(_NOW - timedelta(hours=1), _NOW, lead)
-
-
-def test_not_due_records_none() -> None:
-    assert RenewalOutcome(RenewalOutcomeKind.NOT_DUE).recorded_value is None
-
-
-def test_renewed_records_its_kind() -> None:
-    assert RenewalOutcome(RenewalOutcomeKind.RENEWED).recorded_value == "renewed"
-
-
-def test_failed_records_reason() -> None:
-    outcome = RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT)
-    assert outcome.recorded_value == "failed:timed_out"
-    assert RenewalOutcome(RenewalOutcomeKind.FAILED).recorded_value == "failed"

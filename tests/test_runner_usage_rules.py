@@ -151,20 +151,18 @@ def test_soonest_exhausted_reset() -> None:
 
 
 def test_miss_records_miss_kind_and_null_payload() -> None:
-    attempt = external_usage_attempt(
-        SampleMiss(SampleMissReason.CREDENTIAL_LAPSED), slug="max", renewal="failed:timed_out", at=_NOW
-    )
+    attempt = external_usage_attempt(SampleMiss(SampleMissReason.CREDENTIAL_LAPSED), slug="max", at=_NOW)
     assert attempt.missed
     assert attempt.snapshot is None
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED
     assert attempt.miss_reason is SampleMissReason.CREDENTIAL_LAPSED
     assert attempt.result is SampleMissReason.CREDENTIAL_LAPSED
-    assert (attempt.slug, attempt.sampled_at, attempt.renewal) == ("max", _NOW, "failed:timed_out")
+    assert (attempt.slug, attempt.sampled_at) == ("max", _NOW)
 
 
 def test_snapshot_records_sampled_kind() -> None:
     snapshot = ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=(_window(40.0, _NOW + timedelta(hours=2)),))
-    attempt = external_usage_attempt(snapshot, slug="max", renewal=None, at=_NOW)
+    attempt = external_usage_attempt(snapshot, slug="max", at=_NOW)
     assert not attempt.missed
     assert attempt.snapshot == snapshot
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
