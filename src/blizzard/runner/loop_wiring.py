@@ -17,7 +17,7 @@ import httpx
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.subprocess_worktree_git import SubprocessWorktreeGit
@@ -76,7 +76,7 @@ class _LazyUsageHttpClient:
             self._client.close()
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class LoopWiring:
     """Constructs the loop's collaborators from resolved config.

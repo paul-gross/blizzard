@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import ANALYTICS_ADMIN, TRANSCRIPT_READ
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -139,7 +139,7 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
     return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EventScopeFilters:
     """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions —
@@ -169,36 +169,35 @@ class EventScopeFilters:
             ScopeFilters(graph_id, source, since, until), extractor_version, harness_id, harness_version, model, effort
         )
 
-
-def event_criteria(
-    scope: EventScopeFilters,
-    *,
-    kind: str | None = None,
-    tool: str | None = None,
-    subject_prefix: str | None = None,
-    node_id: str | None = None,
-) -> EventQueryCriteria:
-    """The derived-event routes' own reading of :class:`EventScopeFilters`. A route passes
-    exactly the narrowing filters it exposes; one it does not offer goes unnamed here,
-    rather than named as an explicit ``None``. Built off :meth:`ScopeFilters.normalized`'s
-    own conversion rather than re-deriving it — the ScopeFilters/EventScopeFilters split's
-    byte-identical-spec constraint binds the parameter declarations, not this conversion."""
-    normalized = scope.scope.normalized()
-    return EventQueryCriteria(
-        extractor_version=read_version(scope.extractor_version),
-        kind=kind,
-        tool=tool,
-        subject_prefix=subject_prefix,
-        node_id=node_id,
-        graph_id=normalized.graph_id,
-        source=normalized.source,
-        since=normalized.since,
-        until=normalized.until,
-        harness_id=scope.harness_id,
-        harness_version=scope.harness_version,
-        model=scope.model,
-        effort=scope.effort,
-    )
+    def criteria(
+        self,
+        *,
+        kind: str | None = None,
+        tool: str | None = None,
+        subject_prefix: str | None = None,
+        node_id: str | None = None,
+    ) -> EventQueryCriteria:
+        """The derived-event routes' own reading of these filters. A route passes exactly the
+        narrowing filters it exposes; one it does not offer goes unnamed here, rather than named
+        as an explicit ``None``. Built off :meth:`ScopeFilters.normalized`'s own conversion
+        rather than re-deriving it — the ScopeFilters/EventScopeFilters split's
+        byte-identical-spec constraint binds the parameter declarations, not this conversion."""
+        normalized = self.scope.normalized()
+        return EventQueryCriteria(
+            extractor_version=read_version(self.extractor_version),
+            kind=kind,
+            tool=tool,
+            subject_prefix=subject_prefix,
+            node_id=node_id,
+            graph_id=normalized.graph_id,
+            source=normalized.source,
+            since=normalized.since,
+            until=normalized.until,
+            harness_id=self.harness_id,
+            harness_version=self.harness_version,
+            model=self.model,
+            effort=self.effort,
+        )
 
 
 @dto
@@ -226,8 +225,8 @@ class EventFilters:
 
     @property
     def criteria(self) -> EventQueryCriteria:
-        return event_criteria(
-            self.scope, kind=self.kind, tool=self.tool, subject_prefix=self.subject_prefix, node_id=self.node_id
+        return self.scope.criteria(
+            kind=self.kind, tool=self.tool, subject_prefix=self.subject_prefix, node_id=self.node_id
         )
 
 
@@ -333,7 +332,7 @@ def counts_by_file(
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by file path among ``file_read`` events, honoring every other
     filter. ``kind`` is not offered: this count fixes it to ``file_read``."""
-    criteria = event_criteria(scope, tool=tool, subject_prefix=subject_prefix, node_id=node_id)
+    criteria = scope.criteria(tool=tool, subject_prefix=subject_prefix, node_id=node_id)
     return counts_response(services.analytics_events.counts_by_file(criteria))
 
 
@@ -347,7 +346,7 @@ def counts_by_skill(
     other filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind
     always records ``Skill``), nor ``subject_prefix`` — a skill name is a flat name, so a
     prefix of one narrows nothing a caller could not name outright."""
-    return counts_response(services.analytics_events.counts_by_skill(event_criteria(scope, node_id=node_id)))
+    return counts_response(services.analytics_events.counts_by_skill(scope.criteria(node_id=node_id)))
 
 
 @router.get(
@@ -376,7 +375,7 @@ def counts_by_node(
     """Occurrence counts by node id, across every kind matching the filters.
     ``node_id`` is not offered: it would select a single group, not narrow the count.
     ``by_name`` folds the per-mint rows into one per ``<graph_name>/<node_name>``."""
-    criteria = event_criteria(scope, kind=kind, tool=tool, subject_prefix=subject_prefix)
+    criteria = scope.criteria(kind=kind, tool=tool, subject_prefix=subject_prefix)
     rows = services.analytics_events.counts_by_node(criteria)
     return counts_response(named_counts(rows, by_name))
 

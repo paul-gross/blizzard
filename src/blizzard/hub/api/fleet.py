@@ -29,7 +29,6 @@ from blizzard.hub.api.analytics import (
     EventScopeFilters,
     ScopeFilters,
     counts_response,
-    event_criteria,
     named_counts,
     named_spend,
     operational_criteria,
@@ -406,7 +405,7 @@ def get_chunk_analytics_counts_files(
     rows, over the window it names, gated on the chunk carrying a run context rather than
     on operator credentials."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_file(event_criteria(window.event_scope)))
+    return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria()))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
@@ -417,7 +416,7 @@ def get_chunk_analytics_counts_skills(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_skill(event_criteria(window.event_scope)))
+    return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria()))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
@@ -428,7 +427,7 @@ def get_chunk_analytics_counts_agent_types(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_agent_type(event_criteria(window.event_scope)))
+    return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria()))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
@@ -441,7 +440,7 @@ def get_chunk_analytics_counts_nodes(
     """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
     _routine_run_or_404(chunk_id, services)
     return counts_response(
-        named_counts(services.analytics_events.counts_by_node(event_criteria(window.event_scope)), by_name)
+        named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria()), by_name)
     )
 
 

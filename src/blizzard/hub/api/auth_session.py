@@ -14,7 +14,6 @@ from fastapi import HTTPException, Request, status
 
 from blizzard.auth_core import Permission, Role, expand
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller
-from blizzard.foundation.roles import dto
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.hashing import SessionId
@@ -39,7 +38,6 @@ IMPLICIT_OPERATOR = ResolvedIdentity(
 )
 
 
-@dto
 @dataclass(frozen=True)
 class PresentedSession:
     """The session credential one request carries: the ``HttpOnly`` cookie or an

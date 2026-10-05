@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.oauth.internal.github_provider import GithubProvider
 from blizzard.hub.auth.oauth.internal.oidc_provider import OidcProvider
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
@@ -21,7 +21,7 @@ from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
 from blizzard.hub.config import ConfigError, OAuthProviderConfig
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class ProviderEntry:
     """One ``[[auth.oauth.provider]]`` entry, resolved to the conformer it names."""

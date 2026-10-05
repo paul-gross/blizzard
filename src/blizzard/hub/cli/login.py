@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.auth.pkce import Pkce
 
 _CLIENT_ID = "cli"
@@ -74,7 +74,7 @@ class Callback:
         return _Handler
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Login:
     """One ``blizzard hub login`` dance against one hub: builds the PKCE authorize URL, then
@@ -134,7 +134,7 @@ class Login:
         return token
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Loopback(Login):
     """The browser flow: an ephemeral ``127.0.0.1`` port takes the code back."""

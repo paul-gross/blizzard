@@ -18,7 +18,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
 from blizzard.foundation.assets import EmbeddedFrontend
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 
 _PLACEHOLDER_HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>{app_name}</title></head>
@@ -45,7 +45,7 @@ class SpaStaticFiles(StaticFiles):
             raise
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Frontend:
     """One app's frontend mount — its bundle directory and its placeholder name."""

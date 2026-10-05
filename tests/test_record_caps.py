@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.config import HubConfig, default_db_url
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
@@ -60,7 +60,7 @@ def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: st
 @pytest.mark.parametrize(
     ("rendered", "who"),
     [
-        (lambda p: HubConfig(root=p, db_url=default_db_url(p)).to_toml(), "hub"),
+        (lambda p: HubConfig(root=p, db_url=HubConfig.default_db_url(p)).to_toml(), "hub"),
         (lambda p: RunnerConfig(root=p, db_url=RunnerConfig.default_db_url(p)).to_toml(), "runner"),
     ],
 )

@@ -11,10 +11,10 @@ import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class WorkerScratchDirs:
     """One runner's per-lease scratch-directory layout, rooted at ``root`` (``""`` disables it)."""

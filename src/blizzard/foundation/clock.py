@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 
 
 class IClock(Protocol):
@@ -46,7 +46,7 @@ class SystemMonotonicClock:
         time.sleep(seconds)
 
 
-@domain_model
+@collaborator
 @dataclass
 class ManualMonotonicClock:
     """Test monotonic clock — ``sleep`` advances its own reading and records the delay,
@@ -66,7 +66,7 @@ class ManualMonotonicClock:
         self.reading += seconds
 
 
-@domain_model
+@collaborator
 @dataclass
 class FixedClock:
     """Test clock — returns a controllable instant that ``advance`` moves."""

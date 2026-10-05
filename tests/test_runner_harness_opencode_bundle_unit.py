@@ -28,7 +28,7 @@ from blizzard.runner.harness.opencode.bundle import (
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, section_of, shared_inputs
+from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, shared_inputs
 from blizzard.runner.runtime import init_environment
 from tests.harness_sections import opencode, sections, with_claude_code
 from tests.runner_fakes import FakeProbe
@@ -121,7 +121,7 @@ def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path, mo
     observed: list[tuple[Path, Path, str | None]] = []
 
     def publish(source: Path, root: Path, *, sections: HarnessSections, **_: object) -> SimpleNamespace:
-        section = section_of(sections, OPENCODE_DECLARATION.harness_id)
+        section = sections.of(OPENCODE_DECLARATION.harness_id)
         assert isinstance(section, OpenCodeSection)
         observed.append((source, root, section.worker_config_path))
         return SimpleNamespace(summary=lambda: "published")

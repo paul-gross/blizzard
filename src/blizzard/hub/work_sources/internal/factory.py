@@ -14,7 +14,7 @@ from typing import cast
 
 import httpx
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.domain.chunk.model import IReadWorkItemRepository
@@ -29,7 +29,7 @@ from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class WorkSourceEntry:
     """One ``[[work_source]]`` entry, resolved to the adapter it names."""

@@ -7,32 +7,32 @@ from dataclasses import replace
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.declaration import IHarnessSection
+from blizzard.runner.harness.declaration import HarnessSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.harness.wiring import HarnessSections, section_of, with_section
+from blizzard.runner.harness.wiring import HarnessSections
 
 
 def claude_code(config: RunnerConfig) -> ClaudeCodeSection:
-    section = section_of(config.harness_sections, ClaudeCodeSection().harness_id)
+    section = config.harness_sections.of(ClaudeCodeSection().harness_id)
     assert isinstance(section, ClaudeCodeSection)
     return section
 
 
 def opencode(config: RunnerConfig) -> OpenCodeSection:
-    section = section_of(config.harness_sections, OpenCodeSection().harness_id)
+    section = config.harness_sections.of(OpenCodeSection().harness_id)
     assert isinstance(section, OpenCodeSection)
     return section
 
 
-def sections(*overrides: IHarnessSection, base: HarnessSections | None = None) -> HarnessSections:
+def sections(*overrides: HarnessSection, base: HarnessSections | None = None) -> HarnessSections:
     """``base`` (every binding's default when absent) with each of ``overrides`` standing in."""
     result = base or HarnessSections.defaults()
     for section in overrides:
-        result = with_section(result, section)
+        result = result.replaced(section)
     return result
 
 
-def with_sections(config: RunnerConfig, *overrides: IHarnessSection) -> RunnerConfig:
+def with_sections(config: RunnerConfig, *overrides: HarnessSection) -> RunnerConfig:
     """``config`` with each of ``overrides`` standing in for its binding's section."""
     return replace(config, harness_sections=sections(*overrides, base=config.harness_sections))
 

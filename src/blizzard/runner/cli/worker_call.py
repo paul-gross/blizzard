@@ -11,7 +11,7 @@ import click
 import httpx
 
 from blizzard.cli.operator_trace import exit_code_of
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -37,7 +37,6 @@ READ_TIMEOUT = 30.0
 WRITE_TIMEOUT = 5.0
 
 
-@dto
 @dataclass(frozen=True)
 class Problem:
     """A rejected call's response — the ``detail`` string its JSON body carries, or ``""``."""
@@ -168,7 +167,7 @@ class WorkerSession:
             self.finish(code)
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class WorkerCall:
     """A spawned worker's ambient identity — the runner it reports to, and the lease it acts

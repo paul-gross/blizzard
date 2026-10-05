@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
 import click
 import httpx
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import ChunkLine, Cost, Listing
@@ -22,12 +21,12 @@ class ChunkListing(Listing):
         return ChunkLine(row).line()
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChunkDetail:
     body: dict[str, Any]
 
-    def lines(self) -> Iterator[str]:
+    def lines(self):
         body = self.body
         yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
         yield f"  node: {ChunkLine(body).node}"
@@ -62,14 +61,14 @@ def _neighbor_label(neighbor: dict[str, Any]) -> str:
     return f"{neighbor['chunk_id']} ({marker})"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MigrationIntent:
     chunk_id: str
     body: dict[str, Any]
     cancelled: bool
 
-    def lines(self) -> Iterator[str]:
+    def lines(self):
         if self.cancelled:
             yield f"cleared {self.chunk_id}'s standing migration intent"
             return

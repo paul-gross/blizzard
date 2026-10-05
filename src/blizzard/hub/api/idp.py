@@ -58,7 +58,6 @@ class CliRedirect:
         return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
-@domain_model
 @dataclass(frozen=True)
 class IdpSurface:
     """The hub's own IdP, resolved for one request — absent, and so a ``404``, without an

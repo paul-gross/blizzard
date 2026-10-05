@@ -12,7 +12,7 @@ from pathlib import Path
 
 import structlog
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.config import RunnerConfig
 
 _log = structlog.get_logger(__name__)
@@ -27,7 +27,7 @@ class ListenerError(RuntimeError):
     """A listener could not be bound — the daemon must not start."""
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Uds:
     """The unix-domain listener: a socket file at ``path``, bound at ``SOCKET_MODE``."""
@@ -84,7 +84,7 @@ class Uds:
         self.unlink()
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Tcp:
     """The TCP listener at ``host``:``port``."""
@@ -104,7 +104,6 @@ class Tcp:
         return sock
 
 
-@domain_model
 @dataclass(frozen=True)
 class Listeners:
     """Both always-on doors onto the one ASGI app, over the same route table."""

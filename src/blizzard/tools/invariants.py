@@ -17,7 +17,7 @@ from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -46,7 +46,7 @@ class Violation:
         return f"[{self.invariant}] {self.detail}"
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Check:
     """One durable invariant, asserted against a store — every breach it finds, in the
@@ -56,7 +56,6 @@ class Check:
         raise NotImplementedError
 
 
-@domain_model
 @dataclass(frozen=True)
 class QueryCheck(Check):
     """An invariant answerable by plain queries over one open read connection."""
@@ -949,7 +948,6 @@ class RunnerInvariants:
         return violations
 
 
-@domain_model
 @dataclass(frozen=True)
 class SegmentChunkResolves(QueryCheck):
     """Every ``transcript_segments.chunk_id`` resolves to a ``chunks`` row — the foreign key
@@ -1112,7 +1110,7 @@ class HubInvariants:
         return violations
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Invariants:
     """Both stores' durable invariants, over whichever URLs are given — each store is opened
