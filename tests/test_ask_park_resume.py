@@ -288,6 +288,9 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
     assert store.parked_lease_ids() == set()
     resumed_lease = store.active_lease("lease_1")
     assert resumed_lease is not None and resumed_lease.pid == 4321
+    # The wake's new transcript segment freezes the same cwd the resume ran in.
+    newest = max(ctx.stores.transcript_ledger.transcript_segments_for_chunk("ch_1"), key=lambda s: s.generation)
+    assert newest.spawn_cwd == expected_cwd
     # answer.delivered was buffered up to the hub.
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 

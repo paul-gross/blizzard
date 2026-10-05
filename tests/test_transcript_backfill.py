@@ -647,6 +647,27 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
     assert first  # the closed-lease segment above is untouched by the refusal
 
 
+def test_a_backfill_import_derives_its_segments_spawn_cwd_from_the_chunks_binding() -> None:
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    first = _import_one(ctx)
+
+    imported = ctx.stores.transcript_ledger.transcript_segment(first)
+    assert imported is not None and imported.spawn_cwd == "/ws/e1"
+
+
+def test_reship_carries_the_superseded_segments_spawn_cwd_onto_its_new_segment() -> None:
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    first = _import_one(ctx)
+
+    report = TranscriptBackfill(ctx).reship(first)
+
+    reshipped = ctx.stores.transcript_ledger.transcript_segment(report.segment_id)
+    assert reshipped is not None and reshipped.spawn_cwd == "/ws/e1"
+
+
 def test_reship_points_its_new_segment_at_the_one_it_supersedes() -> None:
     """The hub's lease read is keyed on the lease, not the segment, so the pointer is what
     keeps a re-ship from rendering the conversation twice. Every record carries it — the
