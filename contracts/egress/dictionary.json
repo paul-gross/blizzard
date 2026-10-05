@@ -3,7 +3,9 @@
     {
       "name": "steps",
       "major_version": 1,
-      "identity": "step_key",
+      "identity": [
+        "step_key"
+      ],
       "partition": "ended_at",
       "columns": [
         {
@@ -298,12 +300,17 @@
           "nullable": false,
           "meaning": "When this copy of the row was written"
         }
+      ],
+      "views": [
+        "steps_newest"
       ]
     },
     {
       "name": "invocations",
       "major_version": 1,
-      "identity": "usage_id",
+      "identity": [
+        "usage_id"
+      ],
       "partition": "recorded_at",
       "columns": [
         {
@@ -445,6 +452,350 @@
           "type": "timestamp",
           "nullable": false,
           "meaning": "When this copy of the row was written"
+        }
+      ],
+      "views": [
+        "invocations_newest"
+      ]
+    },
+    {
+      "name": "events",
+      "major_version": 1,
+      "identity": [
+        "derivation_id",
+        "kind",
+        "turn_path",
+        "occurrence"
+      ],
+      "partition": "step_started_at",
+      "views": [
+        "events_current",
+        "events_by_version"
+      ],
+      "columns": [
+        {
+          "name": "record_type",
+          "type": "string",
+          "nullable": false,
+          "meaning": "derivation, event or dropped",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ],
+          "values": {
+            "closed": true,
+            "list": [
+              "derivation",
+              "event",
+              "dropped"
+            ]
+          }
+        },
+        {
+          "name": "segment_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The transcript segment",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "extractor_version",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The extractor that derived it; null on a dropped row",
+          "on": [
+            "derivation",
+            "event"
+          ]
+        },
+        {
+          "name": "derivation_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The derivation's identity, as 32 hex characters; null on a dropped row",
+          "on": [
+            "derivation",
+            "event"
+          ]
+        },
+        {
+          "name": "derived_at",
+          "type": "timestamp",
+          "nullable": true,
+          "meaning": "When the hub derived it; null on a dropped row",
+          "on": [
+            "derivation",
+            "event"
+          ]
+        },
+        {
+          "name": "complete",
+          "type": "bool",
+          "nullable": true,
+          "meaning": "The marker's own flag: false when the derivation stopped short; derivation rows only",
+          "on": [
+            "derivation"
+          ]
+        },
+        {
+          "name": "event_count",
+          "type": "int64",
+          "nullable": true,
+          "meaning": "How many event rows the derivation holds; derivation rows only",
+          "on": [
+            "derivation"
+          ]
+        },
+        {
+          "name": "dropped_at",
+          "type": "timestamp",
+          "nullable": true,
+          "meaning": "When the hub dropped the segment's events; dropped rows only",
+          "on": [
+            "dropped"
+          ]
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "nullable": true,
+          "meaning": "file_read, skill_invocation or agent_spawn; extensible; event rows only",
+          "on": [
+            "event"
+          ],
+          "values": {
+            "closed": false,
+            "list": [
+              "file_read",
+              "skill_invocation",
+              "agent_spawn"
+            ]
+          }
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The path, the skill name, or the spawned agent type; null when the extractor names none",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "tool",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The tool the turn called",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "turn_path",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The event's place in the segment; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "occurrence",
+          "type": "int64",
+          "nullable": true,
+          "meaning": "The event's place in the segment; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "occurred_at",
+          "type": "timestamp",
+          "nullable": true,
+          "meaning": "The turn's own time, when the transcript carries one",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "depth",
+          "type": "int64",
+          "nullable": true,
+          "meaning": "0 for the main conversation, plus one per subagent nesting; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "agent_type",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The nearest enclosing subagent's type; null at depth 0",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "step_key",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The runner step the segment came from, by chunk and epoch",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "trace_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "That step's derived trace id, as 32 hex characters",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "step_started_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When that step started; the row's partition and backfill time",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "chunk_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The segment's chunk",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "epoch",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "The segment's epoch",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "spawn_generation",
+          "type": "int64",
+          "nullable": false,
+          "meaning": "Which worker spawn on the lease produced the segment",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "graph_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph the step stood in",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "graph_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The graph's name",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "node_id",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "node_name",
+          "type": "string",
+          "nullable": false,
+          "meaning": "The node's name",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "harness_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As derived; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "harness_version",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As derived; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As derived; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "effort",
+          "type": "string",
+          "nullable": true,
+          "meaning": "As derived; event rows only",
+          "on": [
+            "event"
+          ]
+        },
+        {
+          "name": "exported_at",
+          "type": "timestamp",
+          "nullable": false,
+          "meaning": "When this copy of the row was written",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
         }
       ]
     }
