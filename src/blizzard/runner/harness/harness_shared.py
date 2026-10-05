@@ -8,7 +8,6 @@ model-resolution skeleton."""
 from __future__ import annotations
 
 import contextlib
-import re
 import shutil
 import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -29,28 +28,6 @@ CHOICE_CLOSE = "</Choice>"
 
 # Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
 VERSION_PROBE_TIMEOUT_SECONDS = 5
-
-# Strips a leading `opencode`/"version"/"v" prefix off one line of OpenCode's `--version` output.
-OPENCODE_VERSION_PATTERN = re.compile(
-    r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
-    r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
-    r"\s*$",
-    re.IGNORECASE,
-)
-
-
-def normalize_opencode_version(raw: str | None) -> str | None:
-    """The bare semantic version in one raw OpenCode ``--version`` output, or ``None`` when it
-    isn't exactly one matching line — the normalizer both the live OpenCode probe and
-    ``OpenCodeHealthProbe.normalize_version`` route a membership check through. Scoped to
-    OpenCode alone: each binding owns its own raw shape and normalizer."""
-    if raw is None:
-        return None
-    lines = [line for line in raw.splitlines() if line.strip()]
-    if len(lines) != 1:
-        return None
-    match = OPENCODE_VERSION_PATTERN.fullmatch(lines[0])
-    return match.group("version") if match else None
 
 
 def binary_present(binary: str) -> bool:

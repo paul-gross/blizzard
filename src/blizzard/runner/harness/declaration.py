@@ -2,7 +2,7 @@
 emits, scaffolds, and whether it is enabled (:class:`IHarnessSectionKind`, :class:`IHarnessSection`) —
 and its construction, what a binding builds or reports from that section plus the runner-wide inputs
 every binding shares (:class:`IHarnessDeclaration`). A consumer iterates
-:data:`~blizzard.runner.harness.wiring.HARNESS_CATALOG` and never names a binding; adding a harness is
+:func:`~blizzard.runner.harness.wiring.harness_catalog` and never names a binding; adding a harness is
 one adapter package under ``harness/`` declaring both halves, and one entry in :mod:`.wiring`."""
 
 from __future__ import annotations

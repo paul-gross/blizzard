@@ -1,13 +1,18 @@
 """The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`;
 every other consumer iterates what it declares (``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS`
 declares the harness order once, Claude Code first — the first enabled binding is the default harness —
-and :data:`HARNESS_CATALOG` pairs each section kind with its binding's declaration by id."""
+and :func:`harness_catalog` pairs each section kind with its binding's declaration by id.
+
+Importing this module loads only each adapter's ``section`` module: the config roster and the lazy
+``blizzard runner`` command map read sections alone, so a worker verb never pays for an adapter's
+graph. Each declaration loads the first time a caller builds, publishes, or reports from it."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from concurrent.futures import Executor
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +21,6 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource, inspect_bundle, publish_bundle
-from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, ClaudeCodeSection
 from blizzard.runner.harness.declaration import (
     IHarnessDeclaration,
@@ -26,7 +30,6 @@ from blizzard.runner.harness.declaration import (
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -111,21 +114,23 @@ def harness_cli_groups() -> dict[str, str]:
     return dict(kind.cli_group for kind in HARNESS_SECTION_KINDS if kind.cli_group is not None)
 
 
-_DECLARED: dict[str, IHarnessDeclaration[Any]] = {
-    declaration.harness_id: declaration for declaration in (CLAUDE_CODE_DECLARATION, OPENCODE_DECLARATION)
-}
-if set(_DECLARED) != {kind.harness_id for kind in HARNESS_SECTION_KINDS}:
-    raise RuntimeError("every harness section kind needs exactly one declaration, and every declaration a section")
+@cache
+def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
+    """Every harness declaration, in catalog order — each adapter's graph loads on the first call."""
+    from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
+    from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 
-#: Every harness declaration, in catalog order.
-HARNESS_CATALOG: tuple[IHarnessDeclaration[Any], ...] = tuple(
-    _DECLARED[kind.harness_id] for kind in HARNESS_SECTION_KINDS
-)
+    declarations = {
+        declaration.harness_id: declaration for declaration in (CLAUDE_CODE_DECLARATION, OPENCODE_DECLARATION)
+    }
+    if set(declarations) != {kind.harness_id for kind in HARNESS_SECTION_KINDS}:
+        raise RuntimeError("every harness section kind needs exactly one declaration, and every declaration a section")
+    return tuple(declarations[kind.harness_id] for kind in HARNESS_SECTION_KINDS)
 
 
 def declared(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], IHarnessSection]]:
     """Each declaration paired with its parsed section, in catalog order."""
-    for declaration in HARNESS_CATALOG:
+    for declaration in harness_catalog():
         yield declaration, section_of(sections, declaration.harness_id)
 
 
@@ -136,7 +141,7 @@ def enabled(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any
 
 def declared_normalizer_versions() -> tuple[str, ...]:
     """Every binding's transcript normalizer version, in catalog order."""
-    return tuple(declaration.normalizer_version for declaration in HARNESS_CATALOG)
+    return tuple(declaration.normalizer_version for declaration in harness_catalog())
 
 
 def configured_tiers(sections: HarnessSections) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -146,7 +151,7 @@ def configured_tiers(sections: HarnessSections) -> dict[str, tuple[tuple[str, st
 
 def bundle_layouts() -> tuple[HarnessLayout, ...]:
     """Every binding's bundle layout, without runner composition."""
-    return tuple(declaration.bundle_layout for declaration in HARNESS_CATALOG)
+    return tuple(declaration.bundle_layout for declaration in harness_catalog())
 
 
 def shared_inputs(
@@ -202,9 +207,6 @@ def build_production_harness_health_probes(
     }
 
 
-BUNDLE_LAYOUTS = bundle_layouts()
-
-
 def publish_harness_bundle(
     config_dir: Path,
     runtime_root: Path,
@@ -225,12 +227,10 @@ def publish_harness_bundle(
 
 def inspect_harness_bundle(config_dir: Path) -> tuple[HarnessSource, ...]:
     """Validate ``config_dir`` against every binding's layout without publishing."""
-    return inspect_bundle(config_dir, BUNDLE_LAYOUTS)
+    return inspect_bundle(config_dir, bundle_layouts())
 
 
 __all__ = [
-    "BUNDLE_LAYOUTS",
-    "HARNESS_CATALOG",
     "HARNESS_SECTION_KINDS",
     "HarnessSections",
     "HarnessSettings",
@@ -242,6 +242,7 @@ __all__ = [
     "declared",
     "declared_normalizer_versions",
     "enabled",
+    "harness_catalog",
     "harness_cli_groups",
     "inspect_harness_bundle",
     "publish_harness_bundle",

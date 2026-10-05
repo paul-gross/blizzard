@@ -1,6 +1,6 @@
 """``claude_code.health.normalize_claude_code_version`` — the version
 normalizer Claude Code's own ``IHarnessHealthProbe.normalize_version`` routes a membership
-check through, cased the same way as ``harness_shared.normalize_opencode_version``'s own
+check through, cased the same way as ``opencode.version.normalize_opencode_version``'s own
 tests, beside which this lives. Also ``version_admitted`` against Claude Code's admitted
 range, pinning the tested-assumption cases the plan records."""
 

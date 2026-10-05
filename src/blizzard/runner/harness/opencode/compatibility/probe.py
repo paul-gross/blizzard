@@ -100,6 +100,7 @@ from blizzard.runner.harness.opencode.shapes import (
     parse_session_export,
 )
 from blizzard.runner.harness.opencode.transcript.cursor import CursorError
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
 # One concrete version this module's corpus/diagnostic fixtures are authored against — never the admission mechanism.
@@ -396,7 +397,7 @@ class OpenCodeCompatibilityProbe:
         result = self._invoke("version", [self.binary, "--version"], cwd=cwd, env=env)
         if result.returncode != 0:
             return "unknown"
-        normalized = harness_shared.normalize_opencode_version(result.stdout)
+        normalized = normalize_opencode_version(result.stdout)
         return normalized if normalized is not None else "unknown"
 
     def _fresh_turn(self, cwd: Path, env: Mapping[str, str]) -> _TurnResult:
