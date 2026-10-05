@@ -19,8 +19,8 @@ from blizzard.hub.cli.egress import StatusView
 from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress import sweep as sweep_module
+from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema
