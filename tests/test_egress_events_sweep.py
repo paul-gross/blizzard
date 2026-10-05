@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import gzip
 import json
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
+import duckdb
 import pytest
 import sqlalchemy as sa
 
@@ -18,12 +20,14 @@ from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.event_rows import derivation_id
+from blizzard.hub.domain.observability.egress import sweep as sweep_module
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.repo_files import repo_root
 from tests.support import HubHarness, hub_store_connections
 from tests.test_egress_sweep import _closed_step, _kinds, _node_id
 from tests.trace_hub import trace_hub
@@ -84,11 +88,16 @@ class _Events:
     def derive(
         self, segment_id: str, events: int, *, version: str = EXTRACTOR_VERSION, chunk_id: str | None = None
     ) -> None:
+        self.derive_events(
+            segment_id, [self._event(turn, chunk_id or self.chunk_id) for turn in range(events)], version
+        )
+
+    def derive_events(self, segment_id: str, events: list[TranscriptEvent], version: str = EXTRACTOR_VERSION) -> None:
         self.hub.clock.advance(timedelta(seconds=1))
         TranscriptEventStore(hub_store_connections(self.hub.engine)).replace_segment_events(
             segment_id,
             version,
-            [self._event(turn, chunk_id or self.chunk_id) for turn in range(events)],
+            events,
             complete=True,
             content_fingerprint="fp",
             at=self.hub.clock.now(),
@@ -100,6 +109,30 @@ class _Events:
         TranscriptEventStore(hub_store_connections(self.hub.engine)).drop_segments(
             frozenset({segment_id}), at=self.hub.clock.now()
         )
+
+    def reads_version(self, version: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Make the sweep read ``version`` as the hub's current extractor version, as an upgrade does."""
+        sweep = self.hub.services.egress_export
+        assert sweep is not None
+        monkeypatch.setattr(sweep, "_extractor_version", version)
+        monkeypatch.setattr(sweep_module, "EXTRACTOR_VERSION", version)
+
+    def view(self, name: str) -> list[tuple[str, ...]]:
+        """The rows of the published view ``name`` over this directory, as ``(segment_id, extractor_version,
+        kind, subject)`` in that order."""
+        connection = duckdb.connect()
+        listed = ", ".join(f"'{path}'" for path in self.files("events"))
+        connection.execute(
+            f"CREATE VIEW events AS SELECT * FROM read_json_auto([{listed}], format = 'newline_delimited', "
+            "union_by_name = true, sample_size = -1)"
+        )
+        sql = (repo_root() / "contracts" / "egress" / f"{name}.sql").read_text()
+        return connection.execute(
+            f"SELECT segment_id, extractor_version, kind, subject FROM ({sql}) ORDER BY 1, 2, 3, 4"
+        ).fetchall()
+
+    def event(self, kind: str, turn: int, subject: str, occurrence: int = 0) -> TranscriptEvent:
+        return replace(self._event(turn, self.chunk_id), kind=kind, subject=subject, occurrence=occurrence)
 
     def _event(self, turn: int, chunk_id: str) -> TranscriptEvent:
         return TranscriptEvent(
@@ -314,3 +347,82 @@ def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(t
     assert _kinds(world.hub) == []
     assert _derivations(world.rows()) == [("sg_a", 1)]
     assert world.hub.client.get("/api/egress/status").json()["rejected_setting"] is None
+
+
+def _subjects(rows: list[tuple[str, ...]], segment: str | None = None) -> list[str]:
+    return [subject for seg, _, _, subject in rows if segment in (None, seg)]
+
+
+def test_events_current_shows_only_what_a_segment_counts_now(tmp_path: Path) -> None:
+    world = _Events(tmp_path)
+    for segment in ("sg_a", "sg_b", "sg_c"):
+        world.segment(segment)
+        world.derive(segment, 2)
+    world.sweep()
+    assert len(world.view("events_current")) == 6
+
+    # sg_a re-derived: only its newest events stand
+    world.derive("sg_a", 1)
+    # sg_b re-derived to nothing: none stand
+    world.derive("sg_b", 0)
+    # sg_c dropped: none stand
+    world.drop("sg_c")
+    world.sweep()
+    now = world.view("events_current")
+    assert _subjects(now, "sg_a") == ["/work/src/f0.py"]
+    assert _subjects(now, "sg_b") == []
+    assert _subjects(now, "sg_c") == []
+
+    # sg_c derived again after its drop counts again
+    world.derive("sg_c", 3)
+    world.sweep()
+    assert _subjects(world.view("events_current"), "sg_c") == [f"/work/src/f{n}.py" for n in range(3)]
+
+
+def test_events_current_counts_two_kinds_at_one_place_twice(tmp_path: Path) -> None:
+    world = _Events(tmp_path)
+    world.segment("sg_a")
+    world.derive_events("sg_a", [world.event("file_read", 0, "/work/a.py"), world.event("skill_invocation", 0, "lint")])
+    world.sweep()
+    assert [(kind, subject) for _, _, kind, subject in world.view("events_current")] == [
+        ("file_read", "/work/a.py"),
+        ("skill_invocation", "lint"),
+    ]
+
+
+def test_events_current_collapses_a_derivation_exported_twice(tmp_path: Path) -> None:
+    world = _Events(tmp_path)
+    world.segment("sg_a")
+    world.derive("sg_a", 2)
+    world.sweep()
+    # a backfill rewrites the same derivation: copy the file under another name
+    [path] = world.files("events")
+    path.with_name("copy.ndjson.gz").write_bytes(path.read_bytes())
+    assert len(world.view("events_current")) == 2
+
+
+def test_the_events_views_ride_through_an_extractor_upgrade_without_a_dip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _Events(tmp_path)
+    world.reads_version(_OLD_VERSION, monkeypatch)
+    segments = [f"sg_{n}" for n in range(6)]
+    for segment in segments:
+        world.segment(segment)
+        world.derive(segment, 2, version=_OLD_VERSION)
+    world.sweep()
+    assert len(world.view("events_current")) == 12
+
+    world.reads_version(EXTRACTOR_VERSION, monkeypatch)
+    world.sweep()
+    assert len(world.view("events_current")) == 12
+    for batch in (segments[:2], segments[2:4], segments[4:]):
+        for segment in batch:
+            world.derive(segment, 2)
+        world.sweep()
+        assert len(world.view("events_current")) == 12, batch
+
+    assert {version for _, version, _, _ in world.view("events_current")} == {EXTRACTOR_VERSION}
+    by_version = world.view("events_by_version")
+    assert {version for seg, version, _, _ in by_version if seg == "sg_0"} == {_OLD_VERSION, EXTRACTOR_VERSION}
+    assert len(by_version) == 24
