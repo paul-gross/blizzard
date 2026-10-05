@@ -15,6 +15,7 @@ from typing import cast
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -30,8 +31,12 @@ from blizzard.runner.leases.overload import (
     backoff_delay,
 )
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.throttle.overload import classify_judge_overload, classify_worker_overload
-from tests.runner_fakes import FakeHarness
+from blizzard.runner.throttle.overload import (
+    classify_judge_overload,
+    classify_worker_overload,
+    record_worker_overload,
+)
+from tests.runner_fakes import FakeHarness, make_store
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -227,3 +232,40 @@ def test_overload_is_classified_by_the_sessions_own_harness(
 
     assert classify(ctx, on(CLAUDE_CODE_HARNESS_ID), "out", ["line"]) == overload
     assert classify(ctx, on(OPENCODE_HARNESS_ID), "out", ["line"]) is None
+
+
+@pytest.mark.unit
+def test_re_classifying_a_recorded_worker_exit_keeps_the_standing_backoff(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A re-classification of an exit already recorded at ordinal 4 answers the standing fact —
+    still backing off, to the stored resume instant — rather than recounting the streak to
+    the limit and falling through."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    resume_after = _NOW + backoff_delay(BACKOFF_LIMIT - 1)
+    for ordinal, generation in enumerate((4, 5, 6, 7), start=1):
+        store.record_overload(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            epoch=1,
+            generation=generation,
+            invocation_kind="worker",
+            invocation_identity=str(generation),
+            streak_ordinal=ordinal,
+            observed_at=_NOW,
+            resume_after=resume_after if generation == 7 else _NOW,
+        )
+    ctx = cast(
+        LoopContext,
+        SimpleNamespace(
+            stores=SimpleNamespace(overload=store),
+            clock=FixedClock(_NOW + timedelta(seconds=5)),
+            events=None,
+            harnesses=HarnessRegistry({}),
+        ),
+    )
+    lease = cast(Lease, SimpleNamespace(lease_id="lease_1", chunk_id="ch_1", epoch=1))
+    overload = ProviderOverload(detail="529")
+
+    assert record_worker_overload(ctx, lease, overload, generation=7) is True
+    assert record_worker_overload(ctx, lease, overload, generation=7) is True
+    standing = [f for f in store.open_overload_facts() if f.invocation_identity == "7"]
+    assert [(f.streak_ordinal, f.resume_after) for f in standing] == [(4, resume_after)]

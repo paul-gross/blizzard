@@ -17,6 +17,7 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.environments.repository import (
     EnvBinding,
+    EnvironmentHeldError,
     IWriteEnvironmentRepository,
     group_bindings_by_chunk,
     require_unheld,
@@ -121,7 +122,11 @@ class ReadyQueue:
         if acquired is None:
             return False
         chunk_id = entry.chunk_id
-        self._bind(chunk_id, acquired)
+        try:
+            self._bind(chunk_id, acquired)
+        except EnvironmentHeldError as exc:
+            self._refuse_held(entry, acquired, exc)
+            return False
         try:
             outcome = self.ctx.hub.claim_route(self._route_claim(chunk_id, acquired))
         except HubClientError:
@@ -200,6 +205,29 @@ class ReadyQueue:
             if self.ctx.events is not None:
                 self.ctx.events.publish_environment_changed(chunk_id, env.environment_id, cause="bound")
         _CP_AFTER_BIND.reached()
+
+    def _refuse_held(
+        self, entry: QueuePeekEntry, acquired: list[AcquiredEnvironment], exc: EnvironmentHeldError
+    ) -> None:
+        """The provider handed back an environment another chunk still holds: record no binding,
+        give back every acquired environment no other chunk holds, and drop the entry so the rest
+        of the tick still runs. A held environment stays with its holder — releasing it at the
+        provider would free it under that chunk."""
+        _log.error(
+            "acquired an environment another chunk holds — binding refused",
+            chunk_id=entry.chunk_id,
+            environment_id=exc.environment_id,
+            holder_chunk_id=exc.holder_chunk_id,
+        )
+        held_by_others = {
+            binding.environment_id
+            for binding in self.ctx.stores.environments.held_bindings()
+            if binding.chunk_id != entry.chunk_id
+        }
+        for env in acquired:
+            if env.environment_id not in held_by_others:
+                self.ctx.provider.release(env.environment_id)
+        self._entries.remove(entry)
 
     def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> RouteClaim:
         return RouteClaim(

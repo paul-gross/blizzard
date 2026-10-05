@@ -118,7 +118,9 @@ class OpenTakeover:
     """An open operator takeover — the human-in-session fact.
 
     ``lease_id`` always names the reference lease, active or already closed. ``fence_epoch`` is set only
-    when a live worker was force-killed; ``reference_epoch`` is the reference lease's own epoch."""
+    when a live worker was force-killed; ``reference_epoch`` is the reference lease's own epoch;
+    ``hold_epoch`` is the chunk's latest epoch when the takeover opened, which sits above the
+    reference lease when a sessionless lease (an escalation mint) followed it."""
 
     takeover_id: str
     chunk_id: str
@@ -129,15 +131,17 @@ class OpenTakeover:
     opened_at: datetime
     harness_id: str | None = None
     reference_epoch: int | None = None
+    hold_epoch: int | None = None
 
     def holds(self, chunk_id: str, epoch: int | None) -> bool:
         """Whether this takeover keeps the loop off a lease (or a held chunk) at ``epoch``: the
-        person holds the reference lease and anything at or below the fence. A lease a later
-        re-claim mints sits above both and is the loop's again; a takeover recording neither
-        epoch holds the whole chunk."""
+        person holds the reference lease, the chunk's own epoch at open, and anything at or below
+        the fence. A lease a later re-claim mints sits above all three and is the loop's again; a
+        takeover recording no epoch holds the whole chunk."""
         if chunk_id != self.chunk_id:
             return False
-        ceiling = max((e for e in (self.reference_epoch, self.fence_epoch) if e is not None), default=None)
+        epochs = (self.reference_epoch, self.fence_epoch, self.hold_epoch)
+        ceiling = max((e for e in epochs if e is not None), default=None)
         return ceiling is None or epoch is None or epoch <= ceiling
 
     def ended_by(self, view: ChunkStatusView) -> bool:
@@ -226,6 +230,7 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         fence_epoch: int | None,
         opened_at: datetime,
         session: SessionReference,
+        hold_epoch: int | None = None,
     ) -> None:
         """Open a takeover — recorded before any kill and before the interactive command
         is returned, so no later tick can race the human for the chunk."""
@@ -301,6 +306,8 @@ class TakeoverAdmission:
     live: bool
     #: The epoch the fence mints, above every epoch this runner knows; ``None`` when nothing is live.
     fence_epoch: int | None
+    #: The chunk's latest epoch at open — held even when the reference lease sits below it.
+    hold_epoch: int
 
 
 def admit_takeover(
@@ -333,6 +340,7 @@ def admit_takeover(
         workdir=scope.bindings[0].workdir,
         live=live,
         fence_epoch=scope.latest_epoch + 1 if live else None,
+        hold_epoch=scope.latest_epoch,
     )
 
 
@@ -377,6 +385,25 @@ class OpenedTakeover:
     # The bounded takeover env, layered over the operator's terminal on exec.
     # Carries the re-minted lease token — env only, never the printable ``command``.
     env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TakeoverCloser:
+    """Ends a takeover through :func:`takeover_closing` — the one close path, shared by the
+    operator's end request and the loop's hub-ended sweep."""
+
+    takeover: IWriteTakeoverRepository
+    clock: IClock
+    events: IRunnerEventPublisher | None = None
+
+    def close(self, scope: TakeoverCloseScope, takeover_id: str) -> None:
+        """End ``takeover_id``, idempotently: ending one already ended is the desired state, so
+        it succeeds rather than raising. Only a different takeover holding the chunk refuses."""
+        if takeover_closing(scope, takeover_id) is None:
+            return
+        self.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self.clock.now())
+        if self.events is not None:
+            self.events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")
 
 
 class TakeoverService:
@@ -445,6 +472,7 @@ class TakeoverService:
             session=session,
             workdir=workdir,
             fence_epoch=fence_epoch,
+            hold_epoch=admission.hold_epoch,
             opened_at=now,
         )
         if self._events is not None:
@@ -517,8 +545,4 @@ class TakeoverService:
         so it succeeds rather than raising. Only a genuinely *different* takeover holding the
         chunk is the real conflict this still refuses. ``scope`` is already resolved by the
         caller (``bzh:domain-takes-objects``)."""
-        if takeover_closing(scope, takeover_id) is None:
-            return
-        self._takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
-        if self._events is not None:
-            self._events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")
+        TakeoverCloser(self._takeover, self._clock, self._events).close(scope, takeover_id)

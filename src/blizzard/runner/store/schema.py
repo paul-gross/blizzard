@@ -369,6 +369,7 @@ takeovers = Table(
     Column("harness_id", String, nullable=True),
     Column("workdir", String, nullable=False),
     Column("fence_epoch", Integer, nullable=True),  # set only when a live worker was force-killed
+    Column("hold_epoch", Integer, nullable=True),  # the chunk's latest epoch when the takeover opened
     Column("opened_at", UtcDateTime, nullable=False),
 )
 

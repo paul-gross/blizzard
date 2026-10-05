@@ -50,7 +50,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
-from blizzard.runner.lifecycle.claim import InterruptedClaims
+from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
@@ -1400,6 +1400,46 @@ def test_fill_preparation_failure_skips_without_claiming(tmp_path):  # type: ign
     assert hub.claims == []
     assert store.list_active_leases() == []
     assert store.held_environment_ids() == []
+
+
+class _HeldIgnoringProvider(FakeProvider):
+    """A provider that breaks its ``held_ids`` contract — hands out its whole pool every time."""
+
+    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+        return super().acquire(chunk_id, count, [])
+
+
+@pytest.mark.unit
+def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """An environment another chunk holds is refused at bind: no binding, no claim, only the
+    environment no one else holds is given back, and the rest of the tick still runs."""
+    import blizzard.runner.loop.tick as tick_module
+
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_holder", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    provider = _HeldIgnoringProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    advanced: list[bool] = []
+
+    class _RecordingAdvance(Advance):
+        def run(self) -> None:
+            advanced.append(True)
+            super().run()
+
+    monkeypatch.setattr(tick_module, "Advance", _RecordingAdvance)
+    monkeypatch.setattr(ReadyQueue, "_environments_wanted", lambda self, entry: 2)
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    tick(ctx)
+
+    assert hub.claims == []
+    assert store.list_active_leases() == []
+    assert [(b.chunk_id, b.environment_id) for b in store.held_bindings()] == [("ch_holder", "e1")]
+    assert provider.released == ["e2"]  # the holder keeps e1
+    assert advanced == [True]
 
 
 @pytest.mark.unit

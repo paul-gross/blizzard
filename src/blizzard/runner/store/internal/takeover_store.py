@@ -63,6 +63,7 @@ class TakeoverStore:
         fence_epoch: int | None,
         opened_at: datetime,
         session: SessionReference,
+        hold_epoch: int | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -74,6 +75,7 @@ class TakeoverStore:
                     harness_id=session.harness_id,
                     workdir=workdir,
                     fence_epoch=fence_epoch,
+                    hold_epoch=hold_epoch,
                     opened_at=opened_at,
                 )
             )
@@ -103,6 +105,7 @@ class TakeoverStore:
             opened_at=r.opened_at,
             harness_id=str(r.harness_id) if r.harness_id is not None else None,
             reference_epoch=int(r.reference_epoch) if r.reference_epoch is not None else None,
+            hold_epoch=int(r.hold_epoch) if r.hold_epoch is not None else None,
         )
 
 

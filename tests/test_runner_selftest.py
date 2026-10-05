@@ -447,13 +447,15 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     # The wedged check (`spawn` blocks forever) never returns on its own — the fix
     # under test is the service's own wall-clock budget resolving the run anyway.
     service = SelfTestService(
-        harnesses=HarnessRegistry({"claude_code": HarnessBinding(adapter=_HangingAdapter())}),
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
         clock=SystemClock(),
         run_budget_seconds=0.2,
     )
-    client = TestClient(create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), selftests=service))
+    registry = HarnessRegistry({"claude_code": HarnessBinding(adapter=_HangingAdapter())})
+    client = TestClient(
+        create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service)
+    )
 
     start = client.post("/api/selftests", json={"harness": "claude_code"})
     assert start.status_code == 201, start.text
@@ -471,12 +473,13 @@ def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path
     # — a recorded owner this runner cannot currently serve, never a default substitute.
     registry = HarnessRegistry({"claude_code": HarnessBinding(adapter=None)})
     service = SelfTestService(
-        harnesses=registry,
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
         clock=SystemClock(),
     )
-    client = TestClient(create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), selftests=service))
+    client = TestClient(
+        create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service)
+    )
 
     resp = client.post("/api/selftests", json={"harness": "claude_code"})
 

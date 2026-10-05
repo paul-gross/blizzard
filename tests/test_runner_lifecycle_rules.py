@@ -4,12 +4,15 @@ no hub, no clock (``blizzard.runner.lifecycle.model``)."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.leases import LeaseClosureReason
+from blizzard.foundation.leases import LeaseClosureReason, LeaseState
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import UnavailableHarnessError
 from blizzard.runner.hub.client import RouteClaimOutcome
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT, cause_of
@@ -77,8 +80,10 @@ from blizzard.runner.lifecycle.model import (
 )
 from blizzard.runner.lifecycle.session import (
     ResumedSession,
+    ResumeTarget,
     member_skip_reason,
     model_drifted,
+    resume_target,
     rotation_breach,
     selection_is_strict,
 )
@@ -199,14 +204,21 @@ _OUTCOMES = {
 # --- lease moves ------------------------------------------------------------------------------ #
 
 
-def test_lease_moves_declare_a_closed_lease_final_and_an_unspawned_one_unparkable() -> None:
-    assert LEASE_MOVES["closed"] == frozenset()
+def test_lease_moves_declare_only_the_pause_park_the_code_enforces() -> None:
+    """A pause parks every spawned lease, an ask-parked one included; an unspawned or closed
+    lease has no worker to park. No other move is claimed by the table."""
+    assert {state: set(moves) for state, moves in LEASE_MOVES.items()} == {
+        "spawning": set(),
+        "running": {LeaseMove.PARK_PAUSED},
+        "stale": {LeaseMove.PARK_PAUSED},
+        "exited": {LeaseMove.PARK_PAUSED},
+        "parked": {LeaseMove.PARK_PAUSED},
+        "backing-off": {LeaseMove.PARK_PAUSED},
+        "closed": set(),
+    }
+    assert set(LEASE_MOVES) == set(get_args(LeaseState))
+    assert lease_move_legal("parked", LeaseMove.PARK_PAUSED)
     assert not lease_move_legal("spawning", LeaseMove.PARK_PAUSED)
-    assert not lease_move_legal("spawning", LeaseMove.START_PROCESS)
-    assert lease_move_legal("running", LeaseMove.PARK_PAUSED)
-    assert lease_move_legal("parked", LeaseMove.START_PROCESS)
-    assert lease_move_legal("exited", LeaseMove.CLOSE_APPLIED)
-    assert not lease_move_legal("running", LeaseMove.CLOSE_APPLIED)
 
 
 def test_preempt_kills_under_brake() -> None:
@@ -701,6 +713,29 @@ def test_select_harness_strict_and_skips() -> None:
     assert member_skip_reason(healthy=False, maps_authored_tier=False) == "unhealthy"
     assert member_skip_reason(healthy=True, maps_authored_tier=False) == "no-authored-tier"
     assert member_skip_reason(healthy=True, maps_authored_tier=True) is None
+
+
+def test_resume_target_cases() -> None:
+    head = SessionReference("cc", "sess-head")
+    exc = UnavailableHarnessError("cc", "model resolution")
+    plain = _node().model_copy(update={"session": SessionMode.RESUME, "session_name": None})
+    pooled = plain.model_copy(update={"session_name": "impl"})
+    fresh = plain.model_copy(update={"session": SessionMode.FRESH})
+
+    assert resume_target(fresh, candidate=head) == ResumeTarget(session=None)
+    assert resume_target(plain) == ResumeTarget(session=None)
+    assert resume_target(plain, candidate=head) == ResumeTarget(session=head)
+    assert resume_target(plain, candidate=head, owner_exc=exc) == ResumeTarget(
+        session=None, owner_unresolvable=(head, exc)
+    )
+    assert resume_target(pooled) == ResumeTarget(session=None)  # an empty pool mints its head
+    assert resume_target(pooled, candidate=head) == ResumeTarget(session=head)
+    assert resume_target(pooled, candidate=head, breach="max_invocations") == ResumeTarget(
+        session=None, pool_owner="cc"
+    )
+    assert resume_target(pooled, candidate=head, breach="owner-unresolvable", owner_exc=exc) == ResumeTarget(
+        session=None, pool_owner="cc", owner_unresolvable=(head, exc)
+    )
 
 
 def test_rotation_breach_order() -> None:

@@ -12,9 +12,8 @@ from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.harness.registry import UnavailableHarnessError
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.selftest.model import SelfTestRun
-from blizzard.runner.selftest.service import UnknownHarnessError
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -61,9 +60,10 @@ def _view(run: SelfTestRun) -> SelfTestView:
 )
 def start_selftest(request_body: SelfTestStartRequest, request: Request) -> SelfTestView:
     """Mint a selftest run against ``harness`` and begin it off the request thread."""
-    service = RunnerWiring.of(request).selftests()
+    wiring = RunnerWiring.of(request)
+    service = wiring.selftests()
     try:
-        run = service.start(request_body.harness)
+        adapter = wiring.harnesses().self_test(request_body.harness)
     except UnknownHarnessError as exc:
         known = ", ".join(exc.known) or "(none configured)"
         raise HTTPException(
@@ -72,7 +72,7 @@ def start_selftest(request_body: SelfTestStartRequest, request: Request) -> Self
         ) from exc
     except UnavailableHarnessError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    return _view(run)
+    return _view(service.start(request_body.harness, adapter))
 
 
 @router.get("/selftests/{selftest_id}", response_model=SelfTestView)

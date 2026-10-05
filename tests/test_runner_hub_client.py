@@ -11,7 +11,7 @@ import json
 import httpx
 import pytest
 
-from blizzard.runner.hub.client import HubClientError
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
@@ -464,3 +464,54 @@ def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
 
     with pytest.raises(HubClientError):
         _client(handler).chunk_statuses(["ch_1"])
+
+
+# --- the chunk-ended 409 decode ------------------------------------ #
+
+
+def _refusing(status_code: int, **kwargs: object):  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, **kwargs)  # type: ignore[arg-type]
+
+    return handler
+
+
+@pytest.mark.unit
+def test_envelope_409_raises_chunk_ended_carrying_the_hub_detail() -> None:
+    client = _client(_refusing(409, json={"detail": "chunk ch_1 has no current runner node"}))
+    with pytest.raises(ChunkEndedError) as raised:
+        client.get_envelope("ch_1")
+    assert raised.value.detail == "chunk ch_1 has no current runner node"
+
+
+@pytest.mark.unit
+def test_route_token_409_raises_chunk_ended_carrying_the_hub_detail() -> None:
+    client = _client(_refusing(409, json={"detail": "chunk ch_1 is done"}))
+    with pytest.raises(ChunkEndedError) as raised:
+        client.rekey_route_token("ch_1")
+    assert raised.value.detail == "chunk ch_1 is done"
+
+
+@pytest.mark.unit
+def test_chunk_ended_detail_falls_back_to_the_raw_body_when_it_is_not_json() -> None:
+    with pytest.raises(ChunkEndedError) as envelope:
+        _client(_refusing(409, text="chunk ended")).get_envelope("ch_1")
+    with pytest.raises(ChunkEndedError) as rekey:
+        _client(_refusing(409, text="route gone")).rekey_route_token("ch_1")
+    assert (envelope.value.detail, rekey.value.detail) == ("chunk ended", "route gone")
+
+
+@pytest.mark.unit
+def test_envelope_404_still_raises_chunk_not_found() -> None:
+    with pytest.raises(ChunkNotFoundError):
+        _client(_refusing(404, json={"detail": "no chunk ch_1"})).get_envelope("ch_1")
+
+
+@pytest.mark.unit
+def test_409_on_a_route_that_does_not_opt_in_stays_a_plain_hub_client_error() -> None:
+    client = _client(_refusing(409, json={"detail": "chunk ch_1 is done"}))
+    with pytest.raises(HubClientError) as raised:
+        client.submit_completion(
+            "ch_1", CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+        )
+    assert type(raised.value) is HubClientError
