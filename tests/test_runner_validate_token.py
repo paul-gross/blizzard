@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.foundation.clock import SystemClock
-from blizzard.runner.auth.jwks_cache import JwksCache
+from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 
 pytestmark = pytest.mark.unit

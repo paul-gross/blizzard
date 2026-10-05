@@ -173,6 +173,7 @@ also_copy = [
     "openapi",
     ".github/workflows/push.yml",
     ".github/workflows/release.yml",
+    "contracts/ast-grep/rules/domain-takes-objects.yml",
     "contracts/cli",
     "contracts/egress",
     "contracts/sse",

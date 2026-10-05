@@ -15,7 +15,7 @@ import jwt
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.auth.jwks_cache import JwksCache
+from blizzard.runner.auth.jwks_cache import IJwksCache
 
 #: The ±30s clock-skew leeway: applied to ``exp`` by :meth:`FederatedIdentity.from_claims`, and to
 #: ``iat``, harmlessly, by PyJWT's own ``leeway`` kwarg.
@@ -74,7 +74,7 @@ class FederationToken:
 
     raw: str
     runner_id: str
-    jwks: JwksCache
+    jwks: IJwksCache
     jti_cache: IJtiCache
     clock: IClock
 

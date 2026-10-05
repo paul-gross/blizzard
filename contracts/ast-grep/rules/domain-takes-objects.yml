@@ -9,43 +9,27 @@ message: >-
   — resolve $ID to its entity at the edge and pass that instead.
 files:
   - src/blizzard/hub/domain/**
-  - src/blizzard/runner/harness/harness_telemetry_plan.py
-  - src/blizzard/runner/harness/selftest_result.py
-  - src/blizzard/runner/hub/outbound_buffer.py
-  - src/blizzard/runner/leases/__init__.py
-  - src/blizzard/runner/leases/asks.py
-  - src/blizzard/runner/leases/closure.py
-  - src/blizzard/runner/leases/elicitation.py
-  - src/blizzard/runner/leases/escalations.py
-  - src/blizzard/runner/leases/lease_auth.py
-  - src/blizzard/runner/leases/liveness.py
-  - src/blizzard/runner/leases/operator_requests.py
-  - src/blizzard/runner/leases/overload.py
-  - src/blizzard/runner/leases/record.py
-  - src/blizzard/runner/leases/resume_intent.py
-  - src/blizzard/runner/leases/session.py
-  - src/blizzard/runner/lifecycle/judgement/artifacts.py
-  - src/blizzard/runner/lifecycle/judgement/checks.py
-  - src/blizzard/runner/lifecycle/judgement/git_commit_declaration.py
-  - src/blizzard/runner/lifecycle/takeover.py
-  - src/blizzard/runner/operator/attachments.py
-  - src/blizzard/runner/operator/requeue.py
-  - src/blizzard/runner/status/view.py
-  - src/blizzard/runner/throttle/pause.py
-  - src/blizzard/runner/tracing/__init__.py
-  - src/blizzard/runner/tracing/assembly.py
-  - src/blizzard/runner/tracing/attributes.py
-  - src/blizzard/runner/tracing/cursor.py
-  - src/blizzard/runner/tracing/facts.py
-  - src/blizzard/runner/tracing/platform.py
-  - src/blizzard/runner/tracing/receiver.py
-  - src/blizzard/runner/tracing/receiver_limits.py
-  - src/blizzard/runner/tracing/replay.py
-  - src/blizzard/runner/tracing/repository.py
-  - src/blizzard/runner/tracing/status.py
-  - src/blizzard/runner/tracing/sweep.py
-  - src/blizzard/runner/transcripts/invocation_boundaries.py
-  - src/blizzard/runner/usage/repository.py
+  - src/blizzard/runner/auth/**
+  - src/blizzard/runner/config_table.py
+  - src/blizzard/runner/environments/**
+  - src/blizzard/runner/events/**
+  - src/blizzard/runner/harness/**
+  - src/blizzard/runner/hub/**
+  - src/blizzard/runner/leases/**
+  - src/blizzard/runner/lifecycle/**
+  - src/blizzard/runner/loop/**
+  - src/blizzard/runner/operator/**
+  - src/blizzard/runner/process/**
+  - src/blizzard/runner/selftest/**
+  - src/blizzard/runner/status/**
+  - src/blizzard/runner/stores.py
+  - src/blizzard/runner/subscriptions/**
+  - src/blizzard/runner/throttle/**
+  - src/blizzard/runner/tracing/**
+  - src/blizzard/runner/transcripts/**
+  - src/blizzard/runner/usage/**
+ignores:
+  - src/blizzard/runner/**/internal/**
 rule:
   all:
     - kind: function_definition

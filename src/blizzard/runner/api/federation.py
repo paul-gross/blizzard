@@ -24,7 +24,7 @@ from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.auth.jwks_cache import JwksCache
+from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
 from blizzard.runner.auth.session import (
     CALLBACK_PATH,
@@ -268,7 +268,7 @@ async def callback(request: Request) -> Response:
         return bounce.refuse("bad or expired state")
 
     settings: FederationSettings = request.app.state.federation
-    jwks: JwksCache = request.app.state.jwks_cache
+    jwks: IJwksCache = request.app.state.jwks_cache
     jti_cache: IJtiCache = request.app.state.jti_cache
     clock: IClock = request.app.state.clock
     try:
