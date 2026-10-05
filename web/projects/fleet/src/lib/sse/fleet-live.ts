@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
   ActivityChunkChangeCause,
   type ActivityView,
+  ChunkStatus,
   type ChunkChangedPayload,
   type DecisionOpenedPayload,
   type DecisionResolvedPayload,
@@ -155,7 +156,22 @@ function chunkDetailKeys(data: HubEventPayload): readonly (readonly unknown[])[]
  * to `needs_human`), and the feed unifies open escalations with logged events, so a
  * status flip that carries an escalation must re-read it too. */
 function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
-  return [hubChunksKey, hubQueueKey, ...chunkDetailKeys(data), hubFleetSpendKey, hubEventsKey];
+  return [
+    hubChunksKey,
+    hubQueueKey,
+    ...chunkDetailKeys(data),
+    hubFleetSpendKey,
+    hubEventsKey,
+    ...(chunkEnded(data) ? [hubQuestionsKey, hubDecisionsKey] : []),
+  ];
+}
+
+/** Whether a chunk-changed frame reports the chunk ended (`stopped`/`done`). The hub lists
+ * no open question or decision on an ended chunk, so the fleet-wide rails must re-read
+ * at once rather than wait on their poll backstop. Other frames leave both lists alone. */
+function chunkEnded(data: HubEventPayload): boolean {
+  const status = 'status' in data ? data.status : undefined;
+  return status === ChunkStatus.STOPPED || status === ChunkStatus.DONE;
 }
 
 /** A question-asked/-answered frame invalidates the fleet-wide ask list (the right

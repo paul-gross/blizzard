@@ -101,7 +101,14 @@ export function mergeActivityFeeds(
 ): readonly LoggedEvent[] {
   const liveKeys = new Set(live.flatMap((event) => (event.key ? [event.key] : [])));
   const backfillOnly = backfill.filter((event) => !event.key || !liveKeys.has(event.key));
-  const combined = [...backfillOnly, ...live].sort((a, b) => a.at - b.at);
+  // A replayed live frame is stamped with its receipt time; the backfill row for the same
+  // fact carries the event's real time, so that time wins on a key collision.
+  const backfillTimes = new Map(backfill.flatMap((event) => (event.key ? [[event.key, event.at] as const] : [])));
+  const liveTimed = live.map((event) => {
+    const at = event.key ? backfillTimes.get(event.key) : undefined;
+    return at === undefined ? event : { ...event, at };
+  });
+  const combined = [...backfillOnly, ...liveTimed].sort((a, b) => a.at - b.at);
   return combined.length > limit ? combined.slice(combined.length - limit) : combined;
 }
 
