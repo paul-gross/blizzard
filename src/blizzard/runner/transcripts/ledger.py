@@ -50,6 +50,8 @@ class TruncationReason(StrEnum):
     BACKFILL_INCOMPLETE = "backfill_incomplete"
     #: The hub capped a record this runner shipped — the worst: the content left the runner.
     HUB_CAPPED = "hub_capped"
+    #: The hub refused a record outright — its chunk and epoch are not this runner's — and stored none of it.
+    HUB_REFUSED = "hub_refused"
 
     @property
     def severity(self) -> int:
@@ -64,6 +66,7 @@ _TRUNCATION_SEVERITY: dict[TruncationReason, int] = {
     TruncationReason.LEASE_CLOSURE_INCOMPLETE: 3,
     TruncationReason.BACKFILL_INCOMPLETE: 3,
     TruncationReason.HUB_CAPPED: 4,
+    TruncationReason.HUB_REFUSED: 5,
 }
 
 #: Where one segment stands: still taking content, or sealed by its final marker.

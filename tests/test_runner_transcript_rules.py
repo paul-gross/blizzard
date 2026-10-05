@@ -139,9 +139,11 @@ def test_lost_to_cap() -> None:
 # --- truncation ---------------------------------------------------------------------
 
 
-def test_hub_capped_ranks_worst() -> None:
-    assert [r.severity for r in TruncationReason] == [0, 1, 2, 3, 3, 4]
-    assert max(TruncationReason, key=lambda r: r.severity) is TruncationReason.HUB_CAPPED
+def test_hub_refused_ranks_worst() -> None:
+    assert [r.severity for r in TruncationReason] == [0, 1, 2, 3, 3, 4, 5]
+    assert max(TruncationReason, key=lambda r: r.severity) is TruncationReason.HUB_REFUSED
+    assert TruncationReason.HUB_REFUSED == "hub_refused"
+    assert TruncationReason.HUB_REFUSED.severity > TruncationReason.HUB_CAPPED.severity
 
 
 def test_truncation_mark_worst_of_warns_once() -> None:

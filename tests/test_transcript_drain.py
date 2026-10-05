@@ -387,6 +387,42 @@ def test_drain_acks_a_hub_refused_record_with_a_warning() -> None:
     assert [(e["seq"], e["segment_id"], e["log_level"]) for e in warned] == [(refused_seq, segment_id, "warning")]
 
 
+def test_drain_marks_a_hub_refused_record_truncated_with_one_fact() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    first = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    second = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    hub.refuse_transcript_seqs = {first, second}
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_refused"
+    fact_events = ctx.stores.outbound.pending_outbound()
+    assert len(fact_events) == 1  # the second refusal changes nothing, so sends no second fact
+    payload = json.loads(fact_events[0].payload)
+    assert payload["kind"] == "transcript-truncated"
+    assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_refused"}
+
+
+def test_drain_displays_hub_refused_over_hub_capped_on_one_segment() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    refused_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    hub.reject_transcript_seqs = {capped_seq}
+    hub.refuse_transcript_seqs = {refused_seq}
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_refused"
+
+
 def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     """A crash in the after-submit.before-ack window (`_CP_AFTER_SUBMIT`) must not read
     the retry's ack as ordinary idempotency — the hub's replay response must still
