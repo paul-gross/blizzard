@@ -1,0 +1,34 @@
+<app-config-master
+  paneId="admin-work-sources"
+  listCaption="Work sources"
+  [filter]="lifecycle()"
+  [rows]="rows()"
+  [state]="state()"
+  [emptyText]="emptyText()"
+  [selectedKey]="selectedKey()"
+  [drilldown]="mobile()"
+  backLabel="Work sources"
+  testidPrefix="admin-work-sources"
+  footer="Retire stops new work; nothing is deleted."
+  [canCreate]="canCreate()"
+  newLabel="New work source"
+  (create)="onNew()"
+  (filterChange)="onFilter($event)"
+  (pick)="onPick($event)"
+  (back)="onBack()"
+>
+  <router-outlet />
+</app-config-master>
+@if (createOpen()) {
+  <app-config-form-dialog
+    heading="New work source"
+    mode="create"
+    [fields]="fields"
+    submitLabel="Create"
+    [submitError]="createError()"
+    [submitting]="createMutation.isPending()"
+    testidPrefix="admin-work-sources-create"
+    (closed)="createOpen.set(false)"
+    (submitted)="onCreate($event)"
+  />
+}

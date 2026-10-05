@@ -1,0 +1,32 @@
+:host {
+  display: block;
+}
+.diff {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+.diff-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 0;
+  min-width: 0;
+}
+.field {
+  color: var(--label);
+}
+.old {
+  color: var(--red);
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+}
+.arrow {
+  color: var(--label-dim);
+}
+.new {
+  color: var(--green);
+  overflow-wrap: anywhere;
+}

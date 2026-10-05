@@ -1,0 +1,19 @@
+<app-config-master
+  paneId="admin-changes"
+  listCaption="Changes, newest first"
+  [rows]="rows()"
+  [state]="state()"
+  emptyText="No configuration changes recorded."
+  [selectedKey]="selectedKey()"
+  [drilldown]="mobile()"
+  backLabel="Changes"
+  testidPrefix="admin-changes"
+  footer="Every change to every record, from every door."
+  [hasOlder]="hasOlder()"
+  [olderPending]="olderPending()"
+  (pick)="onPick($event)"
+  (back)="onBack()"
+  (older)="onOlder()"
+>
+  <router-outlet />
+</app-config-master>

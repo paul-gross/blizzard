@@ -45,6 +45,10 @@ Writes need the `config:edit` permission and reads need `fleet:view`. Over HTTP 
 `/enable`. `PATCH` applies only the fields present and refuses an explicit `null`. The document schema is served at
 `GET /api/config/schema/repositories`.
 
+The board's Admin page lists repositories, with each record's revision, last change, and history. On a desktop, a user
+with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
+saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change.
+
 ## What a record does not change yet
 
 A stored repository does not yet change where the hub delivers. Delivery still takes its forge, owner, base branch, and

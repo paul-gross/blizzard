@@ -1,0 +1,32 @@
+:host {
+  display: block;
+}
+.revs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+.rev-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.r {
+  color: var(--label);
+  flex: none;
+}
+.what {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fields {
+  color: var(--label);
+}
+.who {
+  color: var(--label);
+}

@@ -46,6 +46,10 @@ export class KitTextInput {
    * `<input>`. */
   readonly rows = input(3);
 
+  /** The single-line `<input>`'s type — `password` for a value that must not echo.
+   * No effect on a multiline control. */
+  readonly type = input<'text' | 'password'>('text');
+
   readonly valueChange = output<string>();
 
   protected onInput(event: Event): void {

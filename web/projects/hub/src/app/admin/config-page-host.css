@@ -1,0 +1,8 @@
+/* A config list page is a routed container with no layout of its own: the admin
+   shell's body sizes it, and the master/detail frame inside fills it. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

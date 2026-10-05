@@ -68,6 +68,11 @@ A stored record does not yet change what the hub ingests: ingest, the forge-stat
 read the `[[work_source]]` blocks below, and a source declared only as a record is neither ingested from nor annotated.
 `list` shows records only, so a source declared in `blizzard-hub.toml` is not listed there.
 
+The board's Admin page lists work sources, with each record's revision, last change, and history. On a desktop, a user
+with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change before
+it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
+built-in `hub` source is listed and cannot be changed.
+
 ## Ingesting work items
 
 `blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk; each token is `<source>:<ref>`,

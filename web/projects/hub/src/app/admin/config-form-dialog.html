@@ -1,0 +1,60 @@
+<fleet-kit-dialog [open]="true" [ariaLabel]="heading()" [testid]="testidPrefix() + '-dialog'" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader [attr.data-testid]="testidPrefix() + '-dialog-title'">{{ heading() }}</h2>
+
+  <div class="fields">
+    @for (field of visibleFields(); track field.key) {
+      <div class="field">
+        <span class="label"
+          >{{ field.label }}
+          @if (field.required && mode() !== 'edit') {
+            *
+          }
+        </span>
+        @if (field.kind === 'checkbox') {
+          <input
+            type="checkbox"
+            [checked]="flagOf(field.key)"
+            [attr.aria-label]="field.label"
+            [attr.data-testid]="testidPrefix() + '-field-' + field.key"
+            (change)="onFlag(field.key, $event)"
+          />
+        } @else {
+          <fleet-kit-text-input
+            [type]="field.kind === 'password' ? 'password' : 'text'"
+            [ariaLabel]="field.label"
+            [value]="textOf(field.key)"
+            [testid]="testidPrefix() + '-field-' + field.key"
+            (valueChange)="onText(field.key, $event)"
+          />
+        }
+      </div>
+    }
+  </div>
+
+  @if (mode() === 'edit') {
+    <h3 class="section">Will change</h3>
+    @if (edit().diff.length > 0) {
+      <app-config-field-diff [diff]="edit().diff" [testid]="testidPrefix() + '-diff'" />
+    } @else {
+      <p class="diff-empty" [attr.data-testid]="testidPrefix() + '-diff-empty'">Nothing yet.</p>
+    }
+  }
+
+  <div fleetKitDialogFooter class="footer">
+    @if (submitError(); as error) {
+      <p class="submit-error" [attr.data-testid]="testidPrefix() + '-submit-error'">{{ error }}</p>
+    }
+    <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">
+      Cancel
+    </fleet-kit-button>
+    <fleet-kit-button
+      size="cta"
+      variant="primary"
+      [disabled]="!canSubmit()"
+      [testid]="testidPrefix() + '-submit'"
+      (click)="onSubmit()"
+    >
+      {{ submitLabel() }}
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

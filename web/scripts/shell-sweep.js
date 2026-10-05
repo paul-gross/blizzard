@@ -95,6 +95,10 @@
  *     related-routines list genuinely stack at 1280/390/320px with no
  *     horizontal overflow, and a routine name long enough to wrap stays
  *     inside the list rather than widening the panel.
+ *   - projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts — the Admin
+ *     config surfaces: a desktop detail carries its write controls and a
+ *     phone's carries none and shows the CLI command, both without horizontal
+ *     overflow at 1280/390/320px.
  *   - projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
@@ -260,6 +264,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },

@@ -30,6 +30,11 @@ Every create, replace, retire, and enable is also recorded in the [change log](.
 
 Writes need the `config:edit` permission, held by `admin` and `superuser`; reads need `fleet:view`.
 
+The board's Admin page lists secrets with the records that use each one. On a desktop, a user with `config:edit` can
+create a secret, replace its value, retire it, and enable it there; Retire is unavailable while a record uses the
+secret. The value is typed into a password field and never shown again, and no page of the board displays it. On a
+phone the page is read-only and names the `blizzard hub secret set` command.
+
 Over HTTP, `POST /api/secrets` creates and `PUT /api/secrets/{name}/value` replaces. A replace carrying an `If-Match`
 header answers 409, naming the current revision, when that revision has moved.
 

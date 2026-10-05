@@ -1,0 +1,27 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.filters {
+  padding: 6px 8px;
+}
+.older {
+  padding: 6px 8px;
+}
+.foot {
+  margin: 0;
+  padding: 8px;
+  color: var(--label-dim);
+  font-size: var(--fs-sm);
+}
+.detail-pane {
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.new {
+  display: flex;
+  padding-bottom: 8px;
+}

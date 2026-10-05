@@ -41,6 +41,29 @@ export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
 /** The admin page's user listing — `GET /api/users`. Invalidated by the
  * role-assignment mutation directly (no SSE event names a role change yet). */
 export const hubUsersKey = ['hub', 'users'] as const;
+/** The root every live-configuration read shares — work sources, repositories,
+ * secrets, and the change log. A config write changes more than its own record (a
+ * source retire also moves a secret's references and appends to the change log), so
+ * every config mutation invalidates this one root rather than guessing which reads
+ * it touched. */
+export const hubConfigKey = ['hub', 'config'] as const;
+/** One config list — `GET /api/work-sources`, `/api/repositories`, or `/api/secrets` —
+ * with whether retired records ride along in the key, so the two reads are separate
+ * cache entries. */
+export function hubConfigListKey(noun: string, includeRetired: boolean): readonly unknown[] {
+  return [...hubConfigKey, noun, 'list', includeRetired];
+}
+/** One config record's show read, by noun and name. */
+export function hubConfigRecordKey(noun: string, name: string | null): readonly unknown[] {
+  return [...hubConfigKey, noun, 'record', name];
+}
+/** One record's change history — `GET /api/config/changes` filtered to one
+ * `record_kind` + `record_key`. */
+export function hubConfigHistoryKey(recordKind: string, recordKey: string | null): readonly unknown[] {
+  return [...hubConfigKey, 'history', recordKind, recordKey];
+}
+/** The unfiltered change log — `GET /api/config/changes`, paged newest first. */
+export const hubConfigChangesKey = [...hubConfigKey, 'changes'] as const;
 /** The gardening tab's docket read — `GET /api/garden-proposals`. Not
  * yet in the SSE event vocabulary, so nothing invalidates this key on a live event. */
 export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;

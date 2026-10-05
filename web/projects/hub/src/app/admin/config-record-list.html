@@ -1,0 +1,38 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  [emptyText]="emptyText()"
+  [emptyTestid]="testidPrefix() + '-empty'"
+  [errorTestid]="testidPrefix() + '-error'"
+>
+  <ul class="rows" [attr.data-testid]="testidPrefix() + '-list'">
+    @for (row of rows(); track row.key) {
+      <li>
+        <fleet-kit-select-row
+          [selected]="row.key === selectedKey()"
+          [testid]="testidPrefix() + '-row-' + row.key"
+          (picked)="pick.emit(row.key)"
+        >
+          <span class="top">
+            <span class="title" [class.retired]="row.retired">{{ row.title }}</span>
+            <span class="right">
+              @for (badge of row.badges; track badge.label) {
+                <fleet-kit-badge [tone]="badge.tone" variant="soft">{{ badge.label }}</fleet-kit-badge>
+              }
+              @if (row.revision !== null) {
+                <span class="rev">r{{ row.revision }}</span>
+              }
+            </span>
+          </span>
+          @if (row.sub.length > 0) {
+            <span class="sub">
+              @for (fact of row.sub; track $index) {
+                <span>{{ fact }}</span>
+              }
+            </span>
+          }
+        </fleet-kit-select-row>
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>

@@ -159,6 +159,48 @@ export const routes: Routes = [
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.
   { path: 'login', loadComponent: () => import('../login/login-page').then((m) => m.LoginPage) },
-  // The admin surface — the route the permission-gated nav entry points at.
-  { path: 'admin', loadComponent: () => import('../admin/admin-page').then((m) => m.AdminPage) },
+  // The admin surface — the route the permission-gated nav entry points at. Users,
+  // the user listing, is the default child; beside it sit the configured nouns, each
+  // a list route whose detail is a child, the gardening tabs' own nesting, so a pick
+  // swaps only the detail and the list's filter survives in the query string.
+  {
+    path: 'admin',
+    loadComponent: () => import('../admin/admin-shell').then((m) => m.AdminShell),
+    children: [
+      { path: '', redirectTo: 'users', pathMatch: 'full' },
+      { path: 'users', loadComponent: () => import('../admin/admin-page').then((m) => m.AdminPage) },
+      {
+        path: 'work-sources',
+        loadComponent: () => import('../admin/work-sources/work-sources-page').then((m) => m.WorkSourcesPage),
+        children: [
+          { path: '', loadComponent: () => import('../admin/work-sources/work-source-detail').then((m) => m.WorkSourceDetail) },
+          { path: ':key', loadComponent: () => import('../admin/work-sources/work-source-detail').then((m) => m.WorkSourceDetail) },
+        ],
+      },
+      {
+        path: 'repositories',
+        loadComponent: () => import('../admin/repositories/repositories-page').then((m) => m.RepositoriesPage),
+        children: [
+          { path: '', loadComponent: () => import('../admin/repositories/repository-detail').then((m) => m.RepositoryDetail) },
+          { path: ':key', loadComponent: () => import('../admin/repositories/repository-detail').then((m) => m.RepositoryDetail) },
+        ],
+      },
+      {
+        path: 'secrets',
+        loadComponent: () => import('../admin/secrets/secrets-page').then((m) => m.SecretsPage),
+        children: [
+          { path: '', loadComponent: () => import('../admin/secrets/secret-detail').then((m) => m.SecretDetail) },
+          { path: ':key', loadComponent: () => import('../admin/secrets/secret-detail').then((m) => m.SecretDetail) },
+        ],
+      },
+      {
+        path: 'changes',
+        loadComponent: () => import('../admin/changes/changes-page').then((m) => m.ChangesPage),
+        children: [
+          { path: '', loadComponent: () => import('../admin/changes/change-detail').then((m) => m.ChangeDetail) },
+          { path: ':key', loadComponent: () => import('../admin/changes/change-detail').then((m) => m.ChangeDetail) },
+        ],
+      },
+    ],
+  },
 ];
