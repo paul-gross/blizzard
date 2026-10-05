@@ -3,6 +3,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 /* The column's engraved heading — see BoardShell's own note on why this rule
    is local rather than shared: content in a different encapsulation scope
