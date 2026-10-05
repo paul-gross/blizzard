@@ -49,6 +49,7 @@ from tests.support import (
     hub_store_connections,
     ingest,
     migrate_to,
+    seed_chunk_record,
     seed_graph,
     seed_lease,
 )
@@ -84,7 +85,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
 
 
 def _mint(store: ChunkStores, chunk_id: str, *, graph_id: str = "gr_1") -> None:
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[], minted_at=_T0))
 
 
 def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
@@ -392,12 +393,12 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = _store(tmp_path / "small")
-    small.record.mint(Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(small, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
     small.queue.record_promote("ch_a", at=_T0)
 
     large, large_engine, _large_clock = _store(tmp_path / "large")
     for i in range(40):
-        large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
+        seed_chunk_record(large, Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.queue.record_promote(f"ch_{i}", at=_T0)
 
     small_count = count_queries(small_engine, small.facts.load_all_facts)
@@ -534,12 +535,12 @@ def test_load_live_statuses_query_count_is_independent_of_fleet_size(tmp_path: P
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = _store(tmp_path / "small")
-    small.record.mint(Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(small, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
     small.queue.record_promote("ch_a", at=_T0)
 
     large, large_engine, _large_clock = _store(tmp_path / "large")
     for i in range(40):
-        large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
+        seed_chunk_record(large, Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.queue.record_promote(f"ch_{i}", at=_T0)
 
     small_count = count_queries(small_engine, small.facts.load_live_statuses)
@@ -566,7 +567,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
     the shared batching helper touches at least one row per seeded id, so a
     per-batch query count stays identical across batches regardless of which id lands
     in which batch."""
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.queue.record_promote(chunk_id, at=_T0)
     store.decisions.record_decision(
         imposed_by_runner_id=None,

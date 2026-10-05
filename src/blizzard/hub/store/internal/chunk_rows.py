@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
 
-from sqlalchemy import ColumnElement, Connection, Select, func, insert, or_, select
+from sqlalchemy import ColumnElement, Connection, Select, func, insert, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.roles import adapter_model
@@ -27,7 +28,7 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemMaterializationOutcome,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -324,6 +325,30 @@ def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
     conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
+def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
+    """Take the write lock of each ``(namespace, key)`` row of ``keyed_locks``, in sorted key
+    order, as the transaction's FIRST statements — for a decision whose race has no existing
+    row to lock (``bzh:store-exclusive-write``). A no-op ``UPDATE`` on an absent row locks
+    nothing, so each row is first inserted if unseen: in its own savepoint, so a concurrent
+    insert of the same key loses with an ``IntegrityError`` that rolls back only that insert
+    (the shape of ``review_findings_store._mint_scope_if_unseen``). The ``UPDATE`` then locks
+    a row that exists: SQLite's single writer lock on the first statement; on Postgres, a
+    concurrent locker of the same key queues behind this transaction's commit. Rows are
+    never deleted."""
+    lock = s.keyed_locks
+    for key in sorted(set(keys)):
+        if (
+            conn.execute(select(lock.c.key).where((lock.c.namespace == namespace) & (lock.c.key == key))).first()
+            is None
+        ):
+            try:
+                with conn.begin_nested():
+                    conn.execute(insert(lock).values(namespace=namespace, key=key))
+            except IntegrityError:
+                pass
+        conn.execute(update(lock).where((lock.c.namespace == namespace) & (lock.c.key == key)).values(key=key))
+
+
 class _LockedConnection(Protocol):
     """The write token every ``*_locked`` store method needs — the real capability
     :class:`ILockedChunkRead` deliberately does not expose to the domain layer, so a fake
@@ -337,6 +362,11 @@ def conn_of(handle: ILockedChunkRead) -> Connection:
 
     Real handles are store-built ``LockedChunkTransaction`` instances; this cast
     keeps their concrete type out of the domain and avoids a cyclic import."""
+    return cast(_LockedConnection, handle).conn
+
+
+def work_ref_conn_of(handle: ILockedWorkRefRead) -> Connection:
+    """:func:`conn_of`'s sibling for a domain-held :class:`ILockedWorkRefRead`."""
     return cast(_LockedConnection, handle).conn
 
 

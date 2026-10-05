@@ -11,7 +11,15 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
-from tests.support import FakeWorkSource, build_hub, chunk_stores, hub_store_connections, pointer_token, seed_work_item
+from tests.support import (
+    FakeWorkSource,
+    build_hub,
+    chunk_stores,
+    hub_store_connections,
+    pointer_token,
+    seed_chunk_record,
+    seed_work_item,
+)
 
 pytestmark = pytest.mark.component
 
@@ -93,7 +101,7 @@ def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     chunk = Chunk(chunk_id="ch_empty", graph_id=graph.graph_id, work_refs=[], minted_at=hub.clock.now())
-    chunk_stores(hub.engine, hub.clock).record.mint(chunk)
+    seed_chunk_record(chunk_stores(hub.engine, hub.clock), chunk)
     chunk_id = chunk.chunk_id
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")

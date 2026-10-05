@@ -19,7 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
@@ -35,6 +35,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     graph_id_of_batch,
     insert_chunk_rows,
     is_ephemeral_id,
+    work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
 
@@ -225,8 +226,15 @@ class ChunkRecordStore:
         return list(self.get_many([chunk_id for chunk_id, derived in statuses.items() if derived is status]).values())
 
     def mint(self, chunk: Chunk) -> None:
+        """Insert a chunk's rows with no pointer lock held — the unguarded seed write for
+        fixtures; the ingest path mints through :meth:`mint_locked`."""
         with self._store.write("mint") as conn:
             insert_chunk_rows(conn, chunk)
+
+    def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
+        """Insert a freshly minted chunk's rows on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``)."""
+        insert_chunk_rows(work_ref_conn_of(handle), chunk)
 
     def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on

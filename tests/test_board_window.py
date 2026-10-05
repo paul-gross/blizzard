@@ -19,7 +19,7 @@ from blizzard.hub.api.chunks import BOARD_DONE_WINDOW
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, chunk_stores, count_queries, seed_graph
+from tests.support import HubHarness, build_hub, chunk_stores, count_queries, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,7 @@ def _hub(tmp_path: Path) -> HubHarness:
 def _mint(hub: HubHarness, chunk_id: str, *, ago: timedelta, promote: bool = True) -> None:
     at = hub.clock.now() - ago
     stores = chunk_stores(hub.engine, hub.clock)
-    stores.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=at, default_model=[]))
+    seed_chunk_record(stores, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=at, default_model=[]))
     if promote:
         stores.queue.record_promote(chunk_id, at=at)
 

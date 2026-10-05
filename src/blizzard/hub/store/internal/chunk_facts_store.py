@@ -161,6 +161,12 @@ class ChunkFactsStore:
         with self._store.read("status_facts_for") as conn:
             return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
 
+    def status_facts_for_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:  # type: ignore[no-untyped-def]
+        """`status_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
+        if not chunk_ids:
+            return {}
+        return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
+
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
         chunk id. The chunks a terminal fact already settles are excluded in the store

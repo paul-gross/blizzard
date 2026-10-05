@@ -12,7 +12,7 @@ import pytest
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.route import Route
-from tests.support import count_queries
+from tests.support import count_queries, seed_chunk_record
 from tests.test_load_all_facts_store import _LIVE_CHUNK_IDS, _T0, _seed_fixture, _store
 
 pytestmark = pytest.mark.component
@@ -67,7 +67,7 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
 
 
 def _seed_route(store: ChunkStores, chunk_id: str) -> None:
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.queue.record_promote(chunk_id, at=_T0)
     with store.exclusive.locked([chunk_id]) as handle:
         store.route.record_route_locked(

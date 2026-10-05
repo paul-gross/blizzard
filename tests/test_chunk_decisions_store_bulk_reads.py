@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store.internal.chunk_rows import insert_materialization_row
-from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
+from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -35,7 +35,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
 
 
 def _mint(store: ChunkStores, chunk_id: str) -> None:
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
 
 
 def _proposal(chunk_id: str, proposal_id: str, *, ordinal: int = 0) -> StampedWorkItemProposal:

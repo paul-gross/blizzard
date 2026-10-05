@@ -16,7 +16,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
+from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -31,7 +31,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
 
 
 def _mint(store: ChunkStores, chunk_id: str) -> None:
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
 
 
 def test_record_queue_positions_writes_an_empty_sequence_as_a_no_op(tmp_path: Path) -> None:

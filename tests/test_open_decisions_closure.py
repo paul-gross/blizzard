@@ -14,7 +14,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, Decisi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from tests.support import chunk_stores, migrate_to, seed_graph
+from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -26,7 +26,7 @@ def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.decisions.record_decision(
         imposed_by_runner_id=None,
         decision_id="dec_1",

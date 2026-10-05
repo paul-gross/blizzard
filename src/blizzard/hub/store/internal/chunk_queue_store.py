@@ -13,10 +13,11 @@ from sqlalchemy import select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import insert_promote_rows, row_exists
+from blizzard.hub.store.internal.chunk_rows import conn_of, insert_promote_rows, row_exists
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 
 
@@ -68,13 +69,12 @@ class ChunkQueueStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else None
 
-    def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:
+    def record_promote_with_tail_position_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    ) -> int:
         # One transaction: a crash between the two writes would otherwise let a stale
         # backlog position outrank the tail stamp on restart.
-        with self._store.write("record_promote_with_tail_position") as conn:
-            if row_exists(conn, s.chunk_promoted, chunk_id):
-                return None
-            return insert_promote_rows(conn, chunk_id, position=position, at=at)
+        return insert_promote_rows(conn_of(handle), chunk_id, position=position, at=at) or 0
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """Append every ``(chunk_id, position)`` pair in one multi-row insert — a

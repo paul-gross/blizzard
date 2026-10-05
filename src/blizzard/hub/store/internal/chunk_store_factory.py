@@ -35,11 +35,12 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock, *, registry: R
     facts = ChunkFactsStore(store, clock)
     record = ChunkRecordStore(store, clock)
     dependencies = ChunkDependenciesStore(store, clock)
+    work_refs = ChunkWorkRefsStore(store, clock, facts=facts)
     return ChunkStores(
         facts=facts,
         record=record,
         lifecycle=ChunkLifecycleStore(store),
-        work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
+        work_refs=work_refs,
         queue=ChunkQueueStore(store, clock),
         route=ChunkRouteStore(store, clock),
         movement=ChunkMovementStore(store, clock),
@@ -58,5 +59,6 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock, *, registry: R
             record=record,
             dependencies=dependencies,
             registry=registry,
+            work_refs=work_refs,
         ),
     )

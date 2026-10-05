@@ -11,7 +11,9 @@ from collections.abc import Mapping
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -78,20 +80,36 @@ class PromoteService:
         record: IReadChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
         facts: IReadChunkFactsRepository,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
         self._record = record
         self._queue = queue
         self._facts = facts
+        # The locked-transaction seam (``bzh:store-exclusive-write``): promotability is judged
+        # from facts read under the chunk's row lock, never a caller's pre-lock snapshot.
+        self._exclusive = exclusive
         self._clock = clock
 
-    def promote(self, chunk: Chunk, *, facts: ChunkFacts, statuses: Mapping[str, ChunkStatus]) -> int | None:
+    def promote(self, chunk: Chunk, *, statuses: Mapping[str, ChunkStatus]) -> int | None:
         """Append the ``chunk.promoted`` fact and stamp an explicit tail position, in one
-        transaction, as :func:`promotion_writes` decides: ``None`` for a replay on an
-        already-promoted chunk, :class:`ChunkNotPromotable` for a terminal one; otherwise
-        stamps :func:`tail_position`, read *before* the write, and returns the fresh
-        ``chunk_promoted.id``."""
-        if not promotion_writes(chunk.chunk_id, facts):
-            return None
+        transaction, as :func:`promotion_writes` decides over facts read under the row lock:
+        ``None`` for a replay on an already-promoted chunk, :class:`ChunkNotPromotable` for a
+        terminal one, :class:`ChunkNotFound` for a chunk gone under the lock; otherwise stamps
+        :func:`tail_position` and returns the fresh ``chunk_promoted.id``.
+
+        The tail ranks other chunks — a different aggregate — so it is computed before the
+        lock from ``statuses``; the chunk's own promotability is not."""
+        pre_lock = self._facts.load_facts(chunk.chunk_id)
+        if pre_lock is not None and pre_lock.promoted:
+            return None  # promotion is permanent: a replay needs no lock
         tail = tail_position(self._record, self._queue, self._facts, statuses=statuses)
-        return self._queue.record_promote_with_tail_position(chunk.chunk_id, position=tail, at=self._clock.now())
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            if not promotion_writes(chunk.chunk_id, facts):
+                return None
+            return self._queue.record_promote_with_tail_position_locked(
+                handle, chunk.chunk_id, position=tail, at=self._clock.now()
+            )

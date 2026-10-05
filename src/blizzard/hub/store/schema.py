@@ -346,6 +346,18 @@ Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
 # Leading source column also serves source-only filters.
 Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
 
+# --- Keyed write locks ----------------------------------------------------------
+
+# Lock-only rows: a decision whose race has no existing row to lock locks one of these
+# instead (``bzh:store-exclusive-write``). Holds no state and is never read as a fact;
+# rows are inserted once and never deleted.
+keyed_locks = Table(
+    "keyed_locks",
+    metadata,
+    Column("namespace", String, primary_key=True),
+    Column("key", String, primary_key=True),
+)
+
 # --- Movement record (transition.recorded) ------------------------------------
 
 transitions = Table(

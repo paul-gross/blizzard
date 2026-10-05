@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+
 
 class IReadChunkQueueRepository(Protocol):
     """Read-only chunk-queue access."""
@@ -36,11 +38,15 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         no-op replay — there is no fresh row to name."""
         ...
 
-    def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:
-        """Record ``chunk.promoted`` and its tail queue position in one transaction
-        (:class:`~blizzard.hub.domain.operations.promote.PromoteService`'s only write) — a crash
-        lands both facts or neither, never one without the other. Idempotent the same
-        way as :meth:`record_promote`: returns ``None`` on an already-promoted chunk."""
+    def record_promote_with_tail_position_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    ) -> int:
+        """Record ``chunk.promoted`` and its tail queue position on ``handle``'s already-locked
+        connection (``bzh:store-exclusive-write``;
+        :class:`~blizzard.hub.domain.operations.promote.PromoteService`'s only write) — a crash
+        lands both facts or neither, never one without the other. Not idempotent: the caller
+        judged, under the same lock, that the chunk is not yet promoted. Returns the freshly-written
+        ``chunk_promoted.id``."""
         ...
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:

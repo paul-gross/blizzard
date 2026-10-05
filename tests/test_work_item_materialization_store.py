@@ -37,6 +37,7 @@ from tests.support import (
     hub_store_connections,
     migrate_to,
     seed_chunk,
+    seed_chunk_record,
     seed_graph,
     seed_work_item,
 )
@@ -293,7 +294,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
 
     def _mint() -> str:
         chunk = mint_chunk([], graph_id="gr_x", at=_T0)
-        chunks.record.mint(chunk)
+        seed_chunk_record(chunks, chunk)
         return chunk.chunk_id
 
     runner_terminal = _mint()
@@ -421,7 +422,7 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
     hub = build_hub(tmp_path)
     chunks = chunk_stores(hub.engine, hub.clock)
     chunk = mint_chunk([], graph_id="gr_x", at=_T0)
-    chunks.record.mint(chunk)
+    seed_chunk_record(chunks, chunk)
     chunks.movement.record_transition(
         transition_id="tr_1",
         chunk_id=chunk.chunk_id,
@@ -456,7 +457,7 @@ def test_candidate_read_issues_one_statement_regardless_of_how_many_proposals_ar
 
     def _deliver_and_judge(n: int) -> None:
         chunk = mint_chunk([], graph_id="gr_x", at=_T0)
-        chunks.record.mint(chunk)
+        seed_chunk_record(chunks, chunk)
         chunks.movement.record_transition(
             transition_id=f"tr_judged_{n}",
             chunk_id=chunk.chunk_id,
