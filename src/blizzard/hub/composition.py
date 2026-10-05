@@ -311,7 +311,7 @@ class HubServices:
     secret_references: ISecretReferences
     #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
     config_authoring: ConfigAuthoring
-    #: Stored work-source records (the read half; ``work_sources`` is the boot-built registry).
+    #: Stored work-source records (the read half; ``work_sources`` reads through them on every call).
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
     repository_records: IReadRepositoryRecordRepository

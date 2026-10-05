@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class WorkRef:
     """One wrapped work item — ``{source, ref}``, superseding ``{provider, url}``.
-    ``source`` names a configured ``[[work_source]]``; ``ref`` is that
+    ``source`` names a configured work source; ``ref`` is that
     source's own item token (a GitHub issue number). Contents never stored."""
 
     source: str

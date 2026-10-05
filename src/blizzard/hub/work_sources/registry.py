@@ -1,71 +1,127 @@
-"""The work source registry — configured sources looked up by name.
+"""The work source registry — configured sources read from their records on every call.
 
-A dependency-free ``dict`` wrapper (``bzh:domain-core``); an empty registry is a legal
-hub. :meth:`resolve` tries an ingest token against every binding's ``parse`` in turn,
-first claim wins — config guarantees at most one claim, so order never matters.
+The store is the only answer to what is configured (``bzh:config-read-on-use``): each
+lookup reads the record's revisions and hands out the adapter built under them from the
+process's :class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit, a retirement or
+a secret replace reaches the next call with no restart. The built-in ``hub`` source is
+seated in-process, outside the cache — never configured, never retired.
+
+``resolve``, ``names`` and ``annotating_names`` read the active set, so ingest naming a
+retired source is refused and the annotation sweep lets go of its labels; ``get``,
+``annotator``, ``closer`` and ``label_clearer`` reach retired records too, so items already
+ingested from one still label, close and annotate.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Protocol, cast
 
+from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
+from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 
 
-class WorkSourceRegistry:
-    """The hub's configured work sources, keyed by their declared ``name``.
+class IBuiltInWorkSource(IWorkSource, IWorkEditor, IWorkCloser, Protocol):
+    """The built-in ``hub`` binding — a source, an editor and a closer at once."""
 
-    ``annotators``/``closers``/``editors`` are each a subset of ``sources``, so an absent name has no
-    write half; ``label_clearers`` holds every forge source's annotator, reached only to clear labels."""
+
+@dataclass(frozen=True)
+class BuiltWorkSource:
+    """An adapter with the record it was built from; closing it releases the adapter's client."""
+
+    record: ConfiguredWorkSource
+    source: IWorkSource
+    release: Callable[[], None]
+
+    def close(self) -> None:
+        self.release()
+
+
+class StoreWorkSourceRegistry:
+    """``build`` turns a record into its adapter, revealing the record's secret; it raises
+    :class:`~blizzard.hub.work_sources.source.WorkSourceError` when it cannot, so a source
+    that exists never reads as unconfigured. ``close_forge_writes_enabled=False`` seats no
+    closer for a configured source (never the built-in one)."""
 
     def __init__(
         self,
-        sources: Mapping[str, IWorkSource] | None = None,
-        annotators: Mapping[str, IWorkAnnotator] | None = None,
-        closers: Mapping[str, IWorkCloser] | None = None,
-        editors: Mapping[str, IWorkEditor] | None = None,
-        label_clearers: Mapping[str, IWorkAnnotator] | None = None,
+        *,
+        records: IReadWorkSourceRepository,
+        objects: ConfigObjectCache,
+        build: Callable[[ConfiguredWorkSource], BuiltWorkSource],
+        built_in: IBuiltInWorkSource,
+        close_forge_writes_enabled: bool = True,
     ) -> None:
-        self._sources = dict(sources or {})
-        self._annotators = dict(annotators or {})
-        self._closers = dict(closers or {})
-        self._editors = dict(editors or {})
-        self._label_clearers = {**dict(label_clearers or {}), **self._annotators}
+        self._records = records
+        self._objects = objects
+        self._build = build
+        self._built_in = built_in
+        self._close_forge_writes_enabled = close_forge_writes_enabled
+
+    def _built(self, name: str) -> BuiltWorkSource | None:
+        return self._objects.get(RecordKind.WORK_SOURCE, name, lambda: self._build_current(name))
+
+    def _build_current(self, name: str) -> BuiltWorkSource:
+        record = self._records.get(name)
+        # The revisions read just found it, and a configured record is never deleted.
+        assert record is not None
+        return self._build(record)
 
     def get(self, name: str) -> IWorkSource | None:
-        return self._sources.get(name)
+        if name == RESERVED_HUB_SOURCE_NAME:
+            return self._built_in
+        built = self._built(name)
+        return built.source if built is not None else None
 
     def names(self) -> list[str]:
-        return list(self._sources.keys())
+        return [record.name for record in self._records.list_all(include_retired=False)] + [RESERVED_HUB_SOURCE_NAME]
 
     def annotator(self, name: str) -> IWorkAnnotator | None:
-        return self._annotators.get(name)
+        if name == RESERVED_HUB_SOURCE_NAME:
+            return None
+        built = self._built(name)
+        if built is None or not built.record.fields.annotate:
+            return None
+        return cast(IWorkAnnotator, built.source)
 
     def annotating_names(self) -> list[str]:
-        return list(self._annotators.keys())
+        return [record.name for record in self._records.list_all(include_retired=False) if record.fields.annotate]
 
     def label_clearer(self, name: str) -> IWorkAnnotator | None:
-        return self._label_clearers.get(name)
+        if name == RESERVED_HUB_SOURCE_NAME:
+            return None
+        built = self._built(name)
+        return cast(IWorkAnnotator, built.source) if built is not None else None
 
     def closer(self, name: str) -> IWorkCloser | None:
-        return self._closers.get(name)
+        if name == RESERVED_HUB_SOURCE_NAME:
+            return self._built_in
+        if not self._close_forge_writes_enabled:
+            return None
+        built = self._built(name)
+        return cast(IWorkCloser, built.source) if built is not None else None
 
     def editor(self, name: str) -> IWorkEditor | None:
-        return self._editors.get(name)
+        return self._built_in if name == RESERVED_HUB_SOURCE_NAME else None
 
     def resolve(self, token: str) -> WorkRef | None:
-        """The first configured binding's ``parse`` of ``token`` that claims it, or
-        ``None`` when none do."""
-        for source in self._sources.values():
-            pointer = source.parse(token)
+        """The first active binding's ``parse`` of ``token`` that claims it, the built-in
+        source last; ``None`` when none do."""
+        for record in self._records.list_all(include_retired=False):
+            built = self._built(record.name)
+            pointer = built.source.parse(token) if built is not None else None
             if pointer is not None:
                 return pointer
-        return None
+        return self._built_in.parse(token)
 
 
-def _conforms_work_source_registry(x: WorkSourceRegistry) -> IWorkSourceRegistry:
+def _conforms_work_source_registry(x: StoreWorkSourceRegistry) -> IWorkSourceRegistry:
     return x

@@ -17,13 +17,14 @@ import socket
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
+import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -51,12 +52,12 @@ from blizzard.hub.config import (
     AUTH_MODE_NONE,
     AUTH_MODE_OAUTH,
     PRODUCES_WARN,
+    RESERVED_HUB_SOURCE_NAME,
     ROUTE_TOKEN_WARN,
     RUNNER_AUTH_WARN,
     AuthConfig,
     EgressConfig,
     HubConfig,
-    WorkSourceConfig,
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
@@ -103,9 +104,9 @@ from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
-from blizzard.hub.work_sources.internal.hub_work_source import seat_hub_work_source
-from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
+from blizzard.wire.work_source import WorkSourceDocument
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -299,6 +300,59 @@ class FakeWorkSource:
 
 
 def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
+    return x
+
+
+class WorkSourceRegistry:
+    """A dict-backed work-source registry — the test double for the store-backed one.
+
+    ``annotators``/``closers``/``editors`` are each a subset of ``sources``, so an absent name has no
+    write half; ``label_clearers`` holds every forge source's annotator, reached only to clear labels."""
+
+    def __init__(
+        self,
+        sources: Mapping[str, IWorkSource] | None = None,
+        annotators: Mapping[str, IWorkAnnotator] | None = None,
+        closers: Mapping[str, IWorkCloser] | None = None,
+        editors: Mapping[str, IWorkEditor] | None = None,
+        label_clearers: Mapping[str, IWorkAnnotator] | None = None,
+    ) -> None:
+        self._sources = dict(sources or {})
+        self._annotators = dict(annotators or {})
+        self._closers = dict(closers or {})
+        self._editors = dict(editors or {})
+        self._label_clearers = {**dict(label_clearers or {}), **self._annotators}
+
+    def get(self, name: str) -> IWorkSource | None:
+        return self._sources.get(name)
+
+    def names(self) -> list[str]:
+        return list(self._sources.keys())
+
+    def annotator(self, name: str) -> IWorkAnnotator | None:
+        return self._annotators.get(name)
+
+    def annotating_names(self) -> list[str]:
+        return list(self._annotators.keys())
+
+    def label_clearer(self, name: str) -> IWorkAnnotator | None:
+        return self._label_clearers.get(name)
+
+    def closer(self, name: str) -> IWorkCloser | None:
+        return self._closers.get(name)
+
+    def editor(self, name: str) -> IWorkEditor | None:
+        return self._editors.get(name)
+
+    def resolve(self, token: str) -> WorkRef | None:
+        for source in self._sources.values():
+            pointer = source.parse(token)
+            if pointer is not None:
+                return pointer
+        return None
+
+
+def _conforms_work_source_registry(x: WorkSourceRegistry) -> IWorkSourceRegistry:
     return x
 
 
@@ -731,19 +785,14 @@ def build_hub(
     )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     editors: dict[str, IWorkEditor] = {}
-    # The built-in `hub` source is seated as a closer unconditionally,
+    # The built-in `hub` source is seated as a source, an editor and a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
     core = build_hub_core(engine, clock=clock)
-    seat_hub_work_source(
-        built_sources,
-        editors,
-        closers,
-        users=core.users,
-        items=core.work_item_store,
-        edits=core.work_item_edits,
-        resolution=core.garden_proposal_resolution,
-    )
+    hub_source = HubWorkSource(core.work_item_store, core.work_item_edits, core.users, core.garden_proposal_resolution)
+    built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
+    editors[RESERVED_HUB_SOURCE_NAME] = hub_source
+    closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
     services = build_services(
@@ -791,16 +840,29 @@ def build_hub(
     )
 
 
-def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> HubConfig:
-    """Declare ``[[work_source]]`` entries on an already-``init``ed hub runtime dir.
+#: The one secret every records-seeded fixture source names — no fixture forge checks a token.
+FIXTURE_FORGE_SECRET = "fixture-forge-token"
 
-    Every upper-tier fixture that runs ``blizzard hub init`` and then ingests must
-    declare its sources through this, or its own ingests fail — a load/replace/save
-    round trip through :class:`~blizzard.hub.config.HubConfig`."""
-    config = HubConfig.load(hub_dir)
-    config = replace(config, work_sources=tuple(sources))
-    config.config_path.write_text(config.to_toml())
-    return config
+
+def fixture_work_source(name: str, locator: str, api_base: str, *, annotate: bool = False) -> WorkSourceDocument:
+    """A GitHub-shaped source on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
+    return WorkSourceDocument(
+        name=name, provider="github", locator=locator, api_base=api_base, annotate=annotate, secret=FIXTURE_FORGE_SECRET
+    )
+
+
+def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:
+    """Create ``sources``, and the secret they name, through a running hub's own API.
+
+    Every upper-tier fixture that stands a real hub up and then ingests seeds its sources
+    through this once the hub answers, or its own ingests fail."""
+    if not sources:
+        return
+    secret = hub.post("/api/secrets", json={"name": FIXTURE_FORGE_SECRET, "value": "fixture-token"})
+    assert secret.status_code == 201, secret.text
+    for source in sources:
+        created = hub.post("/api/work-sources", json=source.model_dump())
+        assert created.status_code == 201, created.text
 
 
 def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:

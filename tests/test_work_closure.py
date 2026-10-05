@@ -36,10 +36,10 @@ from blizzard.hub.domain.work_items.closure import (
     close_intent_is_due,
 )
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import (
     FakeCloser,
     HubHarness,
+    WorkSourceRegistry,
     build_hub,
     count_queries,
     emitted_events,

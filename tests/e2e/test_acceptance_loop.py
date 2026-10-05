@@ -23,7 +23,7 @@ import uvicorn
 
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import EgressConfig, HubConfig, WorkSourceConfig
+from blizzard.hub.config import EgressConfig, HubConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
@@ -52,11 +52,12 @@ from tests.e2e.fleet_traces import (
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.harness_sections import claude_code, opencode, sections
 from tests.support import (
+    create_work_sources,
     daemon_log_sink,
+    fixture_work_source,
     free_port,
     read_daemon_log,
     write_mock_harness_credentials,
-    write_work_sources,
 )
 
 pytestmark = [
@@ -83,10 +84,6 @@ MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
 # they ride the allowlist's operator-extension knob rather than the base allowlist.
 MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR)
-
-# The env var every scenario's ``[[work_source]]`` names as its credential —
-# a dummy value suffices, since the mock forge checks no token.
-WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_TOYAPI"
 
 # Appended to a build prompt after a real commit: pushes the branch and declares it via
 # `blizzard runner artifact commit`; declaring twice per lease is harmless.
@@ -333,7 +330,6 @@ def _hub(
         **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
-        WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
         # A short batch delay puts the inline platform spans in the file before the sweep's roots.
         **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
         **(extra_env or {}),
@@ -341,21 +337,6 @@ def _hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not rehost:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one work source every scenario ingests against; `annotate` opts it into
-    # the forge-status label sweep.
-    write_work_sources(
-        hub_dir,
-        [
-            WorkSourceConfig(
-                name=REPO_NAME,
-                provider="github",
-                repo=REPO,
-                token_env=WORK_SOURCE_TOKEN_ENV,
-                api_base=f"http://127.0.0.1:{forge_port}",
-                annotate=annotate,
-            )
-        ],
-    )
     if (
         export_to
         or route_token_mode is not None
@@ -392,6 +373,12 @@ def _hub(
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         _await_http(proc, client, "/api/health", log=log)
+        if not rehost:
+            # The one work source every scenario ingests against; `annotate` opts it into
+            # the forge-status label sweep.
+            create_work_sources(
+                client, [fixture_work_source(REPO_NAME, REPO, f"http://127.0.0.1:{forge_port}", annotate=annotate)]
+            )
         yield client
     finally:
         client.close()

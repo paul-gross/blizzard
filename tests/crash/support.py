@@ -19,11 +19,11 @@ from pathlib import Path
 
 import httpx
 
-from blizzard.hub.config import WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
+from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
-from tests.support import daemon_log_sink, write_mock_harness_credentials, write_work_sources
+from tests.support import create_work_sources, daemon_log_sink, fixture_work_source, write_mock_harness_credentials
 
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
@@ -34,22 +34,10 @@ RUNNER_ENV = "e1"
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
 TICK_SECONDS = "0.3"
 
-# The env var every scenario's ``[[work_source]]`` names as its credential — one suffices
-# for every source this module declares, since the mock forge checks no token.
-WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_CRASH"
 
-
-def default_work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
+def default_work_sources(forge_port: int) -> tuple[WorkSourceDocument, ...]:
     """The one source the crash sweep's ``build -> deliver`` scenarios ingest against."""
-    return (
-        WorkSourceConfig(
-            name=REPO_NAME,
-            provider="github",
-            repo=REPO,
-            token_env=WORK_SOURCE_TOKEN_ENV,
-            api_base=f"http://127.0.0.1:{forge_port}",
-        ),
-    )
+    return (fixture_work_source(REPO_NAME, REPO, f"http://127.0.0.1:{forge_port}"),)
 
 
 # Env var names the crash mechanism and the mock-harness fence read.
@@ -807,7 +795,7 @@ def start_hub(
     forge_port: int,
     port: int,
     crash_point: str | None,
-    work_sources: Sequence[WorkSourceConfig] | None = None,
+    work_sources: Sequence[WorkSourceDocument] | None = None,
     new_session: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen[str]:
@@ -815,21 +803,21 @@ def start_hub(
 
     ``new_session`` makes the hub a process-group leader so a caller can ``os.killpg`` the
     whole tree, including any spawned ``run:`` subprocess — required for a faithful
-    kill -9 mid-script."""
+    kill -9 mid-script. A first start seeds ``work_sources`` (the default source when
+    ``None``) through the hub's own API once it answers; a restart finds them stored."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
-    if not (hub_dir / "blizzard-hub.toml").exists():
+    first_start = not (hub_dir / "blizzard-hub.toml").exists()
+    if first_start:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-        write_work_sources(hub_dir, work_sources if work_sources is not None else default_work_sources(forge_port))
     env = {
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
-        WORK_SOURCE_TOKEN_ENV: "crash-fixture-token",
     }
     _apply_crash_env(env, crash_point)
     if extra_env:
         env.update(extra_env)
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
         stdout=daemon_log_sink(hub_dir / "daemon.log"),
@@ -837,6 +825,11 @@ def start_hub(
         text=True,
         start_new_session=new_session,
     )
+    if first_start:
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as hub:
+            await_http(hub, "/api/health", proc=proc)
+            create_work_sources(hub, work_sources if work_sources is not None else default_work_sources(forge_port))
+    return proc
 
 
 def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_port: int, port: int) -> RunnerConfig:

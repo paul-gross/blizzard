@@ -72,7 +72,7 @@ from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
-from blizzard.hub.composition import HubServices, build_process_core, build_services
+from blizzard.hub.composition import HubServices, build_live_config, build_process_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -404,8 +404,13 @@ def build_hosted_app(
     # The one process-scoped clock and the stores and leaf services built once over it —
     # the work-source registry and `build_services` below both take the same core.
     core = build_process_core(engine)
+    # Minted here on first start when no key source exists yet.
+    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+    live = build_live_config(core, secret_keys=secret_keys)
     work_source_registry = WorkSourceEntry.registry(
-        config.work_sources,
+        records=core.work_source_records,
+        objects=live.objects,
+        secrets=live.secrets,
         users=core.users,
         work_item_store=core.work_item_store,
         edits=core.work_item_edits,
@@ -413,6 +418,7 @@ def build_hosted_app(
         close_forge_writes_enabled=config.close_forge_writes_enabled,
         instrument_client=platform_tracing.instrument_client,
     )
+    _announce_ignored_work_source_blocks(config)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
     tracing = TracingSettings.of(os.environ)
 
@@ -422,8 +428,6 @@ def build_hosted_app(
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
-    # Minted here on first start when no key source exists yet.
-    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
     oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
     forge_client = httpx.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
@@ -494,6 +498,17 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
     )
+
+
+def _announce_ignored_work_source_blocks(config: HubConfig) -> None:
+    """Work sources are records; the file's ``[[work_source]]`` blocks are parsed and never read.
+    One warning per start names them, so an operator sees which blocks to carry over and drop."""
+    if config.work_sources:
+        get_logger("blizzard.hub").warning(
+            "ignoring [[work_source]] blocks: work sources are records, configured through `blizzard hub source`",
+            config=str(config.config_path),
+            sources=[source.name for source in config.work_sources],
+        )
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:

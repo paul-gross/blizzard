@@ -68,7 +68,7 @@ from tests.crash.support import (
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import free_port, write_work_sources
+from tests.support import free_port
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -3215,7 +3215,6 @@ def _scaffold_traced_hub(hub_dir: Path) -> None:
     zero-settle cadence — its ``[tracing]`` knobs set before the hub ever starts."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    write_work_sources(hub_dir, ())
     toml = hub_dir / "blizzard-hub.toml"
     text = toml.read_text()
     for commented, live in (
@@ -3336,7 +3335,6 @@ def _scaffold_egress_hub(hub_dir: Path, directory: Path) -> None:
     """Scaffold the hub with no work source and the egress sweep on a fast, zero-settle cadence."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    write_work_sources(hub_dir, ())
     directory.mkdir()
     toml = hub_dir / "blizzard-hub.toml"
     head, marker, tail = toml.read_text().partition("[egress]\n")

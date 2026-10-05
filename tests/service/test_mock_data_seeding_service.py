@@ -43,9 +43,9 @@ def _require_mock_data_binary() -> Path:
 
 @contextlib.contextmanager
 def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
-    """Host a real hub with **zero** ``[[work_source]]`` blocks.
+    """Host a real hub with **zero** configured work sources.
 
-    Mirrors ``tests.e2e.test_acceptance_loop._hub`` minus ``write_work_sources`` — every
+    Mirrors ``tests.e2e.test_acceptance_loop._hub`` minus ``create_work_sources`` — every
     chunk here is seeded directly, never ingested, so no work source is needed."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)

@@ -2,7 +2,7 @@
 
 Implements :class:`~blizzard.hub.work_sources.source.IWorkSource` against a GitHub REST
 v3 surface. Confined to ``internal/`` (``bzh:dependency-inversion``); ``httpx`` is used
-only here. One instance per configured ``[[work_source]]``, pinned to its own ``repo``
+only here. One instance per work-source record revision, pinned to its own ``repo``
 and ``web_base`` and carrying its own credentialed client."""
 
 from __future__ import annotations

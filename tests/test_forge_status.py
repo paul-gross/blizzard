@@ -16,11 +16,11 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
-from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import (
     FakeAnnotator,
     FakeWorkSource,
     HubHarness,
+    WorkSourceRegistry,
     build_hub,
     count_queries,
     hub_store_connections,
