@@ -174,24 +174,26 @@ class TranscriptDrain:
                     segment_id=delta.segment_id,
                     chunk_id=delta.chunk_id,
                 )
+                self._mark_truncated(delta, TruncationReason.HUB_REFUSED)
             if delta.seq in ack.capped:
                 # A cap rejection is not idempotency — surface it, but do not wedge the FIFO
                 # drain on a record the hub will never store in full: ack and move on.
                 _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
-                # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
-                changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
-                    delta.segment_id, reason=TruncationReason.HUB_CAPPED, severity=TruncationReason.HUB_CAPPED.severity
-                )
-                if changed:
-                    OutboundFacts(self.ctx).transcript_truncated(
-                        chunk_id=delta.chunk_id,
-                        segment_id=delta.segment_id,
-                        reason=TruncationReason.HUB_CAPPED,
-                        at=self.ctx.clock.now(),
-                    )
+                self._mark_truncated(delta, TruncationReason.HUB_CAPPED)
         seqs = [delta.seq for delta in deltas]
         self.ctx.stores.transcript_ledger.ack_transcript_outbound_batch(seqs, acked_at=self.ctx.clock.now())
         return True
+
+    def _mark_truncated(self, delta: BufferedTranscriptDelta, reason: TruncationReason) -> None:
+        """Never silent — the segment-field/fact-lane pair the pump's own paths use; the fact
+        goes out only when the mark changed the segment's displayed reason."""
+        changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
+            delta.segment_id, reason=reason, severity=reason.severity
+        )
+        if changed:
+            OutboundFacts(self.ctx).transcript_truncated(
+                chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=reason, at=self.ctx.clock.now()
+            )
 
     def _render(
         self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentState]
