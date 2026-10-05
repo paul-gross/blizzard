@@ -202,13 +202,7 @@ class UsageStore:
                     .subquery()
                 )
                 stmt = (
-                    select(
-                        samples.c.id,
-                        samples.c.slug,
-                        samples.c.sampled_at,
-                        samples.c.payload,
-                        samples.c.miss_reason,
-                    )
+                    select(samples.c.slug, samples.c.sampled_at, samples.c.payload, samples.c.miss_reason)
                     .join(latest, and_(samples.c.slug == latest.c.slug, samples.c.sampled_at == latest.c.sampled_at))
                     .where(*conditions)
                     .order_by(samples.c.id.desc())
