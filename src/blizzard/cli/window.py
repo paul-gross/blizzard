@@ -8,6 +8,7 @@ from typing import Any, overload
 
 import click
 
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.store.utc import iso_utc
 
 
@@ -41,6 +42,13 @@ def until_option(*, required: bool = False) -> Any:
         help="Only records before this instant, read in the caller's own local time.",
         **attrs,
     )
+
+
+def refuse_future_until(until: datetime, clock: IClock | None = None) -> None:
+    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told.
+    A short-lived CLI process wires its own clock here; tests hand one in."""
+    if until.astimezone(UTC) > (clock or SystemClock()).now():
+        raise click.ClickException("--until must not be in the future")
 
 
 def replay_windows(since: datetime, until: datetime, width_seconds: int | None) -> list[tuple[datetime, datetime]]:

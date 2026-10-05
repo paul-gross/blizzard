@@ -305,3 +305,28 @@ def test_an_events_dry_run_counts_without_writing(tmp_path: Path) -> None:
     assert dry.dry_run
     assert [(c.dataset, c.rows, c.files) for c in dry.datasets] == [(c.dataset, c.rows, c.files) for c in wet.datasets]
     assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
+
+
+def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub, _ = _hub(tmp_path, _real(tmp_path, backfill_max_window=3600))
+    sent: list[object] = []
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: sent.append(a))
+    now = hub.clock.now()
+    monkeypatch.setattr("blizzard.cli.window.SystemClock", lambda: hub.clock)
+
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "egress",
+            "backfill",
+            "--since",
+            "2026-07-12T00:00:00",
+            "--until",
+            (now + timedelta(seconds=1)).astimezone().replace(tzinfo=None).isoformat(),
+        ],
+        env=_ENV,
+    )
+
+    assert result.exit_code != 0
+    assert "--until must not be in the future" in result.output
+    assert sent == []
