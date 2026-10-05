@@ -39,6 +39,8 @@ class RecordKind(StrEnum):
     WORK_SOURCE = "work_source"
     SECRET = "secret"
     REPOSITORY = "repository"
+    SCOPE = "scope"
+    ROUTINE = "routine"
 
 
 class ChangeOp(StrEnum):

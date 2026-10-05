@@ -1110,10 +1110,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub.services.fleet.record_local_pause(HUB_RUNNER_ID_2, paused=True, at=_ht(6), by="runner", reason="disk full")
 
     # --- scopes and routines ---------------------------------------------------------------
-    scope_a = hub.services.scope_registry.ensure(ScopeSlug.parse("blizzard"), description="core")
-    scope_b = hub.services.scope_registry.ensure(ScopeSlug.parse("runner-scope"), description="runner side")
-    scope_c = hub.services.scope_registry.ensure(ScopeSlug.parse("legacy"), description="retired")
-    hub.services.scope_lifecycle.retire(scope_c, by="operator")
+    operator = ChangeContext(actor="operator", door=Door.API)
+    scope_a = hub.services.scope_registry.ensure(ScopeSlug.parse("blizzard"), operator, description="core")
+    scope_b = hub.services.scope_registry.ensure(ScopeSlug.parse("runner-scope"), operator, description="runner side")
+    scope_c = hub.services.scope_registry.ensure(ScopeSlug.parse("legacy"), operator, description="retired")
+    hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
 
     # --- secrets ----------------------------------------------------------------------------
     secret_store = SecretStore(store_connections)
@@ -1125,7 +1126,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         apply_writer=ConfigApplyStore(store_connections),
         clock=clock,
     )
-    operator = ChangeContext(actor="operator", door=Door.API)
     config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)
     retired_secret = config.create_secret(SecretName.parse("old-token"), "tok-b", operator)
     config.retire_secret(retired_secret, operator)
@@ -1149,15 +1149,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     routine = hub.services.routine_authoring.create(
+        ctx=operator,
         name="gardening",
         graph_name=default_graph.name,
         default_scope_slug=ScopeSlug.parse("blizzard"),
         default_model=["opus"],
         default_effort="high",
     )
-    hub.services.routine_scope_membership.link(routine, scope_b)
+    hub.services.routine_scope_membership.link(routine, scope_b, operator)
     routine_2 = hub.services.routine_authoring.create(
-        name="nightly", graph_name=default_graph.name, default_scope_slug=ScopeSlug.parse("runner-scope")
+        ctx=operator, name="nightly", graph_name=default_graph.name, default_scope_slug=ScopeSlug.parse("runner-scope")
     )
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------

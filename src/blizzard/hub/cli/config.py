@@ -13,7 +13,7 @@ from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents.codec import accepted_extensions, codec_for_path
 
-_KINDS = click.Choice(["work_source", "repository", "secret"])
+_KINDS = click.Choice(["work_source", "repository", "secret", "scope", "routine"])
 
 
 class ChangeListing(Listing):

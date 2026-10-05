@@ -1,7 +1,8 @@
 """Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep.
 
 The controller stays read-only (``bzh:controller-read-only``), resolving a ``routine_id``
-before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``GET
+before delegating to the domain. Every write carries the request's :class:`ChangeContext`
+and an optional ``If-Match`` (``bzh:configured-record``). ``GET /routines/trend`` is declared ahead of ``GET
 /routines/{routine_id}`` so the literal path wins; ``sweeps`` nests under a resolved id."""
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
@@ -19,15 +20,18 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (
     Routine,
     RoutineDefaultScopeUnlinkError,
+    RoutineEdit,
     RoutineGraphUnresolvedError,
     RoutineNameImmutableError,
     RoutineNameTakenError,
@@ -57,7 +61,7 @@ from blizzard.wire.routine import (
 router = APIRouter(prefix="/api", tags=["routines"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _routine_view(routine: Routine, *, retired: bool) -> RoutineView:
+def _routine_view(routine: Routine) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         name=routine.name,
@@ -67,18 +71,35 @@ def _routine_view(routine: Routine, *, retired: bool) -> RoutineView:
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
         created_at=iso_utc(routine.created_at),
-        retired=retired,
+        retired=routine.retired,
+        revision=routine.revision,
     )
 
 
-@router.post(
-    "/routines",
-    response_model=RoutineView,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
-)
+def _unprocessable(exc: ConfigFieldError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
+    )
+
+
+def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+def _routine_or_404(routine_id: str, services: HubServices) -> Routine:
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    return routine
+
+
+@router.post("/routines", response_model=RoutineView, status_code=status.HTTP_201_CREATED)
 def create_routine(
-    request: RoutineCreateRequest, services: Annotated[HubServices, Depends(get_services)]
+    request: RoutineCreateRequest,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
 ) -> RoutineView:
     """Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a
     graph name with no enabled mint."""
@@ -88,13 +109,14 @@ def create_routine(
             name=request.name,
             graph_name=request.graph_name,
             default_scope_slug=slug,
+            ctx=change_context(identity, door),
             default_model=request.default_model,
             default_effort=request.default_effort,
             default_harnesses=request.default_harnesses,
         )
     except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(routine, retired=False)
+    return _routine_view(routine)
 
 
 @router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(FLEET_VIEW))])
@@ -104,12 +126,7 @@ def list_routines(
 ) -> list[RoutineView]:
     """Every routine, newest first — a retired routine excluded by default, included and
     marked when ``include_retired``."""
-    retired = services.routines.retired_ids()
-    return [
-        _routine_view(r, retired=r.routine_id in retired)
-        for r in services.routines.list_all()
-        if include_retired or r.routine_id not in retired
-    ]
+    return [_routine_view(r) for r in services.routines.list_all() if include_retired or not r.retired]
 
 
 def _parse_instant(value: str, *, field: str) -> datetime:
@@ -232,10 +249,7 @@ def routine_proposal_counts(
 @router.get("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RoutineView:
     """One routine's whole record; 404 on an unknown id."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return _routine_view(routine, retired=services.routines.is_retired(routine_id))
+    return _routine_view(_routine_or_404(routine_id, services))
 
 
 def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
@@ -295,106 +309,128 @@ def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Sco
     return scope
 
 
-@router.put(
-    "/routines/{routine_id}/scopes/{scope_slug}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require(GRAPH_EDIT))],
-)
+@router.put("/routines/{routine_id}/scopes/{scope_slug}", status_code=status.HTTP_204_NO_CONTENT)
 def link_routine_scope(
-    routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
+    routine_id: str,
+    scope_slug: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
 ) -> Response:
-    """Link `scope_slug` into `routine_id`'s own set; idempotent. 404 on
-    an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
-    scope slug."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    """Link `scope_slug` into `routine_id`'s own set — a routine edit of its `scopes`;
+    linking a linked scope writes nothing. 404 on an unknown routine id or a well-formed but
+    unknown scope slug; 422 on a malformed scope slug; 409 on a stale `If-Match`."""
+    routine = _routine_or_404(routine_id, services)
     scope = _resolve_scope_for_membership(scope_slug, services)
-    services.routine_scope_membership.link(routine, scope)
+    try:
+        services.routine_scope_membership.link(routine, scope, change_context(identity, door), if_match=if_match)
+    except ConfigRevisionConflict as exc:
+        raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete(
-    "/routines/{routine_id}/scopes/{scope_slug}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require(GRAPH_EDIT))],
-)
+@router.delete("/routines/{routine_id}/scopes/{scope_slug}", status_code=status.HTTP_204_NO_CONTENT)
 def unlink_routine_scope(
-    routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
+    routine_id: str,
+    scope_slug: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
 ) -> Response:
-    """Unlink `scope_slug` from `routine_id`'s own set; idempotent. 404
-    on an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
-    scope slug, or on naming the routine's own default scope — always a member of
-    its own set."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    """Unlink `scope_slug` from `routine_id`'s own set — a routine edit of its `scopes`;
+    unlinking an unlinked scope writes nothing. 404 on an unknown routine id or a well-formed
+    but unknown scope slug; 422 on a malformed scope slug, or on naming the routine's own
+    default scope — always a member of its own set; 409 on a stale `If-Match`."""
+    routine = _routine_or_404(routine_id, services)
     scope = _resolve_scope_for_membership(scope_slug, services)
     try:
-        services.routine_scope_membership.unlink(routine, scope)
+        services.routine_scope_membership.unlink(routine, scope, change_context(identity, door), if_match=if_match)
     except RoutineDefaultScopeUnlinkError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except ConfigRevisionConflict as exc:
+        raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.patch("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(GRAPH_EDIT))])
+def _routine_edit(request: RoutineEditRequest) -> RoutineEdit:
+    """The sparse edit ``request`` states — only its present fields, the default scope slug parsed."""
+    present = {name: getattr(request, name) for name in request.model_fields_set}
+    slug = present.get("default_scope_slug")
+    if slug is not None:
+        present["default_scope_slug"] = ScopeSlug.parse(slug)
+    return RoutineEdit(**present)
+
+
+@router.patch("/routines/{routine_id}", response_model=RoutineView)
 def edit_routine(
-    routine_id: str, request: RoutineEditRequest, services: Annotated[HubServices, Depends(get_services)]
+    routine_id: str,
+    request: RoutineEditRequest,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Change the graph, the default scope, and the model/effort defaults; 404 on an
-    unknown id, 422 on a name change, a malformed default scope slug, or a graph name
-    with no enabled mint."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    """Apply only the fields present — the graph, the default scope, and the model, effort,
+    and harness defaults; an explicit `null` clears `default_effort`. A present `name` must
+    restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
+    id; 422 on a name change, a `null` field, a malformed default scope slug, or a graph name
+    with no enabled mint; 409 on a stale `If-Match` naming the current revision."""
+    routine = _routine_or_404(routine_id, services)
     try:
-        slug = ScopeSlug.parse(request.default_scope_slug)
         edited = services.routine_authoring.edit(
-            routine,
-            name=request.name,
-            graph_name=request.graph_name,
-            default_scope_slug=slug,
-            default_model=request.default_model,
-            default_effort=request.default_effort,
-            default_harnesses=request.default_harnesses,
+            routine, _routine_edit(request), change_context(identity, door), if_match=if_match
         )
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc) from exc
+    except ConfigRevisionConflict as exc:
+        raise _revision_conflict(exc) from exc
     except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(edited, retired=services.routines.is_retired(routine_id))
+    return _routine_view(edited)
 
 
-@router.post(
-    "/routines/{routine_id}/retire",
-    response_model=RoutineView,
-    status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
-)
+@router.post("/routines/{routine_id}/retire", response_model=RoutineView, status_code=status.HTTP_202_ACCEPTED)
 def retire_routine(
-    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+    routine_id: str,
+    request: RoutineLifecycleRequest,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Retire a routine — a reversible brake; 404 on an unknown id."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    services.routine_lifecycle.retire(routine, by=request.by)
-    return _routine_view(routine, retired=True)
+    """Retire a routine — a reversible brake; retiring a retired routine writes nothing.
+    404 on an unknown id, 409 on a stale `If-Match`."""
+    routine = _routine_or_404(routine_id, services)
+    try:
+        retired = services.routine_lifecycle.retire(
+            routine, change_context(identity, door), by=request.by, if_match=if_match
+        )
+    except ConfigRevisionConflict as exc:
+        raise _revision_conflict(exc) from exc
+    return _routine_view(retired)
 
 
-@router.post(
-    "/routines/{routine_id}/enable",
-    response_model=RoutineView,
-    status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
-)
+@router.post("/routines/{routine_id}/enable", response_model=RoutineView, status_code=status.HTTP_202_ACCEPTED)
 def enable_routine(
-    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+    routine_id: str,
+    request: RoutineLifecycleRequest,
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    door: RequestDoor,
+    services: Annotated[HubServices, Depends(get_services)],
+    if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Re-enable a retired routine; idempotent, 404 on an unknown id."""
-    routine = services.routines.get(routine_id)
-    if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    services.routine_lifecycle.enable(routine, by=request.by)
-    return _routine_view(routine, retired=False)
+    """Re-enable a retired routine; enabling an enabled one writes nothing. 404 on an
+    unknown id, 409 on a stale `If-Match`."""
+    routine = _routine_or_404(routine_id, services)
+    try:
+        enabled = services.routine_lifecycle.enable(
+            routine, change_context(identity, door), by=request.by, if_match=if_match
+        )
+    except ConfigRevisionConflict as exc:
+        raise _revision_conflict(exc) from exc
+    return _routine_view(enabled)
 
 
 def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:

@@ -472,9 +472,7 @@ def get_chunk_analytics_spend_graphs(
 def get_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not — the
     deployment's scope vocabulary."""
-    scopes = services.scopes.list_all()
-    retired = services.scopes.retired_slugs()
-    return [scope_view(s, retired=s.slug in retired) for s in scopes]
+    return [scope_view(s) for s in services.scopes.list_all()]
 
 
 def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:

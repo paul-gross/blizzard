@@ -4598,7 +4598,7 @@
           "short_help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its\nname never changes here.",
+          "help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its name never changes here.",
           "params": [
             {
               "hidden": false,
@@ -4619,7 +4619,7 @@
               "opts": [
                 "--graph"
               ],
-              "required": true,
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -4631,7 +4631,7 @@
               "opts": [
                 "--scope"
               ],
-              "required": true,
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -4697,7 +4697,7 @@
             }
           ],
           "path": "hub routine edit",
-          "short_help": "Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its name never changes here."
+          "short_help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the options given change, and its name never changes here."
         },
         "enable": {
           "help": "Re-enable a retired routine NAME.",

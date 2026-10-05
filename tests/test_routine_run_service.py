@@ -14,6 +14,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
@@ -23,6 +24,8 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support import HubHarness, build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
+
+_CTX = ChangeContext(actor="operator", door=Door.API)
 
 _AUTHOR = WorkItemAuthor.user("usr_1")
 
@@ -44,6 +47,7 @@ def _routine(
 ) -> tuple[Routine, Graph]:
     graph = _default_graph(hub)
     routine = hub.services.routine_authoring.create(
+        ctx=_CTX,
         name=name,
         graph_name=graph.name,
         default_scope_slug=ScopeSlug.parse(scope),
@@ -167,7 +171,7 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
 def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    unrelated = hub.services.scope_registry.ensure(ScopeSlug.parse("unrelated"))
+    unrelated = hub.services.scope_registry.ensure(ScopeSlug.parse("unrelated"), _CTX)
 
     with pytest.raises(ScopeNotRelatedError):
         hub.services.routine_run.run(
@@ -182,8 +186,8 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
 def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    related = hub.services.scope_registry.ensure(ScopeSlug.parse("related"))
-    hub.services.routine_scope_membership.link(routine, related)
+    related = hub.services.scope_registry.ensure(ScopeSlug.parse("related"), _CTX)
+    hub.services.routine_scope_membership.link(routine, related, _CTX)
 
     result = hub.services.routine_run.run(
         routine,
@@ -255,7 +259,7 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
     routine, _graph = _routine(hub)
     scope = hub.services.scopes.get("blizzard")
     assert scope is not None
-    hub.services.scope_lifecycle.retire(scope, by="operator")
+    hub.services.scope_lifecycle.retire(scope, _CTX, by="operator")
 
     with pytest.raises(ScopeRetiredError):
         hub.services.routine_run.run(
@@ -270,7 +274,7 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
 def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    hub.services.routine_lifecycle.retire(routine, by="operator")
+    retired = hub.services.routine_lifecycle.retire(routine, _CTX, by="operator")
 
     with pytest.raises(RoutineRetiredError):
         hub.services.routine_run.run(
@@ -282,7 +286,7 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
         )
     assert _work_item_count(hub) == 0
 
-    hub.services.routine_lifecycle.enable(routine, by="operator")
+    hub.services.routine_lifecycle.enable(retired, _CTX, by="operator")
     result = hub.services.routine_run.run(
         routine,
         scope=_default_scope(hub, routine),

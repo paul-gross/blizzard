@@ -391,16 +391,50 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
     assert patch_calls == [
         (
             "http://hub.local:8421/api/routines/rtn_1",
-            {
-                "name": "nightly",
-                "graph_name": "beta",
-                "default_scope_slug": "blizzard",
-                "default_model": [],
-                "default_effort": None,
-                "default_harnesses": [],
-            },
+            {"name": "nightly", "graph_name": "beta", "default_scope_slug": "blizzard"},
         )
     ]
+
+
+@pytest.mark.unit
+def test_routine_edit_sends_only_the_options_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_calls: list[object] = []
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
+
+    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        patch_calls.append(json)
+        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    result = CliRunner().invoke(
+        hub_group,
+        ["routine", "edit", "rtn_1", "--effort", "high", "--model", "a", "--model", "b"],
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert patch_calls == [{"name": "nightly", "default_model": ["a", "b"], "default_effort": "high"}]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("kind", ["scope", "routine"])
+def test_config_changes_accepts_the_scope_and_routine_kinds(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    params_seen: list[object] = []
+
+    def fake_get(url: str, *, timeout: float, params: object = None, **_: object) -> _FakeResponse:
+        params_seen.append(params)
+        return _FakeResponse(200, {"changes": [], "next_before": None})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group, ["config", "changes", "--json", "--kind", kind], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert any(kind in str(p) for p in params_seen)
 
 
 # --------------------------------------------------------------------------- #

@@ -129,38 +129,34 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
 
 @routine_group.command("edit", cls=FleetCommand)
 @click.argument("routine_id")
-@click.option("--graph", "graph_name", required=True, help="The routine's graph name.")
-@click.option("--scope", "default_scope_slug", required=True, help="The routine's default scope slug.")
+@click.option("--graph", "graph_name", default=None, help="The routine's graph name.")
+@click.option("--scope", "default_scope_slug", default=None, help="The routine's default scope slug.")
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
 @click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
 def routine_edit(
     cli: CliContext,
     routine_id: str,
-    graph_name: str,
-    default_scope_slug: str,
+    graph_name: str | None,
+    default_scope_slug: str | None,
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
 ) -> None:
-    """Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its
-    name never changes here."""
+    """Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the
+    options given change, and its name never changes here."""
     resp = cli.get(
         f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
     )
-    name = resp.json()["name"]
-    resp = cli.send(
-        "patch",
-        f"/api/routines/{routine_id}",
-        json_body={
-            "name": name,
-            "graph_name": graph_name,
-            "default_scope_slug": default_scope_slug,
-            "default_model": list(default_model),
-            "default_effort": default_effort,
-            "default_harnesses": list(default_harnesses),
-        },
-    )
+    given: dict[str, Any] = {
+        "graph_name": graph_name,
+        "default_scope_slug": default_scope_slug,
+        "default_model": list(default_model) or None,
+        "default_effort": default_effort,
+        "default_harnesses": list(default_harnesses) or None,
+    }
+    body = {"name": resp.json()["name"], **{k: v for k, v in given.items() if v is not None}}
+    resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"routine edit rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})

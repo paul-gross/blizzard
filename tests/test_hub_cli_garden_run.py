@@ -18,10 +18,13 @@ from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RunMode
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from tests.support import HubHarness, build_hub
+
+_CTX = ChangeContext(actor="operator", door=Door.API)
 
 
 @contextlib.contextmanager
@@ -265,6 +268,7 @@ def _default_graph(hub: HubHarness) -> Graph:
 def _routine(hub: HubHarness) -> Routine:
     graph = _default_graph(hub)
     return hub.services.routine_authoring.create(
+        ctx=_CTX,
         name="gardening",
         graph_name=graph.name,
         default_scope_slug=ScopeSlug.parse("blizzard"),

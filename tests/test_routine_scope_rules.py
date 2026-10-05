@@ -3,10 +3,12 @@ every authoring and membership rule over loaded values — no repository, no clo
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.brake import BrakeState, BrakeVerb
 from blizzard.hub.domain.garden.routines import (
     Routine,
@@ -25,6 +27,7 @@ from blizzard.hub.domain.graph.model import Graph
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_CTX = ChangeContext(actor="operator", door=Door.API)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
 _OTHER_SCOPE = Scope(slug="runner", description="", created_at=_T0)
@@ -143,17 +146,18 @@ def test_an_unresolved_graph_refuses_naming_it() -> None:
     assert raised.value.graph_name == "missing"
 
 
-def test_mint_points_at_the_default_scope_and_stamps_the_instant() -> None:
+def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
     model = ["opus"]
-    minted = Routine.mint(
+    minted, change = Routine.new(
         routine_id="rtn_9",
         name="nightly",
         graph_name="default",
         default_scope=_SCOPE,
-        at=_T0,
         default_model=model,
         default_effort=None,
         default_harnesses=("claude",),
+        ctx=_CTX,
+        at=_T0,
     )
     assert minted == Routine(
         routine_id="rtn_9",
@@ -166,37 +170,24 @@ def test_mint_points_at_the_default_scope_and_stamps_the_instant() -> None:
         default_harnesses=["claude"],
     )
     assert minted.default_model is not model
+    assert (change.record_key, change.revision) == ("nightly", 1)
 
 
-def test_an_edit_keeping_the_name_yields_the_field_set_to_write() -> None:
-    edit = _ROUTINE.edited(
-        name="gardening",
-        graph_name="other",
-        default_scope_slug=ScopeSlug.parse("runner"),
-        default_model=[],
-        default_effort=None,
-        default_harnesses=[],
+def test_an_edit_keeping_the_name_yields_the_record_to_write() -> None:
+    decided = _ROUTINE.edit(
+        RoutineEdit(name="gardening", graph_name="other", default_scope_slug=ScopeSlug.parse("runner")),
+        _CTX,
+        if_match=None,
+        at=_T0,
     )
-    assert edit == RoutineEdit(
-        routine_id="rtn_1",
-        graph_name="other",
-        default_scope_slug="runner",
-        default_model=[],
-        default_effort=None,
-        default_harnesses=[],
-    )
+    assert decided is not None
+    edited, _ = decided
+    assert edited == replace(_ROUTINE, graph_name="other", default_scope_slug="runner", revision=2)
 
 
 def test_an_edit_renaming_the_routine_refuses_naming_the_current_name() -> None:
     with pytest.raises(RoutineNameImmutableError) as raised:
-        _ROUTINE.edited(
-            name="renamed",
-            graph_name="default",
-            default_scope_slug=ScopeSlug.parse("blizzard"),
-            default_model=[],
-            default_effort=None,
-            default_harnesses=[],
-        )
+        _ROUTINE.edit(RoutineEdit(name="renamed"), _CTX, if_match=None, at=_T0)
     assert raised.value.current_name == "gardening"
 
 

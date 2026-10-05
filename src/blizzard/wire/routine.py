@@ -1,7 +1,7 @@
 """Routine create/edit/run requests and their read views.
 
 A create names the graph its runs execute and a default scope (minted if unseen);
-edit changes everything but the name, which is immutable. A run mints and ingests a
+edit is sparse and changes everything but the name, which is immutable. A run mints and ingests a
 hub work item from the routine in one act; its chunk rests ``not_ready`` until promoted."""
 
 from __future__ import annotations
@@ -20,19 +20,23 @@ class RoutineCreateRequest(BaseModel):
 
 
 class RoutineEditRequest(BaseModel):
-    """``name`` is required and must equal the routine's current one — the request
-    restates it so a caller cannot silently target the wrong routine's edit."""
+    """A sparse edit: an absent field is unchanged, a present one is set. A present
+    ``name`` must equal the routine's current one; an explicit ``null`` clears
+    ``default_effort`` and is refused on every other field."""
 
-    name: str
-    graph_name: str
-    default_scope_slug: str
-    default_model: list[str] = []
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    graph_name: str | None = None
+    default_scope_slug: str | None = None
+    default_model: list[str] | None = None
     default_effort: str | None = None
-    default_harnesses: list[str] = []
+    default_harnesses: list[str] | None = None
 
 
 class RoutineLifecycleRequest(BaseModel):
-    """Retire or re-enable a routine — records who flipped it."""
+    """Retire or re-enable a routine — ``by`` is recorded on the lifecycle fact; the change
+    row's actor is the authenticated caller."""
 
     by: str = "operator"
 
@@ -49,6 +53,7 @@ class RoutineView(BaseModel):
     default_harnesses: list[str] = []
     created_at: str
     retired: bool = False
+    revision: int | None = None
 
 
 class RoutineRunRequest(BaseModel):

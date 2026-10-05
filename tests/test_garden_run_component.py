@@ -19,6 +19,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine, RunMode
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
@@ -26,6 +27,8 @@ from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
+
+_CTX = ChangeContext(actor="operator", door=Door.API)
 
 _AUTHOR = WorkItemAuthor.user("usr_1")
 _NOW = datetime(2026, 7, 1, tzinfo=UTC)
@@ -42,6 +45,7 @@ def _default_graph(hub: HubHarness) -> Graph:
 def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard") -> Routine:
     graph = _default_graph(hub)
     return hub.services.routine_authoring.create(
+        ctx=_CTX,
         name=name,
         graph_name=graph.name,
         default_scope_slug=ScopeSlug.parse(scope),
