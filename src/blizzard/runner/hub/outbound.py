@@ -20,9 +20,16 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.hub.node_steps import (
+    completion_of,
+    completion_submission,
+    decision_submission,
+    gate_submission_of,
+)
 from blizzard.runner.hub.outbound_buffer import (
     COMPLETION_KIND,
     DECISION_KIND,
+    BufferedFact,
     IWriteOutboundRepository,
     OutboundEventFields,
     answer_delivered_payload,
@@ -36,10 +43,19 @@ from blizzard.runner.hub.outbound_buffer import (
 )
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.node_steps.submissions import Completion, GateSubmission
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 
-__all__ = ["COMPLETION_KIND", "DECISION_KIND", "OutboundContext", "OutboundFacts", "OutboundStores"]
+__all__ = [
+    "COMPLETION_KIND",
+    "DECISION_KIND",
+    "OutboundContext",
+    "OutboundFacts",
+    "OutboundStores",
+    "buffered_completion",
+    "buffered_gate",
+]
 
 
 class OutboundStores(Protocol):
@@ -100,12 +116,14 @@ class OutboundFacts:
         payload = answer_delivered_payload(lease, question_id)
         self._enqueue(ANSWER_DELIVERED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def completion(self, lease: Lease, submission: CompletionSubmission, *, at: datetime) -> None:
-        payload = submission_payload(submission.model_dump(mode="json"))
+    def completion(self, lease: Lease, completion: Completion, *, at: datetime) -> None:
+        """Buffered as the wire body the drain later submits, so a row written before a redeploy
+        drains unchanged after it."""
+        payload = submission_payload(completion_submission(completion).model_dump(mode="json"))
         self._enqueue(COMPLETION_KIND, lease.chunk_id, lease.lease_id, payload, at)
 
-    def decision(self, lease: Lease, submission: DecisionSubmission, *, at: datetime) -> None:
-        payload = submission_payload(submission.model_dump(mode="json"))
+    def decision(self, lease: Lease, gate: GateSubmission, *, at: datetime) -> None:
+        payload = submission_payload(decision_submission(gate).model_dump(mode="json"))
         self._enqueue(DECISION_KIND, lease.chunk_id, lease.lease_id, payload, at)
 
     def command_failed(
@@ -178,3 +196,13 @@ class OutboundFacts:
         )
         if self.ctx.events is not None:
             self.ctx.events.publish_fact_changed(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id)
+
+
+def buffered_completion(fact: BufferedFact) -> Completion:
+    """The completion a buffered ``COMPLETION_KIND`` fact carries."""
+    return completion_of(CompletionSubmission.model_validate(json.loads(fact.payload)["submission"]))
+
+
+def buffered_gate(fact: BufferedFact) -> GateSubmission:
+    """The gate submission a buffered ``DECISION_KIND`` fact carries."""
+    return gate_submission_of(DecisionSubmission.model_validate(json.loads(fact.payload)["submission"]))

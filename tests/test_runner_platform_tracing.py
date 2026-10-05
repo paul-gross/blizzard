@@ -62,6 +62,7 @@ from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.runner.tracing.attributes import RUNNER_ID
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
@@ -77,9 +78,6 @@ from blizzard.runner.tracing.receiver_limits import (
 )
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
 from tests.runner_fakes import (
@@ -714,8 +712,8 @@ def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFact
 
 def test_a_buffered_completion_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
     hub = FakeHub()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
-    submission = CompletionSubmission(choice="pass", epoch=3, runner_id=_RUNNER, from_node_id="nd_build")
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
+    submission = Completion(choice="pass", epoch=3, runner_id=_RUNNER, from_node_id="nd_build")
 
     def seed(ctx: LoopContext) -> None:
         _buffer_closed(ctx, 3, lambda facts, lease: facts.completion(lease, submission, at=_NOW))
@@ -725,7 +723,7 @@ def test_a_buffered_completion_posts_under_its_attempt_step_root(tmp_path: Path)
 
 
 def test_a_buffered_decision_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
-    submission = DecisionSubmission(from_node_id="nd_build", epoch=4, runner_id=_RUNNER)
+    submission = GateSubmission(from_node_id="nd_build", epoch=4, runner_id=_RUNNER)
 
     def seed(ctx: LoopContext) -> None:
         _buffer_closed(ctx, 4, lambda facts, lease: facts.decision(lease, submission, at=_NOW))
@@ -749,7 +747,7 @@ def test_a_resolved_gate_applies_under_its_gate_step_root(tmp_path: Path) -> Non
             decision_id="dec_1", node_id="nd_gate", epoch=2, resolved_choice="approve", transitioned=False
         ),
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.PARKED_AT_GATE)]
     spans = _ticked(tmp_path, hub, _held)
     _assert_directly_under(_call(spans, "submit_completion"), step_root(StepKey.gate("ch_1", 2, "dec_1")))
 

@@ -22,7 +22,7 @@ from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.wire.envelope import ApplyResponse
+from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
@@ -83,7 +83,7 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run lint", "mise run test"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
@@ -131,7 +131,7 @@ def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: 
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
@@ -167,7 +167,7 @@ def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp
 
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
@@ -353,7 +353,7 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
@@ -384,10 +384,10 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
 @pytest.mark.unit
 def test_checks_gate_violated_predicate() -> None:
     from blizzard.foundation.completion_gates import ChecksGate
-    from blizzard.wire.completion import CheckResult
+    from blizzard.runner.node_steps.submissions import CheckVerdict
 
-    green = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=True)]
-    red = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=False)]
+    green = [CheckVerdict(command="a", passed=True), CheckVerdict(command="b", passed=True)]
+    red = [CheckVerdict(command="a", passed=True), CheckVerdict(command="b", passed=False)]
     # Ungated: never violated, whatever the checks say.
     assert ChecksGate(False, red).violated is False
     assert ChecksGate(False, green).violated is False
@@ -444,7 +444,7 @@ def test_advance_lets_a_red_check_route_through_a_non_gated_fail(tmp_path: Path)
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
@@ -479,7 +479,7 @@ def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: 
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )

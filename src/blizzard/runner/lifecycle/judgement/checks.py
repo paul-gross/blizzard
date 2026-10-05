@@ -10,7 +10,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT
-from blizzard.wire.envelope import NodeConfig
+from blizzard.runner.node_steps.envelope import EnvelopeNode
 
 __all__ = ["CheckPlan", "ExecutedCheck", "IReadCheckRepository", "IWriteCheckRepository"]
 
@@ -26,7 +26,7 @@ class CheckPlan:
     timeout: int
 
     @classmethod
-    def of(cls, node: NodeConfig, workdir: str) -> CheckPlan:
+    def of(cls, node: EnvelopeNode, workdir: str) -> CheckPlan:
         """The plan for ``node`` in the leased worktree ``workdir``: ``checks_cwd`` joined
         onto it when the node names one, and the node's ``checks_timeout`` or the default."""
         return cls(

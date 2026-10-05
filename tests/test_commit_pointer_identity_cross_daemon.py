@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.runner.node_steps.submissions import CompletionArtifact
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, report_lease
 from tests.test_pin_hub_delivery import _mint_and_claim, _writable
@@ -30,7 +30,7 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 pytestmark = pytest.mark.component
 
 
-def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str]) -> list[SubmittedArtifact]:
+def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str]) -> list[CompletionArtifact]:
     """What the runner submits for two envs each declaring ``widget`` at ``commits[env]``."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_lease(
@@ -75,7 +75,7 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
     return DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")).verify()
 
 
-def _deliver_payload(tmp_path: Path, submitted: list[SubmittedArtifact]) -> list[dict[str, str]]:
+def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact]) -> list[dict[str, str]]:
     """Record ``submitted`` as the chunk's build artifacts, run ``deliver``, and return the
     ``BZ_HUB_GIT_COMMITS`` list the land script received."""
     runner = FakeHubCommandRunner()

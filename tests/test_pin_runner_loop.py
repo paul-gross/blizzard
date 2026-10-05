@@ -25,9 +25,9 @@ from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeCheckRunner,
@@ -232,7 +232,7 @@ def test_the_resume_guard_fact_is_durable_before_the_resume_runs(tmp_path) -> No
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = _RecordingResumeHarness(
         store=store,
         lease_id="lease_r",

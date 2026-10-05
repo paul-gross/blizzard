@@ -14,7 +14,7 @@ from blizzard.foundation.completion_gates import ChecksGate
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
-from blizzard.wire.envelope import EnvelopeChoice
+from blizzard.runner.node_steps.envelope import Choice
 
 __all__ = ["Verdict", "VerdictOutcome"]
 
@@ -37,10 +37,10 @@ class Verdict:
     reply named none or one the node does not declare."""
 
     choice: str | None
-    selected: EnvelopeChoice | None
+    selected: Choice | None
 
     @classmethod
-    def of(cls, choice: str | None, choices: Sequence[EnvelopeChoice]) -> Verdict:
+    def of(cls, choice: str | None, choices: Sequence[Choice]) -> Verdict:
         return cls(choice, next((c for c in choices if c.name == choice), None) if choice is not None else None)
 
     def without_choice(self, unforwarded_ask: OpenAsk | None) -> VerdictOutcome:

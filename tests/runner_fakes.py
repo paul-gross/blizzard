@@ -51,8 +51,12 @@ from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunk
 from blizzard.runner.hub.client import (
     ChunkEndedError,
     ChunkNotFoundError,
+    ClaimedRoute,
+    ClaimRequest,
+    FactPushAck,
     HubClientError,
     IHubClient,
+    PushedFact,
     RouteClaimOutcome,
 )
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
@@ -62,6 +66,8 @@ from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFil
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode, GraphArtifact, ProducesSpec, RotateBounds
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.runtime import migration_runner
@@ -110,14 +116,9 @@ from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.runner.usage.repository import derive_invocation_cost
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse, GraphArtifact, NodeConfig, NodeEnvelope
-from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
-from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
+from blizzard.wire.route import RouteTokenRekeyResponse
 from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
@@ -360,17 +361,17 @@ class FakeHub:
         # lets a test assert on the capabilities/policy the call site sends.
         self.peek_queue_requests: list[QueuePeekRequest] = []
         self.claim_outcome: RouteClaimOutcome | None = None
-        self.apply_responses: list[ApplyResponse] = []
-        self.envelopes: dict[str, NodeEnvelope] = {}
+        self.apply_responses: list[ApplyReply] = []
+        self.envelopes: dict[str, Envelope] = {}
         self.chunks: dict[str, ChunkStatusView] = {}
         # One entry per `chunk_statuses` call, naming the ids it requested —
         # lets a test assert on the per-tick batching the cache is built for.
         self.chunk_statuses_calls: list[list[str]] = []
-        self.claims: list[RouteClaim] = []
-        self.completions: list[tuple[str, CompletionSubmission]] = []
-        self.decisions_submitted: list[tuple[str, DecisionSubmission]] = []
-        self.decision_responses: list[ApplyResponse] = []
-        self.pushed: list[RunnerFact] = []
+        self.claims: list[ClaimRequest] = []
+        self.completions: list[tuple[str, Completion]] = []
+        self.decisions_submitted: list[tuple[str, GateSubmission]] = []
+        self.decision_responses: list[ApplyReply] = []
+        self.pushed: list[PushedFact] = []
         self.high_water: dict[str, int] = {}
         # One entry per `push_facts` call, naming the seqs it carried — lets a test assert
         # on batching, distinct from `pushed`'s own flattened what-eventually-landed log.
@@ -416,41 +417,41 @@ class FakeHub:
             return QueuePeekResponse(entries=self.queue_responses.pop(0))
         return QueuePeekResponse(entries=list(self.queue))
 
-    def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
+    def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         self.claims.append(claim)
         assert self.claim_outcome is not None, "no claim outcome scripted"
         return self.claim_outcome
 
-    def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
+    def submit_completion(self, chunk_id: str, completion: Completion) -> ApplyReply:
         if self.down:
             raise HubClientError("fake hub is down")
-        self.completions.append((chunk_id, submission))
+        self.completions.append((chunk_id, completion))
         assert self.apply_responses, "no apply response scripted"
         return self.apply_responses.pop(0)
 
-    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+    def submit_decision(self, chunk_id: str, gate: GateSubmission) -> ApplyReply:
         if self.down:
             raise HubClientError("fake hub is down")
-        self.decisions_submitted.append((chunk_id, submission))
+        self.decisions_submitted.append((chunk_id, gate))
         if self.decision_responses:
             return self.decision_responses.pop(0)
-        return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail="parked at gate")
+        return ApplyReply(outcome=ApplyOutcome.PARKED_AT_GATE, detail="parked at gate")
 
-    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
         if self.down:
             raise HubClientError("fake hub is down")
-        self.push_facts_calls.append([fact.seq for fact in batch.facts])
-        mark = self.high_water.get(batch.runner_id, 0)
+        self.push_facts_calls.append([fact.seq for fact in facts])
+        mark = self.high_water.get(runner_id, 0)
         applied, already = [], []
-        for fact in sorted(batch.facts, key=lambda f: f.seq):
+        for fact in sorted(facts, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
             self.pushed.append(fact)
             mark = fact.seq
             applied.append(fact.seq)
-        self.high_water[batch.runner_id] = mark
-        return RunnerFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
+        self.high_water[runner_id] = mark
+        return FactPushAck(high_water=mark, applied=applied, already_applied=already, rejected=[])
 
     def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
         if self.down:
@@ -488,7 +489,7 @@ class FakeHub:
             refused=refused,
         )
 
-    def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+    def get_envelope(self, chunk_id: str) -> Envelope:
         self.get_envelope_calls.append(chunk_id)
         if chunk_id in self.not_found:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
@@ -807,7 +808,7 @@ class FakeHarness:
         # test that doesn't care about the observation seam reads exactly as before.
         self._observed_model = observed_model
         self.observed_model_calls: list[tuple[str, ...]] = []
-        self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
+        self.spawns: list[tuple[Envelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn
         self.judged: list[tuple[str, str, str]] = []
         self.judge_output_paths: list[str] = []  # one entry per judge (launch) call
@@ -869,7 +870,7 @@ class FakeHarness:
 
     def spawn(
         self,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
@@ -1343,7 +1344,7 @@ def make_envelope(
     *,
     node_id: str,
     choices: list[tuple[str, str]],
-    produces: list[str | ProducesEntry] | None = None,
+    produces: list[str | ProducesSpec] | None = None,
     epoch: int = 0,
     session: SessionMode | None = None,
     session_source: str | None = None,
@@ -1352,7 +1353,7 @@ def make_envelope(
     session_harnesses: list[str] | None = None,
     session_effort: str | None = None,
     session_compaction_window: str | None = None,
-    session_rotate: RotatePolicyView | None = None,
+    session_rotate: RotateBounds | None = None,
     checks: list[str] | None = None,
     checks_cwd: str | None = None,
     checks_timeout: int | None = None,
@@ -1361,17 +1362,17 @@ def make_envelope(
     retries_max: int | None = 2,
     graph_name: str | None = None,
     work_refs: list[dict[str, str]] | None = None,
-) -> NodeEnvelope:
+) -> Envelope:
     """A minimal runner-node envelope for a step test.
 
     ``epoch`` defaults to 0 (never-leased); ``session`` defaults ``FRESH``; ``produces`` is a bare name
-    (``kind=asset``) or explicit :class:`~blizzard.wire.graph.ProducesEntry`; ``graph_artifacts`` defaults empty;
+    (``kind=asset``) or explicit :class:`~blizzard.wire.graph.ProducesSpec`; ``graph_artifacts`` defaults empty;
     ``retries_max`` defaults to 2, with ``None`` modeling an omitted `retries:`."""
     from blizzard.foundation.node_steps import Executor, JudgedBy
-    from blizzard.wire.envelope import EnvelopeChoice
+    from blizzard.runner.node_steps.envelope import Choice
 
     gated = requires_checks or set()
-    node = NodeConfig(
+    node = EnvelopeNode(
         node_id=node_id,
         node_name=node_name,
         executor=Executor.RUNNER,
@@ -1388,10 +1389,10 @@ def make_envelope(
         checks=checks or [],
         checks_cwd=checks_cwd,
         checks_timeout=checks_timeout,
-        produces=[p if isinstance(p, ProducesEntry) else ProducesEntry(name=p) for p in produces or []],
-        choices=[EnvelopeChoice(name=n, description=d, requires_checks=n in gated) for n, d in choices],
+        produces=[p if isinstance(p, ProducesSpec) else ProducesSpec(name=p) for p in produces or []],
+        choices=[Choice(name=n, description=d, requires_checks=n in gated) for n, d in choices],
     )
-    return NodeEnvelope(
+    return Envelope(
         chunk_id=chunk_id,
         graph_id="gr_test",
         graph_name=graph_name,
@@ -1405,10 +1406,10 @@ def make_envelope(
 
 
 def claimed_outcome(
-    chunk_id: str, envelope: NodeEnvelope, *, runner_id: str = "r1", route_token: str = "rtok_test"
+    chunk_id: str, envelope: Envelope, *, runner_id: str = "r1", route_token: str = "rtok_test"
 ) -> RouteClaimOutcome:
     return RouteClaimOutcome(
-        claimed=RouteClaimResponse(
+        claimed=ClaimedRoute(
             chunk_id=chunk_id,
             runner_id=runner_id,
             workspace_id="ws1",

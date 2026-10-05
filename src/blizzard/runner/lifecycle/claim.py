@@ -22,7 +22,7 @@ from blizzard.runner.environments.repository import (
     group_bindings_by_chunk,
     require_unheld,
 )
-from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.operator_requests import IReadRequeueRepository
 from blizzard.runner.lifecycle.model import (
@@ -39,10 +39,9 @@ from blizzard.runner.lifecycle.model import (
     recovery_owner,
 )
 from blizzard.runner.lifecycle.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
+from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
-from blizzard.wire.route import RouteClaim
 from blizzard.wire.runner import RunnerCapability
 
 _log = get_logger("blizzard.runner.loop")
@@ -229,8 +228,8 @@ class ReadyQueue:
                 self.ctx.provider.release(env.environment_id)
         self._entries.remove(entry)
 
-    def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> RouteClaim:
-        return RouteClaim(
+    def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> ClaimRequest:
+        return ClaimRequest(
             chunk_id=chunk_id,
             runner_id=self.ctx.config.runner_id,
             workspace_id=self.ctx.config.workspace_id,
@@ -375,7 +374,7 @@ class InterruptedClaims:
         The route is claimed with the environment already held rather than re-acquired; a lost
         race releases the binding."""
         envs = Environments(bindings).acquired
-        claim = RouteClaim(
+        claim = ClaimRequest(
             chunk_id=chunk_id,
             runner_id=self.ctx.config.runner_id,
             workspace_id=self.ctx.config.workspace_id,
@@ -412,7 +411,7 @@ class InterruptedClaims:
         prior mint, the genuinely fresh case a caller's own default is free to decide."""
         return recovery_owner(self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id))
 
-    def _envelope(self, chunk_id: str, what: str, latest_epoch: int | None) -> NodeEnvelope | None:
+    def _envelope(self, chunk_id: str, what: str, latest_epoch: int | None) -> Envelope | None:
         try:
             with self._under_latest_step(chunk_id, latest_epoch):
                 return self.ctx.hub.get_envelope(chunk_id)

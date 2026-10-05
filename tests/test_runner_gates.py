@@ -17,8 +17,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
-from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -171,7 +171,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
     )
     # The resolving transition returns the next runner node to continue into.
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
@@ -265,7 +265,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     assert store.held_environment_ids() == ["e1"]  # env still held for the resolution
 
     # ADVANCE owns it: the resolving transition is recorded at the parked epoch.
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="deliver took over")]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="deliver took over")]
     Advance(ctx).run()
 
     assert len(hub.completions) == 1

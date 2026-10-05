@@ -58,6 +58,7 @@ from blizzard.runner.lifecycle.model import (
     resolved_retries_max,
 )
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
+from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.throttle.pause import IWritePauseRepository, RunnerBrakes
@@ -67,7 +68,6 @@ from blizzard.runner.transcripts.transcript_pump import (
     TranscriptPumpContext,
     TranscriptPumpStores,
 )
-from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -231,7 +231,7 @@ class Spawner:
     def spawn(
         self,
         chunk_id: str,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         environments: list[AcquiredEnvironment],
         *,
         via: str,
@@ -389,7 +389,7 @@ class Spawner:
         _CP_AFTER_SPAWN.reached()
 
     def enter_node(
-        self, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment], *, via: str
+        self, chunk_id: str, envelope: Envelope, environments: list[AcquiredEnvironment], *, via: str
     ) -> None:
         """Spawn into this node, continuing whatever session it resolves to — a
         named pool's head, or a plain resume's own latest session. Either shape's owner failing
@@ -407,7 +407,7 @@ class Spawner:
     def _escalate_unresolvable_resume_owner(
         self,
         chunk_id: str,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         session: SessionReference,
         exc: UnknownHarnessError | UnavailableHarnessError,
         *,
@@ -436,7 +436,7 @@ class Spawner:
     def escalate_no_acceptable_harness(
         self,
         chunk_id: str,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         *,
         attempted: Sequence[str],
         skipped: Sequence[SkippedHarness],
@@ -509,7 +509,7 @@ class Spawner:
     def _mint(
         self,
         chunk_id: str,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         *,
         resume: ResumedSession | None,
         harness_id: str | None,

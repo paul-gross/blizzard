@@ -21,9 +21,9 @@ from blizzard.runner.lifecycle.model import (
     held_chunk_reads_local_epoch,
 )
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
+from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.node_steps.submissions import Completion
 from blizzard.wire.chunk import ChunkDecisionStatusView
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -39,7 +39,7 @@ class HeldChunk:
     ctx: HeldChunkContext
     chunk_id: str
 
-    def apply(self, outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, bindings: list[EnvBinding]) -> None:
+    def apply(self, outcome: ApplyOutcome, next_envelope: Envelope | None, bindings: list[EnvBinding]) -> None:
         # Only a next node can be spawned into a pause, so only then is the chunk's pause read.
         move = apply_move(outcome, next_envelope, chunk_paused=next_envelope is not None and self._chunk_paused())
         if move is ApplyMove.ENTER_NEXT and next_envelope is not None:
@@ -150,7 +150,7 @@ class HeldChunk:
         Reuses the parked step's epoch — no new lease was minted while parked — and references
         the decision id, which is what makes a transition out of a human-judged node legal."""
         parked = self.ctx.stores.lease_record.latest_lease_for_chunk(self.chunk_id)
-        submission = CompletionSubmission(
+        submission = Completion(
             choice=decision.resolved_choice or "",
             epoch=decision.epoch,
             runner_id=self.ctx.config.runner_id,

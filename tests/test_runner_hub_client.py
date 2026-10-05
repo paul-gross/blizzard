@@ -11,12 +11,11 @@ import json
 import httpx
 import pytest
 
-from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
-from blizzard.wire.completion import CompletionSubmission
+from blizzard.runner.node_steps.submissions import Completion
 from blizzard.wire.queue import QueuePeekRequest
-from blizzard.wire.route import RouteClaim
 from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
@@ -97,7 +96,7 @@ def test_claim_route_201_returns_envelope() -> None:
         return httpx.Response(201, json=body)
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert outcome.won
     assert outcome.claimed is not None
@@ -110,7 +109,7 @@ def test_claim_route_409_is_conflict_not_error() -> None:
         return httpx.Response(409, json={"chunk_id": "ch_1", "held_by_runner_id": "r2", "detail": "already claimed"})
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert not outcome.won
     assert outcome.conflict is not None and outcome.conflict.held_by_runner_id == "r2"
@@ -126,7 +125,7 @@ def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict
         return httpx.Response(409, json={"chunk_id": "ch_1", "status": "stopped", "detail": "chunk is terminal"})
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert not outcome.won
     assert outcome.conflict is None
@@ -150,7 +149,7 @@ def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_deni
         )
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert not outcome.won
     assert outcome.conflict is None
@@ -175,7 +174,7 @@ def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibil
         )
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert not outcome.won
     assert outcome.conflict is None
@@ -195,7 +194,7 @@ def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
         )
 
     outcome = _client(handler).claim_route(
-        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+        ClaimRequest(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert not outcome.won
     assert outcome.conflict is None
@@ -209,7 +208,7 @@ def test_submit_completion_returns_apply_response() -> None:
         return httpx.Response(200, json={"outcome": "hub_node_taken", "detail": "delivering"})
 
     resp = _client(handler).submit_completion(
-        "ch_1", CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+        "ch_1", Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
     )
     assert resp.outcome == "hub_node_taken"
 
@@ -511,7 +510,5 @@ def test_envelope_404_still_raises_chunk_not_found() -> None:
 def test_409_on_a_route_that_does_not_opt_in_stays_a_plain_hub_client_error() -> None:
     client = _client(_refusing(409, json={"detail": "chunk ch_1 is done"}))
     with pytest.raises(HubClientError) as raised:
-        client.submit_completion(
-            "ch_1", CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
-        )
+        client.submit_completion("ch_1", Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build"))
     assert type(raised.value) is HubClientError

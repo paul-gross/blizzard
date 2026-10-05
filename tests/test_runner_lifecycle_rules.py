@@ -3,6 +3,7 @@ no hub, no clock (``blizzard.runner.lifecycle.model``)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import get_args
 
@@ -13,7 +14,15 @@ from blizzard.foundation.leases import LeaseClosureReason, LeaseState
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError
-from blizzard.runner.hub.client import RouteClaimOutcome
+from blizzard.runner.hub.client import (
+    ClaimConflict,
+    ClaimedRoute,
+    DependencyDenial,
+    IncompatibleDenial,
+    PausedDenial,
+    RouteClaimOutcome,
+    TerminalDenial,
+)
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT, cause_of
 from blizzard.runner.leases.elicitation import PendingElicitation
@@ -89,19 +98,11 @@ from blizzard.runner.lifecycle.session import (
 )
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.takeover import OpenTakeover
+from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.wire.chunk import BlockedView, ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView, PauseView
-from blizzard.wire.envelope import NodeConfig, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.route import (
-    RouteClaimConflict,
-    RouteClaimDependencyDenial,
-    RouteClaimIncompatibleDenial,
-    RouteClaimPausedDenial,
-    RouteClaimResponse,
-    RouteClaimTerminalDenial,
-)
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
@@ -174,7 +175,7 @@ def _entry(chunk_id: str, *, blocked: bool = False) -> QueuePeekEntry:
 
 def _won() -> RouteClaimOutcome:
     return RouteClaimOutcome(
-        claimed=RouteClaimResponse(
+        claimed=ClaimedRoute(
             chunk_id="ch_1",
             runner_id=_ME,
             workspace_id="ws",
@@ -187,17 +188,15 @@ def _won() -> RouteClaimOutcome:
 
 _OUTCOMES = {
     ClaimVerdict.WON: _won(),
-    ClaimVerdict.PAUSED: RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id=_ME)),
-    ClaimVerdict.NOT_CLAIMABLE: RouteClaimOutcome(
-        denied_terminal=RouteClaimTerminalDenial(chunk_id="ch_1", status="not_ready")
-    ),
+    ClaimVerdict.PAUSED: RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id=_ME)),
+    ClaimVerdict.NOT_CLAIMABLE: RouteClaimOutcome(denied_terminal=TerminalDenial(chunk_id="ch_1", status="not_ready")),
     ClaimVerdict.DEPENDENCY: RouteClaimOutcome(
-        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_pre")
+        denied_dependency=DependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_pre")
     ),
     ClaimVerdict.INCOMPATIBLE: RouteClaimOutcome(
-        denied_incompatible=RouteClaimIncompatibleDenial(chunk_id="ch_1", incompatible_runner_id=_ME)
+        denied_incompatible=IncompatibleDenial(chunk_id="ch_1", incompatible_runner_id=_ME)
     ),
-    ClaimVerdict.LOST: RouteClaimOutcome(conflict=RouteClaimConflict(chunk_id="ch_1", held_by_runner_id="r2")),
+    ClaimVerdict.LOST: RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2")),
 }
 
 
@@ -332,9 +331,9 @@ def test_adopt_enters_a_node_the_latest_lease_did_not_run_unless_it_is_a_restart
 # --- minting ---------------------------------------------------------------------------------- #
 
 
-def _node(*, harnesses: list[str] | None = None) -> NodeConfig:
+def _node(*, harnesses: list[str] | None = None) -> EnvelopeNode:
     node = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")]).node
-    return node.model_copy(update={"session_harnesses": harnesses or []})
+    return replace(node, session_harnesses=harnesses or [])
 
 
 def test_mint_owner_source_precedence() -> None:
@@ -707,9 +706,9 @@ def test_resume_inherits_stamps() -> None:
 def test_select_harness_strict_and_skips() -> None:
     node = _node(harnesses=["cc"])
     assert not selection_is_strict(node)
-    assert not selection_is_strict(node.model_copy(update={"session_model": ["opus"]}))
-    assert selection_is_strict(node.model_copy(update={"session_model": ["blizzard:deep"]}))
-    assert selection_is_strict(node.model_copy(update={"session_harnesses": ["cc", "oc"], "session_model": ["opus"]}))
+    assert not selection_is_strict(replace(node, session_model=["opus"]))
+    assert selection_is_strict(replace(node, session_model=["blizzard:deep"]))
+    assert selection_is_strict(replace(node, session_harnesses=["cc", "oc"], session_model=["opus"]))
     assert member_skip_reason(healthy=False, maps_authored_tier=False) == "unhealthy"
     assert member_skip_reason(healthy=True, maps_authored_tier=False) == "no-authored-tier"
     assert member_skip_reason(healthy=True, maps_authored_tier=True) is None
@@ -718,9 +717,9 @@ def test_select_harness_strict_and_skips() -> None:
 def test_resume_target_cases() -> None:
     head = SessionReference("cc", "sess-head")
     exc = UnavailableHarnessError("cc", "model resolution")
-    plain = _node().model_copy(update={"session": SessionMode.RESUME, "session_name": None})
-    pooled = plain.model_copy(update={"session_name": "impl"})
-    fresh = plain.model_copy(update={"session": SessionMode.FRESH})
+    plain = replace(_node(), session=SessionMode.RESUME, session_name=None)
+    pooled = replace(plain, session_name="impl")
+    fresh = replace(plain, session=SessionMode.FRESH)
 
     assert resume_target(fresh, candidate=head) == ResumeTarget(session=None)
     assert resume_target(plain) == ResumeTarget(session=None)
@@ -739,13 +738,13 @@ def test_resume_target_cases() -> None:
 
 
 def test_rotation_breach_order() -> None:
-    rotate = RotatePolicyView(max_context_tokens=100, max_invocations=3, max_transcript_bytes=1000)
+    rotate = RotateBounds(max_context_tokens=100, max_invocations=3, max_transcript_bytes=1000)
     assert rotation_breach(rotate, context_tokens=101, invocations=4, transcript_bytes=1001) == "max_context_tokens"
     assert rotation_breach(rotate, context_tokens=100, invocations=4, transcript_bytes=1001) == "max_invocations"
     assert rotation_breach(rotate, context_tokens=None, invocations=3, transcript_bytes=1001) == "max_transcript_bytes"
     # An unreadable signal is never a breach.
     assert rotation_breach(rotate, context_tokens=None, invocations=None, transcript_bytes=None) is None
-    assert rotation_breach(RotatePolicyView(), context_tokens=10**9, invocations=10**9, transcript_bytes=10**9) is None
+    assert rotation_breach(RotateBounds(), context_tokens=10**9, invocations=10**9, transcript_bytes=10**9) is None
     assert model_drifted("opus", "sonnet")
     assert not model_drifted(None, "sonnet")
     assert not model_drifted("opus", None)

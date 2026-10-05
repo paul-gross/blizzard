@@ -7,17 +7,19 @@ asserts they agree on the expected verdict.
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.auth.produces import Produces
-from blizzard.hub.domain.execution.submissions import CompletionArtifact
+from blizzard.hub.domain.execution.submissions import CompletionArtifact as HubArtifact
 from blizzard.hub.domain.graph.model import Node, ProducesSpec
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
-from blizzard.wire.completion import SubmittedArtifact
-from blizzard.wire.graph import ProducesEntry
+from blizzard.runner.node_steps.envelope import ProducesSpec as RunnerProducesSpec
+from blizzard.runner.node_steps.submissions import CompletionArtifact
 
 from .runner_fakes import make_envelope
 
@@ -47,14 +49,14 @@ def _git_commit_spec(name: str = "commit") -> ProducesSpec:
     return ProducesSpec(name=name, kind=ArtifactKind.GIT_COMMIT)
 
 
-def _git_commit(name: str) -> SubmittedArtifact:
-    return SubmittedArtifact(
+def _git_commit(name: str) -> CompletionArtifact:
+    return CompletionArtifact(
         name=name, kind=ArtifactKind.GIT_COMMIT, repo=name, branch_name="b", commit_hash="deadbeef"
     )
 
 
-def _asset(name: str, *, attached: bool) -> SubmittedArtifact:
-    return SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content="stuff", attached=attached)
+def _asset(name: str, *, attached: bool) -> CompletionArtifact:
+    return CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content="stuff", attached=attached)
 
 
 #: (id, produces, submission artifacts, expected "is every name covered?"). A ``produces``
@@ -113,11 +115,11 @@ _SCENARIOS = [
 ]
 
 
-def _envelope_produces(produces: list[str | ProducesSpec]) -> list[str | ProducesEntry]:
+def _envelope_produces(produces: list[str | ProducesSpec]) -> list[str | RunnerProducesSpec]:
     """Mirror a ``produces`` scenario entry into :func:`make_envelope`'s own vocabulary —
-    a bare name stays a bare name; a :class:`ProducesSpec` (the hub's kind-carrying type)
-    becomes the wire's :class:`ProducesEntry` counterpart, same ``name``/``kind``."""
-    return [p if isinstance(p, str) else ProducesEntry(name=p.name, kind=p.kind) for p in produces]
+    a bare name stays a bare name; the hub's kind-carrying :class:`ProducesSpec` becomes the
+    runner's envelope counterpart, same ``name``/``kind``."""
+    return [p if isinstance(p, str) else RunnerProducesSpec(name=p.name, kind=p.kind) for p in produces]
 
 
 @pytest.mark.parametrize(
@@ -125,11 +127,11 @@ def _envelope_produces(produces: list[str | ProducesSpec]) -> list[str | Produce
     [pytest.param(p, a, c, id=i) for i, p, a, c in _SCENARIOS],
 )
 def test_hub_and_runner_agree_on_coverage(
-    produces: list[str | ProducesSpec], artifacts: list[SubmittedArtifact], all_covered: bool
+    produces: list[str | ProducesSpec], artifacts: list[CompletionArtifact], all_covered: bool
 ) -> None:
     """One scenario, both predicates, same verdict — and the verdict is the expected one:
     two sides re-forked into the same wrong answer would still agree with each other."""
-    hub_artifacts = [CompletionArtifact(**a.model_dump()) for a in artifacts]
+    hub_artifacts = [HubArtifact(**asdict(a)) for a in artifacts]
     hub_rejects = Produces(_node(produces=produces), hub_artifacts).rejection(mode=PRODUCES_ENFORCE) is not None
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=_envelope_produces(produces)
@@ -170,7 +172,7 @@ def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
         "build",
         node_id="nd_build",
         choices=[("pass", "ok")],
-        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+        produces=[RunnerProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
     assert ProducesReconciler(envelope).missing([_git_commit("toy-api")], {}) == []
@@ -184,7 +186,7 @@ def test_a_git_commit_kind_expectation_with_zero_commits_nudges_the_worker() -> 
         "build",
         node_id="nd_build",
         choices=[("pass", "ok")],
-        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+        produces=[RunnerProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
     missing = ProducesReconciler(envelope).missing([], {})

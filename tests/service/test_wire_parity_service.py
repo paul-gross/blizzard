@@ -16,9 +16,8 @@ import pytest
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.wire.facts import RunnerFact, RunnerFactBatch
-from blizzard.wire.route import RouteClaim
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import (
@@ -72,21 +71,19 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
         chunk_id = _seed(hub)
 
         ack = client.push_facts(
-            RunnerFactBatch(
-                runner_id="runner-parity",
-                facts=[
-                    RunnerFact(
-                        seq=1,
-                        kind=ESCALATION_RECORDED,
-                        payload={
-                            "chunk_id": chunk_id,
-                            "epoch": 4,
-                            "takeover_command": "cd /ws/e1 && claude --resume sess-1",
-                            "wrapped_takeover_command": f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
-                        },
-                    )
-                ],
-            )
+            "runner-parity",
+            [
+                PushedFact(
+                    seq=1,
+                    kind=ESCALATION_RECORDED,
+                    payload={
+                        "chunk_id": chunk_id,
+                        "epoch": 4,
+                        "takeover_command": "cd /ws/e1 && claude --resume sess-1",
+                        "wrapped_takeover_command": f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
+                    },
+                )
+            ],
         )
         assert 1 in ack.applied, ack
 
@@ -110,24 +107,22 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
         question_id = f"parity-question-{uuid.uuid4().hex[:24]}"
 
         ack = client.push_facts(
-            RunnerFactBatch(
-                runner_id="runner-parity",
-                facts=[
-                    RunnerFact(
-                        seq=1,
-                        kind=QUESTION_ASKED,
-                        payload={
-                            "question_id": question_id,
-                            "chunk_id": chunk_id,
-                            "runner_id": "runner-parity",
-                            "epoch": 1,
-                            "question": "which way?",
-                            "options": ["a", "b"],
-                            "asked_at": "2026-07-21T00:00:00+00:00",
-                        },
-                    )
-                ],
-            )
+            "runner-parity",
+            [
+                PushedFact(
+                    seq=1,
+                    kind=QUESTION_ASKED,
+                    payload={
+                        "question_id": question_id,
+                        "chunk_id": chunk_id,
+                        "runner_id": "runner-parity",
+                        "epoch": 1,
+                        "question": "which way?",
+                        "options": ["a", "b"],
+                        "asked_at": "2026-07-21T00:00:00+00:00",
+                    },
+                )
+            ],
         )
         assert 1 in ack.applied, ack
 
@@ -162,7 +157,7 @@ def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -
 
         client.register_runner("runner-parity", "ws1")
         outcome = client.claim_route(
-            RouteClaim(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
+            ClaimRequest(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
         )
 
         assert outcome.claimed is not None, outcome

@@ -22,7 +22,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclaration,
     IReadGitCommitDeclarationRepository,
 )
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.runner.node_steps.submissions import CompletionArtifact
 
 Key = tuple[str, str]
 
@@ -43,7 +43,7 @@ class PointerGroup:
     environments disagree on it — every pointer is still submitted, never chosen between."""
 
     identity: str
-    pointers: tuple[SubmittedArtifact, ...]
+    pointers: tuple[CompletionArtifact, ...]
     disagreement: CommandFailure | None
 
 
@@ -66,7 +66,7 @@ def resolve_origin(key: Key, origins: Mapping[Key, str]) -> str | CommandFailure
 
 def confirm_declaration(
     key: Key, declared: GitCommitDeclaration, origin_url: str, verified: bool | WorktreeGitError
-) -> SubmittedArtifact | CommandFailure:
+) -> CompletionArtifact | CommandFailure:
     """Judge the read-only probe of ``declared`` against ``origin_url``: a probe error is
     reported as-is; a commit that is not the branch head asks for a push or a re-declare;
     otherwise the confirmed artifact, named by the repository's identity."""
@@ -83,7 +83,7 @@ def confirm_declaration(
                 f"`git rev-parse HEAD` actually produced) and declare it again"
             ),
         )
-    return SubmittedArtifact(
+    return CompletionArtifact(
         name=repo_identity(origin_url, repo),
         kind=ArtifactKind.GIT_COMMIT,
         forge=origin_url,
@@ -93,11 +93,11 @@ def confirm_declaration(
     )
 
 
-def converge_pointers(confirmed: Mapping[Key, SubmittedArtifact]) -> list[PointerGroup]:
+def converge_pointers(confirmed: Mapping[Key, CompletionArtifact]) -> list[PointerGroup]:
     """Group confirmed artifacts by repository identity, deduplicated on ``(branch, commit)``:
     agreeing pointers submit as one; disagreeing ones all submit, with the disagreement to
     report naming each environment's pointer."""
-    groups: dict[str, list[tuple[Key, SubmittedArtifact]]] = {}
+    groups: dict[str, list[tuple[Key, CompletionArtifact]]] = {}
     for key, artifact in confirmed.items():
         groups.setdefault(artifact.name, []).append((key, artifact))
     converged: list[PointerGroup] = []
@@ -142,10 +142,10 @@ class DeclaredCommits:
     lease: Lease
     bindings: list[EnvBinding]
     _resolved: dict[Key, GitCommitDeclaration] = field(default_factory=dict)
-    _confirmed: dict[Key, SubmittedArtifact] = field(default_factory=dict)
-    _submitted: dict[str, list[SubmittedArtifact]] = field(default_factory=dict)
+    _confirmed: dict[Key, CompletionArtifact] = field(default_factory=dict)
+    _submitted: dict[str, list[CompletionArtifact]] = field(default_factory=dict)
 
-    def verify(self) -> list[SubmittedArtifact]:
+    def verify(self) -> list[CompletionArtifact]:
         """Confirm every declaration this instance has not already resolved, in declaration
         order, then converge the lease's whole confirmed set by repository identity.
 
@@ -166,8 +166,8 @@ class DeclaredCommits:
                 changed = True
         return self._converge() if changed else []
 
-    def _converge(self) -> list[SubmittedArtifact]:
-        artifacts: list[SubmittedArtifact] = []
+    def _converge(self) -> list[CompletionArtifact]:
+        artifacts: list[CompletionArtifact] = []
         for group in converge_pointers(self._confirmed):
             pointers = list(group.pointers)
             if self._submitted.get(group.identity) == pointers:
@@ -178,7 +178,7 @@ class DeclaredCommits:
             artifacts.extend(pointers)
         return artifacts
 
-    def _confirm(self, key: Key, declared: GitCommitDeclaration, origins: dict[Key, str]) -> SubmittedArtifact | None:
+    def _confirm(self, key: Key, declared: GitCommitDeclaration, origins: dict[Key, str]) -> CompletionArtifact | None:
         origin = resolve_origin(key, origins)
         if isinstance(origin, CommandFailure):
             self._report(origin)

@@ -18,6 +18,7 @@ files:
   - src/blizzard/runner/leases/**
   - src/blizzard/runner/lifecycle/**
   - src/blizzard/runner/loop/**
+  - src/blizzard/runner/node_steps/**
   - src/blizzard/runner/operator/**
   - src/blizzard/runner/process/**
   - src/blizzard/runner/selftest/**

@@ -6,28 +6,17 @@ under ``internal/`` is the reference binding, and a test injects a fake.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.route import (
-    RouteClaim,
-    RouteClaimConflict,
-    RouteClaimDependencyDenial,
-    RouteClaimIncompatibleDenial,
-    RouteClaimPausedDenial,
-    RouteClaimResponse,
-    RouteClaimTerminalDenial,
-    RouteTokenRekeyResponse,
-)
+from blizzard.wire.route import RouteTokenRekeyResponse
 from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
@@ -61,18 +50,96 @@ class ChunkEndedError(HubClientError):
 
 @domain_model
 @dataclass(frozen=True)
+class ClaimRequest:
+    """A complete route the claiming runner asks the hub for: the chunk, this runner, its
+    workspace, and the environments it already bound."""
+
+    chunk_id: str
+    runner_id: str
+    workspace_id: str
+    environment_ids: list[str]
+
+
+@domain_model
+@dataclass(frozen=True)
+class ClaimedRoute:
+    """A won claim — the route, the chunk's first node envelope, and the route's plaintext
+    capability token, which the hub returns exactly once."""
+
+    chunk_id: str
+    runner_id: str
+    workspace_id: str
+    environment_ids: list[str]
+    envelope: Envelope
+    route_token: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class ClaimConflict:
+    """A lost race: another runner holds the chunk's route."""
+
+    chunk_id: str
+    held_by_runner_id: str
+    detail: str = "chunk already claimed"
+
+
+@domain_model
+@dataclass(frozen=True)
+class TerminalDenial:
+    """The chunk stands at a status no claim is legal from — ended for good (``done``,
+    ``stopped``) or not ready yet."""
+
+    chunk_id: str
+    status: str
+    detail: str = "chunk is terminal"
+
+
+@domain_model
+@dataclass(frozen=True)
+class DependencyDenial:
+    """The chunk stands on a prerequisite that has not reached ``done``."""
+
+    chunk_id: str
+    prerequisite_chunk_id: str
+    detail: str = "chunk depends on an unmet prerequisite"
+
+
+@domain_model
+@dataclass(frozen=True)
+class IncompatibleDenial:
+    """This runner's stored capabilities can no longer run every lineage the chunk can reach."""
+
+    chunk_id: str
+    incompatible_runner_id: str
+    detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
+
+
+@domain_model
+@dataclass(frozen=True)
+class PausedDenial:
+    """The hub refuses this runner itself — paused, retired, or unregistered — and ``detail``
+    names which."""
+
+    chunk_id: str
+    runner_id: str
+    detail: str = "runner is paused at the hub"
+
+
+@domain_model
+@dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
     ``denied_paused`` / ``denied_terminal`` / ``denied_dependency`` / ``denied_incompatible``
     set — construction refuses any other count. A conflict is a race this claim lost; every
     denial means the hub refused it before any race."""
 
-    claimed: RouteClaimResponse | None = None
-    conflict: RouteClaimConflict | None = None
-    denied_paused: RouteClaimPausedDenial | None = None
-    denied_terminal: RouteClaimTerminalDenial | None = None
-    denied_dependency: RouteClaimDependencyDenial | None = None
-    denied_incompatible: RouteClaimIncompatibleDenial | None = None
+    claimed: ClaimedRoute | None = None
+    conflict: ClaimConflict | None = None
+    denied_paused: PausedDenial | None = None
+    denied_terminal: TerminalDenial | None = None
+    denied_dependency: DependencyDenial | None = None
+    denied_incompatible: IncompatibleDenial | None = None
 
     def __post_init__(self) -> None:
         arms = (
@@ -90,6 +157,30 @@ class RouteClaimOutcome:
     @property
     def won(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.claimed is not None
+
+
+@domain_model
+@dataclass(frozen=True)
+class PushedFact:
+    """One buffered runner fact as it is pushed: its per-runner ``seq``, its ``noun.verb`` kind,
+    and its kind-specific payload."""
+
+    seq: int
+    kind: str
+    payload: dict[str, Any]
+
+
+@domain_model
+@dataclass(frozen=True)
+class FactPushAck:
+    """The hub's acknowledgement of one push against its high-water mark: the new mark, and the
+    pushed seqs partitioned into applied, already applied, and rejected for a non-idempotency
+    reason."""
+
+    high_water: int
+    applied: list[int]
+    already_applied: list[int]
+    rejected: list[int]
 
 
 class IChunkStatusReader(Protocol):
@@ -116,21 +207,21 @@ class IHubClient(IChunkStatusReader, Protocol):
         regardless of which verb actually served it."""
         ...
 
-    def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
+    def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         """``POST /api/fleet/routes`` — claim work; 409 loses the race (or, distinctly,
         the chunk is already terminal or stands on an unmet prerequisite), 403 means
         the hub registry already has this runner paused."""
         ...
 
-    def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
+    def submit_completion(self, chunk_id: str, completion: Completion) -> ApplyReply:
         """``POST /api/fleet/chunks/{id}/completions`` — the atomic, epoch-fenced write."""
         ...
 
-    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+    def submit_decision(self, chunk_id: str, gate: GateSubmission) -> ApplyReply:
         """``POST /api/fleet/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
         ...
 
-    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
         ...
 
@@ -141,7 +232,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         transcript flush never blocks it."""
         ...
 
-    def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+    def get_envelope(self, chunk_id: str) -> Envelope:
         """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read. Raises
         :class:`ChunkNotFoundError` for an unknown chunk and :class:`ChunkEndedError` for one
         that has ended."""

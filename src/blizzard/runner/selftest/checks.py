@@ -23,6 +23,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.node_steps.envelope import Choice, Envelope, EnvelopeNode
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
@@ -41,7 +42,6 @@ from blizzard.runner.selftest.model import (
     spawn_identity_verdict,
 )
 from blizzard.runner.selftest.scratch_git import IScratchGit
-from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
 
 # The exit-is-done poll budget: bounded so a hung/broken adapter fails the check
 # loudly rather than wedging the canary forever.
@@ -154,8 +154,8 @@ class Spawn:
         )
 
     @staticmethod
-    def _envelope() -> NodeEnvelope:
-        node = NodeConfig(
+    def _envelope() -> Envelope:
+        node = EnvelopeNode(
             node_id="nd_selftest",
             node_name="selftest",
             executor=Executor.RUNNER,
@@ -163,9 +163,9 @@ class Spawn:
             judged_by=JudgedBy.WORKER,
             retries_max=0,
             produces=[],
-            choices=[EnvelopeChoice(name="pass", description="the trivial task succeeded")],
+            choices=[Choice(name="pass", description="the trivial task succeeded")],
         )
-        return NodeEnvelope(
+        return Envelope(
             chunk_id="ch_selftest",
             graph_id="gr_selftest",
             epoch=1,
