@@ -22,7 +22,6 @@ from blizzard.foundation.platform_tracing.received_export import (
     DisabledReceivedTelemetryExport,
     IReceivedTelemetryExport,
 )
-from blizzard.foundation.roles import domain_model
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
@@ -49,7 +48,6 @@ from blizzard.runner.transcripts.service import TranscriptService
 _STORE = "runner store"
 
 
-@domain_model
 @dataclass(frozen=True)
 class RunnerWiring:
     """One route's view of the wired runner — each accessor resolves its seam or refuses,

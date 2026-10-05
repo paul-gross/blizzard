@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.documents.codec import YAML_CODEC, accepted_extensions, codec_for_path
 from blizzard.hub.domain.graph.model import GraphDoc
 
@@ -32,7 +32,7 @@ class GraphArtifactFileMissing(ValueError):
         self.path = path
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class ArtifactInliner:
     """The graph-scoped ``artifacts:`` pass: every entry is always a file reference (no
@@ -85,7 +85,7 @@ class Inliner:
         return "\n" not in value and (value.startswith("./") or value.startswith("../") or value.endswith(".md"))
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class GraphFile:
     """One graph definition file on disk. Every read below re-reads it; nothing is cached."""

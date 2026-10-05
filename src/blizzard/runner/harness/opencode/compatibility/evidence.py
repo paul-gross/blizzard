@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.harness.compatibility import CompatibilityReport
 from blizzard.runner.harness.opencode.compatibility.sanitizer import OpenCodeSanitizer, is_absolute_host_path
 
@@ -18,7 +18,7 @@ class OpenCodeEvidenceError(RuntimeError):
     """Evidence could not be written as a sanitized JSON document."""
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class OpenCodeEvidence:
     """Write the report and process observations into a caller-selected evidence directory."""

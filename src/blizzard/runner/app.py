@@ -26,7 +26,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.exclusion import is_excluded
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.foundation.platform_tracing.received_export import IReceivedTelemetryExport
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend, install_schema_components
@@ -110,7 +110,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 from blizzard.wire.components import RUNNER_SCHEMA_COMPONENTS
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Lane:
     """One tenant of the three-tenant partition — a router set and the gate it

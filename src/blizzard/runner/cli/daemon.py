@@ -12,7 +12,6 @@ import httpx
 
 from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.param_rank import ParamSource
-from blizzard.foundation.roles import domain_model
 from blizzard.runner.config import RunnerConfig
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
@@ -31,7 +30,6 @@ def uds_client(sock: Path) -> httpx.Client:
     )
 
 
-@domain_model
 @dataclass(frozen=True)
 class RunnerDaemon:
     """One operator verb's door onto the runner's local API — its UDS socket, or TCP when

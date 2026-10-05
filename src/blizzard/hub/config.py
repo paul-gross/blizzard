@@ -181,7 +181,7 @@ class StoreUrl:
             ) from exc
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkSourceConfig:
     """One configured work source — a named, credentialed forge binding.
@@ -198,71 +198,71 @@ class WorkSourceConfig:
     api_base: str | None = None
     web_base: str | None = None
 
-
-def _work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
-    """Validate and project ``[[work_source]]`` entries; each rejection names
-    the offending entry rather than failing generically."""
-    if not isinstance(raw_sources, list):
-        return ()
-    sources: list[WorkSourceConfig] = []
-    seen_names: set[str] = set()
-    seen_provider_repo: set[tuple[str, str]] = set()
-    for entry in raw_sources:
-        if not isinstance(entry, dict):
-            raise ConfigError(f"[[work_source]] entry must be a table, got {entry!r}")
-        missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
-        if missing:
-            raise ConfigError(f"[[work_source]] entry is missing required key(s) {missing}: {entry!r}")
-        name = str(entry["name"])
-        provider = str(entry["provider"])
-        repo = str(entry["repo"])
-        token_env = str(entry["token_env"])
-        if ":" in name:
-            # A colon in a source name breaks the ingest-token grammar's first-colon split.
-            raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
-        if name == RESERVED_HUB_SOURCE_NAME:
-            # The built-in, always-seated source — a configured entry
-            # of the same name would collide with it.
-            raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
-        if name in seen_names:
-            raise ConfigError(f"duplicate [[work_source]] name {name!r}")
-        seen_names.add(name)
-        if "close" in entry:
-            # Close intents have no per-source configuration key.
-            raise ConfigError(f"[[work_source]] {name!r} has an unsupported close key — delete the key")
-        provider_repo = (provider, repo)
-        if provider_repo in seen_provider_repo:
-            # Two names for one (provider, repo) would let the same item be ingested twice
-            # under two identities — this is what holds pointer identity uniqueness up.
-            raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
-        seen_provider_repo.add(provider_repo)
-        if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
-            raise ConfigError(
-                f"[[work_source]] {name!r} has unknown provider {provider!r} "
-                f"(known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
+    @classmethod
+    def sources(cls, raw_sources: object) -> tuple[WorkSourceConfig, ...]:
+        """Validate and project ``[[work_source]]`` entries; each rejection names
+        the offending entry rather than failing generically."""
+        if not isinstance(raw_sources, list):
+            return ()
+        sources: list[WorkSourceConfig] = []
+        seen_names: set[str] = set()
+        seen_provider_repo: set[tuple[str, str]] = set()
+        for entry in raw_sources:
+            if not isinstance(entry, dict):
+                raise ConfigError(f"[[work_source]] entry must be a table, got {entry!r}")
+            missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
+            if missing:
+                raise ConfigError(f"[[work_source]] entry is missing required key(s) {missing}: {entry!r}")
+            name = str(entry["name"])
+            provider = str(entry["provider"])
+            repo = str(entry["repo"])
+            token_env = str(entry["token_env"])
+            if ":" in name:
+                # A colon in a source name breaks the ingest-token grammar's first-colon split.
+                raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
+            if name == RESERVED_HUB_SOURCE_NAME:
+                # The built-in, always-seated source — a configured entry
+                # of the same name would collide with it.
+                raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
+            if name in seen_names:
+                raise ConfigError(f"duplicate [[work_source]] name {name!r}")
+            seen_names.add(name)
+            if "close" in entry:
+                # Close intents have no per-source configuration key.
+                raise ConfigError(f"[[work_source]] {name!r} has an unsupported close key — delete the key")
+            provider_repo = (provider, repo)
+            if provider_repo in seen_provider_repo:
+                # Two names for one (provider, repo) would let the same item be ingested twice
+                # under two identities — this is what holds pointer identity uniqueness up.
+                raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
+            seen_provider_repo.add(provider_repo)
+            if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
+                raise ConfigError(
+                    f"[[work_source]] {name!r} has unknown provider {provider!r} "
+                    f"(known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
+                )
+            annotate = entry.get("annotate", False)
+            if not isinstance(annotate, bool):
+                # Validated rather than coerced, mirroring `follow_latest`: a source that opts
+                # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
+                raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
+            api_base = str(entry["api_base"]) if entry.get("api_base") else None
+            web_base = str(entry["web_base"]) if entry.get("web_base") else None
+            sources.append(
+                cls(
+                    name=name,
+                    provider=provider,
+                    repo=repo,
+                    token_env=token_env,
+                    annotate=annotate,
+                    api_base=api_base,
+                    web_base=web_base,
+                )
             )
-        annotate = entry.get("annotate", False)
-        if not isinstance(annotate, bool):
-            # Validated rather than coerced, mirroring `follow_latest`: a source that opts
-            # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
-            raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
-        api_base = str(entry["api_base"]) if entry.get("api_base") else None
-        web_base = str(entry["web_base"]) if entry.get("web_base") else None
-        sources.append(
-            WorkSourceConfig(
-                name=name,
-                provider=provider,
-                repo=repo,
-                token_env=token_env,
-                annotate=annotate,
-                api_base=api_base,
-                web_base=web_base,
-            )
-        )
-    return tuple(sources)
+        return tuple(sources)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OAuthProviderConfig:
     """One configured OAuth login provider. ``client_secret_env``
@@ -278,39 +278,39 @@ class OAuthProviderConfig:
     issuer: str | None = None
     api_base: str | None = None
 
-
-def _oauth_providers(raw_providers: object) -> tuple[OAuthProviderConfig, ...]:
-    """Structurally validate and project ``[[auth.oauth.provider]]`` entries — required
-    keys only; ``type``/``issuer`` semantic validation belongs to whichever consumer first
-    uses a provider."""
-    if not isinstance(raw_providers, list):
-        return ()
-    providers: list[OAuthProviderConfig] = []
-    seen_names: set[str] = set()
-    for entry in raw_providers:
-        if not isinstance(entry, dict):
-            raise ConfigError(f"[[auth.oauth.provider]] entry must be a table, got {entry!r}")
-        missing = [key for key in _REQUIRED_OAUTH_PROVIDER_KEYS if key not in entry]
-        if missing:
-            raise ConfigError(f"[[auth.oauth.provider]] entry is missing required key(s) {missing}: {entry!r}")
-        name = str(entry["name"])
-        if name in seen_names:
-            raise ConfigError(f"duplicate [[auth.oauth.provider]] name {name!r}")
-        seen_names.add(name)
-        issuer_raw = entry.get("issuer")
-        api_base_raw = entry.get("api_base")
-        providers.append(
-            OAuthProviderConfig(
-                name=name,
-                type=str(entry["type"]),
-                display_name=str(entry["display_name"]),
-                client_id=str(entry["client_id"]),
-                client_secret_env=str(entry["client_secret_env"]),
-                issuer=str(issuer_raw) if issuer_raw else None,
-                api_base=str(api_base_raw) if api_base_raw else None,
+    @classmethod
+    def providers(cls, raw_providers: object) -> tuple[OAuthProviderConfig, ...]:
+        """Structurally validate and project ``[[auth.oauth.provider]]`` entries — required
+        keys only; ``type``/``issuer`` semantic validation belongs to whichever consumer first
+        uses a provider."""
+        if not isinstance(raw_providers, list):
+            return ()
+        providers: list[OAuthProviderConfig] = []
+        seen_names: set[str] = set()
+        for entry in raw_providers:
+            if not isinstance(entry, dict):
+                raise ConfigError(f"[[auth.oauth.provider]] entry must be a table, got {entry!r}")
+            missing = [key for key in _REQUIRED_OAUTH_PROVIDER_KEYS if key not in entry]
+            if missing:
+                raise ConfigError(f"[[auth.oauth.provider]] entry is missing required key(s) {missing}: {entry!r}")
+            name = str(entry["name"])
+            if name in seen_names:
+                raise ConfigError(f"duplicate [[auth.oauth.provider]] name {name!r}")
+            seen_names.add(name)
+            issuer_raw = entry.get("issuer")
+            api_base_raw = entry.get("api_base")
+            providers.append(
+                cls(
+                    name=name,
+                    type=str(entry["type"]),
+                    display_name=str(entry["display_name"]),
+                    client_id=str(entry["client_id"]),
+                    client_secret_env=str(entry["client_secret_env"]),
+                    issuer=str(issuer_raw) if issuer_raw else None,
+                    api_base=str(api_base_raw) if api_base_raw else None,
+                )
             )
-        )
-    return tuple(providers)
+        return tuple(providers)
 
 
 @dto
@@ -337,11 +337,11 @@ class AuthConfig:
         return cls(
             mode=mode,
             superuser=str(superuser_raw) if superuser_raw else None,
-            oauth_providers=_oauth_providers(raw_providers),
+            oauth_providers=OAuthProviderConfig.providers(raw_providers),
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptCapsConfig:
     """Resolved ``[transcripts]`` config — the ingest lane's three byte
@@ -357,23 +357,23 @@ class TranscriptCapsConfig:
         if not isinstance(raw_transcripts, dict):
             return cls()
         return cls(
-            record_max_bytes=_cap_bytes(raw_transcripts, "record_max_bytes"),
-            chunk_budget_max_bytes=_cap_bytes(raw_transcripts, "chunk_budget_max_bytes"),
-            runner_daily_rate_max_bytes=_cap_bytes(raw_transcripts, "runner_daily_rate_max_bytes"),
+            record_max_bytes=cls._bytes(raw_transcripts, "record_max_bytes"),
+            chunk_budget_max_bytes=cls._bytes(raw_transcripts, "chunk_budget_max_bytes"),
+            runner_daily_rate_max_bytes=cls._bytes(raw_transcripts, "runner_daily_rate_max_bytes"),
         )
 
-
-def _cap_bytes(raw: Mapping[str, object], key: str) -> int | None:
-    value = raw.get(key)
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigError(f"transcripts.{key} must be an integer number of bytes, got {value!r}")
-    if value <= 0:
-        # Zero would reject every record while reading as "unset" to an operator
-        # skimming the file; there is no "disable the lane" meaning for a cap.
-        raise ConfigError(f"transcripts.{key} must be positive, got {value!r}")
-    return value
+    @staticmethod
+    def _bytes(raw: Mapping[str, object], key: str) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"transcripts.{key} must be an integer number of bytes, got {value!r}")
+        if value <= 0:
+            # Zero would reject every record while reading as "unset" to an operator
+            # skimming the file; there is no "disable the lane" meaning for a cap.
+            raise ConfigError(f"transcripts.{key} must be positive, got {value!r}")
+        return value
 
 
 EGRESS_FORMATS = ("ndjson", "parquet")
@@ -385,7 +385,7 @@ EGRESS_FILE_PATHS = ("relative", "hashed", "absolute", "omit")
 EGRESS_EXTRACTOR_VERSIONS = ("current", "all")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressConfig:
     """Resolved ``[egress]`` config — the fact-egress export's keys. It runs only when ``directory`` is set;
@@ -415,21 +415,92 @@ class EgressConfig:
             return cls()
         defaults = cls()
         return cls(
-            directory=_egress_directory(raw_egress),
-            format=_egress_format(raw_egress, defaults.format),
-            datasets=_egress_datasets(raw_egress, defaults.datasets),
-            sweep_seconds=_egress_integer(raw_egress, "sweep_seconds", defaults.sweep_seconds, minimum=1),
-            settle_seconds=_egress_integer(raw_egress, "settle_seconds", defaults.settle_seconds, minimum=0),
-            batch_limit=_egress_integer(raw_egress, "batch_limit", defaults.batch_limit, minimum=1),
-            max_rows_per_file=_egress_integer(raw_egress, "max_rows_per_file", defaults.max_rows_per_file, minimum=1),
-            min_free_bytes=_egress_integer(raw_egress, "min_free_bytes", defaults.min_free_bytes, minimum=0),
-            backfill_max_window=_egress_integer(
+            directory=cls._directory(raw_egress),
+            format=cls._format(raw_egress, defaults.format),
+            datasets=cls._datasets(raw_egress, defaults.datasets),
+            sweep_seconds=cls._integer(raw_egress, "sweep_seconds", defaults.sweep_seconds, minimum=1),
+            settle_seconds=cls._integer(raw_egress, "settle_seconds", defaults.settle_seconds, minimum=0),
+            batch_limit=cls._integer(raw_egress, "batch_limit", defaults.batch_limit, minimum=1),
+            max_rows_per_file=cls._integer(raw_egress, "max_rows_per_file", defaults.max_rows_per_file, minimum=1),
+            min_free_bytes=cls._integer(raw_egress, "min_free_bytes", defaults.min_free_bytes, minimum=0),
+            backfill_max_window=cls._integer(
                 raw_egress, "backfill_max_window", defaults.backfill_max_window, minimum=1
             ),
-            file_paths=_egress_file_paths(raw_egress, defaults.file_paths),
-            path_key_env=_egress_path_key_env(raw_egress, defaults.path_key_env),
-            extractor_versions=_egress_extractor_versions(raw_egress, defaults.extractor_versions),
+            file_paths=cls._file_paths(raw_egress, defaults.file_paths),
+            path_key_env=cls._path_key_env(raw_egress, defaults.path_key_env),
+            extractor_versions=cls._extractor_versions(raw_egress, defaults.extractor_versions),
         )
+
+    @staticmethod
+    def _directory(raw: Mapping[str, object]) -> Path | None:
+        value = raw.get("directory")
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"egress.directory must be a non-empty path, got {value!r}")
+        return Path(value).expanduser()
+
+    @staticmethod
+    def _format(raw: Mapping[str, object], default: Literal["ndjson", "parquet"]) -> Literal["ndjson", "parquet"]:
+        value = raw.get("format", default)
+        if value == "ndjson":
+            return "ndjson"
+        if value == "parquet":
+            return "parquet"
+        raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
+
+    @staticmethod
+    def _file_paths(
+        raw: Mapping[str, object], default: Literal["relative", "hashed", "absolute", "omit"]
+    ) -> Literal["relative", "hashed", "absolute", "omit"]:
+        value = raw.get("file_paths", default)
+        if value == "relative":
+            return "relative"
+        if value == "hashed":
+            return "hashed"
+        if value == "absolute":
+            return "absolute"
+        if value == "omit":
+            return "omit"
+        raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
+
+    @staticmethod
+    def _extractor_versions(raw: Mapping[str, object], default: Literal["current", "all"]) -> Literal["current", "all"]:
+        value = raw.get("extractor_versions", default)
+        if value == "current":
+            return "current"
+        if value == "all":
+            return "all"
+        raise ConfigError(
+            f"egress.extractor_versions must be one of {', '.join(EGRESS_EXTRACTOR_VERSIONS)}, got {value!r}"
+        )
+
+    @staticmethod
+    def _path_key_env(raw: Mapping[str, object], default: str) -> str:
+        value = raw.get("path_key_env", default)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"egress.path_key_env must be a non-empty environment variable name, got {value!r}")
+        return value
+
+    @staticmethod
+    def _datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
+        value = raw.get("datasets", list(default))
+        if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
+            raise ConfigError(
+                f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}"
+            )
+        # Pass order, not file order: steps first, once each.
+        return tuple(name for name in EGRESS_DATASETS if name in value)
+
+    @staticmethod
+    def _integer(raw: Mapping[str, object], key: str, default: int, *, minimum: int) -> int:
+        value = raw.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"egress.{key} must be an integer, got {value!r}")
+        if value < minimum:
+            bound = "non-negative" if minimum == 0 else "positive"
+            raise ConfigError(f"egress.{key} must be {bound}, got {value!r}")
+        return value
 
     def to_toml(self) -> list[str]:
         """The ``[egress]`` block. ``directory`` is the switch and has no default; every other key is rendered
@@ -455,75 +526,6 @@ class EgressConfig:
         return lines
 
 
-def _egress_directory(raw: Mapping[str, object]) -> Path | None:
-    value = raw.get("directory")
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ConfigError(f"egress.directory must be a non-empty path, got {value!r}")
-    return Path(value).expanduser()
-
-
-def _egress_format(raw: Mapping[str, object], default: Literal["ndjson", "parquet"]) -> Literal["ndjson", "parquet"]:
-    value = raw.get("format", default)
-    if value == "ndjson":
-        return "ndjson"
-    if value == "parquet":
-        return "parquet"
-    raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
-
-
-def _egress_file_paths(
-    raw: Mapping[str, object], default: Literal["relative", "hashed", "absolute", "omit"]
-) -> Literal["relative", "hashed", "absolute", "omit"]:
-    value = raw.get("file_paths", default)
-    if value == "relative":
-        return "relative"
-    if value == "hashed":
-        return "hashed"
-    if value == "absolute":
-        return "absolute"
-    if value == "omit":
-        return "omit"
-    raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
-
-
-def _egress_extractor_versions(
-    raw: Mapping[str, object], default: Literal["current", "all"]
-) -> Literal["current", "all"]:
-    value = raw.get("extractor_versions", default)
-    if value == "current":
-        return "current"
-    if value == "all":
-        return "all"
-    raise ConfigError(f"egress.extractor_versions must be one of {', '.join(EGRESS_EXTRACTOR_VERSIONS)}, got {value!r}")
-
-
-def _egress_path_key_env(raw: Mapping[str, object], default: str) -> str:
-    value = raw.get("path_key_env", default)
-    if not isinstance(value, str) or not value.strip():
-        raise ConfigError(f"egress.path_key_env must be a non-empty environment variable name, got {value!r}")
-    return value
-
-
-def _egress_datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
-    value = raw.get("datasets", list(default))
-    if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
-        raise ConfigError(f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}")
-    # Pass order, not file order: steps first, once each.
-    return tuple(name for name in EGRESS_DATASETS if name in value)
-
-
-def _egress_integer(raw: Mapping[str, object], key: str, default: int, *, minimum: int) -> int:
-    value = raw.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigError(f"egress.{key} must be an integer, got {value!r}")
-    if value < minimum:
-        bound = "non-negative" if minimum == 0 else "positive"
-        raise ConfigError(f"egress.{key} must be {bound}, got {value!r}")
-    return value
-
-
 _EGRESS_KEYS = (
     "format",
     "datasets",
@@ -539,7 +541,7 @@ _EGRESS_KEYS = (
 )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HubConfig:
     """Resolved hub runtime configuration."""
@@ -573,6 +575,19 @@ class HubConfig:
     #: Absolute ``http(s)`` board origin; ``None`` omits every board link.
     public_url: str | None = None
 
+    @staticmethod
+    def parse_public_url(value: object) -> str | None:
+        """``public_url`` validated — absent stays ``None``; anything but an absolute
+        ``http(s)`` URL is a :class:`ConfigError`."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ConfigError(f"public_url must be a string, got {value!r}")
+        parts = urlsplit(value)
+        if parts.scheme not in {"http", "https"} or not parts.netloc:
+            raise ConfigError(f"public_url must be an absolute http(s) URL, got {value!r}")
+        return value.rstrip("/")
+
     @property
     def config_path(self) -> Path:
         return self.root / CONFIG_FILENAME
@@ -581,13 +596,17 @@ class HubConfig:
     def data_dir(self) -> Path:
         return self.root / DATA_DIRNAME
 
+    @staticmethod
+    def default_db_url(root: Path) -> str:
+        return f"sqlite:///{(root / DATA_DIRNAME / 'hub.db').resolve()}"
+
     @classmethod
     def scaffold(cls, root: Path) -> HubConfig:
         """The default config for a fresh runtime root (used by ``init``)."""
         env = Env()
         return cls(
             root=root,
-            db_url=env.text(ENV_DB_URL, default_db_url(root)),
+            db_url=env.text(ENV_DB_URL, cls.default_db_url(root)),
             host=env.text(ENV_HOST, DEFAULT_HOST),
             port=env.port(DEFAULT_PORT),
         )
@@ -623,7 +642,7 @@ class HubConfig:
 
     def to_toml(self) -> str:
         lines = ["# blizzard-hub runtime configuration (blizzard hub init)\n"]
-        if self.db_url != default_db_url(self.root):
+        if self.db_url != self.default_db_url(self.root):
             # The default is omitted rather than serialized absolute: `load`
             # re-derives it, so a copied runtime root stays self-contained.
             lines.append(f'db_url = "{self.db_url}"\n')
@@ -741,7 +760,7 @@ class HubConfig:
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
         env = Env()
-        db_url = env.text(ENV_DB_URL) or str(raw.get("db_url") or default_db_url(root))
+        db_url = env.text(ENV_DB_URL) or str(raw.get("db_url") or cls.default_db_url(root))
         if not allow_external_db:
             StoreUrl(db_url).confine(root)
         return cls(
@@ -749,7 +768,7 @@ class HubConfig:
             db_url=db_url,
             host=host or env.text(ENV_HOST) or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else env.port(toml_port),
-            work_sources=_work_sources(raw.get("work_source", [])),
+            work_sources=WorkSourceConfig.sources(raw.get("work_source", [])),
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
@@ -761,22 +780,5 @@ class HubConfig:
             tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
             egress=EgressConfig.of(raw.get("egress", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
-            public_url=parse_public_url(raw.get("public_url")),
+            public_url=cls.parse_public_url(raw.get("public_url")),
         )
-
-
-def parse_public_url(value: object) -> str | None:
-    """``public_url`` validated — absent stays ``None``; anything but an absolute
-    ``http(s)`` URL is a :class:`ConfigError`."""
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ConfigError(f"public_url must be a string, got {value!r}")
-    parts = urlsplit(value)
-    if parts.scheme not in {"http", "https"} or not parts.netloc:
-        raise ConfigError(f"public_url must be an absolute http(s) URL, got {value!r}")
-    return value.rstrip("/")
-
-
-def default_db_url(root: Path) -> str:
-    return f"sqlite:///{(root / DATA_DIRNAME / 'hub.db').resolve()}"

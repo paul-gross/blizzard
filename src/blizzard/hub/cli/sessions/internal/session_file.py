@@ -8,13 +8,13 @@ from pathlib import Path
 
 import platformdirs
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.cli.sessions import IReadSessionStore, IWriteSessionStore
 
 _APP_NAME = "blizzard"
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class SessionFile:
     """The CLI's ``sessions.json`` — one session bearer per hub, so more than one may be held at once."""

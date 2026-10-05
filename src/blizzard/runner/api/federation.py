@@ -22,7 +22,7 @@ from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import dto
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
@@ -87,7 +87,6 @@ class HubAuthModeCache:
         return self._enabled
 
 
-@domain_model
 @dataclass(frozen=True)
 class HumanLane:
     """One request's runner-local identity — resolution stays separate from what each surface
@@ -137,7 +136,6 @@ class HumanLane:
         return session
 
 
-@domain_model
 @dataclass(frozen=True)
 class Bounce:
     """The two short-lived cookies a federation round trip rides on: the ``state`` the callback

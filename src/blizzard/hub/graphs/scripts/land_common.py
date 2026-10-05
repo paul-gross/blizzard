@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 
 _HUB_USER = "blizzard-hub"
 
@@ -123,7 +123,7 @@ class MarkerWriteError(Exception):
     over an unrecorded merge, and must not carry on to the next repo."""
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class MarkerWriter:
     """The run's durable marker channel, carrying its capability
@@ -206,7 +206,6 @@ def deliver_and_report(
     return 1
 
 
-@domain_model
 @dataclass(frozen=True)
 class LandRun:
     """One ``deliver`` node visit: the env the executor injected, and the two channels out
@@ -427,7 +426,6 @@ class MergeDidNotLand(Exception):
         self.result = result
 
 
-@domain_model
 @dataclass(frozen=True)
 class PullRequest:
     """One repo's PR for a chunk's branch, and the sole owner of the forge's ``pulls``

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockPolicy,
     LandlockUnavailable,
@@ -210,7 +210,7 @@ class _PtyProcess:
         return b"", b""
 
 
-@domain_model
+@collaborator
 @dataclass
 class _SubprocessStartedProcess:
     """A process-group handle so interruption does not leave OpenCode descendants behind."""

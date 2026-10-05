@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 
 import pytest
 
-from blizzard.foundation.roles import ROLE_ATTRIBUTE, domain_model, dto, entity
+from blizzard.foundation.roles import ROLE_ATTRIBUTE, collaborator, domain_model, dto, entity
 
 pytestmark = pytest.mark.unit
 
@@ -14,6 +14,7 @@ _MARKERS: list[tuple[Callable[[type[Any]], type[Any]], str]] = [
     (domain_model, "domain_model"),
     (entity, "entity"),
     (dto, "dto"),
+    (collaborator, "collaborator"),
 ]
 
 

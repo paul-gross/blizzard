@@ -16,15 +16,15 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model, dto
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource, inspect_bundle, publish_bundle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, ClaudeCodeSection
 from blizzard.runner.harness.declaration import (
+    HarnessSection,
     IHarnessDeclaration,
-    IHarnessSection,
     IHarnessSectionKind,
     SharedHarnessInputs,
 )
@@ -39,12 +39,12 @@ from blizzard.runner.process.probe import LinuxProcessProbe
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessSections:
     """Every binding's parsed section, in catalog order."""
 
-    sections: tuple[IHarnessSection, ...]
+    sections: tuple[HarnessSection, ...]
 
     @classmethod
     def defaults(cls) -> HarnessSections:
@@ -64,32 +64,29 @@ class HarnessSections:
             raise ConfigError(f"{tables} are {quantity} false; enable at least one")
         return parsed
 
-    def __iter__(self) -> Iterator[IHarnessSection]:
-        return iter(section_of(self, kind.harness_id) for kind in HARNESS_SECTION_KINDS)
+    def of(self, harness_id: str) -> HarnessSection:
+        """The section for ``harness_id``; a binding absent here reads as its default section."""
+        for section in self.sections:
+            if section.harness_id == harness_id:
+                return section
+        return next(kind.default() for kind in HARNESS_SECTION_KINDS if kind.harness_id == harness_id)
 
-
-def section_of(sections: HarnessSections, harness_id: str) -> IHarnessSection:
-    """The section for ``harness_id``; a binding absent from ``sections`` reads as its default
-    section."""
-    for section in sections.sections:
-        if section.harness_id == harness_id:
-            return section
-    return next(kind.default() for kind in HARNESS_SECTION_KINDS if kind.harness_id == harness_id)
-
-
-def with_section(sections: HarnessSections, section: IHarnessSection) -> HarnessSections:
-    """``sections`` with ``section`` standing in for its binding's own."""
-    return HarnessSections(
-        tuple(
-            section if kind.harness_id == section.harness_id else section_of(sections, kind.harness_id)
-            for kind in HARNESS_SECTION_KINDS
+    def replaced(self, section: HarnessSection) -> HarnessSections:
+        """These sections with ``section`` standing in for its binding's own."""
+        return HarnessSections(
+            tuple(
+                section if kind.harness_id == section.harness_id else self.of(kind.harness_id)
+                for kind in HARNESS_SECTION_KINDS
+            )
         )
-    )
+
+    def __iter__(self) -> Iterator[HarnessSection]:
+        return iter(self.of(kind.harness_id) for kind in HARNESS_SECTION_KINDS)
 
 
 def claude_code_section(sections: HarnessSections) -> ClaudeCodeSection:
     """The Claude Code binding's section, as its telemetry plan reads it."""
-    section = section_of(sections, CLAUDE_CODE_SECTION.harness_id)
+    section = sections.of(CLAUDE_CODE_SECTION.harness_id)
     assert isinstance(section, ClaudeCodeSection)
     return section
 
@@ -128,13 +125,13 @@ def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
     return tuple(declarations[kind.harness_id] for kind in HARNESS_SECTION_KINDS)
 
 
-def declared(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], IHarnessSection]]:
+def declared(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
     """Each declaration paired with its parsed section, in catalog order."""
     for declaration in harness_catalog():
-        yield declaration, section_of(sections, declaration.harness_id)
+        yield declaration, sections.of(declaration.harness_id)
 
 
-def enabled(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], IHarnessSection]]:
+def enabled(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
     """:func:`declared`, narrowed to the bindings their sections enable."""
     return ((declaration, section) for declaration, section in declared(sections) if section.enabled)
 
@@ -246,7 +243,5 @@ __all__ = [
     "harness_cli_groups",
     "inspect_harness_bundle",
     "publish_harness_bundle",
-    "section_of",
     "shared_inputs",
-    "with_section",
 ]

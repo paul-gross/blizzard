@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.wiring import declared
@@ -37,7 +37,7 @@ class Migrations:
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Runtime:
     """A runner runtime root, administered while the daemon is down."""

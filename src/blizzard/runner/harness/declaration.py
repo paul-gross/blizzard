@@ -1,5 +1,5 @@
 """A harness declaration in two halves: its config section — what a binding reads from the TOML,
-emits, scaffolds, and whether it is enabled (:class:`IHarnessSectionKind`, :class:`IHarnessSection`) —
+emits, scaffolds, and whether it is enabled (:class:`IHarnessSectionKind`, :class:`HarnessSection`) —
 and its construction, what a binding builds or reports from that section plus the runner-wide inputs
 every binding shares (:class:`IHarnessDeclaration`). A consumer iterates
 :func:`~blizzard.runner.harness.wiring.harness_catalog` and never names a binding; adding a harness is
@@ -23,7 +23,7 @@ from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.process.probe import IProcessProbe
 
 
-class IHarnessSection(Protocol):
+class HarnessSection(Protocol):
     """One binding's parsed config section — the facts a consumer reads off it without
     knowing which binding it is."""
 
@@ -71,19 +71,19 @@ class IHarnessSectionKind(Protocol):
         """The verb name and the lazy ``module:attribute`` of its click group."""
         ...
 
-    def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> IHarnessSection:
+    def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> HarnessSection:
         """Read the section from the whole TOML ``document`` — a binding may claim legacy root
         keys — raising :class:`ConfigError` on a conflict among them."""
         ...
 
-    def default(self) -> IHarnessSection: ...
+    def default(self) -> HarnessSection: ...
 
-    def scaffold(self, root: Path, environ: Mapping[str, str]) -> IHarnessSection:
+    def scaffold(self, root: Path, environ: Mapping[str, str]) -> HarnessSection:
         """The section a fresh ``runner init`` at ``root`` writes, seeded from ``environ``."""
         ...
 
 
-SectionT_contra = TypeVar("SectionT_contra", bound=IHarnessSection, contravariant=True)
+SectionT_contra = TypeVar("SectionT_contra", bound=HarnessSection, contravariant=True)
 
 
 @dto
@@ -157,4 +157,4 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         ...
 
 
-__all__ = ["IHarnessDeclaration", "IHarnessSection", "IHarnessSectionKind", "SharedHarnessInputs"]
+__all__ = ["HarnessSection", "IHarnessDeclaration", "IHarnessSectionKind", "SharedHarnessInputs"]
