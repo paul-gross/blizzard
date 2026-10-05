@@ -16,7 +16,6 @@ from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import HubAdvanceResponse
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 
 class HubClientError(RuntimeError):
@@ -246,6 +245,30 @@ class FactPushAck:
     rejected: list[int]
 
 
+@domain_model
+@dataclass(frozen=True)
+class TranscriptPush:
+    """One buffered transcript record as it is pushed: its lane ``seq`` and its body — the
+    record's every field but ``seq``, in the canonical turn format the pump rendered."""
+
+    seq: int
+    body: dict[str, Any]
+
+
+@domain_model
+@dataclass(frozen=True)
+class TranscriptPushAck:
+    """The hub's acknowledgement of one transcript push against the lane's high-water mark.
+    ``capped`` records are acknowledged with their content dropped; ``refused`` ones, whose
+    lease epoch another holder owns, are acknowledged and never stored."""
+
+    high_water: int
+    applied: list[int] = field(default_factory=list)
+    already_applied: list[int] = field(default_factory=list)
+    capped: list[int] = field(default_factory=list)
+    refused: list[int] = field(default_factory=list)
+
+
 class IChunkStatusReader(Protocol):
     """One method of :class:`IHubClient`'s thirteen (the seam-size ceiling: a new consumer
     re-types to the capability it calls, not the whole wide client). ``IHubClient``
@@ -288,7 +311,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
         ...
 
-    def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
         push, seq-idempotent against its own high-water mark. Structurally independent
         of :meth:`push_facts`: a wedged or slow

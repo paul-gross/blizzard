@@ -14,7 +14,7 @@ from typing import Any, Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.client import HubClientError, IHubClient
+from blizzard.runner.hub.client import HubClientError, IHubClient, TranscriptPush
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
@@ -27,7 +27,6 @@ from blizzard.runner.transcripts.transcript_pump import (
     TranscriptPumpContext,
     resolve_record_max_bytes,
 )
-from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -43,7 +42,7 @@ _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied
 _FINAL_RECORD_SIZE_ESTIMATE_BYTES = 2048
 
 #: A non-final delta's estimate padding, over `len(payload)` alone, for the `seq` field
-#: `TranscriptSegmentRecord.model_validate` adds that `payload` itself does not carry.
+#: the pushed record carries beside its body, which `payload` itself does not.
 _SEQ_FIELD_ESTIMATE_BYTES = 24
 
 #: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
@@ -158,10 +157,9 @@ class TranscriptDrain:
             [delta.segment_id for delta in deltas if delta.final]
         )
         records = [self._render(delta, final_segments) for delta in deltas]
-        batch = TranscriptSegmentBatch(runner_id=self.ctx.config.runner_id, records=records)
         _CP_BEFORE_SUBMIT.reached()
         try:
-            ack = self.ctx.hub.push_transcripts(batch)
+            ack = self.ctx.hub.push_transcripts(self.ctx.config.runner_id, records)
         except HubClientError:
             return False  # hub unreachable — the batch stays buffered, retried next tick; the fact lane is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
@@ -197,17 +195,15 @@ class TranscriptDrain:
 
     def _render(
         self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentState]
-    ) -> TranscriptSegmentRecord:
-        """A non-final row's ``payload`` already IS the wire body, built by
+    ) -> TranscriptPush:
+        """A non-final row's ``payload`` already IS the record's body, built by
         :class:`TranscriptPump`. A final marker's is deliberately minimal — every field it
         needs is already frozen on the ledger row, read from ``final_segments`` — one
         :meth:`~IReadTranscriptLedgerRepository.transcript_segments` call per batch, rather
         than one :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per final
         marker — so it reflects an earlier batch's just-applied hub-cap ack."""
         if not delta.final:
-            return TranscriptSegmentRecord.model_validate(
-                {"seq": delta.seq, **_scrub_surrogates(json.loads(delta.payload))}
-            )
+            return TranscriptPush(seq=delta.seq, body=_scrub_surrogates(json.loads(delta.payload)))
         segment = final_segments.get(delta.segment_id)
         if segment is None:
             # A final marker's own segment row always exists; a conditional rather than
@@ -227,25 +223,26 @@ def _scrub_surrogates(value: Any) -> Any:
     return value
 
 
-def _final_record(seq: int, segment: TranscriptSegmentState) -> TranscriptSegmentRecord:
-    record_truncated = segment.truncated
-    return TranscriptSegmentRecord(
+def _final_record(seq: int, segment: TranscriptSegmentState) -> TranscriptPush:
+    return TranscriptPush(
         seq=seq,
-        segment_id=segment.segment_id,
-        chunk_id=segment.chunk_id,
-        node_id=segment.node_id,
-        epoch=segment.epoch,
-        spawn_generation=segment.generation,
-        turn_range_start=segment.shipped_turns,
-        turn_range_end=segment.shipped_turns - 1,  # empty range — a final marker claims no new turns
-        final=True,
-        harness_id=segment.harness_id,
-        normalizer_version=segment.normalizer_version,
-        harness_version=segment.harness_version,
-        model=segment.model,
-        effort=segment.effort,
-        spawn_cwd=segment.spawn_cwd,
-        record_truncated=record_truncated,
-        supersedes=segment.supersedes,
-        turns=[],
+        body={
+            "segment_id": segment.segment_id,
+            "chunk_id": segment.chunk_id,
+            "node_id": segment.node_id,
+            "epoch": segment.epoch,
+            "spawn_generation": segment.generation,
+            "turn_range_start": segment.shipped_turns,
+            "turn_range_end": segment.shipped_turns - 1,  # empty range — a final marker claims no new turns
+            "final": True,
+            "harness_id": segment.harness_id,
+            "normalizer_version": segment.normalizer_version,
+            "harness_version": segment.harness_version,
+            "model": segment.model,
+            "effort": segment.effort,
+            "spawn_cwd": segment.spawn_cwd,
+            "record_truncated": segment.truncated,
+            "supersedes": segment.supersedes,
+            "turns": [],
+        },
     )

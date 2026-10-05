@@ -2183,8 +2183,18 @@ _PROPERTY_DECORATORS = frozenset({"property", "cached_property"})
 _CONSTRUCTOR_DUNDERS = frozenset({"__init__", "__new__", "__post_init__"})
 #: The app boundary, relative to the source root: the packages where the app meets the outside.
 _APP_BOUNDARY = tuple(Path(p) for p in ("wire", "hub/api", "hub/cli", "runner/api", "runner/cli", "cli"))
-#: The runner's hub client — the adapter that sends and receives the ``wire/`` contract.
-_WIRE_CLIENT = Path("runner/hub")
+#: The adapters that send or receive the ``wire/`` contract itself: the runner's hub client, the
+#: two daemons' SSE brokers, and the runner's read-back of its own shipped transcript segments.
+_WIRE_ADAPTERS = tuple(
+    Path(p)
+    for p in (
+        "runner/hub",
+        "hub/events/broker.py",
+        "runner/events/broker.py",
+        "runner/transcripts/internal/http_archived_transcript_repository.py",
+        "runner/transcripts/internal/segment_projection.py",
+    )
+)
 #: The modules outside the app boundary still importing a ``wire/`` model — a closed list that only
 #: shrinks, as each concept maps the wire to its own domain models at its edge.
 _WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
@@ -2193,14 +2203,6 @@ _WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
         "hub/domain/garden/delivery/validation.py",
         "hub/domain/garden/review/validation.py",
         "hub/domain/garden/runs/history.py",
-        "hub/domain/observability/analytics/events.py",
-        "hub/domain/observability/analytics/extraction.py",
-        "hub/events/broker.py",
-        "hub/store/internal/transcript_event_store.py",
-        "runner/events/broker.py",
-        "runner/transcripts/internal/http_archived_transcript_repository.py",
-        "runner/transcripts/internal/segment_projection.py",
-        "runner/transcripts/transcript_drain.py",
     }
 )
 
@@ -2642,13 +2644,13 @@ def _adapter_model_violations(src_root: Path, paths: Iterable[Path] | None = Non
 
 
 def _wire_import_violations(src_root: Path, *, listed: frozenset[str], exempt: frozenset[Path]) -> list[str]:
-    """Every module under ``src_root`` — outside the app boundary, the runner's hub client, and
+    """Every module under ``src_root`` — outside the app boundary, the wire adapters, and
     ``exempt`` — importing ``blizzard.wire`` that ``listed`` does not name, and every ``listed``
     module (relative to ``src_root``) that imports none."""
     importers: set[str] = set()
     for path in sorted(src_root.rglob("*.py")):
         rel = path.relative_to(src_root)
-        if _in_app_boundary(rel) or rel.is_relative_to(_WIRE_CLIENT) or path in exempt:
+        if _in_app_boundary(rel) or any(rel.is_relative_to(a) for a in _WIRE_ADAPTERS) or path in exempt:
             continue
         if any(m == "blizzard.wire" or m.startswith("blizzard.wire.") for m in _imported_modules(path)):
             importers.add(rel.as_posix())

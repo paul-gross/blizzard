@@ -11,11 +11,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.transcripts import TurnKind
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
@@ -445,3 +446,87 @@ class TranscriptIngestService:
             limit_bytes=breach.limit,
         )
         return breach.reason
+
+
+@domain_model
+@dataclass(frozen=True)
+class TurnToolCall:
+    """A tool invocation inside a stored turn: what was called, with what input, and what came
+    back. ``output_patch`` marks a turn carrying only a result for an earlier window's call."""
+
+    name: str
+    input: dict[str, object]
+    input_unparsed: str | None
+    input_shape: str
+    tool_use_id: str | None
+    output: str | None
+    output_truncated: bool
+    input_truncated: bool = False
+    output_patch: bool = False
+
+    @classmethod
+    def of_stored(cls, stored: dict[str, Any]) -> TurnToolCall:
+        return cls(
+            name=stored["name"],
+            input=dict(stored["input"]),
+            input_unparsed=stored["input_unparsed"],
+            input_shape=stored["input_shape"],
+            tool_use_id=stored["tool_use_id"],
+            output=stored["output"],
+            output_truncated=stored["output_truncated"],
+            input_truncated=stored.get("input_truncated", False),
+            output_patch=stored.get("output_patch", False),
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class TurnSidechain:
+    """A subagent's private conversation, nested under the call that spawned it — its own
+    turns, recursively."""
+
+    agent_id: str | None
+    agent_type: str | None
+    link: str
+    turns: list[TranscriptTurn]
+    parent_tool_use_id: str | None = None
+
+    @classmethod
+    def of_stored(cls, stored: dict[str, Any]) -> TurnSidechain:
+        return cls(
+            agent_id=stored["agent_id"],
+            agent_type=stored["agent_type"],
+            link=stored["link"],
+            turns=[TranscriptTurn.of_stored(turn) for turn in stored["turns"]],
+            parent_tool_use_id=stored.get("parent_tool_use_id"),
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class TranscriptTurn:
+    """One normalized turn as the hub stored it, in full. The ingest route validated it against
+    the segment wire, so reading it back trusts its shape."""
+
+    index: int
+    kind: TurnKind
+    timestamp: str | None
+    text: str
+    tool: TurnToolCall | None
+    thinking_redacted: bool
+    sidechain: TurnSidechain | None
+    truncated: bool
+
+    @classmethod
+    def of_stored(cls, stored: dict[str, Any]) -> TranscriptTurn:
+        tool, sidechain = stored["tool"], stored["sidechain"]
+        return cls(
+            index=stored["index"],
+            kind=stored["kind"],
+            timestamp=stored["timestamp"],
+            text=stored["text"],
+            tool=TurnToolCall.of_stored(tool) if tool is not None else None,
+            thinking_redacted=stored["thinking_redacted"],
+            sidechain=TurnSidechain.of_stored(sidechain) if sidechain is not None else None,
+            truncated=stored["truncated"],
+        )

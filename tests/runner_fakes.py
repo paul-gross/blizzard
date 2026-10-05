@@ -62,6 +62,8 @@ from blizzard.runner.hub.client import (
     QueueEntry,
     RouteClaimOutcome,
     SubscriptionDeclaration,
+    TranscriptPush,
+    TranscriptPushAck,
 )
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -121,7 +123,7 @@ from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.runner.usage.repository import derive_invocation_cost
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import HubAdvanceResponse
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
+from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 
 
 class SqlAlchemyRunnerStore(
@@ -462,13 +464,15 @@ class FakeHub:
         self.high_water[runner_id] = mark
         return FactPushAck(high_water=mark, applied=applied, already_applied=already, rejected=[])
 
-    def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         if self.down:
             raise HubClientError("fake hub is down")
-        self.push_transcripts_calls.append([record.seq for record in batch.records])
-        mark = self.transcript_high_water.get(batch.runner_id, 0)
+        # Validated into the wire record exactly as the httpx binding does, so a test reads what shipped.
+        shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
+        self.push_transcripts_calls.append([record.seq for record in shipped])
+        mark = self.transcript_high_water.get(runner_id, 0)
         applied, already, capped, refused = [], [], [], []
-        for record in sorted(batch.records, key=lambda r: r.seq):
+        for record in sorted(shipped, key=lambda r: r.seq):
             if record.seq <= mark:
                 # Mirrors the real hub's own replay fix: a lost-ack retry of an
                 # already-decided seq still reports its cap outcome, not bare idempotency.
@@ -488,9 +492,8 @@ class FakeHub:
                 continue
             self.transcripts_pushed.append(record)
             applied.append(record.seq)
-        self.transcript_high_water[batch.runner_id] = mark
-        return TranscriptSegmentAck(
-            runner_id=batch.runner_id,
+        self.transcript_high_water[runner_id] = mark
+        return TranscriptPushAck(
             high_water=mark,
             applied=applied,
             already_applied=already,

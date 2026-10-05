@@ -30,9 +30,9 @@ from blizzard.hub.domain.observability.analytics.events import (
     is_candidate,
     segment_complete,
 )
+from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -282,17 +282,17 @@ def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
     )
 
 
-def _decode_turns(records: Sequence[Any]) -> list[TurnSegmentView]:
+def _decode_turns(records: Sequence[Any]) -> list[TranscriptTurn]:
     """Every non-rejected record's turns, decompressed and concatenated in range order —
     the domain's own decode, independent of ``hub/api``'s (``bzh:domain-core``: this
     adapter owns its own reads, never reaches into an outer layer for them)."""
-    turns: list[TurnSegmentView] = []
+    turns: list[TranscriptTurn] = []
     for row in records:
         if row.rejected or row.content is None:
             continue
         assert row.codec == "zlib", row.codec  # the store's only codec today
         turns_json = zlib.decompress(row.content).decode("utf-8")
-        turns.extend(TurnSegmentView.model_validate(turn) for turn in json.loads(turns_json))
+        turns.extend(TranscriptTurn.of_stored(turn) for turn in json.loads(turns_json))
     return turns
 
 

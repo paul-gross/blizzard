@@ -34,6 +34,8 @@ from blizzard.runner.hub.client import (
     RouteClaimOutcome,
     SubscriptionDeclaration,
     TerminalDenial,
+    TranscriptPush,
+    TranscriptPushAck,
 )
 from blizzard.runner.hub.node_steps import (
     apply_reply_of,
@@ -65,7 +67,7 @@ from blizzard.wire.runner import (
     RunnerSubscriptionDeclaration,
     RunnerView,
 )
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
+from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 _log = get_logger("blizzard.runner.hub")
 
@@ -154,11 +156,22 @@ class HttpHubClient:
             rejected=ack.rejected,
         )
 
-    def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+        batch = TranscriptSegmentBatch(
+            runner_id=runner_id,
+            records=[TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records],
+        )
         resp = self._post(
             f"{_FLEET_API}/transcripts", batch.model_dump(mode="json"), timeout=_TRANSCRIPT_PUSH_TIMEOUT_SECONDS
         )
-        return TranscriptSegmentAck.model_validate(resp.json())
+        ack = TranscriptSegmentAck.model_validate(resp.json())
+        return TranscriptPushAck(
+            high_water=ack.high_water,
+            applied=ack.applied,
+            already_applied=ack.already_applied,
+            capped=ack.capped,
+            refused=ack.refused,
+        )
 
     def get_envelope(self, chunk_id: str) -> Envelope:
         resp = self._get(

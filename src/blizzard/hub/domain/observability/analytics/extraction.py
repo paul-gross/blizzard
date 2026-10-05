@@ -15,7 +15,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.dialects import DIALECTS
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
-from blizzard.wire.transcript_segment import TurnSegmentView
+from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 
 #: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched.
 EXTRACTOR_VERSION = "blizzard-analytics/5"
@@ -54,7 +54,7 @@ class ITurnEventExtractor(Protocol):
 
     kind: str
 
-    def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]: ...
+    def recognize(self, turn: TranscriptTurn, *, normalizer_version: str) -> list[dict[str, object]]: ...
 
     def subject(self, payload: dict[str, object]) -> str | None:
         """This kind's subject within one of :meth:`recognize`'s own payloads —
@@ -62,7 +62,7 @@ class ITurnEventExtractor(Protocol):
         ...
 
 
-def _resolve_call(turn: TurnSegmentView, *, normalizer_version: str, kind: str) -> tuple[str, str] | None:
+def _resolve_call(turn: TranscriptTurn, *, normalizer_version: str, kind: str) -> tuple[str, str] | None:
     """This turn's own ``(tool_name, argument_value)`` for ``kind``, per the dialect
     named by ``normalizer_version`` — ``None`` when the turn doesn't match at all. The
     one recognition rule every extractor below shares; only the payload each builds
@@ -89,7 +89,7 @@ class FileReadExtractor:
         path = payload.get("path")
         return path if isinstance(path, str) else None
 
-    def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
+    def recognize(self, turn: TranscriptTurn, *, normalizer_version: str) -> list[dict[str, object]]:
         resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
         if resolved is None:
             return []
@@ -107,7 +107,7 @@ class SkillInvocationExtractor:
         skill_name = payload.get("skill_name")
         return skill_name if isinstance(skill_name, str) else None
 
-    def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
+    def recognize(self, turn: TranscriptTurn, *, normalizer_version: str) -> list[dict[str, object]]:
         resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
         if resolved is None:
             return []
@@ -126,7 +126,7 @@ class AgentSpawnExtractor:
         agent_type = payload.get("agent_type")
         return agent_type if isinstance(agent_type, str) else None
 
-    def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
+    def recognize(self, turn: TranscriptTurn, *, normalizer_version: str) -> list[dict[str, object]]:
         resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
         if resolved is None:
             return []
@@ -156,7 +156,7 @@ def _parse_occurred_at(raw: str | None) -> datetime | None:
 
 
 def extract_events(
-    turns: list[TurnSegmentView],
+    turns: list[TranscriptTurn],
     *,
     normalizer_version: str,
     extractors: Sequence[ITurnEventExtractor] = DEFAULT_EXTRACTORS,
@@ -172,7 +172,7 @@ def extract_events(
 
 
 def _walk(
-    turns: list[TurnSegmentView],
+    turns: list[TranscriptTurn],
     *,
     normalizer_version: str,
     extractors: Sequence[ITurnEventExtractor],

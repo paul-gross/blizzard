@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.wire.transcript_segment import TurnSegmentView
+from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 
 #: :attr:`TranscriptEvent.kind` values this build's extractors mint — open to a
 #: future extractor registering a new one; no column or migration gates a new entry.
@@ -205,7 +205,7 @@ class SegmentDerivationInput:
     epoch: int
     spawn_generation: int
     normalizer_version: str
-    turns: list[TurnSegmentView]
+    turns: list[TranscriptTurn]
     complete: bool
     content_fingerprint: str
     provenance: SegmentProvenance
