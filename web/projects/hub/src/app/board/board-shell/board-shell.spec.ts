@@ -251,7 +251,7 @@ describe('BoardShell', () => {
     expect(selected).toBe('ch_01running000000000000000000');
   });
 
-  it('renders the node name as the visible label with the raw ULID demoted to a tooltip', async () => {
+  it('renders the node name as the visible label with the full name and raw ULID in the tooltip', async () => {
     const chunks: ChunkSummary[] = [
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -270,7 +270,7 @@ describe('BoardShell', () => {
 
     const node = el.querySelector('[data-testid="chunk-node"]');
     expect(node?.textContent?.trim()).toBe('review');
-    expect(node?.getAttribute('title')).toBe('nd_01KXHKVCWZ1000000000000000');
+    expect(node?.getAttribute('title')).toBe('review (nd_01KXHKVCWZ1000000000000000)');
   });
 
   it('names each work item as plain text, one chip per line — a card carries no competing link', async () => {

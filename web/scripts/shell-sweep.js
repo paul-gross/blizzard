@@ -187,6 +187,9 @@
  *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
+ *   - projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts — a
+ *     120-character current-node name truncates inside its card: every lane stays
+ *     inside a 1440px viewport.
  *   - projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts — the
  *     dock header's action row with every in-flow control live at once (Pause, the
  *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
@@ -275,6 +278,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts' },
