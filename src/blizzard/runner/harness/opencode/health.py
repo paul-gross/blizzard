@@ -27,6 +27,7 @@ from blizzard.runner.harness.opencode.compatibility.probe import (
     ADMITTED_OPENCODE_RANGE,
     ADMITTED_OPENCODE_RANGE_DISPLAY,
 )
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
 
 _log = get_logger("blizzard.runner.harness.opencode")
 
@@ -112,7 +113,7 @@ class OpenCodeHealthProbe:
         return ADMITTED_OPENCODE_RANGE_DISPLAY
 
     def normalize_version(self, raw: str | None) -> str | None:
-        return harness_shared.normalize_opencode_version(raw)
+        return normalize_opencode_version(raw)
 
     def classifies_offline(self) -> bool:
         return True

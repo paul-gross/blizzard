@@ -10,7 +10,7 @@ import subprocess
 import sys
 import textwrap
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -682,9 +682,12 @@ _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
 
 def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | None, may_name: bool) -> str | None:
     """Why one imported ``module`` breaches the adapter boundary for its importer, or ``None``."""
-    loop = f"{harness.rsplit('.', 1)[0]}.loop"
-    if in_harness and (module == loop or module.startswith(f"{loop}.")):
+    runner = harness.rsplit(".", 1)[0]
+    loops = (f"{runner}.loop", f"{runner}.loop_wiring")
+    if in_harness and any(module == loop or module.startswith(f"{loop}.") for loop in loops):
         return "harness -> loop"
+    if in_harness and not may_name and module == f"{harness}.wiring":
+        return "harness -> wiring, which names every adapter"
     target = next(
         (
             name
@@ -703,8 +706,9 @@ def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | N
 def _adapter_isolation_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[str]:
     """Every import statement breaching the harness adapter boundary under ``src_root``: the
     harness core or any other module naming an adapter package, an adapter naming the other, and
-    any harness module importing ``runner/loop``. ``harness/wiring.py`` and ``exempt`` may name
-    an adapter."""
+    any harness module importing ``runner/loop`` or its composition root. ``harness/wiring.py`` and
+    ``exempt`` may name an adapter; since wiring names both, any other harness module importing it
+    reaches every adapter through it."""
     harness = f"{src_root.name}.runner.harness"
     wiring = src_root / "runner" / "harness" / "wiring.py"
     violations: list[str] = []
@@ -772,6 +776,11 @@ def _plant_harness(tmp_path: Path, importer: str, statement: str) -> list[str]:
         ("runner/api/x.py", "import blizzard.runner.harness.claude_code.section", "adapter named outside"),
         ("runner/harness/core.py", "from blizzard.runner.loop.steps import X", "harness -> loop"),
         ("runner/harness/opencode/a.py", "from blizzard.runner import loop", "harness -> loop"),
+        ("runner/harness/core.py", "from blizzard.runner.loop_wiring import X", "harness -> loop"),
+        ("runner/harness/claude_code/section.py", "from blizzard.runner.harness.wiring import X", "-> wiring"),
+        ("runner/harness/claude_code/section.py", "from blizzard.runner.harness import wiring", "-> wiring"),
+        ("runner/harness/opencode/a.py", "from ..wiring import X", "-> wiring"),
+        ("runner/harness/core.py", "from .wiring import X", "-> wiring"),
     ],
 )
 def test_adapter_isolation_catches_every_breach(tmp_path: Path, importer: str, statement: str, breach: str) -> None:
@@ -789,8 +798,8 @@ def test_adapter_isolation_catches_every_breach(tmp_path: Path, importer: str, s
         ("runner/harness/opencode/compatibility/x.py", "from blizzard.runner.harness.opencode import paths"),
         ("runner/harness/opencode/a.py", "from .compatibility import x"),
         ("runner/harness/opencode/a.py", "from blizzard.runner.harness.core import X"),
-        ("runner/harness/core.py", "from blizzard.runner.loop_wiring import X"),
         ("runner/api/x.py", "from blizzard.runner.harness.core import X"),
+        ("runner/api/x.py", "from blizzard.runner.harness.wiring import X"),
     ],
 )
 def test_adapter_isolation_admits_wiring_roots_and_own_adapter(tmp_path: Path, importer: str, statement: str) -> None:
@@ -1717,6 +1726,53 @@ def test_a_worker_verb_loads_no_opentelemetry() -> None:
         "(blizzard.cli.lazy_group.LazyGroup): register a new verb there by 'module:attribute' and keep "
         "its module free of module-level imports of the hub, fastapi, or telemetry stacks"
     )
+
+
+def _adapter_modules_beyond_sections(loaded: set[str]) -> list[str]:
+    """Every loaded harness adapter module other than an adapter package and its ``section`` module."""
+    adapters = tuple(f"blizzard.runner.harness.{name}" for name in _ADAPTER_PACKAGES)
+    return sorted(
+        module
+        for module in loaded
+        if any(module.startswith(f"{adapter}.") for adapter in adapters)
+        and module not in {f"{adapter}.section" for adapter in adapters}
+    )
+
+
+@pytest.mark.parametrize(
+    "load",
+    [
+        lambda: _loaded_after_importing("blizzard.runner.cli.worker"),
+        lambda: _loaded_after_running(["runner", "heartbeat", "--help"]),
+    ],
+    ids=["hook-entry-point", "heartbeat-verb"],
+)
+def test_a_worker_hook_loads_no_harness_adapter_beyond_its_section(load: Callable[[], set[str]]) -> None:
+    """The per-tool-call ``heartbeat`` and ``session-end`` hooks reach ``harness/wiring.py`` only for the
+    section roster: neither adapter's declaration graph loads (``bzh:pluggable-seams``)."""
+    loaded = load()
+    assert "blizzard.runner.harness.wiring" in loaded
+    adapters = _adapter_modules_beyond_sections(loaded)
+    assert not adapters, (
+        f"a worker hook loaded {len(adapters)} harness adapter modules, first {adapters[:3]}: keep "
+        "harness/wiring.py's module-level imports to each adapter's section module and resolve a "
+        "declaration through harness_catalog()"
+    )
+
+
+def test_the_adapter_module_filter_keeps_only_what_lies_beyond_a_section() -> None:
+    loaded = {
+        "blizzard.runner.harness.claude_code",
+        "blizzard.runner.harness.claude_code.section",
+        "blizzard.runner.harness.opencode.section",
+        "blizzard.runner.harness.opencode.compatibility.probe",
+        "blizzard.runner.harness.claude_code.declaration",
+        "blizzard.runner.harness.wiring",
+    }
+    assert _adapter_modules_beyond_sections(loaded) == [
+        "blizzard.runner.harness.claude_code.declaration",
+        "blizzard.runner.harness.opencode.compatibility.probe",
+    ]
 
 
 def test_a_hub_client_verb_loads_no_opentelemetry() -> None:

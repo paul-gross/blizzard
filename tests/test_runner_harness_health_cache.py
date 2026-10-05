@@ -16,10 +16,10 @@ from packaging.specifiers import SpecifierSet
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness import health_cache
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
 from blizzard.runner.harness.selftest_result import LatestSelfTestResult
 
 pytestmark = pytest.mark.unit

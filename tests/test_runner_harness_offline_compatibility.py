@@ -20,7 +20,6 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.offline_compatibility import (
     DEFAULT_CORPUS_ROOT,
     CorpusConfigurationError,
@@ -30,6 +29,7 @@ from blizzard.runner.harness.offline_compatibility import (
     reference_corpus_version,
 )
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
