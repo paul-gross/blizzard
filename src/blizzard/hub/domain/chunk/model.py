@@ -1395,15 +1395,18 @@ class LandedRepos:
     """Repos landed via a hub command node's ``merged/<repo>`` marker artifact (#67).
 
     No engine code names a "deliver" node, so a chunk's landed detail is read off its
-    own node artifacts rather than a privileged fact family."""
+    own node artifacts rather than a privileged fact family. ``artifacts`` arrive in durable
+    write order, so the newest-written marker decides a repo's sha."""
 
     names: frozenset[str]
+    shas: dict[str, str]
 
     @classmethod
     def of(cls, artifacts: Sequence[StoredArtifact]) -> LandedRepos:
-        return cls(
-            frozenset(a.name.removeprefix(_MARKER_PREFIX) for a in artifacts if a.name.startswith(_MARKER_PREFIX))
-        )
+        shas = {
+            a.name.removeprefix(_MARKER_PREFIX): a.data.strip() for a in artifacts if a.name.startswith(_MARKER_PREFIX)
+        }
+        return cls(frozenset(shas), shas)
 
 
 @domain_model

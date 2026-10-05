@@ -219,7 +219,7 @@ class DormantSession:
 
     def on_unpause(self, park: PausePark, elicitation: PendingElicitation | None) -> None:
         """Finish a pause park's teardown, then poll its chunk; once the operator resumes it, restart
-        its session. The teardown runs ahead of every gate below — brake, hub, the pause itself —
+        its session. The teardown runs ahead of every read and move below,
         since a kill is not a spawn and the interrupted envelope is owed its recording regardless.
         The pause cost the chunk a process, not an attempt; an **ask-parked** lease
         returns early even once unpaused, so a lift never conjures an absent answer.
@@ -228,8 +228,6 @@ class DormantSession:
         far rarer resume-time check reads fresh, since settling may have just cleared it."""
         lease = self.lease
         if not self._pause_park_settled(park, elicitation):
-            return
-        if Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
         try:
             view = self.ctx.chunk_views.get(lease.chunk_id)
@@ -246,12 +244,13 @@ class DormantSession:
         move = unpause_move(
             view,
             self.ctx.config.runner_id,
+            braked=Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id),
             ask_parked=lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids(),
             judge_parked=standing is not None,
             has_env_and_session=bool(bindings) and lease.session is not None,
         )
         if move is UnpauseMove.WAIT:
-            return  # still paused, or detached while parked — PULL's sweep abandons it, not this step
+            return  # still paused, braked, or detached while parked — PULL's sweep abandons it, not this step
         if move is UnpauseMove.CLEAR_AWAIT_ANSWER:
             # Dormant on a question underneath the pause: clearing the pause-park is the whole
             # action, and an answer — not this resume — restarts it.

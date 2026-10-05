@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.claude_code.health import (
     ADMITTED_CLAUDE_CODE_RANGE,
     normalize_claude_code_version,
 )
-from blizzard.runner.harness.harness_shared import version_admitted
 
 pytestmark = pytest.mark.unit
 

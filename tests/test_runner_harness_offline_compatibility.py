@@ -165,7 +165,7 @@ def test_assert_admitted_range_has_corpus_raises_naming_the_range(tmp_path: Path
 
 def test_a_semver_prerelease_named_corpus_directory_is_never_admitted(tmp_path: Path) -> None:
     """A directory named ``1.19.0-1`` reads as a semver pre-release — the
-    same guard :func:`~blizzard.runner.harness.harness_shared.version_admitted`
+    same guard :func:`~blizzard.runner.harness.admission.version_admitted`
     applies to an observed version, now shared by corpus admission too."""
     for version in ("1.19.0-1", "1.19.0"):
         manifest_dir = tmp_path / "widget" / version

@@ -510,7 +510,7 @@ def park_names_elicitation(park: PausePark, elicitation: PendingElicitation | No
 
 
 class UnpauseMove(StrEnum):
-    #: Still paused, or routed away — wait (Pull's lease reconcile owns a detach).
+    #: Still paused, braked, or routed away — wait (Pull's lease reconcile owns a detach).
     WAIT = "wait"
     #: The lease is also ask-parked: clear the pause park; an answer restarts it.
     CLEAR_AWAIT_ANSWER = "clear-await-answer"
@@ -523,12 +523,19 @@ class UnpauseMove(StrEnum):
 
 
 def unpause_move(
-    view: ChunkState, runner_id: str, *, ask_parked: bool, judge_parked: bool, has_env_and_session: bool
+    view: ChunkState,
+    runner_id: str,
+    *,
+    braked: bool,
+    ask_parked: bool,
+    judge_parked: bool,
+    has_env_and_session: bool,
 ) -> UnpauseMove:
-    """Once a pause park has settled and the brake admits a start: a lifted pause on a chunk still
-    routed here wakes the session — unless a question underneath it or a standing judge park
-    claims the resume instead."""
-    if view.pause is not None or routed_away(view, runner_id):
+    """Once a pause park has settled: a lifted pause on a chunk still routed here wakes the
+    session — unless a question underneath it or a standing judge park claims the resume instead.
+    A braking runner starts nothing and outranks every answer below, the ask-parked clear
+    included: the pause-park stands until the brake lifts."""
+    if braked or view.pause is not None or routed_away(view, runner_id):
         return UnpauseMove.WAIT
     if ask_parked:
         return UnpauseMove.CLEAR_AWAIT_ANSWER

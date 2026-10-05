@@ -7,7 +7,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos
 
 pytestmark = pytest.mark.unit
 
@@ -126,3 +126,16 @@ def test_same_epoch_replacement_follows_write_order_not_artifact_id() -> None:
     view = DeliveryRead.of(ChunkFacts(minted=True), DeliverySources(markers=[earlier, later]))
     assert [p.number for p in view.open_prs] == [4]
     assert [p.number for p in view.closed_prs] == [3]
+
+
+def test_landed_repos_keeps_the_newest_written_sha_per_repo() -> None:
+    landed = LandedRepos.of(
+        [
+            marker("merged/acme/one", "old-sha"),
+            marker("delivery-pr/acme/one", "{}"),
+            marker("merged/acme/two", " two-sha\n"),
+            marker("merged/acme/one", "new-sha", epoch=2),
+        ]
+    )
+    assert landed.shas == {"acme/one": "new-sha", "acme/two": "two-sha"}
+    assert landed.names == {"acme/one", "acme/two"}

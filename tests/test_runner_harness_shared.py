@@ -1,7 +1,7 @@
 """``opencode.version.normalize_opencode_version`` — the one version normalizer
 both the live OpenCode probe and the health/capability-snapshot path route a membership or
 corpus-lookup check through, so the two paths can never disagree about what "the observed version" means. Also
-``harness_shared.version_admitted``, the one semver-range membership check both paths route
+``admission.version_admitted``, the one semver-range membership check both paths route
 through in turn."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from packaging.specifiers import SpecifierSet
 
-from blizzard.runner.harness.harness_shared import version_admitted
+from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
 
 pytestmark = pytest.mark.unit
