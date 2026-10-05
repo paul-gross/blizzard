@@ -104,6 +104,8 @@ class ChangeContext:
 
     actor: str
     door: Door
+    #: Groups the rows one apply writes; ``None`` for every other door and for a dry run.
+    apply_id: str | None = None
 
 
 @domain_model
@@ -153,6 +155,7 @@ class ConfigChange:
             revision=revision,
             op=op,
             diff=changes,
+            apply_id=ctx.apply_id,
         )
 
 

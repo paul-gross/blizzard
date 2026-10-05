@@ -1578,6 +1578,60 @@
     },
     "config": {
       "commands": {
+        "apply": {
+          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "file",
+              "opts": [
+                "file"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "help": "Show what would change and write nothing.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dry_run",
+              "opts": [
+                "--dry-run"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub config apply",
+          "short_help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction."
+        },
         "changes": {
           "help": "List configuration changes newest first \u2014 who changed which record, through which door, and what.\n\nShows the newest page unless --all. A secret's value never appears.",
           "params": [
@@ -1644,12 +1698,55 @@
           ],
           "path": "hub config changes",
           "short_help": "List configuration changes newest first \u2014 who changed which record, through which door, and what."
+        },
+        "export": {
+          "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it.",
+          "params": [
+            {
+              "help": "The document format to print.",
+              "hidden": false,
+              "kind": "option",
+              "name": "fmt",
+              "opts": [
+                "--format"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub config export",
+          "short_help": "Print every active work source, repository and secret name as a document that applies back unchanged."
         }
       },
-      "help": "Operator verbs over configuration: changes.",
+      "help": "Operator verbs over configuration: changes, apply, export.",
       "params": [],
       "path": "hub config",
-      "short_help": "Operator verbs over configuration: changes."
+      "short_help": "Operator verbs over configuration: changes, apply, export."
     },
     "decision": {
       "commands": {

@@ -68,6 +68,71 @@ def _columns(record: ConfiguredRepository) -> dict[str, object]:
     }
 
 
+def insert_record(conn: Connection, record: ConfiguredRepository, change: ConfigChange) -> None:
+    """The create body, inside the caller's transaction. :class:`RepositorySecretUnavailable`,
+    :class:`RepositoryNameTaken` or :class:`RepositoryCoordinateTaken` when refused."""
+    _check_secret(conn, record.fields.secret_name)
+    if conn.execute(select(repositories.c.name).where(repositories.c.name == record.name)).first():
+        raise RepositoryNameTaken(record.name)
+    holder = _coordinate_holder(conn, record)
+    if holder is not None:
+        raise _coordinate_taken(record, holder)
+    conn.execute(
+        insert(repositories).values(
+            name=record.name,
+            **_columns(record),
+            revision=record.revision,
+            created_at=record.created_at,
+            created_by=record.created_by,
+        )
+    )
+    append_change(conn, change)
+
+
+def update_record(conn: Connection, record: ConfiguredRepository, from_revision: int, change: ConfigChange) -> None:
+    """The compare-and-set edit body, inside the caller's transaction."""
+    _check_secret(conn, record.fields.secret_name)
+    holder = _coordinate_holder(conn, record)
+    if holder is not None:
+        raise _coordinate_taken(record, holder)
+    moved = conn.execute(
+        update(repositories)
+        .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
+        .values(**_columns(record), revision=record.revision)
+    ).rowcount
+    if moved != 1:
+        raise ConfigRevisionConflict("repository", record.name, current=_revision(conn, record.name))
+    append_change(conn, change)
+
+
+def record_lifecycle_fact(
+    conn: Connection,
+    record: ConfiguredRepository,
+    *,
+    retired: bool,
+    from_revision: int,
+    at: datetime,
+    by: str,
+    change: ConfigChange,
+) -> None:
+    """The retire/enable body, inside the caller's transaction. Enabling re-checks the secret."""
+    if not retired:
+        _check_secret(conn, record.fields.secret_name)
+    moved = conn.execute(
+        update(repositories)
+        .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
+        .values(revision=record.revision)
+    ).rowcount
+    if moved != 1:
+        raise ConfigRevisionConflict("repository", record.name, current=_revision(conn, record.name))
+    conn.execute(insert(repository_lifecycle_facts).values(name=record.name, retired=retired, set_at=at, set_by=by))
+    append_change(conn, change)
+
+
+def _revision(conn: Connection, name: str) -> int:
+    return conn.execute(select(repositories.c.revision).where(repositories.c.name == name)).scalar_one()
+
+
 class RepositoryRecordStore:
     """Read-write repository adapter over the hub store."""
 
@@ -79,22 +144,7 @@ class RepositoryRecordStore:
             with self._store.write(
                 "create", expect=(RepositorySecretUnavailable, RepositoryNameTaken, RepositoryCoordinateTaken)
             ) as conn:
-                _check_secret(conn, record.fields.secret_name)
-                if conn.execute(select(repositories.c.name).where(repositories.c.name == record.name)).first():
-                    raise RepositoryNameTaken(record.name)
-                holder = _coordinate_holder(conn, record)
-                if holder is not None:
-                    raise _coordinate_taken(record, holder)
-                conn.execute(
-                    insert(repositories).values(
-                        name=record.name,
-                        **_columns(record),
-                        revision=record.revision,
-                        created_at=record.created_at,
-                        created_by=record.created_by,
-                    )
-                )
-                append_change(conn, change)
+                insert_record(conn, record, change)
         except IntegrityError as exc:  # a concurrent create won the race
             raise RepositoryNameTaken(record.name) from exc
         return record
@@ -103,18 +153,7 @@ class RepositoryRecordStore:
         with self._store.write(
             "update", expect=(RepositorySecretUnavailable, RepositoryCoordinateTaken, ConfigRevisionConflict)
         ) as conn:
-            _check_secret(conn, record.fields.secret_name)
-            holder = _coordinate_holder(conn, record)
-            if holder is not None:
-                raise _coordinate_taken(record, holder)
-            moved = conn.execute(
-                update(repositories)
-                .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
-                .values(**_columns(record), revision=record.revision)
-            ).rowcount
-            if moved != 1:
-                raise ConfigRevisionConflict("repository", record.name, current=self._revision(conn, record.name))
-            append_change(conn, change)
+            update_record(conn, record, from_revision, change)
         return record
 
     def record_lifecycle(
@@ -130,24 +169,10 @@ class RepositoryRecordStore:
         with self._store.write(
             "record_lifecycle", expect=(RepositorySecretUnavailable, ConfigRevisionConflict)
         ) as conn:
-            if not retired:
-                _check_secret(conn, record.fields.secret_name)
-            moved = conn.execute(
-                update(repositories)
-                .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
-                .values(revision=record.revision)
-            ).rowcount
-            if moved != 1:
-                raise ConfigRevisionConflict("repository", record.name, current=self._revision(conn, record.name))
-            conn.execute(
-                insert(repository_lifecycle_facts).values(name=record.name, retired=retired, set_at=at, set_by=by)
+            record_lifecycle_fact(
+                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )
-            append_change(conn, change)
         return record
-
-    @staticmethod
-    def _revision(conn: Connection, name: str) -> int:
-        return conn.execute(select(repositories.c.revision).where(repositories.c.name == name)).scalar_one()
 
     def get(self, name: str) -> ConfiguredRepository | None:
         return self.get_many([name]).get(name)

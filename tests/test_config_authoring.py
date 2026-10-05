@@ -3,6 +3,7 @@ committed with the record (component tier, migrated sqlite-on-disk)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,8 +13,23 @@ from sqlalchemy import Engine, func, select
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.config.apply import (
+    ApplyEntryRefused,
+    ConfigDeclaration,
+    RepositoryDeclaration,
+    StoredConfig,
+    WorkSourceDeclaration,
+)
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind, RecordRef
+from blizzard.hub.domain.config.changes import (
+    ChangeContext,
+    ChangeOp,
+    Door,
+    FieldChange,
+    RecordKind,
+    RecordRef,
+    RecordState,
+)
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -416,3 +432,121 @@ def test_referrers_union_every_kind_ordered_by_kind_then_key(world: _World) -> N
     assert world.referrers.referrers_of(["gh"]) == {
         "gh": [RecordRef(RecordKind.REPOSITORY, "demo"), RecordRef(RecordKind.WORK_SOURCE, "demo")]
     }
+
+
+# --- Declarative apply -----------------------------------------------------------------
+
+_APPLY = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_ONE")
+
+
+def _source_declaration(name: str, locator: str, **stated: object) -> WorkSourceDeclaration:
+    return WorkSourceDeclaration(
+        name=name,
+        fields=replace(_FIELDS, locator=locator),
+        edit=WorkSourceEdit(**stated),  # type: ignore[arg-type]
+    )
+
+
+def _repo_declaration(name: str, **stated: object) -> RepositoryDeclaration:
+    return RepositoryDeclaration(name=name, fields=_REPO, edit=RepositoryEdit(**stated))  # type: ignore[arg-type]
+
+
+def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _APPLY, *, dry_run: bool = False):  # type: ignore[no-untyped-def]
+    stored = StoredConfig(
+        work_sources=world.sources.get_many([d.name for d in declaration.work_sources]),
+        repositories=world.repos.get_many([d.name for d in declaration.repositories]),
+        secrets=dict.fromkeys(declaration.secrets, RecordState.ACTIVE),
+    )
+    return world.authoring.apply(declaration, stored, ctx, dry_run=dry_run)
+
+
+_DECLARATION = ConfigDeclaration(
+    secrets=("gh",),
+    work_sources=(_source_declaration("demo", "acme/demo"),),
+    repositories=(_repo_declaration("demo"),),
+)
+
+
+def test_an_apply_commits_every_write_with_the_door_and_one_shared_apply_id(world: _World) -> None:
+    before = world.count()
+    outcomes = _apply(world, _DECLARATION)
+    assert [(o.kind, o.key, o.op) for o in outcomes] == [
+        (RecordKind.WORK_SOURCE, "demo", ChangeOp.CREATE),
+        (RecordKind.REPOSITORY, "demo", ChangeOp.CREATE),
+    ]
+    rows = world.changes()[before:]
+    assert [(r.door, r.apply_id, r.actor) for r in rows] == [(Door.APPLY, "apl_ONE", "alice")] * 2
+    assert world.source().revision == 1 and world.repo().revision == 1
+
+
+def test_a_second_apply_of_the_same_declaration_appends_nothing(world: _World) -> None:
+    _apply(world, _DECLARATION)
+    written = world.count()
+    declaration = replace(
+        _DECLARATION,
+        work_sources=(
+            replace(_source_declaration("demo", "acme/demo"), edit=WorkSourceEdit(locator="acme/demo", annotate=False)),
+        ),
+    )
+    outcomes = _apply(world, declaration)
+    assert [o.op for o in outcomes] == [None, None]
+    assert world.count() == written
+
+
+def test_a_dry_run_writes_nothing_and_returns_the_outcomes_of_the_real_apply(world: _World) -> None:
+    before = world.count()
+    dry = _apply(world, _DECLARATION, replace(_APPLY, apply_id=None), dry_run=True)
+    assert world.count() == before
+    assert world.sources.get("demo") is None and world.repos.get("demo") is None
+    assert _apply(world, _DECLARATION) == dry
+
+
+def test_a_dry_run_reaches_the_refusals_a_real_apply_reaches(world: _World) -> None:
+    world.authoring.retire_secret(world.secrets.get("gh"), OP)  # type: ignore[arg-type]
+    before = world.count()
+    for dry_run in (True, False):
+        with pytest.raises(ApplyEntryRefused) as caught:
+            _apply(world, replace(_DECLARATION, secrets=()), dry_run=dry_run)
+        assert isinstance(caught.value.cause, WorkSourceSecretUnavailable)
+    assert world.count() == before
+
+
+def test_a_refusal_on_a_later_entry_leaves_the_earlier_creates_unwritten(world: _World) -> None:
+    before = world.count()
+    declaration = ConfigDeclaration(
+        work_sources=(
+            _source_declaration("first", "acme/first"),
+            _source_declaration("second", "acme/second"),
+            _source_declaration("third", "acme/first"),
+        )
+    )
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _apply(world, declaration)
+    assert (caught.value.section, caught.value.index) == ("work_sources", 2)
+    assert isinstance(caught.value.cause, WorkSourceLocatorTaken)
+    assert world.count() == before
+    assert world.sources.get("first") is None and world.sources.get("second") is None
+
+
+def test_an_edit_and_an_enable_commit_in_one_transaction_at_consecutive_revisions(world: _World) -> None:
+    _apply(world, _DECLARATION)
+    world.authoring.retire_work_source(world.source(), OP)
+    outcomes = _apply(
+        world, replace(_DECLARATION, work_sources=(_source_declaration("demo", "acme/demo", annotate=True),))
+    )
+    assert [o.op for o in outcomes] == [ChangeOp.ENABLE, ChangeOp.EDIT, None]
+    record = world.source()
+    assert (record.revision, record.retired, record.fields.annotate) == (4, False, True)
+
+
+def test_a_lost_race_on_a_row_refuses_the_whole_apply(world: _World) -> None:
+    _apply(world, _DECLARATION)
+    stale = world.source()
+    world.authoring.edit_work_source(stale, WorkSourceEdit(annotate=True), OP)
+    declaration = ConfigDeclaration(work_sources=(_source_declaration("demo", "acme/demo", annotate=True),))
+    stored = StoredConfig(work_sources={"demo": stale}, repositories={}, secrets={})
+    before = world.count()
+    with pytest.raises(ApplyEntryRefused) as caught:
+        world.authoring.apply(declaration, stored, _APPLY, dry_run=False)
+    assert isinstance(caught.value.cause, ConfigRevisionConflict)
+    assert world.count() == before

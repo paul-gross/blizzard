@@ -147,6 +147,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -401,6 +402,7 @@ class HubCore:
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
+    config_apply: ConfigApplyStore
     clock: IClock
 
 
@@ -448,6 +450,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         repository_records=RepositoryRecordStore(store_connections),
         secret_referrers=SecretReferrersStore(store_connections),
         config_changes=ConfigChangeStore(store_connections),
+        config_apply=ConfigApplyStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -896,6 +899,7 @@ def build_services(
             repositories=core.repository_records,
             secrets=core.secrets,
             cipher=secret_cipher(secret_keys),
+            apply_writer=core.config_apply,
             clock=clock,
         ),
         work_source_records=core.work_source_records,

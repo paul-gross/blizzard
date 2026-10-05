@@ -12,6 +12,7 @@ import click
 import httpx
 
 from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.foundation.roles import dto
 from blizzard.hub.cli.sessions import IReadSessionStore
 
 
@@ -29,6 +30,15 @@ _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 
 #: The fallback a verb's own unnamed 403 falls back to when the body carries no ``detail``.
 _FORBIDDEN_FALLBACK = "forbidden"
+
+
+@dto
+@dataclass(frozen=True)
+class RawBody:
+    """A request body sent as it is, under its own ``Content-Type`` — for a document the hub decodes itself."""
+
+    content: bytes
+    media_type: str
 
 
 @dataclass(frozen=True)
@@ -93,16 +103,20 @@ class CliContext:
         timeout: float = CLIENT_TIMEOUT,
         if_match: int | None = None,
         door: bool = False,
+        params: dict[str, str] | None = None,
+        raw_body: RawBody | None = None,
     ) -> httpx.Response:
         return self._verb(
             "post",
             path,
             operation,
             json_body=json_body,
+            params=params,
             on_status=on_status,
             timeout=timeout,
             if_match=if_match,
             door=door,
+            raw_body=raw_body,
         )
 
     def patch(
@@ -169,6 +183,7 @@ class CliContext:
         timeout: float = CLIENT_TIMEOUT,
         if_match: int | None = None,
         door: bool = False,
+        raw_body: RawBody | None = None,
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first.
         Dispatches through ``httpx``'s module-level verb function, same as :meth:`stream` —
@@ -178,9 +193,13 @@ class CliContext:
         kwargs: dict[str, Any] = {"timeout": timeout}
         if json_body is not None:
             kwargs["json"] = json_body
+        if raw_body is not None:
+            kwargs["content"] = raw_body.content
         if params is not None:
             kwargs["params"] = params
         headers = self._headers(door=door)
+        if raw_body is not None:
+            headers["Content-Type"] = raw_body.media_type
         if if_match is not None:
             headers["If-Match"] = str(if_match)
         if headers:
@@ -271,9 +290,17 @@ class CliContext:
         timeout: float = CLIENT_TIMEOUT,
         if_match: int | None = None,
         door: bool = False,
+        raw_body: RawBody | None = None,
     ) -> httpx.Response:
         resp = self.send(
-            method, path, json_body=json_body, params=params, timeout=timeout, if_match=if_match, door=door
+            method,
+            path,
+            json_body=json_body,
+            params=params,
+            timeout=timeout,
+            if_match=if_match,
+            door=door,
+            raw_body=raw_body,
         )
         self.check(resp, operation, on_status=on_status)
         return resp

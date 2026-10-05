@@ -399,3 +399,192 @@ def test_repository_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: 
         "changes"
     ]
     assert (row["door"], row["actor"] != "operator") == ("cli", True)
+
+
+# --- Declarative apply and export --------------------------------------------------
+
+_YAML = "application/yaml"
+_APPLY_REPO = {
+    "name": "blizzard",
+    "forge_api_url": "https://api.github.com",
+    "owner": "acme",
+    "repo": "blizzard",
+    "base_branch": "master",
+    "secret_name": "gh",
+}
+_YAML_DOCUMENT = """\
+version: 1
+secrets: [gh]
+work_sources:
+  - {name: demo, provider: github, locator: acme/demo, secret: gh, annotate: true}
+repositories:
+  - {name: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh}
+"""
+
+
+def _apply_json(hub: HubHarness, document: dict, *, dry_run: bool = False, headers: dict | None = None):  # type: ignore[no-untyped-def,type-arg]
+    return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json=document, headers=headers or {})
+
+
+def _apply_yaml(hub: HubHarness, text: str, *, dry_run: bool = False):  # type: ignore[no-untyped-def]
+    return hub.client.post(
+        "/api/config/apply", params={"dry_run": dry_run}, content=text.encode(), headers={"Content-Type": _YAML}
+    )
+
+
+def test_yaml_and_json_bodies_apply_identically(hub: HubHarness, tmp_path: Path) -> None:
+    (tmp_path / "other").mkdir()
+    other = build_hub(tmp_path / "other")
+    other.client.post("/api/secrets", json={"name": "gh", "value": _SENTINEL})
+    document = {
+        "version": 1,
+        "secrets": ["gh"],
+        "work_sources": [_DEMO],
+        "repositories": [_APPLY_REPO],
+    }
+    from_json = _apply_json(hub, document)
+    from_yaml = _apply_yaml(other, _YAML_DOCUMENT)
+    assert from_json.status_code == 200, from_json.text
+    assert from_yaml.status_code == 200, from_yaml.text
+    assert from_json.json()["outcomes"] == from_yaml.json()["outcomes"]
+    assert [(o["kind"], o["key"], o["op"]) for o in from_json.json()["outcomes"]] == [
+        ("work_source", "demo", "create"),
+        ("repository", "blizzard", "create"),
+    ]
+    assert from_json.json()["apply_id"].startswith("apl_")
+
+
+def test_a_dry_run_writes_nothing_and_matches_the_real_apply(hub: HubHarness) -> None:
+    before = _changes(hub)
+    dry = _apply_yaml(hub, _YAML_DOCUMENT, dry_run=True)
+    assert dry.status_code == 200, dry.text
+    assert dry.json()["dry_run"] is True and dry.json()["apply_id"] is None
+    assert _changes(hub) == before
+    assert hub.client.get("/api/work-sources/demo").status_code == 404
+    real = _apply_yaml(hub, _YAML_DOCUMENT)
+    assert real.json()["outcomes"] == dry.json()["outcomes"]
+
+
+def test_the_rows_an_apply_writes_carry_the_apply_door_and_one_apply_id(hub: HubHarness) -> None:
+    applied = _apply_yaml(hub, _YAML_DOCUMENT).json()
+    rows = [r for r in _changes(hub) if r["door"] == "apply"]
+    assert len(rows) == 2
+    assert {r["apply_id"] for r in rows} == {applied["apply_id"]}
+    assert _apply_yaml(hub, _YAML_DOCUMENT).json()["outcomes"] == [
+        {"kind": "work_source", "key": "demo", "op": "unchanged", "diff": []},
+        {"kind": "repository", "key": "blizzard", "op": "unchanged", "diff": []},
+    ]
+    assert len([r for r in _changes(hub) if r["door"] == "apply"]) == 2
+
+
+def test_a_claimed_apply_door_on_another_route_still_records_api(hub: HubHarness) -> None:
+    created = hub.client.post("/api/work-sources", json=_DEMO, headers={"X-Blizzard-Door": "apply"})
+    assert created.status_code == 201
+    assert _changes(hub, record_key="demo")[0]["door"] == "api"
+    applied = _apply_json(
+        hub,
+        {"version": 1, "work_sources": [{**_DEMO, "annotate": False}]},
+        headers={"X-Blizzard-Door": "cli"},
+    )
+    assert applied.status_code == 200
+    assert _changes(hub, record_key="demo")[0]["door"] == "apply"
+
+
+def test_an_omitted_field_is_left_and_a_stated_one_is_restored(hub: HubHarness) -> None:
+    _apply_yaml(hub, _YAML_DOCUMENT)
+    hub.client.patch("/api/work-sources/demo", json={"annotate": False})
+    partial = {"version": 1, "work_sources": [{"name": "demo", "provider": "github", "locator": "acme/demo"}]}
+    assert _apply_json(hub, partial).json()["outcomes"][0]["op"] == "unchanged"
+    restored = _apply_json(hub, {"version": 1, "work_sources": [_DEMO]}).json()["outcomes"][0]
+    assert (restored["op"], [d["field"] for d in restored["diff"]]) == ("edit", ["annotate"])
+    assert hub.client.get("/api/work-sources/demo").json()["annotate"] is True
+
+
+def test_a_retired_record_is_enabled_and_one_the_document_omits_is_untouched(hub: HubHarness) -> None:
+    _apply_yaml(hub, _YAML_DOCUMENT)
+    hub.client.post("/api/repositories/blizzard/retire")
+    only_source = {"version": 1, "work_sources": [_DEMO]}
+    assert _apply_json(hub, only_source).json()["outcomes"][0]["op"] == "unchanged"
+    assert hub.client.get("/api/repositories/blizzard").json()["retired"] is True
+    again = _apply_json(hub, {"version": 1, "repositories": [_APPLY_REPO]}).json()["outcomes"]
+    assert [o["op"] for o in again] == ["enable"]
+
+
+def test_refusals_carry_their_status_and_entry_and_leave_the_store_unchanged(hub: HubHarness) -> None:
+    before = _changes(hub)
+    missing = _apply_json(hub, {"version": 1, "secrets": ["nope"], "work_sources": [_DEMO]})
+    assert missing.status_code == 422
+    assert missing.json()["detail"][0]["loc"] == ["body", "secrets", 0]
+
+    unknown = _apply_json(hub, {"version": 1, "work_sources": [{**_DEMO, "secret": "nope"}]})
+    assert unknown.status_code == 422
+    assert unknown.json()["detail"][0]["loc"] == ["body", "work_sources", 0, "secret"]
+
+    invalid = _apply_json(hub, {"version": 1, "work_sources": [_DEMO, {**_DEMO, "name": "b", "provider": "x"}]})
+    assert invalid.json()["detail"][0]["loc"] == ["body", "work_sources", 1, "provider"]
+
+    shape = _apply_json(hub, {"version": 2})
+    assert shape.status_code == 422
+    assert shape.json()["detail"][0]["loc"] == ["body", "version"]
+
+    twice = _apply_json(hub, {"version": 1, "work_sources": [_DEMO, _DEMO]})
+    assert twice.status_code == 422 and twice.json()["detail"][0]["loc"][:3] == ["body", "work_sources", 1]
+
+    clash = _apply_json(hub, {"version": 1, "work_sources": [_DEMO, {**_DEMO, "name": "other"}]})
+    assert clash.status_code == 409 and "work_sources[1]" in clash.json()["detail"]
+
+    built_in = _apply_json(hub, {"version": 1, "work_sources": [{**_DEMO, "name": "hub"}]})
+    assert built_in.status_code == 409
+    assert _changes(hub) == before
+    assert hub.client.get("/api/work-sources/demo").status_code == 404
+
+
+def test_a_malformed_body_is_422_and_an_unknown_media_type_is_415(hub: HubHarness) -> None:
+    broken = hub.client.post("/api/config/apply", content=b"a: [", headers={"Content-Type": _YAML})
+    assert broken.status_code == 422
+    assert broken.json()["detail"][0]["line"] is not None
+    plain = hub.client.post("/api/config/apply", content=b"version: 1", headers={"Content-Type": "text/plain"})
+    assert plain.status_code == 415
+
+
+def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
+    _apply_yaml(hub, _YAML_DOCUMENT)
+    hub.client.post("/api/secrets", json={"name": "spare", "value": "v"})
+    hub.client.post("/api/secrets/spare/retire")
+    hub.client.post("/api/work-sources", json={**_DEMO, "name": "gone", "locator": "acme/gone"})
+    hub.client.post("/api/work-sources/gone/retire")
+    exported = hub.client.get("/api/config/export")
+    assert exported.status_code == 200
+    document = exported.json()
+    assert document["version"] == 1
+    assert document["secrets"] == ["gh"]
+    assert [w["name"] for w in document["work_sources"]] == ["demo"]
+    assert [r["name"] for r in document["repositories"]] == ["blizzard"]
+    assert set(document["work_sources"][0]) == {
+        "name",
+        "provider",
+        "locator",
+        "api_base",
+        "web_base",
+        "annotate",
+        "secret",
+    }
+    before = _changes(hub)
+    replay = _apply_json(hub, document)
+    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged", "unchanged"]
+    assert _changes(hub) == before
+
+
+def test_apply_needs_config_edit_and_export_needs_fleet_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
+    contributor = {
+        "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
+    }
+    guest = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='gus', role=Role.GUEST))}"}
+    document = {"version": 1}
+    assert _apply_json(hub, document).status_code == 401
+    assert _apply_json(hub, document, headers=contributor).status_code == 403
+    assert _apply_json(hub, document, headers=admin).status_code == 200
+    assert hub.client.get("/api/config/export").status_code == 401
+    assert hub.client.get("/api/config/export", headers=guest).status_code == 200

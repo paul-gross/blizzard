@@ -50,6 +50,7 @@ class IdPrefix(StrEnum):
     FINDING_SET = "fins"  # the set a delivered finding list mints, one per artifact
     GARDEN_PROPOSAL = "gprop"  # a garden proposal — never confused with a work-item proposal
     DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
+    CONFIG_APPLY = "apl"  # one declarative config apply — groups the change rows it writes
 
 
 CHUNK_PREFIX = IdPrefix.CHUNK

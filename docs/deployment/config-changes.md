@@ -1,7 +1,7 @@
 # Configuration changes
 
-Every committed write to a stored work source, repository, or secret appends one row to the hub's change log, in the same transaction
-as the write. A write that changes nothing appends nothing.
+Every committed write to a stored work source, repository, or secret appends one row to the hub's change log, in the
+same transaction as the write. A write that changes nothing appends nothing.
 
 ## Reading the log
 
@@ -23,13 +23,13 @@ fields. An older page loads on request.
 
 ## Operations
 
-| Operation | Written when                  | Fields listed                                      |
-| --------- | ----------------------------- | -------------------------------------------------- |
-| `create`  | A record is stored            | Every set field, each against an old value of null |
-| `edit`    | A work source's fields change | Only the fields whose values changed               |
-| `retire`  | A record is retired           | `retired`, from false to true                      |
-| `enable`  | A retired record is enabled   | `retired`, from true to false                      |
-| `replace` | A secret's value is replaced  | None                                               |
+| Operation | Written when                                  | Fields listed                                      |
+| --------- | --------------------------------------------- | -------------------------------------------------- |
+| `create`  | A record is stored                            | Every set field, each against an old value of null |
+| `edit`    | A work source's or repository's fields change | Only the fields whose values changed               |
+| `retire`  | A record is retired                           | `retired`, from false to true                      |
+| `enable`  | A retired record is enabled                   | `retired`, from true to false                      |
+| `replace` | A secret's value is replaced                  | None                                               |
 
 A secret's value never appears in a row, so a secret's `create` and `replace` list no fields. A secret's `retire` and
 `enable` record the secret's unchanged revision, because only a replace moves it.
@@ -39,3 +39,6 @@ A secret's value never appears in a row, so a secret's `create` and `replace` li
 The door names where the write came from: `cli` for `blizzard hub` verbs, `board` for the web board, and `api` for any
 other client. A client may claim only `cli` or `board`; every other value, or none, is recorded as `api`. `apply` and
 `migration` are reserved for the hub's own use and are never accepted from a caller.
+
+`blizzard hub config apply` writes `apply` rows, and every row one apply writes shares an `apply_id`, so one apply reads
+back as one group. [Configuration documents](./config-documents.md) owns what an apply writes.
