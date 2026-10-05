@@ -67,7 +67,7 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated fully onto
     the row lock and import `threading` no longer.
 
-- **`bzh:binding-name-selection`** (`rules/binding-name-selection.yml`) — a binding's config name is compared only at
+- **`bzh:seam-answers-binding-facts`** (`rules/seam-answers-binding-facts.yml`) — a binding's config name is compared only at
   its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the harness
   catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file
   states none of that prose, only what the rule mechanically checks:
