@@ -3033,7 +3033,7 @@
       },
       "ConfigDocument": {
         "additionalProperties": false,
-        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry.",
+        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; scopes reconcile before routines, so a routine may name a scope the\nsame document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry.",
         "properties": {
           "repositories": {
             "default": [],
@@ -3041,6 +3041,22 @@
               "$ref": "#/components/schemas/RepositoryDocument"
             },
             "title": "Repositories",
+            "type": "array"
+          },
+          "routines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoutineDocument"
+            },
+            "title": "Routines",
+            "type": "array"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScopeDocument"
+            },
+            "title": "Scopes",
             "type": "array"
           },
           "secrets": {
@@ -5858,6 +5874,25 @@
         "title": "GraphEdgeView",
         "type": "object"
       },
+      "GraphFlagsPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of a graph's mutable flags: an absent field is unchanged, a present\none is set. ``follow_latest`` is the tri-state, so an explicit ``null`` reverts to\ninheriting the hub default rather than being refused.",
+        "properties": {
+          "follow_latest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Latest"
+          }
+        },
+        "title": "GraphFlagsPatchRequest",
+        "type": "object"
+      },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
@@ -7818,7 +7853,9 @@
         "enum": [
           "work_source",
           "secret",
-          "repository"
+          "repository",
+          "scope",
+          "routine"
         ],
         "title": "RecordKind",
         "type": "string"
@@ -8444,8 +8481,9 @@
         "title": "RoutineCreateRequest",
         "type": "object"
       },
-      "RoutineEditRequest": {
-        "description": "``name`` is required and must equal the routine's current one \u2014 the request\nrestates it so a caller cannot silently target the wrong routine's edit.",
+      "RoutineDocument": {
+        "additionalProperties": false,
+        "description": "A routine as a document entry, keyed by its immutable ``name`` \u2014 the model whose JSON Schema\n``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope\nalways among it; an entry that omits it leaves the stored set. Every scope an entry names must be\nstored or declared in the same document, and ``graph_name`` must name an enabled graph.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -8485,6 +8523,14 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
           }
         },
         "required": [
@@ -8492,11 +8538,91 @@
           "graph_name",
           "default_scope_slug"
         ],
+        "title": "RoutineDocument",
+        "type": "object"
+      },
+      "RoutineEditRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``name`` must equal the routine's current one; an explicit ``null`` clears\n``default_effort`` and is refused on every other field.",
+        "properties": {
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Harnesses"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "default_scope_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Scope Slug"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
         "title": "RoutineEditRequest",
         "type": "object"
       },
       "RoutineLifecycleRequest": {
-        "description": "Retire or re-enable a routine \u2014 records who flipped it.",
+        "description": "Retire or re-enable a routine \u2014 ``by`` is recorded on the lifecycle fact; the change\nrow's actor is the authenticated caller.",
         "properties": {
           "by": {
             "default": "operator",
@@ -8686,6 +8812,17 @@
             "default": false,
             "title": "Retired",
             "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
           },
           "routine_id": {
             "title": "Routine Id",
@@ -9451,22 +9588,47 @@
         "title": "ScopeCreateRequest",
         "type": "object"
       },
-      "ScopeEditRequest": {
-        "description": "Change a scope's stored description in place.",
+      "ScopeDocument": {
+        "additionalProperties": false,
+        "description": "A scope as a document entry \u2014 the model whose JSON Schema ``GET /api/config/schema/scopes``\nserves. A ``description`` the entry omits is left as stored, and is empty on a create.",
         "properties": {
           "description": {
+            "default": "",
             "title": "Description",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
             "type": "string"
           }
         },
         "required": [
-          "description"
+          "slug"
         ],
+        "title": "ScopeDocument",
+        "type": "object"
+      },
+      "ScopeEditRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set; ``null`` is\nrefused. The slug is immutable, so a body carrying it is refused.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
         "title": "ScopeEditRequest",
         "type": "object"
       },
       "ScopeLifecycleRequest": {
-        "description": "Retire or re-enable a scope \u2014 records who flipped it.",
+        "description": "Retire or re-enable a scope \u2014 ``by`` is recorded on the lifecycle fact; the change\nrow's actor is the authenticated caller.",
         "properties": {
           "by": {
             "default": "operator",
@@ -9537,6 +9699,17 @@
             "default": false,
             "title": "Retired",
             "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
           },
           "slug": {
             "title": "Slug",
@@ -16090,7 +16263,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every active, non-built-in work source and repository with every field, and every active secret name,\nas a document that applies back as a no-op. Retired records are left out, since applying one would enable it.",
+        "description": "Every active, non-built-in work source and repository, and every active scope and routine (its linked\nscope set included), with every field, and every active secret name, as a document that applies back as a\nno-op. Retired records are left out, since applying one would enable it.",
         "operationId": "export_config_api_config_export_get",
         "responses": {
           "200": {
@@ -19137,6 +19310,57 @@
         "tags": [
           "graphs"
         ]
+      },
+      "patch": {
+        "description": "Sparse-edit this graph's mutable flags; 404 on an unknown id.\n\nAn absent ``follow_latest`` writes nothing. A present one \u2014 explicit ``null``\nincluded \u2014 appends a policy fact rather than mutating the immutable ``graphs`` row,\nscoped to this one mint. A graph is not a configured record, so the flag carries no\nrevision and no change row.",
+        "operationId": "patch_graph_api_graphs__graph_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphFlagsPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Graph",
+        "tags": [
+          "graphs"
+        ]
       }
     },
     "/api/graphs/{graph_id}/enable": {
@@ -19184,7 +19408,8 @@
     },
     "/api/graphs/{graph_id}/follow-latest": {
       "post": {
-        "description": "Set this graph's follow-latest policy \u2014 ``true``/``false``/``null``.\n\nAppends a policy fact rather than mutating the immutable ``graphs`` row; explicit\n``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped\nto this one mint, not to the graph name. Idempotent, and 404 on an unknown id.",
+        "deprecated": true,
+        "description": "Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.\n\nKept for clients that cannot be redeployed; it calls the same domain verb and still\nanswers ``202``. ``true``/``false``/``null`` set the policy, explicit ``null``\nreverting to the hub default. Idempotent, and 404 on an unknown id.",
         "operationId": "set_graph_follow_latest_api_graphs__graph_id__follow_latest_post",
         "parameters": [
           {
@@ -19229,7 +19454,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Graph Follow Latest",
+        "summary": "Deprecated alias for PATCH /graphs/{graph_id} with follow_latest",
         "tags": [
           "graphs"
         ]
@@ -20041,6 +20266,24 @@
       "post": {
         "description": "Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a\ngraph name with no enabled mint.",
         "operationId": "create_routine_api_routines_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -20286,7 +20529,7 @@
         ]
       },
       "patch": {
-        "description": "Change the graph, the default scope, and the model/effort defaults; 404 on an\nunknown id, 422 on a name change, a malformed default scope slug, or a graph name\nwith no enabled mint.",
+        "description": "Apply only the fields present \u2014 the graph, the default scope, and the model, effort,\nand harness defaults; an explicit `null` clears `default_effort`. A present `name` must\nrestate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a name change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint; 409 on a stale `If-Match` naming the current revision.",
         "operationId": "edit_routine_api_routines__routine_id__patch",
         "parameters": [
           {
@@ -20296,6 +20539,38 @@
             "schema": {
               "title": "Routine Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -20386,7 +20661,7 @@
     },
     "/api/routines/{routine_id}/enable": {
       "post": {
-        "description": "Re-enable a retired routine; idempotent, 404 on an unknown id.",
+        "description": "Re-enable a retired routine; enabling an enabled one writes nothing. 404 on an\nunknown id, 409 on a stale `If-Match`.",
         "operationId": "enable_routine_api_routines__routine_id__enable_post",
         "parameters": [
           {
@@ -20396,6 +20671,38 @@
             "schema": {
               "title": "Routine Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -20439,7 +20746,7 @@
     },
     "/api/routines/{routine_id}/retire": {
       "post": {
-        "description": "Retire a routine \u2014 a reversible brake; 404 on an unknown id.",
+        "description": "Retire a routine \u2014 a reversible brake; retiring a retired routine writes nothing.\n404 on an unknown id, 409 on a stale `If-Match`.",
         "operationId": "retire_routine_api_routines__routine_id__retire_post",
         "parameters": [
           {
@@ -20449,6 +20756,38 @@
             "schema": {
               "title": "Routine Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -20592,7 +20931,7 @@
     },
     "/api/routines/{routine_id}/scopes/{scope_slug}": {
       "delete": {
-        "description": "Unlink `scope_slug` from `routine_id`'s own set; idempotent. 404\non an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug, or on naming the routine's own default scope \u2014 always a member of\nits own set.",
+        "description": "Unlink `scope_slug` from `routine_id`'s own set \u2014 a routine edit of its `scopes`;\nunlinking an unlinked scope writes nothing. 404 on an unknown routine id or a well-formed\nbut unknown scope slug; 422 on a malformed scope slug, or on naming the routine's own\ndefault scope \u2014 always a member of its own set; 409 on a stale `If-Match`.",
         "operationId": "unlink_routine_scope_api_routines__routine_id__scopes__scope_slug__delete",
         "parameters": [
           {
@@ -20611,6 +20950,38 @@
             "schema": {
               "title": "Scope Slug",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -20635,7 +21006,7 @@
         ]
       },
       "put": {
-        "description": "Link `scope_slug` into `routine_id`'s own set; idempotent. 404 on\nan unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug.",
+        "description": "Link `scope_slug` into `routine_id`'s own set \u2014 a routine edit of its `scopes`;\nlinking a linked scope writes nothing. 404 on an unknown routine id or a well-formed but\nunknown scope slug; 422 on a malformed scope slug; 409 on a stale `If-Match`.",
         "operationId": "link_routine_scope_api_routines__routine_id__scopes__scope_slug__put",
         "parameters": [
           {
@@ -20654,6 +21025,38 @@
             "schema": {
               "title": "Scope Slug",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -21249,7 +21652,7 @@
     },
     "/api/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not \u2014 retirement resolved in one\nbulk read.",
+        "description": "Every scope, newest first, each marked retired or not.",
         "operationId": "list_scopes_api_scopes_get",
         "responses": {
           "200": {
@@ -21275,6 +21678,24 @@
       "post": {
         "description": "Mint a scope, or no-op onto the existing one of the same slug; 422 on a\nmalformed slug, naming the rejected value.",
         "operationId": "create_scope_api_scopes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -21356,7 +21777,7 @@
         ]
       },
       "patch": {
-        "description": "Change a scope's description in place; 422 on a malformed slug naming the\nrejected value, 404 on a well-formed but unknown one.",
+        "description": "Apply only the fields present; an edit that changes nothing writes nothing. 422 on a\nmalformed slug naming the rejected value or on a `null` field, 404 on a well-formed but\nunknown slug, 409 on a stale `If-Match` naming the current revision.",
         "operationId": "edit_scope_api_scopes__slug__patch",
         "parameters": [
           {
@@ -21366,6 +21787,38 @@
             "schema": {
               "title": "Slug",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -21409,7 +21862,7 @@
     },
     "/api/scopes/{slug}/enable": {
       "post": {
-        "description": "Re-enable a retired scope; idempotent, 404 on an unknown slug.",
+        "description": "Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown\nslug, 409 on a stale `If-Match`.",
         "operationId": "enable_scope_api_scopes__slug__enable_post",
         "parameters": [
           {
@@ -21419,6 +21872,38 @@
             "schema": {
               "title": "Slug",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],
@@ -21462,7 +21947,7 @@
     },
     "/api/scopes/{slug}/retire": {
       "post": {
-        "description": "Retire a scope \u2014 a reversible brake; 404 on an unknown slug.",
+        "description": "Retire a scope \u2014 a reversible brake; retiring a retired scope writes nothing. 404 on\nan unknown slug, 409 on a stale `If-Match`.",
         "operationId": "retire_scope_api_scopes__slug__retire_post",
         "parameters": [
           {
@@ -21472,6 +21957,38 @@
             "schema": {
               "title": "Slug",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
             }
           }
         ],

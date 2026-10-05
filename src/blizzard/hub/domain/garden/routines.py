@@ -1,10 +1,8 @@
 """Routine domain model — an operator-authored pointer at a graph, a default scope, and
 run-defaults the hub hands back unresolved.
 
-``routine_id`` is a surrogate key: ``name``, the run/finding/proposal lineage, survives
-independently of it. A routine is a configured record keyed for its change rows by that
-immutable ``name``: every write moves its revision and commits one change row
-(``bzh:configured-record``). :class:`RoutineAuthoring` mints an unseen default scope
+``routine_id`` is a surrogate key; the immutable ``name`` is the lineage and keys its change
+rows (``bzh:configured-record``). :class:`RoutineAuthoring` mints an unseen default scope
 and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
@@ -365,11 +363,9 @@ class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
 
 
 class RoutineAuthoring:
-    """Create and edit a routine, minting its default scope on demand
-    and linking that default into the routine's own `routine_scopes` set, so the
-    invariant — a routine's default scope is always a member of its own set — can never
-    be violated by forgetting a separate step. The mint, the routine write, the link, and
-    both change rows commit in one transaction."""
+    """Create and edit a routine, minting its default scope on demand and linking it into
+    the routine's own `routine_scopes` set, so the default is always a member of that set.
+    The mint, the routine write, the link, and both change rows commit in one transaction."""
 
     def __init__(
         self,

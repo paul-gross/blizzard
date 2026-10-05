@@ -1,11 +1,9 @@
 """Scope domain model — an operator-authored slug the hub stores and hands back, never
 resolves.
 
-Minted the moment its slug is first named, by ``scope create`` or a routine naming an
-unseen default (:class:`ScopeRegistry.resolve`). A scope is a configured record: every write
-moves its revision and commits one change row (``bzh:configured-record``). Retire/enable is
-a reversible, append-only, newest-fact-wins brake (``bzh:facts-not-status``) whose repeat
-writes nothing."""
+Minted when its slug is first named, by ``scope create`` or a routine naming an unseen
+default (:class:`ScopeRegistry.resolve`). A configured record (``bzh:configured-record``)
+whose retire/enable is a newest-fact-wins brake (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
@@ -88,11 +86,9 @@ class ScopeEdit:
 @domain_model
 @dataclass(frozen=True)
 class Scope:
-    """A stored scope — a configured record keyed by its slug (``bzh:configured-record``).
-    ``retired`` derives from the newest lifecycle fact.
-
-    Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
-    or ``None`` when the verb changes nothing and so writes nothing."""
+    """A stored scope — a configured record keyed by its slug; ``retired`` derives from the
+    newest lifecycle fact. Each verb returns the record with its :class:`ConfigChange`, or
+    ``None`` when it changes nothing."""
 
     slug: str
     description: str

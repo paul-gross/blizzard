@@ -1,10 +1,9 @@
 """Scope routes — create, list, read, edit, retire, and enable a scope.
 
-The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
-slug into an object before delegating to the domain (``bzh:domain-takes-objects``). Every
-write carries the request's :class:`ChangeContext` and an optional ``If-Match``
-(``bzh:configured-record``). ``reject_runner_principal`` confines a runner's bearer token
-to the fleet router."""
+The controller resolves a slug into an object before delegating to the domain
+(``bzh:controller-read-only``, ``bzh:domain-takes-objects``). Every write carries the
+request's :class:`ChangeContext` and an optional ``If-Match`` (``bzh:configured-record``).
+``reject_runner_principal`` confines a runner's bearer token to the fleet router."""
 
 from __future__ import annotations
 

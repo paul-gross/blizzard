@@ -2,9 +2,8 @@
 
 Exercises ``ensure``/``update``/``record_lifecycle`` — each committing its change row, its
 revision compare-and-set, and any lifecycle fact in one transaction — through the read/write
-Protocol split (``bzh:repository-split``), migrated-to-head sqlite-on-disk — the
-``tests/test_work_item_store.py`` shape. ``ensure``'s first-write-wins CAS is
-proven directly against a pre-seeded row, mirroring a losing concurrent second mint."""
+Protocol split (``bzh:repository-split``) on migrated-to-head sqlite. ``ensure``'s
+first-write-wins CAS is proven against a pre-seeded row, a losing concurrent second mint."""
 
 from __future__ import annotations
 

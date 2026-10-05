@@ -1,4 +1,4 @@
-"""Graph routes — mint, sync, list, read, retire, and enable a workflow graph.
+"""Graph routes — mint, sync, list, read, patch, retire, and enable a workflow graph.
 
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
 YAML body or a ``graph_id`` into an object before delegating to the domain
@@ -27,6 +27,7 @@ from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
     GraphChoiceView,
     GraphEdgeView,
+    GraphFlagsPatchRequest,
     GraphMintRequest,
     GraphNodeView,
     GraphPolicyRequest,
@@ -224,10 +225,34 @@ def enable_graph(
     return _graph_view(graph, retired=False, follow_latest=services.graphs.follow_latest(graph_id))
 
 
+@router.patch("/graphs/{graph_id}", response_model=GraphView)
+def patch_graph(
+    graph_id: str,
+    request: GraphFlagsPatchRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+) -> GraphView:
+    """Sparse-edit this graph's mutable flags; 404 on an unknown id.
+
+    An absent ``follow_latest`` writes nothing; a present one, ``null`` included, appends
+    a policy fact scoped to this mint. A graph is not a configured record: no revision,
+    no change row."""
+    graph = services.graphs.get(graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+    if "follow_latest" in request.model_fields_set:
+        services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
+    return _graph_view(
+        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+    )
+
+
 @router.post(
     "/graphs/{graph_id}/follow-latest",
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
+    deprecated=True,
+    summary="Deprecated alias for PATCH /graphs/{graph_id} with follow_latest",
 )
 def set_graph_follow_latest(
     graph_id: str,
@@ -235,11 +260,10 @@ def set_graph_follow_latest(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
 ) -> GraphView:
-    """Set this graph's follow-latest policy — ``true``/``false``/``null``.
+    """Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.
 
-    Appends a policy fact rather than mutating the immutable ``graphs`` row; explicit
-    ``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped
-    to this one mint, not to the graph name. Idempotent, and 404 on an unknown id."""
+    Kept for clients that cannot be redeployed: the same domain verb, answering ``202``.
+    Idempotent, and 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")

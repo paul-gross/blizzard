@@ -1929,7 +1929,8 @@ export type ConfigChangesPage = {
  * ConfigDocument
  *
  * A declarative configuration document. Each entry is the kind's own document model, so a field an
- * entry omits is left as stored; ``secrets`` lists secret names that must already be active.
+ * entry omits is left as stored; scopes reconcile before routines, so a routine may name a scope the
+ * same document declares; ``secrets`` lists secret names that must already be active.
  * ``GET /api/config/export`` writes every field of every entry.
  */
 export type ConfigDocument = {
@@ -1937,6 +1938,14 @@ export type ConfigDocument = {
      * Repositories
      */
     repositories?: Array<RepositoryDocument>;
+    /**
+     * Routines
+     */
+    routines?: Array<RoutineDocument>;
+    /**
+     * Scopes
+     */
+    scopes?: Array<ScopeDocument>;
     /**
      * Secrets
      */
@@ -3735,6 +3744,20 @@ export type GraphEdgeView = {
 };
 
 /**
+ * GraphFlagsPatchRequest
+ *
+ * A sparse edit of a graph's mutable flags: an absent field is unchanged, a present
+ * one is set. ``follow_latest`` is the tri-state, so an explicit ``null`` reverts to
+ * inheriting the hub default rather than being refused.
+ */
+export type GraphFlagsPatchRequest = {
+    /**
+     * Follow Latest
+     */
+    follow_latest?: boolean | null;
+};
+
+/**
  * GraphMintRequest
  *
  * A graph definition to mint — the raw YAML body.
@@ -5054,7 +5077,9 @@ export type ReceiverStatus = {
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
     SECRET: 'secret',
-    REPOSITORY: 'repository'
+    REPOSITORY: 'repository',
+    SCOPE: 'scope',
+    ROUTINE: 'routine'
 } as const;
 
 /**
@@ -5500,12 +5525,14 @@ export type RoutineCreateRequest = {
 };
 
 /**
- * RoutineEditRequest
+ * RoutineDocument
  *
- * ``name`` is required and must equal the routine's current one — the request
- * restates it so a caller cannot silently target the wrong routine's edit.
+ * A routine as a document entry, keyed by its immutable ``name`` — the model whose JSON Schema
+ * ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope
+ * always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
+ * stored or declared in the same document, and ``graph_name`` must name an enabled graph.
  */
-export type RoutineEditRequest = {
+export type RoutineDocument = {
     /**
      * Default Effort
      */
@@ -5530,12 +5557,51 @@ export type RoutineEditRequest = {
      * Name
      */
     name: string;
+    /**
+     * Scopes
+     */
+    scopes?: Array<string>;
+};
+
+/**
+ * RoutineEditRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set. A present
+ * ``name`` must equal the routine's current one; an explicit ``null`` clears
+ * ``default_effort`` and is refused on every other field.
+ */
+export type RoutineEditRequest = {
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string> | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string> | null;
+    /**
+     * Default Scope Slug
+     */
+    default_scope_slug?: string | null;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
 };
 
 /**
  * RoutineLifecycleRequest
  *
- * Retire or re-enable a routine — records who flipped it.
+ * Retire or re-enable a routine — ``by`` is recorded on the lifecycle fact; the change
+ * row's actor is the authenticated caller.
  */
 export type RoutineLifecycleRequest = {
     /**
@@ -5683,6 +5749,10 @@ export type RoutineView = {
      * Retired
      */
     retired?: boolean;
+    /**
+     * Revision
+     */
+    revision?: number | null;
     /**
      * Routine Id
      */
@@ -6206,21 +6276,40 @@ export type ScopeCreateRequest = {
 };
 
 /**
+ * ScopeDocument
+ *
+ * A scope as a document entry — the model whose JSON Schema ``GET /api/config/schema/scopes``
+ * serves. A ``description`` the entry omits is left as stored, and is empty on a create.
+ */
+export type ScopeDocument = {
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * ScopeEditRequest
  *
- * Change a scope's stored description in place.
+ * A sparse edit: an absent field is unchanged, a present one is set; ``null`` is
+ * refused. The slug is immutable, so a body carrying it is refused.
  */
 export type ScopeEditRequest = {
     /**
      * Description
      */
-    description: string;
+    description?: string | null;
 };
 
 /**
  * ScopeLifecycleRequest
  *
- * Retire or re-enable a scope — records who flipped it.
+ * Retire or re-enable a scope — ``by`` is recorded on the lifecycle fact; the change
+ * row's actor is the authenticated caller.
  */
 export type ScopeLifecycleRequest = {
     /**
@@ -6271,6 +6360,10 @@ export type ScopeView = {
      * Retired
      */
     retired?: boolean;
+    /**
+     * Revision
+     */
+    revision?: number | null;
     /**
      * Slug
      */
@@ -11522,6 +11615,36 @@ export type GetGraphApiGraphsGraphIdGetResponses = {
 
 export type GetGraphApiGraphsGraphIdGetResponse = GetGraphApiGraphsGraphIdGetResponses[keyof GetGraphApiGraphsGraphIdGetResponses];
 
+export type PatchGraphApiGraphsGraphIdPatchData = {
+    body: GraphFlagsPatchRequest;
+    path: {
+        /**
+         * Graph Id
+         */
+        graph_id: string;
+    };
+    query?: never;
+    url: '/api/graphs/{graph_id}';
+};
+
+export type PatchGraphApiGraphsGraphIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchGraphApiGraphsGraphIdPatchError = PatchGraphApiGraphsGraphIdPatchErrors[keyof PatchGraphApiGraphsGraphIdPatchErrors];
+
+export type PatchGraphApiGraphsGraphIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: GraphView;
+};
+
+export type PatchGraphApiGraphsGraphIdPatchResponse = PatchGraphApiGraphsGraphIdPatchResponses[keyof PatchGraphApiGraphsGraphIdPatchResponses];
+
 export type EnableGraphApiGraphsGraphIdEnablePostData = {
     body?: never;
     path: {
@@ -12070,6 +12193,12 @@ export type ListRoutinesApiRoutinesGetResponse = ListRoutinesApiRoutinesGetRespo
 
 export type CreateRoutineApiRoutinesPostData = {
     body: RoutineCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path?: never;
     query?: never;
     url: '/api/routines';
@@ -12213,6 +12342,16 @@ export type GetRoutineApiRoutinesRoutineIdGetResponse = GetRoutineApiRoutinesRou
 
 export type EditRoutineApiRoutinesRoutineIdPatchData = {
     body: RoutineEditRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Routine Id
@@ -12275,6 +12414,16 @@ export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponse = RoutineBa
 
 export type EnableRoutineApiRoutinesRoutineIdEnablePostData = {
     body: RoutineLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Routine Id
@@ -12305,6 +12454,16 @@ export type EnableRoutineApiRoutinesRoutineIdEnablePostResponse = EnableRoutineA
 
 export type RetireRoutineApiRoutinesRoutineIdRetirePostData = {
     body: RoutineLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Routine Id
@@ -12397,6 +12556,16 @@ export type ListRoutineScopesApiRoutinesRoutineIdScopesGetResponse = ListRoutine
 
 export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteData = {
     body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Routine Id
@@ -12431,6 +12600,16 @@ export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponse 
 
 export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutData = {
     body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Routine Id
@@ -12828,6 +13007,12 @@ export type ListScopesApiScopesGetResponse = ListScopesApiScopesGetResponses[key
 
 export type CreateScopeApiScopesPostData = {
     body: ScopeCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path?: never;
     query?: never;
     url: '/api/scopes';
@@ -12883,6 +13068,16 @@ export type GetScopeApiScopesSlugGetResponse = GetScopeApiScopesSlugGetResponses
 
 export type EditScopeApiScopesSlugPatchData = {
     body: ScopeEditRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Slug
@@ -12913,6 +13108,16 @@ export type EditScopeApiScopesSlugPatchResponse = EditScopeApiScopesSlugPatchRes
 
 export type EnableScopeApiScopesSlugEnablePostData = {
     body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Slug
@@ -12943,6 +13148,16 @@ export type EnableScopeApiScopesSlugEnablePostResponse = EnableScopeApiScopesSlu
 
 export type RetireScopeApiScopesSlugRetirePostData = {
     body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
     path: {
         /**
          * Slug

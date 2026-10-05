@@ -7,6 +7,7 @@ the component tier.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
@@ -389,3 +390,41 @@ def test_an_operator_intent_migration_is_attributed_to_the_intent(tmp_path: Path
 
     migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]
     assert [m["source"] for m in migrations] == ["intent"]
+
+
+@pytest.mark.component
+def test_patch_sets_the_policy_and_an_absent_flag_writes_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
+
+    for value in (True, None, False):
+        resp = hub.client.patch(f"/api/graphs/{graph_id}", json={"follow_latest": value})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["follow_latest"] is value
+        assert hub.client.get(f"/api/graphs/{graph_id}").json()["follow_latest"] is value
+
+    with sqlite3.connect(tmp_path / "hub.db") as conn:
+        facts_before = conn.execute("select count(*) from graph_policy_facts").fetchone()[0]
+    empty = hub.client.patch(f"/api/graphs/{graph_id}", json={})
+    assert empty.status_code == 200
+    assert empty.json()["follow_latest"] is False
+    with sqlite3.connect(tmp_path / "hub.db") as conn:
+        assert conn.execute("select count(*) from graph_policy_facts").fetchone()[0] == facts_before
+
+
+@pytest.mark.component
+def test_patch_on_an_unknown_graph_is_404_and_an_unknown_field_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
+    assert hub.client.patch("/api/graphs/gr_nope", json={"follow_latest": True}).status_code == 404
+    assert hub.client.patch(f"/api/graphs/{graph_id}", json={"retired": True}).status_code == 422
+
+
+@pytest.mark.component
+def test_the_deprecated_post_alias_still_answers_202_with_the_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
+    resp = hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": None})
+    assert resp.status_code == 202
+    assert resp.json()["follow_latest"] is None
+    assert resp.json()["graph_id"] == graph_id

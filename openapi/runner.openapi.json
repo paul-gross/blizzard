@@ -4184,6 +4184,17 @@
             "title": "Retired",
             "type": "boolean"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"

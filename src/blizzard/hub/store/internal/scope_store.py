@@ -1,10 +1,9 @@
 """SQLAlchemy adapter for the scope repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). ``ensure`` is a
-first-write-wins CAS over the slug primary key, the ``ChunkQuestionsStore.answer_question`` shape
-rather than ``WorkItemStore.allocate_ref``'s increment-on-conflict. Retired derives
-from the append-only ``scope_lifecycle_facts`` table, newest-fact-wins per slug. Every
-write commits its change row in the same transaction (``bzh:configured-record``)."""
+first-write-wins CAS over the slug primary key. Retired derives from the append-only
+``scope_lifecycle_facts`` table, newest-fact-wins per slug. Every write commits its change
+row in the same transaction (``bzh:configured-record``)."""
 
 from __future__ import annotations
 

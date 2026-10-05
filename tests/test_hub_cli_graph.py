@@ -1,4 +1,4 @@
-"""``blizzard hub graph list|show|retire|enable|mint|sync`` (unit tier) — pure clients of
+"""``blizzard hub graph list|show|retire|enable|follow-latest|mint|sync`` (unit tier) — pure clients of
 the graph lifecycle, mint, and reconciliation endpoints, driven here with ``httpx``
 stubbed. ``mint`` inlines referenced
 prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling the
@@ -82,6 +82,24 @@ def test_graph_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPat
     assert result.exit_code == 0, result.output
     assert calls == [("http://hub.local:8421/api/graphs/gr_1/retire", {})]
     assert "retired" in result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("value", "sent"), [("true", True), ("false", False), ("inherit", None)])
+def test_graph_follow_latest_patches_the_graph(monkeypatch: pytest.MonkeyPatch, value: str, sent: object) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(200, {"graph_id": "gr_1", "follow_latest": sent})
+
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    result = CliRunner().invoke(
+        hub_group, ["graph", "follow-latest", "gr_1", value], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("http://hub.local:8421/api/graphs/gr_1", {"follow_latest": sent})]
 
 
 @pytest.mark.unit
