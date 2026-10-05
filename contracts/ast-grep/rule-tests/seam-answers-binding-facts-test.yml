@@ -1,4 +1,4 @@
-id: bzh:binding-name-selection
+id: bzh:seam-answers-binding-facts
 valid:
   # The selection point's shape: a name→builder registry looked up by key, never compared.
   - |

@@ -1,4 +1,4 @@
-id: bzh:binding-name-selection
+id: bzh:seam-answers-binding-facts
 snapshots:
   ? |
     env_capacity = (
