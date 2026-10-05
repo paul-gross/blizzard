@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, select
+from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -2716,7 +2717,9 @@ def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(t
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Fill(ctx).run()
+    with capture_logs() as logs:
+        Fill(ctx).run()
+    assert [entry for entry in logs if entry["log_level"] == "error"] == []
     assert store.held_environment_ids() == []
     assert harness.spawns == []
     envelope_reads = list(hub.get_envelope_calls)
@@ -3331,8 +3334,6 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
         probe=FakeProbe(),
         config=config,
     )
-
-    from structlog.testing import capture_logs
 
     with capture_logs() as logs:
         Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")

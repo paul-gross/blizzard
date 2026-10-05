@@ -750,6 +750,7 @@ def ingest_runner_facts(
         applied=result.applied,
         already_applied=result.already_applied,
         rejected=result.rejected,
+        route_ended=result.route_ended,
     )
 
 

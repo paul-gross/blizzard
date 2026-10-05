@@ -10,6 +10,7 @@ import json
 
 import httpx
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError, TranscriptPush
@@ -490,6 +491,23 @@ def test_route_token_409_raises_chunk_ended_carrying_the_hub_detail() -> None:
     with pytest.raises(ChunkEndedError) as raised:
         client.rekey_route_token("ch_1")
     assert raised.value.detail == "chunk ch_1 is done"
+
+
+@pytest.mark.unit
+def test_route_token_404_raises_chunk_ended_carrying_the_hub_detail_without_an_error_log() -> None:
+    client = _client(_refusing(404, json={"detail": "chunk ch_1 has no live route"}))
+    with capture_logs() as logs, pytest.raises(ChunkEndedError) as raised:
+        client.rekey_route_token("ch_1")
+    assert raised.value.detail == "chunk ch_1 has no live route"
+    assert [entry for entry in logs if entry["log_level"] == "error"] == []
+
+
+@pytest.mark.unit
+def test_an_unclassified_status_still_logs_a_hub_call_failure_at_error() -> None:
+    client = _client(_refusing(500, text="boom"))
+    with capture_logs() as logs, pytest.raises(HubClientError):
+        client.rekey_route_token("ch_1")
+    assert [entry["event"] for entry in logs if entry["log_level"] == "error"] == ["hub call failed"]
 
 
 @pytest.mark.unit

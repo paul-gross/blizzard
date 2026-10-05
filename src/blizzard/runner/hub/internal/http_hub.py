@@ -154,6 +154,7 @@ class HttpHubClient:
             applied=ack.applied,
             already_applied=ack.already_applied,
             rejected=ack.rejected,
+            route_ended=ack.route_ended,
         )
 
     def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
@@ -235,7 +236,9 @@ class HttpHubClient:
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
     def rekey_route_token(self, chunk_id: str) -> str:
-        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True)
+        resp = self._post(
+            f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True, ended_on_not_found=True
+        )
         return RouteTokenRekeyResponse.model_validate(resp.json()).route_token
 
     # --- plumbing -----------------------------------------------------------
@@ -256,7 +259,13 @@ class HttpHubClient:
         return resp
 
     def _post(
-        self, path: str, body: object, *, timeout: float | None = None, ended_on_conflict: bool = False
+        self,
+        path: str,
+        body: object,
+        *,
+        timeout: float | None = None,
+        ended_on_conflict: bool = False,
+        ended_on_not_found: bool = False,
     ) -> httpx.Response:
         try:
             if timeout is not None:
@@ -265,7 +274,9 @@ class HttpHubClient:
                 resp = self._client.post(path, json=body)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
-        self._raise_for_status(resp, f"POST {path}", ended_on_conflict=ended_on_conflict)
+        self._raise_for_status(
+            resp, f"POST {path}", ended_on_conflict=ended_on_conflict, ended_on_not_found=ended_on_not_found
+        )
         return resp
 
     def _raise_for_status(
@@ -275,15 +286,24 @@ class HttpHubClient:
         *,
         not_found_as: type[HubClientError] | None = None,
         ended_on_conflict: bool = False,
+        ended_on_not_found: bool = False,
     ) -> None:
         if resp.is_success:
             return
-        _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+        message = f"{operation} -> {resp.status_code}: {resp.text[:200]}"
+        # A status decoded to a typed terminal outcome is expected: the caller owns its handling and
+        # its log level. Only a status left unclassified is a hub-call failure worth an error.
         if not_found_as is not None and resp.status_code == httpx.codes.NOT_FOUND:
-            raise not_found_as(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+            _log.info("hub call refused", operation=operation, status=resp.status_code)
+            raise not_found_as(message)
+        if ended_on_not_found and resp.status_code == httpx.codes.NOT_FOUND:
+            _log.info("hub call refused", operation=operation, status=resp.status_code)
+            raise ChunkEndedError(message, detail=_detail(resp))
         if ended_on_conflict and resp.status_code == httpx.codes.CONFLICT:
-            raise ChunkEndedError(f"{operation} -> {resp.status_code}: {resp.text[:200]}", detail=_detail(resp))
-        raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+            _log.info("hub call refused", operation=operation, status=resp.status_code)
+            raise ChunkEndedError(message, detail=_detail(resp))
+        _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+        raise HubClientError(message)
 
     @staticmethod
     def _wrap(exc: httpx.HTTPError, operation: str) -> HubClientError:
