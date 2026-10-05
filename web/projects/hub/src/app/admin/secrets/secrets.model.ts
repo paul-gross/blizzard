@@ -1,5 +1,6 @@
 import type { SecretView } from 'fleet';
 
+import type { ConfigFieldDef } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { recordLink } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
@@ -50,3 +51,14 @@ export function secretRecordVm(secret: SecretView | undefined): ConfigRecordVm |
     hasHistory: true,
   };
 }
+
+/** A new secret's form fields — its name and its write-only value. */
+export const SECRET_CREATE_FIELDS: readonly ConfigFieldDef[] = [
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'value', label: 'Value', kind: 'password', required: true },
+];
+
+/** The replace form's one field. */
+export const SECRET_REPLACE_FIELDS: readonly ConfigFieldDef[] = [
+  { key: 'value', label: 'New value', kind: 'password', required: true },
+];

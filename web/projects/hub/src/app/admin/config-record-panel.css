@@ -60,3 +60,15 @@
 .links a {
   color: var(--cyan);
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.action-error {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}

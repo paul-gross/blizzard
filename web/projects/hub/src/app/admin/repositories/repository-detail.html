@@ -5,6 +5,25 @@
   [revisions]="revisions()"
   [revisionsState]="revisionsState()"
   [cliCommand]="cliCommand()"
+  [actions]="actions()"
+  [busy]="busy()"
+  [actionError]="actionError()"
+  (edit)="onEdit()"
+  (lifecycle)="onLifecycle($event)"
   emptyText="Pick a repository."
   testidPrefix="admin-repository"
 />
+@if (editOpen() && shown(); as initial) {
+  <app-config-form-dialog
+    heading="Edit repository"
+    mode="edit"
+    [fields]="fields"
+    [initial]="initial"
+    submitLabel="Save"
+    [submitError]="editError()"
+    [submitting]="editMutation.isPending()"
+    testidPrefix="admin-repository-edit"
+    (closed)="editOpen.set(false)"
+    (submitted)="onSave($event)"
+  />
+}

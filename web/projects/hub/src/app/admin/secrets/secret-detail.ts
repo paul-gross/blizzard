@@ -1,14 +1,26 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, type KitAsyncStateValue, RecordKind, restingAsyncState, ViewportService } from 'fleet';
+import {
+  asyncState,
+  errorMessage,
+  type KitAsyncStateValue,
+  RecordKind,
+  restingAsyncState,
+  ViewportService,
+} from 'fleet';
 import { map } from 'rxjs';
 
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
+import { ConfigFormDialog } from '../config-form-dialog';
+import type { ConfigFormValues } from '../config-edit.model';
 import { detailCliCommand } from '../config-cli.model';
 import { historyRecordKey, lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
-import { secretRecordVm } from './secrets.model';
+import { SECRET_REPLACE_FIELDS, secretRecordVm } from './secrets.model';
+import { injectReplaceSecretMutation, injectSecretLifecycleMutation } from './secrets.mutations';
 import { injectSecretQuery } from './secrets.query';
 
 /**
@@ -20,7 +32,7 @@ import { injectSecretQuery } from './secrets.query';
 @Component({
   selector: 'app-secret-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRecordPanel],
+  imports: [ConfigFormDialog, ConfigRecordPanel],
   templateUrl: './secret-detail.html',
 })
 export class SecretDetail {
@@ -47,4 +59,61 @@ export class SecretDetail {
   protected readonly cliCommand = computed(() =>
     detailCliCommand(this.viewport.mode(), RecordKind.SECRET, this.secretQuery.data()),
   );
+
+  private readonly meQuery = injectMeQuery();
+  protected readonly replaceMutation = injectReplaceSecretMutation();
+  private readonly lifecycleMutation = injectSecretLifecycleMutation();
+
+  protected readonly fields = SECRET_REPLACE_FIELDS;
+  protected readonly replaceOpen = signal(false);
+  protected readonly replaceError = signal<string | null>(null);
+  private readonly pendingKey = signal<string | null>(null);
+  private readonly failure = signal<ConfigFailure | null>(null);
+
+  protected readonly actions = computed(() => {
+    const secret = this.secretQuery.data();
+    return configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), secret, {
+      replace: true,
+      referenceCount: (secret?.references ?? []).length,
+    });
+  });
+  protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
+  protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
+
+  protected onReplace(): void {
+    this.replaceError.set(null);
+    this.replaceOpen.set(true);
+  }
+
+  protected onSave(values: ConfigFormValues): void {
+    const secret = this.secretQuery.data();
+    const value = values['value'];
+    if (!secret || typeof value !== 'string') return;
+    this.replaceError.set(null);
+    this.replaceMutation.mutate(
+      { name: secret.name, revision: secret.revision, value },
+      {
+        onSuccess: () => this.replaceOpen.set(false),
+        onError: (error) => this.replaceError.set(errorMessage(error, 'Replace failed.')),
+      },
+    );
+  }
+
+  protected onLifecycle(verb: 'retire' | 'enable'): void {
+    const secret = this.secretQuery.data();
+    if (!secret) return;
+    this.pendingKey.set(secret.name);
+    this.failure.set(null);
+    this.lifecycleMutation.mutate(
+      { name: secret.name, retired: verb === 'retire' },
+      {
+        onError: (error) =>
+          this.failure.set({
+            key: secret.name,
+            message: errorMessage(error, `${verb} failed.`),
+          }),
+        onSettled: () => this.pendingKey.set(null),
+      },
+    );
+  }
 }

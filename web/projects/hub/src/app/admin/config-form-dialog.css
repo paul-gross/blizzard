@@ -1,0 +1,65 @@
+:host {
+  --kit-dialog-width: 640px;
+}
+
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field fleet-kit-text-input {
+  align-self: stretch;
+}
+
+.label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.section {
+  margin: 12px 0 4px;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  font-weight: normal;
+}
+
+.diff-empty {
+  margin: 0;
+  color: var(--label);
+  font-size: var(--fs-sm);
+}
+
+.footer {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submit-error {
+  flex: 1;
+  align-self: center;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+  overflow-wrap: anywhere;
+}

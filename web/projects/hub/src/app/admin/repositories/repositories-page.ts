@@ -1,8 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService, type RepositoryDocument } from 'fleet';
 
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { injectCreateRepositoryMutation } from './repositories.mutations';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
+import { type ConfigFormValues, createBody } from '../config-edit.model';
+import { ConfigFormDialog } from '../config-form-dialog';
 import {
   includeRetired,
   LIFECYCLE_FILTER_PARAM,
@@ -12,7 +16,7 @@ import {
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
-import { repositoryRows } from './repositories.model';
+import { REPOSITORY_FIELDS, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
 
 /**
@@ -24,7 +28,7 @@ import { injectRepositoriesQuery } from './repositories.query';
 @Component({
   selector: 'app-repositories-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigMaster, RouterOutlet],
+  imports: [ConfigFormDialog, ConfigMaster, RouterOutlet],
   templateUrl: './repositories-page.html',
   styleUrl: '../config-page-host.css',
 })
@@ -41,18 +45,54 @@ export class RepositoriesPage {
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
     repositoryRows(this.repositoriesQuery.data() ?? [], this.lifecycle()),
   );
-  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.repositoriesQuery, this.rows().length === 0));
+  protected readonly state = computed<KitAsyncStateValue>(() =>
+    asyncState(this.repositoriesQuery, this.rows().length === 0),
+  );
   protected readonly emptyText = computed(() => lifecycleEmptyText('repositories', this.lifecycle()));
 
   protected onFilter(value: string): void {
-    this.filters.patch({ [LIFECYCLE_FILTER_PARAM]: lifecycleFilterParam(value) });
+    this.filters.patch({
+      [LIFECYCLE_FILTER_PARAM]: lifecycleFilterParam(value),
+    });
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'repositories', key], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(['/admin', 'repositories', key], {
+      queryParamsHandling: 'preserve',
+    });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'repositories'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(['/admin', 'repositories'], {
+      queryParamsHandling: 'preserve',
+    });
+  }
+
+  private readonly meQuery = injectMeQuery();
+  protected readonly createMutation = injectCreateRepositoryMutation();
+  protected readonly fields = REPOSITORY_FIELDS;
+  protected readonly createOpen = signal(false);
+  protected readonly createError = signal<string | null>(null);
+
+  /** New is a write: a desktop with `config:edit` only. */
+  protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
+
+  protected onNew(): void {
+    this.createError.set(null);
+    this.createOpen.set(true);
+  }
+
+  protected onCreate(values: ConfigFormValues): void {
+    const body = createBody(this.fields, values) as unknown as RepositoryDocument;
+    this.createError.set(null);
+    this.createMutation.mutate(body, {
+      onSuccess: () => {
+        this.createOpen.set(false);
+        void this.router.navigate(['/admin', 'repositories', body.name], {
+          queryParamsHandling: 'preserve',
+        });
+      },
+      onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
+    });
   }
 }

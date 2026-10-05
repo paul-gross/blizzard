@@ -36,11 +36,15 @@ export class ConfigMaster {
   /** Whether an older page exists to load. */
   readonly hasOlder = input(false);
   readonly olderPending = input(false);
+  /** Whether a New control is offered above the list. */
+  readonly canCreate = input(false);
+  readonly newLabel = input('New');
 
   readonly filterChange = output<string>();
   readonly pick = output<string>();
   readonly back = output<void>();
   readonly older = output<void>();
+  readonly create = output<void>();
 
   protected readonly filterOptions = LIFECYCLE_FILTER_OPTIONS;
 }

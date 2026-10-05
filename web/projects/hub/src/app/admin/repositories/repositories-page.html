@@ -10,9 +10,25 @@
   backLabel="Repositories"
   testidPrefix="admin-repositories"
   footer="Retire stops new deliveries; nothing is deleted."
+  [canCreate]="canCreate()"
+  newLabel="New repository"
+  (create)="onNew()"
   (filterChange)="onFilter($event)"
   (pick)="onPick($event)"
   (back)="onBack()"
 >
   <router-outlet />
 </app-config-master>
+@if (createOpen()) {
+  <app-config-form-dialog
+    heading="New repository"
+    mode="create"
+    [fields]="fields"
+    submitLabel="Create"
+    [submitError]="createError()"
+    [submitting]="createMutation.isPending()"
+    testidPrefix="admin-repositories-create"
+    (closed)="createOpen.set(false)"
+    (submitted)="onCreate($event)"
+  />
+}

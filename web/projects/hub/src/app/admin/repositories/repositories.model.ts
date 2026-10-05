@@ -1,5 +1,6 @@
 import type { RepositorySummary } from 'fleet';
 
+import type { ConfigFieldDef } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { factText, secretLinks } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
@@ -40,7 +41,27 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
     ],
     revision: repository.revision,
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,
-    links: { heading: 'Token', links: secretLinks(repository.secret_name), emptyText: 'No token secret.' },
+    links: {
+      heading: 'Token',
+      links: secretLinks(repository.secret_name),
+      emptyText: 'No token secret.',
+    },
     hasHistory: true,
   };
 }
+
+/** A repository's form fields. The name is set on create alone. */
+export const REPOSITORY_FIELDS: readonly ConfigFieldDef[] = [
+  {
+    key: 'name',
+    label: 'Name',
+    kind: 'text',
+    required: true,
+    createOnly: true,
+  },
+  { key: 'forge_api_url', label: 'Forge API', kind: 'text', required: true },
+  { key: 'owner', label: 'Owner', kind: 'text', required: true },
+  { key: 'repo', label: 'Repository', kind: 'text', required: true },
+  { key: 'base_branch', label: 'Base branch', kind: 'text', required: true },
+  { key: 'secret_name', label: 'Token secret', kind: 'text', required: true },
+];

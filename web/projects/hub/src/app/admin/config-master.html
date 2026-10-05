@@ -8,6 +8,13 @@
   (back)="back.emit()"
 >
   <div kit-master-detail-list class="list-pane">
+    @if (canCreate()) {
+      <div class="new">
+        <fleet-kit-button variant="primary" [testid]="testidPrefix() + '-new'" (click)="create.emit()">
+          {{ newLabel() }}
+        </fleet-kit-button>
+      </div>
+    }
     @if (filter(); as current) {
       <div class="filters" [attr.data-testid]="testidPrefix() + '-filters'">
         <fleet-kit-chips [options]="filterOptions" [selectedValue]="current" (choose)="filterChange.emit($event)" />

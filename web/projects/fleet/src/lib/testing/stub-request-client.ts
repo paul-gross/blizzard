@@ -5,6 +5,8 @@ export interface CapturedRequest {
   readonly body: unknown;
   /** The URL's query string, `?`-prefixed, or empty. */
   readonly search: string;
+  /** The request headers, names lower-cased. */
+  readonly headers: Readonly<Record<string, string>>;
 }
 
 /** Handle over a stubbed generated client — the captured requests plus a restore hook. */
@@ -84,7 +86,13 @@ export function stubRequestClient(
     } catch {
       body = undefined;
     }
-    requests.push({ method, path, body, search: url.search });
+    requests.push({
+      method,
+      path,
+      body,
+      search: url.search,
+      headers: Object.fromEntries(input.headers.entries()),
+    });
     const result = await route(method, path);
     const [status, data] = isStubHttpError(result) ? [result.status, result.body] : [200, result];
     return new Response(JSON.stringify(data ?? {}), {
@@ -93,7 +101,10 @@ export function stubRequestClient(
     });
   };
 
-  client.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+  client.setConfig({
+    baseUrl: 'http://localhost',
+    fetch: fakeFetch as typeof fetch,
+  });
 
   return {
     requests,

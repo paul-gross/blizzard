@@ -11,7 +11,7 @@
 } @else {
   <input
     class="ctl"
-    type="text"
+    [type]="type()"
     [placeholder]="placeholder()"
     [attr.aria-label]="ariaLabel()"
     [attr.data-testid]="testid()"

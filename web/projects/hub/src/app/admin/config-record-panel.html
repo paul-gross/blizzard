@@ -28,7 +28,47 @@
         <p class="note">{{ note }}</p>
       }
       @if (cliCommand(); as command) {
-        <p class="cli" [attr.data-testid]="testidPrefix() + '-cli'">Change it with <code>{{ command }}</code></p>
+        <p class="cli" [attr.data-testid]="testidPrefix() + '-cli'">
+          Change it with <code>{{ command }}</code>
+        </p>
+      }
+      @if (actions(); as write) {
+        <div class="actions" [attr.data-testid]="testidPrefix() + '-actions'">
+          @if (write.edit) {
+            <fleet-kit-button [disabled]="busy()" [testid]="testidPrefix() + '-edit'" (click)="edit.emit()">
+              Edit
+            </fleet-kit-button>
+          }
+          @if (write.replace) {
+            <fleet-kit-button [disabled]="busy()" [testid]="testidPrefix() + '-replace'" (click)="replace.emit()">
+              Replace value
+            </fleet-kit-button>
+          }
+          @if (write.lifecycle === 'retire') {
+            <fleet-kit-button
+              variant="danger"
+              [disabled]="busy() || write.retireBlocked !== null"
+              [testid]="testidPrefix() + '-retire'"
+              (click)="lifecycle.emit('retire')"
+            >
+              Retire
+            </fleet-kit-button>
+          } @else {
+            <fleet-kit-button
+              [disabled]="busy()"
+              [testid]="testidPrefix() + '-enable'"
+              (click)="lifecycle.emit('enable')"
+            >
+              Enable
+            </fleet-kit-button>
+          }
+        </div>
+        @if (write.retireBlocked; as blocked) {
+          <p class="note" [attr.data-testid]="testidPrefix() + '-retire-blocked'">{{ blocked }}</p>
+        }
+        @if (actionError(); as failure) {
+          <p class="action-error" [attr.data-testid]="testidPrefix() + '-action-error'">{{ failure }}</p>
+        }
       }
       @if (record.links; as group) {
         <h3 class="section">{{ group.heading }}</h3>

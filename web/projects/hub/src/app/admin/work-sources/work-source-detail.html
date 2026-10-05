@@ -5,6 +5,25 @@
   [revisions]="revisions()"
   [revisionsState]="revisionsState()"
   [cliCommand]="cliCommand()"
+  [actions]="actions()"
+  [busy]="busy()"
+  [actionError]="actionError()"
+  (edit)="onEdit()"
+  (lifecycle)="onLifecycle($event)"
   emptyText="Pick a work source."
   testidPrefix="admin-work-source"
 />
+@if (editOpen() && shown(); as initial) {
+  <app-config-form-dialog
+    heading="Edit work source"
+    mode="edit"
+    [fields]="fields"
+    [initial]="initial"
+    submitLabel="Save"
+    [submitError]="editError()"
+    [submitting]="editMutation.isPending()"
+    testidPrefix="admin-work-source-edit"
+    (closed)="editOpen.set(false)"
+    (submitted)="onSave($event)"
+  />
+}

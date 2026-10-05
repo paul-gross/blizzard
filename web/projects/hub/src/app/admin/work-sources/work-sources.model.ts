@@ -1,5 +1,6 @@
 import type { WorkSourceSummary } from 'fleet';
 
+import type { ConfigFieldDef } from '../config-edit.model';
 import { factText, secretLinks } from '../config-links.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
@@ -56,7 +57,28 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
     ],
     revision: source.revision ?? null,
     note: source.retired ? 'Retired — no new items ingest from it.' : null,
-    links: { heading: 'Token', links: secretLinks(source.secret), emptyText: 'No token secret.' },
+    links: {
+      heading: 'Token',
+      links: secretLinks(source.secret),
+      emptyText: 'No token secret.',
+    },
     hasHistory: true,
   };
 }
+
+/** A work source's form fields. The name is set on create alone. */
+export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef[] = [
+  {
+    key: 'name',
+    label: 'Name',
+    kind: 'text',
+    required: true,
+    createOnly: true,
+  },
+  { key: 'provider', label: 'Provider', kind: 'text', required: true },
+  { key: 'locator', label: 'Locator', kind: 'text', required: true },
+  { key: 'api_base', label: 'API base', kind: 'text' },
+  { key: 'web_base', label: 'Web base', kind: 'text' },
+  { key: 'secret', label: 'Token secret', kind: 'text' },
+  { key: 'annotate', label: 'Annotates', kind: 'checkbox' },
+];

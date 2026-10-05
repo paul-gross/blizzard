@@ -1,7 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, input, type TemplateRef, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  output,
+  type TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, type KitFact, KitFactList } from 'fleet';
+import {
+  FleetWhen,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitButton,
+  type KitFact,
+  KitFactList,
+} from 'fleet';
 
+import type { ConfigActionsVm } from './config-actions.model';
 import type { LastChangeVm, RevisionRowVm } from './config-history.model';
 import type { ConfigBadgeVm } from './config-record-list';
 import { ConfigRevisions } from './config-revisions';
@@ -45,7 +62,7 @@ export interface ConfigRecordVm {
 @Component({
   selector: 'app-config-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitFactList, RouterLink],
+  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitFactList, RouterLink],
   templateUrl: './config-record-panel.html',
   styleUrl: './config-record-panel.css',
 })
@@ -60,15 +77,32 @@ export class ConfigRecordPanel {
   /** The rest-state copy while nothing is selected. */
   readonly emptyText = input.required<string>();
   readonly testidPrefix = input.required<string>();
+  /** The write controls, or `null` for none — a phone, a viewer, a built-in record. */
+  readonly actions = input<ConfigActionsVm | null>(null);
+  /** Whether a write on this record is in flight. */
+  readonly busy = input(false);
+  /** The refusal from the last retire or enable, shown beside the controls. */
+  readonly actionError = input<string | null>(null);
+
+  readonly edit = output<void>();
+  readonly replace = output<void>();
+  readonly lifecycle = output<'retire' | 'enable'>();
 
   private readonly revisionTemplate = viewChild.required<TemplateRef<unknown>>('revisionFact');
 
   protected readonly factRows = computed<readonly KitFact[]>(() => {
     const vm = this.vm();
     if (vm === null) return [];
-    const facts: KitFact[] = vm.facts.map((fact) => ({ label: fact.label, value: fact.value }));
+    const facts: KitFact[] = vm.facts.map((fact) => ({
+      label: fact.label,
+      value: fact.value,
+    }));
     if (vm.revision !== null) {
-      facts.push({ label: 'Revision', template: this.revisionTemplate(), testid: `${this.testidPrefix()}-revision` });
+      facts.push({
+        label: 'Revision',
+        template: this.revisionTemplate(),
+        testid: `${this.testidPrefix()}-revision`,
+      });
     }
     return facts;
   });
