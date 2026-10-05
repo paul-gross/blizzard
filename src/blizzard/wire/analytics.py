@@ -154,7 +154,7 @@ class AnalyticsOutcomesResponse(BaseModel):
 
 
 class ReDeriveRequest(BaseModel):
-    """Scope the call to one segment (a genuine force, bypassing the candidate check),
+    """Scope the call to one visible segment (a genuine force, bypassing the candidate check),
     one chunk's candidates, or every candidate (both unset) — never both a segment and a
     chunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives
     exactly one, so it ignores ``limit``."""
@@ -167,7 +167,8 @@ class ReDeriveRequest(BaseModel):
 class ReDeriveResponse(BaseModel):
     """How many segments this call derived, and how many still-candidate segments
     remain in scope — the caller drives to convergence by calling again while
-    ``remaining`` is nonzero."""
+    ``remaining`` is nonzero. ``not_visible``: the named segment is not visible; nothing derived."""
 
     derived: int
     remaining: int
+    not_visible: bool = False

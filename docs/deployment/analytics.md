@@ -15,7 +15,8 @@ no claim, spawn, or admission; dropping the table costs only the sweep's own re-
 earlier derivation is re-derived next pass.
 
 `blizzard hub analytics re-derive` forces derivation sooner: `--segment` forces one segment regardless of apparent
-freshness; `--chunk`, or neither flag for the fleet, derives up to `--limit` (default 50) candidates, reporting how many
+freshness, but only a visible one — a superseded, non-final, or unknown segment derives nothing and is reported as not
+visible; `--chunk`, or neither flag for the fleet, derives up to `--limit` (default 50) candidates, reporting how many
 remain — call again to continue. `re-derive` drives the hub's own live in-process reconciler — never a `--dir` verb, the
 hub never stopped — and requires admin and above (`analytics:admin`) since it mutates.
 

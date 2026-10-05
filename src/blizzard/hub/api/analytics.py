@@ -67,15 +67,15 @@ _STREAM_BATCH_SIZE = 500
 
 @router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(ANALYTICS_ADMIN))])
 def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends(get_services)]) -> ReDeriveResponse:
-    """A segment scope forces that one segment regardless of its candidacy; a chunk or
-    all scope derives up to ``limit`` of that scope's current candidates and reports how
+    """A segment scope forces that one visible segment regardless of its candidacy; a chunk
+    or all scope derives up to ``limit`` of that scope's current candidates and reports how
     many remain, so the caller drives to convergence with repeated calls."""
     try:
         scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
     except ReDeriveScopeRefused as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     outcome = services.event_derivation_service.re_derive(scope, limit=request.limit)
-    return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining)
+    return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining, not_visible=outcome.not_visible)
 
 
 # --- read-only events/counts --------------------------------------

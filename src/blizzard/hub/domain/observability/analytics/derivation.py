@@ -68,7 +68,7 @@ class ReDeriveScopeRefused(ValueError):
 @domain_model
 @dataclass(frozen=True)
 class ReDeriveScope:
-    """What one re-derive covers: one segment, forced regardless of its candidacy; or the
+    """What one re-derive covers: one segment, forced regardless of its candidacy but only while visible; or the
     candidates of one chunk, or of every chunk. An id that names nothing derives nothing —
     re-derive is a convergence trigger, not a read."""
 
@@ -91,10 +91,11 @@ class ReDeriveScope:
 @domain_model
 @dataclass(frozen=True)
 class ReDeriveOutcome:
-    """How many segments a re-derive derived — successes only — and how many candidates remain."""
+    """Segments a re-derive derived (successes only), candidates remaining, and whether a segment force was refused."""
 
     derived: int
     remaining: int
+    not_visible: bool = False
 
 
 def stamp_events(
@@ -220,8 +221,10 @@ class EventDerivationService:
     def re_derive(self, scope: ReDeriveScope, *, limit: int) -> ReDeriveOutcome:
         """Derive ``scope``: its one segment, or up to ``limit`` of its current candidates.
         ``derived`` counts the segments actually derived — a candidate gone by now, or one
-        with no resolvable graph pin, is not counted."""
+        with no resolvable graph pin, is not counted. A segment that is not visible is refused: no derive, no marker."""
         if scope.segment_id is not None:
+            if not self._events.visible_segment_ids(segment_id=scope.segment_id):
+                return ReDeriveOutcome(derived=0, remaining=0, not_visible=True)
             pins = self.graph_pins_for([scope.segment_id])
             return ReDeriveOutcome(derived=1 if self.derive_segment(scope.segment_id, pins) else 0, remaining=0)
         to_derive, remaining = scope.batch(self.candidate_segment_ids(chunk_id=scope.chunk_id), limit)

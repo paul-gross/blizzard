@@ -49,7 +49,7 @@ def _minted_chunk_ids_subselect() -> Select[Any]:
     return select(s.chunks.c.chunk_id)
 
 
-def _visible_segment_ids_stmt(chunk_id: str | None = None) -> Select[Any]:
+def _visible_segment_ids_stmt(chunk_id: str | None = None, segment_id: str | None = None) -> Select[Any]:
     superseded = select(s.transcript_segments.c.supersedes).where(s.transcript_segments.c.supersedes.is_not(None))
     stmt = (
         select(s.transcript_segments.c.segment_id)
@@ -60,6 +60,8 @@ def _visible_segment_ids_stmt(chunk_id: str | None = None) -> Select[Any]:
     )
     if chunk_id is not None:
         stmt = stmt.where(s.transcript_segments.c.chunk_id == chunk_id)
+    if segment_id is not None:
+        stmt = stmt.where(s.transcript_segments.c.segment_id == segment_id)
     return stmt
 
 
@@ -304,9 +306,9 @@ class TranscriptEventStore:
 
     # --- reads ----------------------------------------------------------------
 
-    def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
+    def visible_segment_ids(self, *, chunk_id: str | None = None, segment_id: str | None = None) -> frozenset[str]:
         with self._store.read("visible_segment_ids") as conn:
-            rows = conn.execute(_visible_segment_ids_stmt(chunk_id)).all()
+            rows = conn.execute(_visible_segment_ids_stmt(chunk_id, segment_id)).all()
         return frozenset(row.segment_id for row in rows)
 
     def derived_segment_ids(self) -> frozenset[str]:

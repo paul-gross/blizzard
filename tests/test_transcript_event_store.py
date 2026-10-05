@@ -793,3 +793,17 @@ def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path
     )
 
     assert store.derived_segment_ids() == frozenset({"sg_1", "sg_2"})
+
+
+def test_visible_segment_ids_narrows_to_the_given_segment(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
+    segments.insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    store = TranscriptEventStore(hub_store_connections(engine))
+    assert store.visible_segment_ids(segment_id="sg_new") == frozenset({"sg_new"})
+    assert store.visible_segment_ids(segment_id="sg_old") == frozenset()
+    assert store.visible_segment_ids(segment_id="sg_missing") == frozenset()

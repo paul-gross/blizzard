@@ -60,6 +60,18 @@ def test_re_derive_with_a_segment_scope_posts_it(monkeypatch: pytest.MonkeyPatch
     assert body == {"limit": 50, "segment_id": "sg_1"}
 
 
+def test_re_derive_reports_a_segment_that_is_not_visible(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, {"derived": 0, "remaining": 0, "not_visible": True})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["analytics", "re-derive", "--segment", "sg_old"])
+
+    assert result.exit_code == 0, result.output
+    assert "not visible" in result.output
+    assert "derived 0" not in result.output
+
+
 def test_re_derive_with_a_chunk_scope_and_limit_posts_both(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
