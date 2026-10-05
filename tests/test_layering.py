@@ -876,34 +876,62 @@ def _declares_protocol(node: ast.ClassDef) -> bool:
     )
 
 
-def _ctx_annotations(tree: ast.Module) -> list[tuple[int, ast.expr | None]]:
-    found: list[tuple[int, ast.expr | None]] = []
+def _annotated_names(tree: ast.Module) -> list[tuple[str, int, ast.expr | None]]:
+    """Every function parameter and class field in ``tree`` as ``(name, lineno, annotation)``."""
+    found: list[tuple[str, int, ast.expr | None]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             args = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
-            found += [(arg.lineno, arg.annotation) for arg in args if arg.arg == "ctx"]
+            found += [(arg.arg, arg.lineno, arg.annotation) for arg in args]
         elif isinstance(node, ast.ClassDef):
             found += [
-                (stmt.lineno, stmt.annotation)
+                (stmt.target.id, stmt.lineno, stmt.annotation)
                 for stmt in node.body
-                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.target.id == "ctx"
+                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
             ]
     return found
+
+
+def _named_types(annotation: ast.expr | None) -> set[str]:
+    """Every type an annotation names, bare or module-qualified, unioned or wrapped."""
+    if annotation is None:
+        return set()
+    return {
+        node.id if isinstance(node, ast.Name) else node.attr
+        for node in ast.walk(annotation)
+        if isinstance(node, ast.Name | ast.Attribute)
+    }
 
 
 def _step_contexts(
     root: Path, *, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...], src_root: Path = _SRC_DIR
 ) -> tuple[list[str], set[str]]:
+    """Each step's context typing: a ``ctx`` must be a Protocol its own module declares, and any other
+    parameter or field typed by a step context — ``LoopContext``, or a Protocol some ``ctx`` is typed by —
+    must name one its own module declares, so renaming the parameter never smuggles in a foreign context."""
+    scanned = _scanned(root, exempt, exempt_dirs)
     violations: list[str] = []
     contexts: set[str] = set()
-    for path, tree in _scanned(root, exempt, exempt_dirs):
+    local_by_path: dict[Path, set[str]] = {}
+    for path, tree in scanned:
         local = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and _declares_protocol(node)}
-        for lineno, annotation in _ctx_annotations(tree):
+        local_by_path[path] = local
+        for name, lineno, annotation in _annotated_names(tree):
+            if name != "ctx":
+                continue
             if isinstance(annotation, ast.Name) and annotation.id in local:
                 contexts.add(annotation.id)
             else:
                 shown = ast.unparse(annotation) if annotation else "nothing"
                 violations.append(f"{path.relative_to(src_root.parent.parent)}:{lineno} types ctx by {shown}")
+    step_contexts = contexts | _LOOP_CONTEXT
+    for path, tree in scanned:
+        for name, lineno, annotation in _annotated_names(tree):
+            foreign = sorted((_named_types(annotation) & step_contexts) - local_by_path[path])
+            if name != "ctx" and foreign:
+                violations.append(
+                    f"{path.relative_to(src_root.parent.parent)}:{lineno} types {name} by step context {foreign[0]}"
+                )
     return violations, contexts
 
 
@@ -1023,17 +1051,26 @@ _STEP_PROTOCOL = "from typing import Protocol\nclass StepContext(Protocol): ...\
         "def step(ctx: LoopContext) -> None: ...",
         "from blizzard.runner.lifecycle.spawn import SpawnContext\ndef step(ctx: SpawnContext) -> None: ...",
         "@dataclass\nclass Step:\n    ctx: LoopContext",
+        "def step(context: LoopContext) -> None: ...",
+        "@dataclass\nclass Step:\n    loop: LoopContext | None",
+        "from blizzard.runner.loop import other\ndef step(context: other.OtherContext) -> None: ...",
     ],
 )
 def test_step_context_check_catches_a_foreign_or_bundle_context(tmp_path: Path, body: str) -> None:
-    src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body})
+    other = (
+        "from typing import Protocol\nclass OtherContext(Protocol): ...\ndef other(ctx: OtherContext) -> None: ...\n"
+    )
+    src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body, "runner/loop/other.py": other})
     violations, _ = _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src)
     assert len(violations) == 1
     assert violations[0].startswith("src/blizzard/runner/loop/step.py:")
 
 
 def test_step_context_check_admits_a_local_protocol(tmp_path: Path) -> None:
-    body = "def step(ctx: StepContext) -> None: ...\n@dataclass\nclass Step:\n    ctx: StepContext\n"
+    body = (
+        "def step(ctx: StepContext) -> None: ...\n@dataclass\nclass Step:\n    ctx: StepContext\n"
+        "def helper(context: StepContext, label: str) -> None: ...\n"
+    )
     src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body})
     assert _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src) == ([], {"StepContext"})
 

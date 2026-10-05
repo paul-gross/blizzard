@@ -163,7 +163,10 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
     def workspace_prompt(self) -> str: ...
 
 
-class SpawnProcess(Protocol):
+class SpawnContext(TranscriptPumpContext, Protocol):
+    """What a spawn and an attempt read. One seam for both, since :class:`Spawner` builds an
+    ``Attempt`` and ``Attempt`` builds a :class:`Spawner`, each handing the other its own ``ctx``."""
+
     @property
     def process(self) -> IProcessProbe: ...
     @property
@@ -172,9 +175,6 @@ class SpawnProcess(Protocol):
     def worker_scratch(self) -> WorkerScratchDirs: ...
     @property
     def elicitation_files(self) -> ElicitationFiles: ...
-
-
-class SpawnContext(SpawnProcess, TranscriptPumpContext, Protocol):
     @property
     def stores(self) -> SpawnStores: ...
     @property
