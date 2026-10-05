@@ -7,14 +7,15 @@ commit for a declared name. Its coverage predicate is shared via
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.completion_gates import Coverage
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_ENFORCE
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.completion import SubmittedArtifact
 
 _log = get_logger("blizzard.hub.produces_auth")
 
@@ -26,7 +27,7 @@ class Produces:
     already-loaded values only (``bzh:domain-takes-objects``)."""
 
     node: Node
-    artifacts: list[SubmittedArtifact]
+    artifacts: Sequence[CompletionArtifact]
 
     def rejection(self, *, mode: str) -> str | None:
         """A failure detail to reject with under ``enforce``, naming every spec the

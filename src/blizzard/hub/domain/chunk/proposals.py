@@ -4,13 +4,40 @@ alongside its artifacts. Read by the delivery-materialization sweep
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+import json
+from dataclasses import asdict, dataclass
+from typing import ClassVar, Literal
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.work_items import WorkItemPriority
 
-if TYPE_CHECKING:
-    from blizzard.wire.completion import WorkItemProposal
+
+@domain_model
+@dataclass(frozen=True)
+class CreateItemProposal:
+    """A proposed new work item — a title, a markdown body, and a stated priority."""
+
+    kind: ClassVar[Literal["create"]] = "create"
+
+    title: str
+    body: str
+    stated_priority: WorkItemPriority = WorkItemPriority.NORMAL
+
+
+@domain_model
+@dataclass(frozen=True)
+class UpdateItemProposal:
+    """A proposed update to an existing work item — its ``{source, ref}`` pointer plus evidence
+    to append. An unresolvable pointer is recorded, not refused: materialization resolves it."""
+
+    kind: ClassVar[Literal["update"]] = "update"
+
+    source: str
+    ref: str
+    evidence: str
+
+
+type ItemProposal = CreateItemProposal | UpdateItemProposal
 
 
 @domain_model
@@ -36,7 +63,7 @@ class StampedWorkItemProposal:
     @classmethod
     def of(
         cls,
-        proposal: WorkItemProposal,
+        proposal: ItemProposal,
         *,
         proposal_id: str,
         chunk_id: str,
@@ -46,9 +73,8 @@ class StampedWorkItemProposal:
         ordinal: int,
         runner_id: str,
     ) -> StampedWorkItemProposal:
-        """Compress a wire proposal to its storage row. ``model_dump_json`` derives
-        ``data`` from whichever variant this is, so a field added to either
-        ``CreateWorkItemProposal`` or ``UpdateWorkItemProposal`` lands here automatically."""
+        """Compress a proposal to its storage row. ``data`` serializes whichever variant this is
+        field by field, compact and unescaped, so a field added to either lands here too."""
         return cls(
             proposal_id=proposal_id,
             chunk_id=chunk_id,
@@ -57,6 +83,6 @@ class StampedWorkItemProposal:
             epoch=epoch,
             ordinal=ordinal,
             kind=proposal.kind,
-            data=proposal.model_dump_json(exclude={"kind"}),
+            data=json.dumps(asdict(proposal), separators=(",", ":"), ensure_ascii=False),
             runner_id=runner_id,
         )

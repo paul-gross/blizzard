@@ -13,8 +13,8 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.config import PRODUCES_ENFORCE, PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
 from blizzard.hub.domain.graph.model import Node, ProducesSpec
-from blizzard.wire.completion import SubmittedArtifact
 
 pytestmark = pytest.mark.unit
 
@@ -35,12 +35,12 @@ def _node(*, produces: list[str]) -> Node:
     )
 
 
-def _artifact(name: str, *, attached: bool) -> SubmittedArtifact:
-    return SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content="stuff", attached=attached)
+def _artifact(name: str, *, attached: bool) -> CompletionArtifact:
+    return CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content="stuff", attached=attached)
 
 
-def _git_commit_artifact(name: str) -> SubmittedArtifact:
-    return SubmittedArtifact(
+def _git_commit_artifact(name: str) -> CompletionArtifact:
+    return CompletionArtifact(
         name=name, kind=ArtifactKind.GIT_COMMIT, repo=name, branch_name="b", commit_hash="deadbeef"
     )
 
@@ -96,7 +96,7 @@ def test_missing_names_are_all_named_in_the_rejection_detail() -> None:
 
 def test_a_git_commit_covered_produces_name_is_accepted_under_enforce() -> None:
     """A `produces:` name legitimately covered by a pushed git commit carries
-    `attached=False` on its `GIT_COMMIT` `SubmittedArtifact` — must not be rejected as
+    `attached=False` on its `GIT_COMMIT` `CompletionArtifact` — must not be rejected as
     an unattached name (`~blizzard.foundation.completion_gates.Coverage.satisfied_names`)."""
     node = _node(produces=["backend"])
     artifacts = [_git_commit_artifact("backend")]

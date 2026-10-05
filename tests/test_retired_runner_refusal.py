@@ -12,13 +12,12 @@ import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
+from blizzard.hub.domain.execution.facts import PushedFact
+from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
 from blizzard.hub.domain.runners.route import Route
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 from tests.support import HubHarness, build_hub, make_ready, report_lease
 
@@ -165,19 +164,16 @@ class _Routed:
 
 _GUARDED: dict[str, Callable[[_Routed], object]] = {
     "fact ingest": lambda r: r.hub.services.facts.ingest(
-        RunnerFactBatch(
-            runner_id=_RUNNER,
-            facts=[RunnerFact(seq=2, kind="lease.minted", payload={"chunk_id": r.chunk_id, "epoch": 2})],
-        )
+        _RUNNER, [PushedFact(seq=2, kind="lease.minted", payload={"chunk_id": r.chunk_id, "epoch": 2})]
     ),
     "transcript ingest": lambda r: r.hub.services.transcript_ingest.ingest(_RUNNER, [r.transcript_record()]),
     "completion": lambda r: r.hub.services.apply.apply(
         r.chunk,
         r.graph,
-        CompletionSubmission(choice="pass", epoch=1, runner_id=_RUNNER, from_node_id=r.node_id, artifacts=[]),
+        Completion(choice="pass", epoch=1, runner_id=_RUNNER, from_node_id=r.node_id),
     ),
     "decision": lambda r: r.hub.services.decisions.submit(
-        r.chunk, r.graph, DecisionSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
+        r.chunk, r.graph, GateSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
     ),
     "route-token rekey": lambda r: r.hub.services.claim.rekey(
         r.route, ChunkFacts.or_default(r.hub.services.chunks.facts.load_facts(r.chunk_id))

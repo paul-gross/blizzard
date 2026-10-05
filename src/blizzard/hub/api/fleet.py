@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
@@ -38,7 +38,7 @@ from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_prin
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
-from blizzard.hub.api.ingest_broadcast import IngestBroadcast
+from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
 from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
@@ -59,6 +59,7 @@ from blizzard.hub.domain.execution.claim import (
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
 from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
+from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
@@ -168,11 +169,11 @@ def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None
 
 
 def _migration_targets(
-    services: HubServices, chunk: Chunk, graph: Graph, submission: CompletionSubmission, *, follow_latest_default: bool
+    services: HubServices, chunk: Chunk, graph: Graph, completion: Completion, *, follow_latest_default: bool
 ) -> MigrationTargets:
     """Load the graphs one completion may move the chunk onto; :class:`MigrationTargets` decides."""
     graphs = services.graphs
-    cross_graph_name = MigrationTargets.cross_graph_name(graph, submission)
+    cross_graph_name = MigrationTargets.cross_graph_name(graph, completion)
     intent = chunk.intended_migration
     intent_graph = graphs.get(intent.graph_id) if intent is not None else None
     return MigrationTargets.of(
@@ -315,7 +316,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         )
     except NoCurrentNode as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return envelope.wire
+    return node_steps.node_envelope(envelope)
 
 
 def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
@@ -628,7 +629,7 @@ def claim_route(
         runner_id=result.route.runner_id,
         workspace_id=result.route.workspace_id,
         environment_ids=result.route.environment_ids,
-        envelope=result.envelope,
+        envelope=node_steps.node_envelope(result.envelope),
         route_token=result.route_token,
     )
 
@@ -671,17 +672,17 @@ def submit_completion(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    targets = _migration_targets(services, chunk, graph, submission, follow_latest_default=fleet.follow_latest)
+    completion = node_steps.completion_of(submission)
+    targets = _migration_targets(services, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.apply.apply(
         chunk,
         graph,
-        submission,
+        completion,
         route_token_mode=fleet.route_token_mode,
         produces_mode=fleet.produces_mode,
         targets=targets,
     )
-    response = result.response
     fresh_migration = result.fresh_migration
     cause = "migrated" if fresh_migration else "node-completed"
     # `key` names the fact this call wrote, per each cause's own mapped fact table:
@@ -697,7 +698,7 @@ def submit_completion(
         services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
     chunks_api.OpenDecision(services, chunk_id).publish()
-    return response
+    return node_steps.apply_response(result.outcome, detail=result.detail, envelope=result.envelope)
 
 
 @router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)
@@ -718,13 +719,17 @@ def submit_decision(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.decisions.submit(
-        chunk, graph, submission, route_token_mode=fleet.route_token_mode, produces_mode=fleet.produces_mode
+        chunk,
+        graph,
+        node_steps.gate_submission_of(submission),
+        route_token_mode=fleet.route_token_mode,
+        produces_mode=fleet.produces_mode,
     )
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
     change.publish(cause="decision-submitted", key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
     chunks_api.OpenDecision(services, chunk_id).publish()
-    return result.response
+    return node_steps.apply_response(result.outcome, detail=result.detail)
 
 
 @router.post("/events", response_model=RunnerFactAck)
@@ -737,9 +742,15 @@ def ingest_runner_facts(
     with each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired."""
     fleet.assert_owns(batch.runner_id)
     broadcast = IngestBroadcast.before_ingest(services, batch)
-    result = services.facts.ingest(batch, route_token_mode=fleet.route_token_mode)
+    result = services.facts.ingest(batch.runner_id, pushed_facts(batch), route_token_mode=fleet.route_token_mode)
     broadcast.publish(result)
-    return result.ack
+    return RunnerFactAck(
+        runner_id=batch.runner_id,
+        high_water=result.high_water,
+        applied=result.applied,
+        already_applied=result.already_applied,
+        rejected=result.rejected,
+    )
 
 
 @router.post("/transcripts", response_model=TranscriptSegmentAck)

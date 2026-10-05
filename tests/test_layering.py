@@ -2177,17 +2177,6 @@ _WIRE_CLIENT = Path("runner/hub")
 #: shrinks, as each concept maps the wire to its own domain models at its edge.
 _WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
     {
-        "hub/domain/chunk/proposals.py",
-        "hub/domain/execution/apply.py",
-        "hub/domain/execution/auth/commit_pointer.py",
-        "hub/domain/execution/auth/produces.py",
-        "hub/domain/execution/auth/proposals.py",
-        "hub/domain/execution/claim.py",
-        "hub/domain/execution/completion.py",
-        "hub/domain/execution/decisions.py",
-        "hub/domain/execution/envelope.py",
-        "hub/domain/execution/facts.py",
-        "hub/domain/execution/questions.py",
         "hub/domain/garden/delivery/materialize.py",
         "hub/domain/garden/delivery/validation.py",
         "hub/domain/garden/review/validation.py",
@@ -2195,7 +2184,6 @@ _WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
         "hub/domain/observability/analytics/events.py",
         "hub/domain/observability/analytics/extraction.py",
         "hub/events/broker.py",
-        "hub/store/internal/runner_registry_store.py",
         "hub/store/internal/transcript_event_store.py",
         "runner/events/broker.py",
         "runner/harness/adapter.py",

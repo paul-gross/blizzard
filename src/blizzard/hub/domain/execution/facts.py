@@ -8,10 +8,9 @@ lands on (``bzh:controller-read-only``) and stamps landing time from the injecte
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-
-from pydantic import ValidationError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, narrow_event_log_kind
@@ -29,7 +28,6 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.event_log import EventLogService
@@ -43,8 +41,7 @@ from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import parse_instant
-from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact, RunnerFactAck, RunnerFactBatch
+from blizzard.hub.domain.runners.registration import ExternalSubscriptionUsageWindow, RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
 
@@ -63,17 +60,11 @@ def _external_usage_windows_json(raw: object, *, runner_id: str, slug: str) -> s
         return "[]"
     windows = []
     for entry in raw:
-        try:
-            window = ExternalSubscriptionUsageWindowFact.model_validate(entry)
-        except ValidationError as exc:
-            _log.warning(
-                "dropped malformed external usage window",
-                runner_id=runner_id,
-                slug=slug,
-                reason=exc.errors()[0]["type"] if exc.errors() else "invalid",
-            )
+        window = ExternalSubscriptionUsageWindow.admitted(entry)
+        if isinstance(window, str):
+            _log.warning("dropped malformed external usage window", runner_id=runner_id, slug=slug, reason=window)
             continue
-        windows.append({**window.model_dump(mode="json"), "resets_at": iso_utc(as_utc(window.resets_at))})
+        windows.append(window.stored)
     return json.dumps(windows)
 
 
@@ -171,12 +162,27 @@ class LocalPause:
 
 @domain_model
 @dataclass(frozen=True)
-class FactIngestResult:
-    """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck` plus, per
-    freshly-applied fact, the id of the row it wrote. ``row_id_by_seq`` carries an entry
-    only for a kind whose own id is not already in its payload. Not a wire type."""
+class PushedFact:
+    """One buffered runner fact: its per-runner ``seq``, its ``noun.verb`` kind, and its
+    kind-specific payload."""
 
-    ack: RunnerFactAck
+    seq: int
+    kind: str
+    payload: dict[str, object]
+
+
+@domain_model
+@dataclass(frozen=True)
+class FactIngestResult:
+    """:meth:`FactIngestService.ingest`'s own return — the runner's new high-water mark, the
+    pushed seqs partitioned into applied, already applied, and rejected for a non-idempotency
+    reason, and per freshly-applied fact the id of the row it wrote. ``row_id_by_seq`` carries an
+    entry only for a kind whose own id is not already in its payload."""
+
+    high_water: int
+    applied: list[int]
+    already_applied: list[int]
+    rejected: list[int]
     row_id_by_seq: dict[int, int]
 
 
@@ -207,21 +213,23 @@ class FactIngestService:
         self._retired = retired
         self._clock = clock
 
-    def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> FactIngestResult:
-        """Apply the batch. A retired runner is refused with :class:`RunnerRetired` before its
-        high-water mark is read, so nothing in the batch lands."""
-        self._retired.refuse_if_retired(batch.runner_id, action="fact ingest")
-        mark = self._route.runner_high_water(batch.runner_id)
+    def ingest(
+        self, runner_id: str, pushed: Sequence[PushedFact], *, route_token_mode: str = ROUTE_TOKEN_WARN
+    ) -> FactIngestResult:
+        """Apply one push of ``runner_id``'s facts. A retired runner is refused with
+        :class:`RunnerRetired` before its high-water mark is read, so nothing in the push lands."""
+        self._retired.refuse_if_retired(runner_id, action="fact ingest")
+        mark = self._route.runner_high_water(runner_id)
         applied: list[int] = []
         already: list[int] = []
         rejected: list[int] = []
         row_id_by_seq: dict[int, int] = {}
 
-        for fact in sorted(batch.facts, key=lambda f: f.seq):
+        for fact in sorted(pushed, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            ok, row_id = self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
+            ok, row_id = self._apply(runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
@@ -233,24 +241,19 @@ class FactIngestService:
                 row_id_by_seq[fact.seq] = row_id
             # Persisted per applied fact, not once after the loop — bounds a crash mid-batch
             # to the one in-flight fact's double-apply (blizzard-context crash-correctness/hub.md).
-            self._route.set_runner_high_water(batch.runner_id, seq=mark, at=self._clock.now())
+            self._route.set_runner_high_water(runner_id, seq=mark, at=self._clock.now())
 
         _log.info(
             "runner facts ingested",
-            runner_id=batch.runner_id,
+            runner_id=runner_id,
             high_water=mark,
             applied=len(applied),
             already=len(already),
             rejected=len(rejected),
         )
-        ack = RunnerFactAck(
-            runner_id=batch.runner_id,
-            high_water=mark,
-            applied=applied,
-            already_applied=already,
-            rejected=rejected,
+        return FactIngestResult(
+            high_water=mark, applied=applied, already_applied=already, rejected=rejected, row_id_by_seq=row_id_by_seq
         )
-        return FactIngestResult(ack=ack, row_id_by_seq=row_id_by_seq)
 
     @staticmethod
     def _fenced(kind: str, fact: Payload, refusal: FenceRefusal) -> tuple[bool, None]:

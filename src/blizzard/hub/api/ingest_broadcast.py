@@ -20,7 +20,7 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.execution.facts import FactIngestResult
+from blizzard.hub.domain.execution.facts import FactIngestResult, PushedFact
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 #: The ``chunk-changed`` cause for each chunk-scoped fact kind an ingest lands.
@@ -56,6 +56,11 @@ _CHUNK_SCOPED_FACT_KINDS = frozenset(
 )
 
 
+def pushed_facts(batch: RunnerFactBatch) -> list[PushedFact]:
+    """The batch's facts as the intake service reads them."""
+    return [PushedFact(seq=fact.seq, kind=fact.kind, payload=fact.payload) for fact in batch.facts]
+
+
 @dataclass(frozen=True)
 class IngestBroadcast:
     """One batch's stream side-effects, held across the ingest that lands it.
@@ -76,7 +81,7 @@ class IngestBroadcast:
         return cls(services=services, batch=batch, changes=changes)
 
     def publish(self, result: FactIngestResult) -> None:
-        applied = set(result.ack.applied)
+        applied = set(result.applied)
         applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
         chunk_ids = [cid for fact in applied_facts if (cid := self._chunk_arm_id(fact)) is not None]
         states = load_frame_states(self.services, chunk_ids)

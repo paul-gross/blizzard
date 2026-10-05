@@ -36,27 +36,32 @@ from blizzard.hub.domain.execution.completion import (
     stamped_proposals,
     stored_artifacts,
 )
+from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.completion import SubmittedArtifact
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse
 
 
 @domain_model
 @dataclass(frozen=True)
 class DecisionSubmitResult:
-    """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
-    the identity of the durable fact this call just wrote. ``decision_id``
+    """:meth:`DecisionService.submit`'s own return — what the submission produced and its
+    detail, plus the identity of the durable fact this call just wrote. ``decision_id``
     is set only on a fresh ``decisions`` row, never on a failure or an idempotent
     replay."""
 
-    response: ApplyResponse
+    outcome: ApplyOutcome
+    detail: str
     decision_id: str | None = None
 
     @classmethod
     def failure(cls, detail: str) -> DecisionSubmitResult:
-        return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
+        return cls(outcome=ApplyOutcome.FAILURE, detail=detail)
+
+    @classmethod
+    def parked(cls, gate_node: Node, decision_id: str | None = None) -> DecisionSubmitResult:
+        return cls(
+            outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{gate_node.name}`", decision_id=decision_id
+        )
 
 
 @domain_model
@@ -96,7 +101,7 @@ class DecisionService:
         self,
         chunk: Chunk,
         graph: Graph,
-        submission: DecisionSubmission,
+        submission: GateSubmission,
         *,
         route_token_mode: str = ROUTE_TOKEN_WARN,
         produces_mode: str = PRODUCES_WARN,
@@ -131,9 +136,7 @@ class DecisionService:
         # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
         if self._decisions.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
-            return DecisionSubmitResult(
-                response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
-            )
+            return DecisionSubmitResult.parked(node)
 
         try:
             refuse_incoherent_attempt(facts, graph, from_node=node, epoch=submission.epoch)
@@ -175,14 +178,11 @@ class DecisionService:
         )
         if refusal is not None:
             return DecisionSubmitResult.failure(refusal.detail)
-        return DecisionSubmitResult(
-            response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
-            decision_id=decision_id,
-        )
+        return DecisionSubmitResult.parked(node, decision_id)
 
     @staticmethod
     def _artifact_rows(
-        chunk: Chunk, node: Node, epoch: int, artifacts: Sequence[SubmittedArtifact], ids: Sequence[str]
+        chunk: Chunk, node: Node, epoch: int, artifacts: Sequence[CompletionArtifact], ids: Sequence[str]
     ) -> list[StoredArtifact]:
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 

@@ -17,9 +17,9 @@ from blizzard.hub.domain.chunk.model import (
     NotADecisionChoice,
     NotAPendingProposal,
 )
+from blizzard.hub.domain.chunk.proposals import CreateItemProposal
 from blizzard.hub.domain.execution.completion import stamped_proposals
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.completion import CreateWorkItemProposal
 
 pytestmark = pytest.mark.unit
 
@@ -45,7 +45,7 @@ _PENDING, _STRUCK = (
             "chk_1",
             _GATE_NODE,
             1,
-            [CreateWorkItemProposal(title="a", body="a"), CreateWorkItemProposal(title="b", body="b")],
+            [CreateItemProposal(title="a", body="a"), CreateItemProposal(title="b", body="b")],
             proposal_ids=["pr_pending", "pr_struck"],
             runner_id="runner-a",
         ),

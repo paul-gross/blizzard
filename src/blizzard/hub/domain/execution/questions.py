@@ -7,15 +7,17 @@ loser is told who won. Open/answered derives from the answer row (``bzh:facts-no
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.chunk.model import AnswerOutcome, ChunkFacts, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
-from blizzard.wire.question import QuestionAsked
 
 _log = get_logger("blizzard.hub.questions")
 
@@ -31,6 +33,26 @@ def parse_instant(value: object, fallback: datetime) -> datetime:
         return fallback
 
 
+@domain_model
+@dataclass(frozen=True)
+class AskedQuestion:
+    """A worker's question, asked from a parked attempt: ``question_id`` is runner-minted,
+    ``epoch`` the parked lease's fence, ``session_id`` the dormant session, ``options`` the offered
+    choices, and ``asked_at`` the ISO-8601 instant the runner recorded it."""
+
+    question_id: str
+    chunk_id: str
+    runner_id: str
+    epoch: int
+    question: str
+    asked_at: str
+    node_id: str | None = None
+    session_id: str | None = None
+    harness_id: str | None = None
+    lease_id: str | None = None
+    options: Sequence[str] = ()
+
+
 class QuestionService:
     """Land questions and answers at the hub."""
 
@@ -38,7 +60,7 @@ class QuestionService:
         self._questions = questions
         self._clock = clock
 
-    def record_asked(self, fact: QuestionAsked) -> FenceRefusal | None:
+    def record_asked(self, fact: AskedQuestion) -> FenceRefusal | None:
         """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — unless the
         write fence refuses it (``bzh:epoch-fencing``), which lands nothing."""
         refusal = self._questions.record_question(
@@ -52,7 +74,7 @@ class QuestionService:
             admission=EpochAdmission.AT_OR_ABOVE,
             claimant=Claimant(fact.runner_id, fact.lease_id),
             question=fact.question,
-            options=fact.options,
+            options=list(fact.options),
             asked_at=parse_instant(fact.asked_at, self._clock.now()),
         )
         if refusal is None:

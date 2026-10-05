@@ -14,15 +14,38 @@ from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, MovementKind, TransitionFact, WorkRefLabel
-from blizzard.hub.domain.graph.model import Edge, Graph, Node
-from blizzard.wire.envelope import (
-    EnvelopeArtifact,
-    EnvelopeChoice,
-    GraphArtifact,
-    NodeConfig,
-    NodeEnvelope,
-)
-from blizzard.wire.graph import ProducesEntry, RotatePolicyView
+from blizzard.hub.domain.graph.model import Edge, Graph, Node, RotatePolicy
+
+
+@domain_model
+@dataclass(frozen=True)
+class CarriedArtifact:
+    """One node-scope artifact as an envelope carries it: a ``git_commit`` decoded to its repo,
+    branch, and commit, an ``asset`` to its content."""
+
+    name: str
+    kind: ArtifactKind
+    node_name: str
+    epoch: int
+    repo: str | None = None
+    branch_name: str | None = None
+    commit_hash: str | None = None
+    content: str | None = None
+
+    @classmethod
+    def of(cls, row: StoredArtifact) -> CarriedArtifact:
+        if row.kind is ArtifactKind.GIT_COMMIT:
+            branch_name, _, commit_hash = row.data.partition(":")
+            return cls(
+                name=row.name,
+                kind=row.kind,
+                node_name=row.node_name,
+                epoch=row.epoch,
+                repo=row.repo,
+                branch_name=branch_name,
+                commit_hash=commit_hash,
+            )
+        return cls(name=row.name, kind=row.kind, node_name=row.node_name, epoch=row.epoch, content=row.data)
 
 
 @domain_model
@@ -43,25 +66,8 @@ class LatestArtifacts:
         return cls(list(latest.values()))
 
     @property
-    def wire(self) -> list[EnvelopeArtifact]:
-        return [self._projected(row) for row in self.rows]
-
-    @staticmethod
-    def _projected(row: StoredArtifact) -> EnvelopeArtifact:
-        if row.kind is ArtifactKind.GIT_COMMIT:
-            branch_name, _, commit_hash = row.data.partition(":")
-            return EnvelopeArtifact(
-                name=row.name,
-                kind=row.kind,
-                node_name=row.node_name,
-                epoch=row.epoch,
-                repo=row.repo,
-                branch_name=branch_name,
-                commit_hash=commit_hash,
-            )
-        return EnvelopeArtifact(
-            name=row.name, kind=row.kind, node_name=row.node_name, epoch=row.epoch, content=row.data
-        )
+    def carried(self) -> list[CarriedArtifact]:
+        return [CarriedArtifact.of(row) for row in self.rows]
 
 
 @domain_model
@@ -108,7 +114,7 @@ class EffectiveSession:
     name: str | None
     model: list[str]
     effort: str | None
-    rotate: RotatePolicyView | None
+    rotate: RotatePolicy | None
     compaction_window: str | None
     harnesses: list[str]
 
@@ -117,18 +123,11 @@ class EffectiveSession:
         declaration = graph.session_by_name(node.session_source) if node.session_source else None
         if declaration is None:
             return cls(None, list(chunk.default_model), chunk.default_effort, None, None, list(chunk.default_harnesses))
-        rotate = declaration.rotate
         return cls(
             declaration.name,
             list(declaration.model) if declaration.model else list(chunk.default_model),
             declaration.effort if declaration.effort is not None else chunk.default_effort,
-            RotatePolicyView(
-                max_context_tokens=rotate.max_context_tokens,
-                max_transcript_bytes=rotate.max_transcript_bytes,
-                max_invocations=rotate.max_invocations,
-            )
-            if rotate is not None
-            else None,
+            declaration.rotate,
             declaration.compaction_window,
             list(declaration.harnesses) if declaration.harnesses else list(chunk.default_harnesses),
         )
@@ -244,47 +243,18 @@ class Envelope:
         return self.node.judgement_prompt
 
     @property
-    def config(self) -> NodeConfig:  # ast-grep-ignore: bzh:property-delegates
-        session = EffectiveSession.of(self.chunk, self.graph, self.node)
-        node = self.node
-        return NodeConfig(
-            node_id=node.node_id,
-            node_name=node.name,
-            executor=node.executor,
-            session=SessionMode.FRESH if self.entered_by_restart else node.session,
-            session_source=node.session_source,
-            session_name=session.name,
-            session_model=session.model,
-            session_effort=session.effort,
-            session_harnesses=session.harnesses,
-            session_rotate=session.rotate,
-            session_compaction_window=session.compaction_window,
-            judged_by=node.judged_by,
-            checks=list(node.checks),
-            checks_cwd=node.checks_cwd,
-            checks_timeout=node.checks_timeout,
-            produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
-            proposes_work_items=node.proposes_work_items,
-            retries_max=node.retries_max,
-            choices=[
-                EnvelopeChoice(name=c.name, description=c.description, requires_checks=c.requires_checks)
-                for c in node.choices
-            ],
-        )
+    def session(self) -> EffectiveSession:
+        return EffectiveSession.of(self.chunk, self.graph, self.node)
 
     @property
-    def wire(self) -> NodeEnvelope:
-        return NodeEnvelope(
-            chunk_id=self.chunk.chunk_id,
-            graph_id=self.chunk.graph_id,
-            graph_name=self.graph.name,
-            epoch=self.epoch,
-            node=self.config,
-            prompt=self.prompt,
-            judgement_prompt=self.judgement_prompt,
-            work_refs=self.work_refs,
-            artifacts=LatestArtifacts.of(self.artifacts).wire,
-            graph_artifacts=[
-                GraphArtifact(name=a.name, kind=ArtifactKind.ASSET, content=a.content) for a in self.graph.artifacts
-            ],
-        )
+    def session_mode(self) -> SessionMode:
+        """The node's declared session mode — ``fresh`` whenever an operator restart forced this visit."""
+        return self._session_mode()
+
+    def _session_mode(self) -> SessionMode:
+        return SessionMode.FRESH if self.entered_by_restart else self.node.session
+
+    @property
+    def carried_artifacts(self) -> list[CarriedArtifact]:
+        """The node-scope artifacts this step carries, latest-by-epoch per ``{node_name}.{name}``."""
+        return LatestArtifacts.of(self.artifacts).carried

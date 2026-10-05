@@ -49,8 +49,8 @@ from blizzard.hub.domain.execution.completion import (
     replayed_migration,
     stored_artifacts,
 )
+from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Choice, Edge, FollowLatest, Node
-from blizzard.wire.completion import CheckResult, CompletionSubmission, SubmittedArtifact
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -129,10 +129,8 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
 _AT_BUILD = ChunkFacts(minted=True, promoted=True, leases=[LeaseFact(epoch=1, minted_at=_T0)])
 
 
-def _submission(choice: str, *, from_node_id: str = "nd_build", **fields: object) -> CompletionSubmission:
-    return CompletionSubmission.model_validate(
-        {"choice": choice, "epoch": 1, "runner_id": "runner-a", "from_node_id": from_node_id, **fields}
-    )
+def _submission(choice: str, *, from_node_id: str = "nd_build", **fields: object) -> Completion:
+    return Completion(choice=choice, epoch=1, runner_id="runner-a", from_node_id=from_node_id, **fields)  # type: ignore[arg-type]
 
 
 def _gate(
@@ -235,15 +233,13 @@ def test_a_gate_offers_the_nodes_own_choices() -> None:
 # --- Plain completion plan ---------------------------------------------------
 
 
-def _plain(
-    submission: CompletionSubmission, *, node: Node = _BUILD, gate: GateDecision | None = None
-) -> CompletionPlan:
+def _plain(submission: Completion, *, node: Node = _BUILD, gate: GateDecision | None = None) -> CompletionPlan:
     return CompletionPlan.plain(_GRAPH, node, submission, open_gate=gate, produces_mode="enforce")
 
 
 def test_a_plain_completion_lands_on_its_edges_destination() -> None:
     assert _plain(_submission("ship")).to_node_id == RESERVED_TERMINAL
-    plan = _plain(_submission("review", check_results=[{"command": "make test", "passed": True}]))
+    plan = _plain(_submission("review", check_results=[CheckOutcome(command="make test", passed=True)]))
     assert (plan.to_node_id, plan.migrates) == ("nd_review", False)
 
 
@@ -283,9 +279,9 @@ def test_an_unknown_choice_or_destination_is_refused() -> None:
 
 
 def test_a_red_check_refuses_a_choice_that_requires_green_ones() -> None:
-    red = [CheckResult(command="make test", passed=False)]
+    red = [CheckOutcome(command="make test", passed=False)]
     with pytest.raises(CompletionRefused, match="requires green checks"):
-        _plain(_submission("review", check_results=[c.model_dump() for c in red]))
+        _plain(_submission("review", check_results=red))
 
 
 # --- Resolving completion plan -----------------------------------------------
@@ -351,7 +347,7 @@ def test_a_replayed_migration_is_classified_by_what_landed(migration: MigrationF
 
 def test_a_replay_answers_without_claiming_a_fresh_migration() -> None:
     superseded = ApplyResult.replayed(ReplayedMigration.SUPERSEDED_BY_RESTART, epoch=3)
-    assert superseded.response.detail == "superseded by a restart at epoch 3"
+    assert superseded.detail == "superseded by a restart at epoch 3"
     for replay in ReplayedMigration:
         assert not ApplyResult.replayed(replay, epoch=1).fresh_migration
 
@@ -458,10 +454,10 @@ def test_the_next_step_follows_the_destination(to_node_id: str, kind: NextStepKi
 
 
 def test_a_commit_artifact_encodes_branch_and_hash_and_alone_carries_its_repo() -> None:
-    commit = SubmittedArtifact(
+    commit = CompletionArtifact(
         name="c", kind=ArtifactKind.GIT_COMMIT, forge="github", repo="o/r", branch_name="main", commit_hash="abc"
     )
-    note = SubmittedArtifact(name="n", kind=ArtifactKind.ASSET, repo="o/r", content="hello")
+    note = CompletionArtifact(name="n", kind=ArtifactKind.ASSET, repo="o/r", content="hello")
     rows = stored_artifacts("chk_1", _BUILD, 2, [commit, note], artifact_ids=["ar_1", "ar_2"])
 
     assert [(r.artifact_id, r.data, r.repo, r.forge) for r in rows] == [
@@ -472,6 +468,6 @@ def test_a_commit_artifact_encodes_branch_and_hash_and_alone_carries_its_repo() 
 
 
 def test_every_submitted_artifact_gets_exactly_one_minted_id() -> None:
-    note = SubmittedArtifact(name="n", kind=ArtifactKind.ASSET)
+    note = CompletionArtifact(name="n", kind=ArtifactKind.ASSET)
     with pytest.raises(ValueError):
         stored_artifacts("chk_1", _BUILD, 1, [note], artifact_ids=[])

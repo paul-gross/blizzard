@@ -17,13 +17,12 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.execution.detach import DetachService
-from blizzard.hub.domain.execution.facts import FactIngestService
+from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
@@ -91,18 +90,16 @@ def test_applying_the_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path)
     service = _service(engine, clock)
 
     first = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
+            )
+        ],
     )
-    assert first.ack.applied == [1]
+    assert first.applied == [1]
 
     row = _row(engine, "r1")
     assert row is not None
@@ -110,18 +107,16 @@ def test_applying_the_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path)
 
     later = _T0.replace(hour=13)
     second = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=2,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="anthropic", sampled_at=later, utilization_pct=55.0),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=2,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="anthropic", sampled_at=later, utilization_pct=55.0),
+            )
+        ],
     )
-    assert second.ack.applied == [2]
+    assert second.applied == [2]
 
     # Exactly one row (upsert, not append), and it carries the later call's payload.
     with engine.connect() as conn:
@@ -137,35 +132,31 @@ def test_replayed_seq_at_or_below_high_water_is_already_applied_and_writes_nothi
     service = _service(engine, clock)
 
     first = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
+            )
+        ],
     )
-    assert first.ack.applied == [1]
+    assert first.applied == [1]
 
     # Replay the same seq with a different payload — since it is at-or-below the
     # high-water mark, it must not apply (and must not overwrite the stored row).
     replay = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=99.0),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=99.0),
+            )
+        ],
     )
-    assert replay.ack.applied == []
-    assert replay.ack.already_applied == [1]
+    assert replay.applied == []
+    assert replay.already_applied == [1]
 
     row = _row(engine, "r1")
     assert row is not None
@@ -181,19 +172,17 @@ def test_fact_for_a_runner_with_no_registration_row_applies_without_stalling_hig
     service = _service(engine, clock)
 
     result = service.ingest(
-        RunnerFactBatch(
-            runner_id="ghost-runner",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=1.0),
-                )
-            ],
-        )
+        "ghost-runner",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=1.0),
+            )
+        ],
     )
-    assert result.ack.applied == [1]
-    assert result.ack.high_water == 1
+    assert result.applied == [1]
+    assert result.high_water == 1
 
     row = _row(engine, "ghost-runner")
     assert row is not None
@@ -495,31 +484,29 @@ def test_non_finite_or_out_of_range_utilization_windows_are_omitted_at_ingest(
     service = _service(engine, FixedClock(_T0))
     valid_window = _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5)["windows"][0]
     result = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload={
-                        "slug": "anthropic",
-                        "sampled_at": _T0.isoformat(),
-                        "windows": [
-                            valid_window,
-                            {
-                                "window": "7d",
-                                "utilization_pct": invalid_pct,
-                                "resets_at": "2026-08-08T12:00:00+00:00",
-                                "window_seconds": 604_800,
-                            },
-                        ],
-                    },
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload={
+                    "slug": "anthropic",
+                    "sampled_at": _T0.isoformat(),
+                    "windows": [
+                        valid_window,
+                        {
+                            "window": "7d",
+                            "utilization_pct": invalid_pct,
+                            "resets_at": "2026-08-08T12:00:00+00:00",
+                            "window_seconds": 604_800,
+                        },
+                    ],
+                },
+            )
+        ],
     )
 
-    assert result.ack.applied == [1]
+    assert result.applied == [1]
     row = _row(engine, "r1")
     assert row is not None
     # Intake normalizes the instant, so the stored stamp carries an explicit +00:00
@@ -595,18 +582,16 @@ def test_a_missed_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path) -> 
     service = _service(engine, clock)
 
     first = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                    payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed", name="OpenAI"),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed", name="OpenAI"),
+            )
+        ],
     )
-    assert first.ack.applied == [1]
+    assert first.applied == [1]
 
     row = _miss_row(engine, "r1")
     assert row is not None
@@ -615,18 +600,16 @@ def test_a_missed_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path) -> 
 
     later = _T0.replace(hour=13)
     second = service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=2,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                    payload=_miss_payload(slug="openai", missed_at=later, reason="endpoint_unreachable"),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=2,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                payload=_miss_payload(slug="openai", missed_at=later, reason="endpoint_unreachable"),
+            )
+        ],
     )
-    assert second.ack.applied == [2]
+    assert second.applied == [2]
 
     with engine.connect() as conn:
         rows = conn.execute(
@@ -646,30 +629,24 @@ def test_a_missed_fact_never_touches_the_sample_row(tmp_path: Path) -> None:
     service = _service(engine, clock)
 
     service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(slug="openai", sampled_at=_T0, utilization_pct=10.0, name="OpenAI"),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                payload=_payload(slug="openai", sampled_at=_T0, utilization_pct=10.0, name="OpenAI"),
+            )
+        ],
     )
     service.ingest(
-        RunnerFactBatch(
-            runner_id="r1",
-            facts=[
-                RunnerFact(
-                    seq=2,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                    payload=_miss_payload(
-                        slug="openai", missed_at=_T0 + timedelta(minutes=1), reason="credential_lapsed"
-                    ),
-                )
-            ],
-        )
+        "r1",
+        [
+            PushedFact(
+                seq=2,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                payload=_miss_payload(slug="openai", missed_at=_T0 + timedelta(minutes=1), reason="credential_lapsed"),
+            )
+        ],
     )
 
     sample_row = _row(engine, "r1", "openai")
@@ -689,19 +666,17 @@ def test_a_missed_fact_for_a_runner_with_no_registration_row_applies_without_sta
     service = _service(engine, clock)
 
     result = service.ingest(
-        RunnerFactBatch(
-            runner_id="ghost-runner",
-            facts=[
-                RunnerFact(
-                    seq=1,
-                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-                    payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed"),
-                )
-            ],
-        )
+        "ghost-runner",
+        [
+            PushedFact(
+                seq=1,
+                kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed"),
+            )
+        ],
     )
-    assert result.ack.applied == [1]
-    assert result.ack.high_water == 1
+    assert result.applied == [1]
+    assert result.high_water == 1
     assert _miss_row(engine, "ghost-runner") is not None
 
 

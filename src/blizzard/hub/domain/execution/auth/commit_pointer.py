@@ -5,11 +5,12 @@ submitted."""
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.roles import domain_model
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
 
 # A full lowercase object name: SHA-1 (40) or SHA-256 (64).
 _FULL_OBJECT_NAME = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
@@ -21,7 +22,7 @@ class CommitPointerPolicy:
     """One submission's ``git_commit`` artifacts judged for a complete pointer —
     already-loaded values only (``bzh:domain-takes-objects``)."""
 
-    artifacts: list[SubmittedArtifact]
+    artifacts: Sequence[CompletionArtifact]
 
     def rejection(self) -> str | None:
         """A failure detail naming the artifact and the field at fault, or ``None`` when
@@ -35,7 +36,7 @@ class CommitPointerPolicy:
         return None
 
     @staticmethod
-    def _fault(artifact: SubmittedArtifact) -> str | None:
+    def _fault(artifact: CompletionArtifact) -> str | None:
         if not (artifact.repo or "").strip():
             return "`repo` is required"
         branch = artifact.branch_name or ""

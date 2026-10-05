@@ -6,14 +6,15 @@ its own wider threshold). ``token_hash`` is the one mutable exception; a revoked
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, TypeGuard
 
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.domain.runners.route import Route
 
@@ -284,6 +285,61 @@ class ExternalSubscriptionUsageWindow:
     utilization_pct: float
     resets_at: datetime
     window_seconds: int
+
+    @classmethod
+    def admitted(cls, entry: object) -> ExternalSubscriptionUsageWindow | str:
+        """One window off a runner's usage fact, or why it is refused: ``window`` a string,
+        ``utilization_pct`` a finite number from 0 to 100, ``window_seconds`` a positive integer —
+        a ``bool`` is never a number here — and ``resets_at`` an ISO-8601 instant or a Unix
+        timestamp, read as UTC when naive (``bzh:utc-instants``)."""
+        if not isinstance(entry, Mapping):
+            return "not an object"
+        window, pct, seconds = entry.get("window"), entry.get("utilization_pct"), entry.get("window_seconds")
+        if not isinstance(window, str):
+            return "window"
+        if not _is_number(pct) or not math.isfinite(pct) or not 0 <= pct <= 100:
+            return "utilization_pct"
+        if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
+            return "window_seconds"
+        resets_at = _instant(entry.get("resets_at"))
+        if resets_at is None:
+            return "resets_at"
+        return cls(window=window, utilization_pct=float(pct), resets_at=resets_at, window_seconds=seconds)
+
+    @property
+    def stored(self) -> dict[str, object]:
+        """The JSON object ``runner_external_usage`` keeps for this window."""
+        return {
+            "window": self.window,
+            "utilization_pct": self.utilization_pct,
+            "resets_at": iso_utc(self.resets_at),
+            "window_seconds": self.window_seconds,
+        }
+
+
+def _is_number(value: object) -> TypeGuard[int | float]:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+# A Unix timestamp past this many seconds is read as milliseconds.
+_MILLISECONDS_ABOVE = 2e10
+
+
+def _instant(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return as_utc(value)
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            try:
+                return as_utc(datetime.fromisoformat(value))
+            except ValueError:
+                return None
+    if not _is_number(value) or not math.isfinite(value):
+        return None
+    seconds = value / 1000 if abs(value) > _MILLISECONDS_ABOVE else value
+    return datetime.fromtimestamp(seconds, UTC)
 
 
 @domain_model

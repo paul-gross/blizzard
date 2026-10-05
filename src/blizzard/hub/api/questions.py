@@ -21,6 +21,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
+from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
 router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
@@ -48,13 +49,29 @@ def question_view(row: NodeQuestion) -> QuestionView:
     )
 
 
+def asked_question(fact: QuestionAsked) -> AskedQuestion:
+    return AskedQuestion(
+        question_id=fact.question_id,
+        chunk_id=fact.chunk_id,
+        runner_id=fact.runner_id,
+        epoch=fact.epoch,
+        question=fact.question,
+        asked_at=fact.asked_at,
+        node_id=fact.node_id,
+        session_id=fact.session_id,
+        harness_id=fact.harness_id,
+        lease_id=fact.lease_id,
+        options=tuple(fact.options),
+    )
+
+
 @router.post("/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(QUESTION_ANSWER))])
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
     if services.chunks.record.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
-    refusal = services.questions.record_asked(fact)
+    refusal = services.questions.record_asked(asked_question(fact))
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
     key = f"questions:{fact.question_id}"
