@@ -21,8 +21,8 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService
-from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -90,7 +90,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         choices=_CHOICES,
         produces=["review-findings", "review-diary"],
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",

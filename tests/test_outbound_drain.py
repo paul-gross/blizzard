@@ -5,6 +5,7 @@ far and then still handled one at a time by its own arm."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -18,7 +19,7 @@ from blizzard.runner.lifecycle import drain as drain_module
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.envelope import ApplyResponse
+from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -93,7 +94,7 @@ def test_run_sends_a_contiguous_run_of_generic_facts_in_one_push_facts_call() ->
 
 def test_run_flushes_the_collected_run_before_a_completion_then_handles_it_on_its_own() -> None:
     hub = FakeHub()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, detail="")]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, detail="")]
     ctx = _ctx(hub)
     run_seqs = [_enqueue_generic(ctx) for _ in range(3)]
     completion_seq = _enqueue_completion(ctx)
@@ -156,9 +157,9 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
 
     real_push_facts = hub.push_facts
 
-    def _reject_middle(batch):  # type: ignore[no-untyped-def]
-        ack = real_push_facts(batch)
-        return ack.model_copy(update={"applied": [s for s in ack.applied if s != seqs[1]], "rejected": [seqs[1]]})
+    def _reject_middle(runner_id, facts):  # type: ignore[no-untyped-def]
+        ack = real_push_facts(runner_id, facts)
+        return replace(ack, applied=[s for s in ack.applied if s != seqs[1]], rejected=[seqs[1]])
 
     hub.push_facts = _reject_middle  # type: ignore[method-assign]
 

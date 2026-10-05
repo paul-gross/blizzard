@@ -23,8 +23,8 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests import support
 from tests.runner_fakes import (
@@ -198,7 +198,7 @@ def test_runner_loop_scenario_never_plans_an_automatic_covering_index(tmp_path: 
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     hub.envelopes["ch_1"] = env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     wt = FakeWorktreeGit()

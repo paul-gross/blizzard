@@ -18,7 +18,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.wire.envelope import ApplyResponse
+from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
@@ -153,7 +153,7 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
         checks=["a", "b"],
         requires_checks={"pass"} if requires_checks else set(),
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="s", pgid=100), verdict="pass"
     )

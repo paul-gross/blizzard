@@ -36,11 +36,9 @@ from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.usage_limit import classify_judge_usage_limit, engage_and_park_judge
+from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
+from blizzard.runner.node_steps.submissions import CheckVerdict, Completion, CompletionArtifact, GateSubmission
 from blizzard.runner.throttle.overload import classify_judge_overload, record_judge_overload, reset_if_streak_open
-from blizzard.wire.completion import CheckResult, CompletionSubmission, SubmittedArtifact
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import NodeEnvelope
-from blizzard.wire.graph import ProducesEntry
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -104,7 +102,7 @@ class Judgement:
 
     ctx: JudgementContext
     lease: Lease
-    envelope: NodeEnvelope
+    envelope: Envelope
     bindings: list[EnvBinding]
 
     @property
@@ -155,7 +153,7 @@ class Judgement:
         lease = self.lease
         gated = lease.node_name in self.ctx.config.gates
         route = route_exit(entry, gated=gated)
-        artifacts: list[SubmittedArtifact] = []
+        artifacts: list[CompletionArtifact] = []
         if route is not ExitRoute.ELICIT:
             # Confirmed ahead of the gate and the brake alike: a buffered decision and the
             # produces reconcile both read them.
@@ -181,7 +179,7 @@ class Judgement:
                 return
         self._launch()
 
-    def _nudge(self, produces: ProducesReconciler, missing: list[ProducesEntry]) -> None:
+    def _nudge(self, produces: ProducesReconciler, missing: list[ProducesSpec]) -> None:
         """Resume-once: an exit with `produces:` unmet is resumed, not judged — no verdict
         elicited, no attempt failed, and no `checks:` run."""
         lease = self.lease
@@ -510,13 +508,13 @@ class Judgement:
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(selected.name, checks, artifacts)
 
-    def _buffer_decision(self, artifacts: list[SubmittedArtifact]) -> None:
+    def _buffer_decision(self, artifacts: list[CompletionArtifact]) -> None:
         """Buffer a runner-config gate decision — the gated node-step's outcome.
 
         The choice set is not the runner's, so the submission carries only the step's artifacts
         and its fence; ADVANCE skips this lease until the flush closes it."""
         lease = self.lease
-        submission = DecisionSubmission(
+        submission = GateSubmission(
             from_node_id=lease.node_id,
             epoch=lease.epoch,
             runner_id=self.ctx.config.runner_id,
@@ -527,17 +525,17 @@ class Judgement:
         OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
 
-    def _buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[SubmittedArtifact]) -> None:
+    def _buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[CompletionArtifact]) -> None:
         """One atomic, epoch-fenced write. The entry names the lease, so ADVANCE skips it
         until the flush closes it."""
         lease = self.lease
-        submission = CompletionSubmission(
+        submission = Completion(
             choice=choice,
             epoch=lease.epoch,
             runner_id=self.ctx.config.runner_id,
             from_node_id=lease.node_id,
             # `(command, passed)` only — `output_tail` stays runner-local, off the wire.
-            check_results=[CheckResult(command=r.command, passed=r.passed) for r in checks],
+            check_results=[CheckVerdict(command=r.command, passed=r.passed) for r in checks],
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
             lease_id=lease.lease_id,

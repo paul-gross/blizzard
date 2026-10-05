@@ -7,7 +7,7 @@ confined here; a transport failure or unexpected status is wrapped once into
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 import httpx
 from pydantic import TypeAdapter
@@ -16,15 +16,30 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.client import (
     ChunkEndedError,
     ChunkNotFoundError,
+    ClaimConflict,
+    ClaimedRoute,
+    ClaimRequest,
+    DependencyDenial,
+    FactPushAck,
     HubClientError,
     IHubClient,
+    IncompatibleDenial,
+    PausedDenial,
+    PushedFact,
     RouteClaimOutcome,
+    TerminalDenial,
 )
+from blizzard.runner.hub.node_steps import (
+    apply_reply_of,
+    completion_submission,
+    decision_submission,
+    envelope_of,
+)
+from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
+from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
@@ -78,9 +93,15 @@ class HttpHubClient:
         self._raise_for_status(resp, f"POST {path}")
         return QueuePeekResponse.model_validate(resp.json())
 
-    def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
+    def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
+        body = RouteClaim(
+            chunk_id=claim.chunk_id,
+            runner_id=claim.runner_id,
+            workspace_id=claim.workspace_id,
+            environment_ids=claim.environment_ids,
+        ).model_dump(mode="json")
         try:
-            resp = self._client.post(f"{_FLEET_API}/routes", json=claim.model_dump(mode="json"))
+            resp = self._client.post(f"{_FLEET_API}/routes", json=body)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, "POST /fleet/routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
@@ -88,28 +109,42 @@ class HttpHubClient:
             # Four distinct 409 shapes share the status code — race loss, terminal,
             # dependency, and incompatibility denials — told apart by which field is in body.
             if "status" in body:
-                return RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial.model_validate(body))
+                return RouteClaimOutcome(denied_terminal=_terminal(RouteClaimTerminalDenial.model_validate(body)))
             if "prerequisite_chunk_id" in body:
-                return RouteClaimOutcome(denied_dependency=RouteClaimDependencyDenial.model_validate(body))
+                return RouteClaimOutcome(denied_dependency=_dependency(RouteClaimDependencyDenial.model_validate(body)))
             if "incompatible_runner_id" in body:
-                return RouteClaimOutcome(denied_incompatible=RouteClaimIncompatibleDenial.model_validate(body))
-            return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(body))
+                return RouteClaimOutcome(
+                    denied_incompatible=_incompatible(RouteClaimIncompatibleDenial.model_validate(body))
+                )
+            return RouteClaimOutcome(conflict=_conflict(RouteClaimConflict.model_validate(body)))
         if resp.status_code == httpx.codes.FORBIDDEN:
-            return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))
+            return RouteClaimOutcome(denied_paused=_paused(RouteClaimPausedDenial.model_validate(resp.json())))
         self._raise_for_status(resp, "POST /fleet/routes")
-        return RouteClaimOutcome(claimed=RouteClaimResponse.model_validate(resp.json()))
+        return RouteClaimOutcome(claimed=_claimed(RouteClaimResponse.model_validate(resp.json())))
 
-    def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
-        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
-        return ApplyResponse.model_validate(resp.json())
+    def submit_completion(self, chunk_id: str, completion: Completion) -> ApplyReply:
+        body = completion_submission(completion).model_dump(mode="json")
+        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/completions", body)
+        return apply_reply_of(ApplyResponse.model_validate(resp.json()))
 
-    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
-        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/decisions", submission.model_dump(mode="json"))
-        return ApplyResponse.model_validate(resp.json())
+    def submit_decision(self, chunk_id: str, gate: GateSubmission) -> ApplyReply:
+        resp = self._post(
+            f"{_FLEET_API}/chunks/{chunk_id}/decisions", decision_submission(gate).model_dump(mode="json")
+        )
+        return apply_reply_of(ApplyResponse.model_validate(resp.json()))
 
-    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
+        batch = RunnerFactBatch(
+            runner_id=runner_id, facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts]
+        )
         resp = self._post(f"{_FLEET_API}/events", batch.model_dump(mode="json"))
-        return RunnerFactAck.model_validate(resp.json())
+        ack = RunnerFactAck.model_validate(resp.json())
+        return FactPushAck(
+            high_water=ack.high_water,
+            applied=ack.applied,
+            already_applied=ack.already_applied,
+            rejected=ack.rejected,
+        )
 
     def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
         resp = self._post(
@@ -117,11 +152,11 @@ class HttpHubClient:
         )
         return TranscriptSegmentAck.model_validate(resp.json())
 
-    def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+    def get_envelope(self, chunk_id: str) -> Envelope:
         resp = self._get(
             f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError, ended_on_conflict=True
         )
-        return NodeEnvelope.model_validate(resp.json())
+        return envelope_of(NodeEnvelope.model_validate(resp.json()))
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
         ids = list(dict.fromkeys(chunk_ids))
@@ -245,3 +280,38 @@ def _detail(resp: httpx.Response) -> str:
         return resp.text[:200]
     detail = body.get("detail") if isinstance(body, dict) else None
     return str(detail) if detail is not None else resp.text[:200]
+
+
+def _claimed(wire: RouteClaimResponse) -> ClaimedRoute:
+    return ClaimedRoute(
+        chunk_id=wire.chunk_id,
+        runner_id=wire.runner_id,
+        workspace_id=wire.workspace_id,
+        environment_ids=list(wire.environment_ids),
+        envelope=envelope_of(wire.envelope),
+        route_token=wire.route_token,
+    )
+
+
+def _conflict(wire: RouteClaimConflict) -> ClaimConflict:
+    return ClaimConflict(chunk_id=wire.chunk_id, held_by_runner_id=wire.held_by_runner_id, detail=wire.detail)
+
+
+def _terminal(wire: RouteClaimTerminalDenial) -> TerminalDenial:
+    return TerminalDenial(chunk_id=wire.chunk_id, status=wire.status, detail=wire.detail)
+
+
+def _dependency(wire: RouteClaimDependencyDenial) -> DependencyDenial:
+    return DependencyDenial(
+        chunk_id=wire.chunk_id, prerequisite_chunk_id=wire.prerequisite_chunk_id, detail=wire.detail
+    )
+
+
+def _incompatible(wire: RouteClaimIncompatibleDenial) -> IncompatibleDenial:
+    return IncompatibleDenial(
+        chunk_id=wire.chunk_id, incompatible_runner_id=wire.incompatible_runner_id, detail=wire.detail
+    )
+
+
+def _paused(wire: RouteClaimPausedDenial) -> PausedDenial:
+    return PausedDenial(chunk_id=wire.chunk_id, runner_id=wire.runner_id, detail=wire.detail)

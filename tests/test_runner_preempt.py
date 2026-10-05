@@ -12,13 +12,13 @@ from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.node_steps import completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -197,16 +197,16 @@ def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):
     """Reconcile before draining the queued completion; its rejection spends no retry."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    submission = CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+    submission = Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
     store.enqueue_outbound(
         kind=COMPLETION_KIND,
         chunk_id="ch_1",
         lease_id="lease_1",
-        payload=json.dumps({"submission": submission.model_dump(mode="json")}),
+        payload=json.dumps({"submission": completion_submission(submission).model_dump(mode="json")}),
         created_at=_NOW,
     )
     hub = _restarted_hub()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.FAILURE, detail="stale epoch 1; chunk is at 2")]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.FAILURE, detail="stale epoch 1; chunk is at 2")]
     ctx = _ctx(store, hub)
 
     Pull(ctx).run()

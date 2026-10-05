@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.completion_gates import Coverage
 from blizzard.foundation.roles import domain_model
-from blizzard.wire.completion import SubmittedArtifact
-from blizzard.wire.envelope import NodeEnvelope
-from blizzard.wire.graph import ProducesEntry
+from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
+from blizzard.runner.node_steps.submissions import CompletionArtifact
 
 
 @domain_model
@@ -18,9 +17,9 @@ from blizzard.wire.graph import ProducesEntry
 class ProducesReconciler:
     """The ``produces:`` specs of one node, against what its attempt has submitted."""
 
-    envelope: NodeEnvelope
+    envelope: Envelope
 
-    def missing(self, git_artifacts: list[SubmittedArtifact], attached_names: Iterable[str]) -> list[ProducesEntry]:
+    def missing(self, git_artifacts: list[CompletionArtifact], attached_names: Iterable[str]) -> list[ProducesSpec]:
         """Every spec this attempt does not yet cover, in declaration order.
 
         Evaluated by the shared :class:`Coverage` predicate, so this and the upstream
@@ -29,11 +28,11 @@ class ProducesReconciler:
         name's dummy artifact carries an empty string rather than fetching content this
         check provably never uses."""
         attached = [
-            SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content="", attached=True) for name in attached_names
+            CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content="", attached=True) for name in attached_names
         ]
         return Coverage(git_artifacts + attached).unmet(self.envelope.node.produces)
 
-    def nudge_message(self, missing: list[ProducesEntry]) -> str:
+    def nudge_message(self, missing: list[ProducesSpec]) -> str:
         """The nudge resume's message: one line per unmet spec, naming
         the kind-appropriate declaration verb. Same inert ``#`` framing as the resume messages.
         """
@@ -56,14 +55,14 @@ class ProducesReconciler:
         return "\n".join(lines)
 
     def collect_assets(
-        self, git_artifacts: list[SubmittedArtifact], assessment: str, attachments: dict[str, str]
-    ) -> list[SubmittedArtifact]:
+        self, git_artifacts: list[CompletionArtifact], assessment: str, attachments: dict[str, str]
+    ) -> list[CompletionArtifact]:
         """An asset artifact per produced name no git commit covers.
 
         An explicit attachment wins over the assessment, marked ``attached=True``.
         """
         covered = {a.name for a in git_artifacts}
-        submitted: list[SubmittedArtifact] = []
+        submitted: list[CompletionArtifact] = []
         for spec in self.envelope.node.produces:
             if spec.kind is ArtifactKind.GIT_COMMIT:
                 continue
@@ -72,8 +71,8 @@ class ProducesReconciler:
                 continue
             if name in attachments:
                 submitted.append(
-                    SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=attachments[name], attached=True)
+                    CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content=attachments[name], attached=True)
                 )
             else:
-                submitted.append(SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment))
+                submitted.append(CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment))
         return submitted

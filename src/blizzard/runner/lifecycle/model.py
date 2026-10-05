@@ -23,9 +23,9 @@ from blizzard.foundation.runner_event_types import LeaseChangeCause
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
+from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
 from blizzard.runner.throttle.pause import PausePark, needs_pause_park
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView
-from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry
 
 if TYPE_CHECKING:
@@ -359,7 +359,7 @@ class MintOwnerSource(StrEnum):
 
 
 def mint_owner_source(
-    resume_from: SessionReference | None, harness_id: str | None, node: NodeConfig
+    resume_from: SessionReference | None, harness_id: str | None, node: EnvelopeNode
 ) -> MintOwnerSource:
     """A resumed session's owner, then an explicit carried owner (a retry or a recovery), then
     selection among the node's acceptable set, then the runner's default."""
@@ -551,7 +551,7 @@ class ApplyMove(StrEnum):
     NONE = "none"
 
 
-def apply_move(outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, *, chunk_paused: bool) -> ApplyMove:
+def apply_move(outcome: ApplyOutcome, next_envelope: Envelope | None, *, chunk_paused: bool) -> ApplyMove:
     """What the hub's answer to an applied step means here. A paused chunk starts no worker: the
     binding is held, and the node is entered once the pause lifts."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:

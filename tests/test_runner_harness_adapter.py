@@ -25,8 +25,8 @@ from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import LinuxProcessProbe
-from blizzard.wire.envelope import NodeEnvelope
 from tests import transcript_fixtures
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -211,7 +211,7 @@ def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
     return _fake_popen
 
 
-def _spawn_fixture(spawn_executor: Executor) -> tuple[ClaudeCodeAdapter, NodeEnvelope, WorkerPreamble]:
+def _spawn_fixture(spawn_executor: Executor) -> tuple[ClaudeCodeAdapter, Envelope, WorkerPreamble]:
     adapter = _adapter(spawn_executor, binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(

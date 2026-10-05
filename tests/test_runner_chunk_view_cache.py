@@ -16,13 +16,13 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.node_steps import completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply, Completion
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -155,8 +155,8 @@ class _WriteReactingHub(FakeHub):
     scripted status — standing in for the hub's own reaction to the write landing, the
     signal a reader after invalidation must see and a stale cache would have missed."""
 
-    def push_facts(self, batch):  # type: ignore[no-untyped-def]
-        ack = super().push_facts(batch)
+    def push_facts(self, runner_id, facts):  # type: ignore[no-untyped-def]
+        ack = super().push_facts(runner_id, facts)
         self.chunks["ch_a"] = ChunkStatusView(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
         return ack
 
@@ -194,12 +194,12 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
     # (b) ch_b: an active lease with a buffered completion — primed under the spend cap,
     # then the flush's own hub reaction pushes it over, which _capped must catch fresh.
     _seed_active_lease(store, chunk="ch_b", lease="lease_b", pid=300, start="start-300")
-    submission = CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+    submission = Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
     store.enqueue_outbound(
         kind=COMPLETION_KIND,
         chunk_id="ch_b",
         lease_id="lease_b",
-        payload=json.dumps({"submission": submission.model_dump(mode="json")}),
+        payload=json.dumps({"submission": completion_submission(submission).model_dump(mode="json")}),
         created_at=_NOW,
     )
 
@@ -221,7 +221,7 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
     )
     hub.envelopes["ch_a"] = make_envelope("ch_a", "build", node_id="nd_build", choices=[("pass", "ok")])
     hub.apply_responses = [
-        ApplyResponse(
+        ApplyReply(
             outcome=ApplyOutcome.NEXT,
             next_envelope=make_envelope("ch_b", "review", node_id="nd_review", choices=[("pass", "ok")]),
         )

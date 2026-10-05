@@ -20,7 +20,7 @@ from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.wire.envelope import NodeEnvelope
+from blizzard.runner.node_steps.envelope import Envelope
 
 #: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
 DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 10.0
@@ -134,7 +134,7 @@ class IHarnessWorkerLifecycle(Protocol):
 
     def spawn(
         self,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,

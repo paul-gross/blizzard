@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.runner.hub.client import RouteClaimOutcome
+from blizzard.runner.hub.client import ClaimConflict, ClaimedRoute, RouteClaimOutcome
 from blizzard.runner.hub.outbound_buffer import (
     COMPLETION_KIND,
     DECISION_KIND,
@@ -25,7 +25,7 @@ from blizzard.runner.hub.outbound_buffer import (
 )
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
-from blizzard.wire.route import RouteClaimConflict, RouteClaimResponse
+from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
 
@@ -164,7 +164,14 @@ def test_route_claim_outcome_requires_exactly_one() -> None:
         RouteClaimOutcome()
     with pytest.raises(ValueError, match="exactly one arm, not 2"):
         RouteClaimOutcome(
-            claimed=RouteClaimResponse.model_construct(),
-            conflict=RouteClaimConflict.model_construct(),
+            claimed=ClaimedRoute(
+                chunk_id="ch_1",
+                runner_id="r1",
+                workspace_id="ws1",
+                environment_ids=[],
+                envelope=make_envelope("ch_1", "build", node_id="nd_build", choices=[]),
+                route_token="rtok",
+            ),
+            conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"),
         )
-    assert RouteClaimOutcome(conflict=RouteClaimConflict.model_construct()).won is False
+    assert RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2")).won is False

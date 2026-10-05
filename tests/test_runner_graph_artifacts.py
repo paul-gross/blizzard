@@ -13,7 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
-from blizzard.wire.envelope import GraphArtifact
+from blizzard.runner.node_steps.envelope import GraphArtifact
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,

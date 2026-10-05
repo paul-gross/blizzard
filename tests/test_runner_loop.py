@@ -59,14 +59,13 @@ from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.envelope import ProducesSpec
+from blizzard.runner.node_steps.submissions import ApplyReply, CompletionArtifact
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
-from blizzard.wire.completion import SubmittedArtifact
-from blizzard.wire.envelope import ApplyResponse
-from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from tests.runner_fakes import (
@@ -1122,13 +1121,12 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
 
 @pytest.mark.unit
 def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-untyped-def]
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimConflict
+    from blizzard.runner.hub.client import ClaimConflict, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = RouteClaimOutcome(conflict=RouteClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
+    hub.claim_outcome = RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
@@ -1145,13 +1143,12 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
     """A 403 is distinct from a 409 conflict: the claim was refused outright,
     so FILL releases the binding and stops trying further slots this tick rather than
     keep racing claims that will be refused the same way."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimPausedDenial
+    from blizzard.runner.hub.client import PausedDenial, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id="r1"))
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
@@ -1170,13 +1167,12 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ign
     """The must-fix-1 claim guard: the chunk was stopped between this
     runner's peek and its claim POST — not a fleet-wide brake, so FILL releases the
     binding and keeps trying its remaining slots, same as a race-loss conflict."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimTerminalDenial
+    from blizzard.runner.hub.client import RouteClaimOutcome, TerminalDenial
 
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial(chunk_id="ch_1", status="stopped"))
+    hub.claim_outcome = RouteClaimOutcome(denied_terminal=TerminalDenial(chunk_id="ch_1", status="stopped"))
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
@@ -1195,14 +1191,13 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
     """A distinct refusal: the chunk stands on a prerequisite that has
     not reached ``done`` — not a race loss, so FILL releases the binding and keeps
     trying its remaining slots, same as a terminal denial or a race-loss conflict."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimDependencyDenial
+    from blizzard.runner.hub.client import DependencyDenial, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = RouteClaimOutcome(
-        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
+        denied_dependency=DependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -1222,14 +1217,13 @@ def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  # type:
     """The runner's stored capabilities no longer cover the chunk — not a race loss or a
     dependency block, so FILL releases the binding, mints no lease, and keeps filling its
     remaining slots, as the terminal/dependency denials do."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimIncompatibleDenial
+    from blizzard.runner.hub.client import IncompatibleDenial, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = RouteClaimOutcome(
-        denied_incompatible=RouteClaimIncompatibleDenial(chunk_id="ch_1", incompatible_runner_id="r1")
+        denied_incompatible=IncompatibleDenial(chunk_id="ch_1", incompatible_runner_id="r1")
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -1251,8 +1245,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
     statically-known one — must still hold strict mode at that head. With two open slots and
     a second, unmarked entry behind it, the whole run must stop at the first claim rather
     than falling through to attempt the second."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimDependencyDenial
+    from blizzard.runner.hub.client import DependencyDenial, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1261,7 +1254,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
         QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
     ]
     hub.claim_outcome = RouteClaimOutcome(
-        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
+        denied_dependency=DependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
     )
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -1499,8 +1492,7 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_le
     """Hoist, preserved for the legacy (non-capability-asserting)
     path only: one ``Fill.run()`` peeks the hub ONCE, filling every open
     slot off that one cached snapshot — the reverse of the matched path's own discipline."""
-    from blizzard.runner.hub.client import RouteClaimOutcome
-    from blizzard.wire.route import RouteClaimConflict
+    from blizzard.runner.hub.client import ClaimConflict, RouteClaimOutcome
 
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1510,7 +1502,7 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_le
     ]
     # Both claims lose the race — spawning is never reached, which is what lets this test
     # assert `capabilities=[]` cleanly (no adapter needs to resolve through `ctx.harnesses`).
-    hub.claim_outcome = RouteClaimOutcome(conflict=RouteClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
+    hub.claim_outcome = RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -1633,7 +1625,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     wt = FakeWorktreeGit()
@@ -1692,7 +1684,7 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     wt = FakeWorktreeGit(False)  # every declaration fails verification
@@ -1737,7 +1729,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     wt = FakeWorktreeGit()
@@ -1793,7 +1785,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
@@ -1825,7 +1817,7 @@ def test_node_transition_removes_the_prior_leases_scratch_directory_and_creates_
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
@@ -1919,8 +1911,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     # to `review` (fresh) — always a new sid (assertion c).
     hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
     hub.apply_responses = [
-        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
-        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env),
+        ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
+        ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build_env),
     ]
     harness2 = FakeHarness(
         handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200),
@@ -1994,8 +1986,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
 
     hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
     hub.apply_responses = [
-        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
-        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_reentry_env),
+        ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
+        ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build_reentry_env),
     ]
     harness2 = FakeHarness(
         handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200),
@@ -2094,7 +2086,7 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
 def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None):  # type: ignore[no-untyped-def]
     """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
     hub.envelopes["ch_1"] = env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=env)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id=session, pid=pid, process_start_time=f"start-{pid}", pgid=pid), verdict="pass"
     )
@@ -2372,7 +2364,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
     # Review is read-only: no git commit produced, but the judgement carries findings.
     harness = FakeHarness(handle=_HANDLE, verdict="fail", assessment="BLOCKING: guard the empty input")
     ctx = make_context(
@@ -2433,7 +2425,7 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
     harness = FakeHarness(handle=_HANDLE, verdict="fail", assessment="BLOCKING: guard the empty input")
     wt = FakeWorktreeGit()
     ctx = make_context(
@@ -2508,7 +2500,7 @@ def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  # 
     even when an attachment exists for that same name."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, produces=["toy-api"])
     git_artifacts = [
-        SubmittedArtifact(
+        CompletionArtifact(
             name="toy-api", kind=ArtifactKind.GIT_COMMIT, repo="toy-api", branch_name="b", commit_hash="deadbeef"
         )
     ]
@@ -2530,7 +2522,7 @@ def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():
         "build",
         node_id="nd_build",
         choices=_CHOICES,
-        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+        produces=[ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
     submitted = ProducesReconciler(envelope).collect_assets([], "assessment", {})
@@ -2544,7 +2536,7 @@ def test_flush_done_releases_environments(tmp_path):  # type: ignore[no-untyped-
     _seed_running_lease(store)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
@@ -2587,7 +2579,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
     _seed_running_lease(store)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     ctx = make_context(
         store,
         hub=hub,
@@ -3380,7 +3372,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)  # over the $5 cap
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -3424,7 +3416,7 @@ def test_cost_cap_escalation_reads_open_locally(tmp_path):  # type: ignore[no-un
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
     ctx = make_context(
         store,
@@ -3453,7 +3445,7 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # typ
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)  # over the $5 cap
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -3485,7 +3477,7 @@ def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  # type: ignore[no-un
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -3536,7 +3528,7 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-unt
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=1.0)  # well under the $5 cap
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
@@ -3567,7 +3559,7 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=9999.0)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
@@ -3595,7 +3587,7 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=5.0, cost_partial=True)  # exactly at the cap, partial
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -3638,7 +3630,7 @@ def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_pat
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=5.0, cost_partial=False, billed_partial=True, estimated_cost_usd=3.0)
     ctx = make_context(
         store,
@@ -3672,7 +3664,7 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
@@ -3721,7 +3713,7 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     hub.envelopes["ch_1"] = env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     wt = FakeWorktreeGit()
@@ -3878,7 +3870,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
 
     # --- A resumed spawn: build re-entered on its own prior session.
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     harness2 = FakeHarness(
         handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200", pgid=200),
         verdict="pass",
@@ -3921,7 +3913,7 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
         )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider(
         {"e1": "/ws/e1", "e2": "/ws/e2"},
         repos={
@@ -3975,7 +3967,7 @@ def _two_env_commit_submission(tmp_path, *, origins, commits):  # type: ignore[n
         )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider(
         {"e1": "/ws/e1", "e2": "/ws/e2"},
         repos={env: [("toy-api", origins[env])] for env in ("e1", "e2")},

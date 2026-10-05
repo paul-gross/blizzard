@@ -17,7 +17,7 @@ from blizzard.runner.leases import (
     Lease,
     PoolHead,
 )
-from blizzard.wire.envelope import NodeConfig, RotatePolicyView
+from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -70,7 +70,7 @@ class SessionResolver:
     #: The transcripts lane's on/off switch — every actual read still dispatches per-owner through ``harnesses``.
     transcripts_wired: bool = False
 
-    def resolve_resume(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> ResumeTarget:
+    def resolve_resume(self, chunk_id: str, node: EnvelopeNode, spawn_cwd: str | None) -> ResumeTarget:
         """The prior session this spawn resumes, or ``None`` to mint fresh (#115, #144), paired
         with the owner a rotated named pool's replacement must mint under. **Only the
         resume-vs-mint decision** — the configuration a spawn runs under resolves in
@@ -81,7 +81,7 @@ class SessionResolver:
             return self._pool_resume(chunk_id, node, spawn_cwd)
         return self._plain_resume(chunk_id, node)
 
-    def _plain_resume(self, chunk_id: str, node: NodeConfig) -> ResumeTarget:
+    def _plain_resume(self, chunk_id: str, node: EnvelopeNode) -> ResumeTarget:
         """A bare, un-pooled resume's latest session, with its owner checked exactly as a named
         pool's head is."""
         session = self.leases.latest_session(chunk_id, node.session_source)
@@ -103,7 +103,7 @@ class SessionResolver:
         return ResumedSession(session=resume_from, lease=self.leases.lease_for_session(resume_from))
 
     def session_stamps(
-        self, node: NodeConfig, resume: ResumedSession | None, *, harness_id: str
+        self, node: EnvelopeNode, resume: ResumedSession | None, *, harness_id: str
     ) -> tuple[str | None, str | None, str | None]:
         """The (model, effort, compaction_window) this spawn runs under, and stamps (#144).
 
@@ -120,7 +120,7 @@ class SessionResolver:
             harness.resolve_compaction_window(node.session_compaction_window),
         )
 
-    def _pool_resume(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> ResumeTarget:
+    def _pool_resume(self, chunk_id: str, node: EnvelopeNode, spawn_cwd: str | None) -> ResumeTarget:
         """The named pool's head and, when there is one, why it must not be resumed."""
         pool = node.session_name or ""
         head = self.leases.pool_head(chunk_id, pool)
@@ -138,7 +138,7 @@ class SessionResolver:
         return resume_target(node, candidate=head.session, breach=breach, owner_exc=owner_exc)
 
     def _rotation_breach(
-        self, head: PoolHead, node: NodeConfig, spawn_cwd: str | None
+        self, head: PoolHead, node: EnvelopeNode, spawn_cwd: str | None
     ) -> tuple[str | None, UnknownHarnessError | UnavailableHarnessError | None]:
         """Why this pool head must not be resumed, or ``None`` when it may be,
         paired with the owner's own unresolvable exception. A head resumes only while every
@@ -240,7 +240,7 @@ class HarnessSelector:
     #: This runner's own cross-tick health cache; ``None`` skips the health gate entirely.
     health: IReadHarnessHealth | None = None
 
-    def select(self, node: NodeConfig) -> HarnessSelection:
+    def select(self, node: EnvelopeNode) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
         declared order — a member the registry cannot serve, or one health has withdrawn,
         is skipped and recorded. A single member skips the model check only
@@ -269,7 +269,7 @@ class HarnessSelector:
         return HarnessSelection(harness_id=None, skipped=tuple(skipped))
 
 
-def selection_is_strict(node: NodeConfig) -> bool:
+def selection_is_strict(node: EnvelopeNode) -> bool:
     """Whether selection checks each member can map the node's model: a model preference set
     across several members, or one naming an authored (``blizzard:``-namespaced) tier — a tier a
     harness cannot map is never silently substituted."""
@@ -290,7 +290,7 @@ def member_skip_reason(*, healthy: bool, maps_authored_tier: bool) -> str | None
 
 
 def resume_target(
-    node: NodeConfig,
+    node: EnvelopeNode,
     *,
     candidate: SessionReference | None = None,
     breach: str | None = None,
@@ -320,7 +320,7 @@ def model_drifted(head_model: str | None, resolved: str | None) -> bool:
 
 
 def rotation_breach(
-    rotate: RotatePolicyView, *, context_tokens: int | None, invocations: int | None, transcript_bytes: int | None
+    rotate: RotateBounds, *, context_tokens: int | None, invocations: int | None, transcript_bytes: int | None
 ) -> str | None:
     """The first rotation bound a pool head has gone over, in declared order, or ``None``. An
     unreadable signal (``None``) is never a breach — never a zero that would make its bound inert."""

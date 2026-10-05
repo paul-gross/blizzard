@@ -33,7 +33,7 @@ from blizzard.runner.lifecycle.judgement.git_commits import (
     converge_pointers,
     resolve_origin,
 )
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.runner.node_steps.submissions import CompletionArtifact
 
 pytestmark = pytest.mark.unit
 
@@ -165,7 +165,7 @@ def test_confirm_not_head_hints_push() -> None:
 
 
 def test_confirm_ok_names_repo_identity() -> None:
-    assert confirm_declaration(("e1", "toy-api"), _DECLARATION, _ORIGIN, True) == SubmittedArtifact(
+    assert confirm_declaration(("e1", "toy-api"), _DECLARATION, _ORIGIN, True) == CompletionArtifact(
         name=repo_identity(_ORIGIN, "toy-api"),
         kind=ArtifactKind.GIT_COMMIT,
         forge=_ORIGIN,
@@ -178,8 +178,8 @@ def test_confirm_ok_names_repo_identity() -> None:
 # --- converging pointers ------------------------------------------------------------------
 
 
-def _pointer(branch: str, commit: str, *, name: str = "acme/toy-api") -> SubmittedArtifact:
-    return SubmittedArtifact(
+def _pointer(branch: str, commit: str, *, name: str = "acme/toy-api") -> CompletionArtifact:
+    return CompletionArtifact(
         name=name, kind=ArtifactKind.GIT_COMMIT, forge=_ORIGIN, repo="toy-api", branch_name=branch, commit_hash=commit
     )
 

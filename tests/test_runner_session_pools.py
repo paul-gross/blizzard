@@ -32,10 +32,10 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.node_steps.envelope import RotateBounds
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store.schema import leases
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyResponse
-from blizzard.wire.graph import RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -118,7 +118,7 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
     assert h1.resume_froms == [None]  # `fresh:code` always mints
 
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t200", pgid=200), verdict="pass"
     )
@@ -176,7 +176,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
 
     # build#1 -> verify#1
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2", pgid=200), verdict="fail"
     )
@@ -187,7 +187,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
 
     # verify#1 fails -> back into build (`fresh:code`), which must MINT, not continue.
     hub.envelopes["ch_1"] = verify_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     h3 = FakeHarness(
         handle=WorkerHandle(session_id="sess-code-2", pid=300, process_start_time="t3", pgid=300), verdict="pass"
     )
@@ -200,7 +200,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
 
     # build#2 -> verify#2, which must continue the NEW head.
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h4 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=400, process_start_time="t4", pgid=400), verdict="pass"
     )
@@ -256,7 +256,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
 
     # build -> verify: a different pool, also empty, so verify mints too.
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(
         handle=WorkerHandle(session_id="sess-verify-1", pid=200, process_start_time="t2", pgid=200), verdict="fail"
     )
@@ -272,7 +272,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
 
     # verify fails -> build, which must resume `code`'s head, not the newer verify one.
     hub.envelopes["ch_1"] = verify_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     h3 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3", pgid=300), verdict="pass"
     )
@@ -325,7 +325,7 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
 
     # A later `resume:code` member continues the RETRY's session, not the failed first.
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h3 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3", pgid=300), verdict="pass"
     )
@@ -400,7 +400,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     Fill(_ctx(store, hub, provider, h1)).run()
 
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=retro_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=retro_env)]
     h2 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2", pgid=200), verdict="pass"
     )
@@ -474,7 +474,7 @@ def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode)
         )
     hub.queue = []
     hub.envelopes["ch_1"] = first
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     middle = _ctx(store, hub, provider, initial, minutes=1)
     Advance(middle).run()
     Advance(middle).run()
@@ -560,7 +560,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     _blank_stamps(store, "ch_1")
 
     hub.envelopes["ch_1"] = build_env
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=resume_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=resume_env)]
     h2 = FakeHarness(
         handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2", pgid=200), verdict="pass"
     )
@@ -670,7 +670,7 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
 
 
 def _rotate(**bounds):  # type: ignore[no-untyped-def]
-    return RotatePolicyView(**bounds)
+    return RotateBounds(**bounds)
 
 
 def _bounded(mode: SessionMode, rotate=None, model=None):  # type: ignore[no-untyped-def]

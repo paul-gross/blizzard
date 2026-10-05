@@ -297,9 +297,9 @@ class _OrderTrackingHub(FakeHub):
         self.calls.append("chunk_statuses")
         return super().chunk_statuses(chunk_ids)
 
-    def push_facts(self, batch):  # type: ignore[no-untyped-def]
+    def push_facts(self, runner_id, facts):  # type: ignore[no-untyped-def]
         self.calls.append("push_facts")
-        return super().push_facts(batch)
+        return super().push_facts(runner_id, facts)
 
 
 @pytest.mark.unit

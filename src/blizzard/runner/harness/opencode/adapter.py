@@ -61,8 +61,8 @@ from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
 
@@ -329,7 +329,7 @@ class OpenCodeAdapter:
 
     def spawn(
         self,
-        envelope: NodeEnvelope,
+        envelope: Envelope,
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
@@ -575,7 +575,7 @@ class OpenCodeAdapter:
             )
         return composed
 
-    def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
+    def _spawn_env(self, envelope: Envelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)
 
     # --- output/usage (execution spec, "Output and usage") ------------------

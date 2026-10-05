@@ -28,18 +28,17 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.runner.hub.client import HubClientError, RouteClaimOutcome
+from blizzard.runner.hub.client import HubClientError, PausedDenial, RouteClaimOutcome, TerminalDenial
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.route import RouteClaimPausedDenial, RouteClaimTerminalDenial
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -481,7 +480,7 @@ def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
@@ -891,8 +890,8 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     # Two rejections: one for the flush during the pause, one for the flush after it.
     hub.apply_responses = [
-        ApplyResponse(outcome=ApplyOutcome.FAILURE, detail="stale epoch — fenced"),
-        ApplyResponse(outcome=ApplyOutcome.FAILURE, detail="stale epoch — fenced"),
+        ApplyReply(outcome=ApplyOutcome.FAILURE, detail="stale epoch — fenced"),
+        ApplyReply(outcome=ApplyOutcome.FAILURE, detail="stale epoch — fenced"),
     ]
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
@@ -1002,7 +1001,7 @@ def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ig
     assert store.hub_paused("r1") is False
 
     # The pause lands at the hub in the window between this PULL and FILL's claim.
-    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id="r1"))
 
     Fill(ctx).run()
 
@@ -1014,7 +1013,7 @@ def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ig
 def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ignore[no-untyped-def]
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()
-    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id="r1"))
 
     with capture_logs() as logs:
         Fill(ctx).run()
@@ -1033,7 +1032,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     [
         (
             RouteClaimOutcome(
-                denied_paused=RouteClaimPausedDenial(
+                denied_paused=PausedDenial(
                     chunk_id="ch_1", runner_id="r1", detail="runner r1 is not registered at the hub"
                 )
             ),
@@ -1042,7 +1041,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
         ),
         (
             RouteClaimOutcome(
-                denied_terminal=RouteClaimTerminalDenial(
+                denied_terminal=TerminalDenial(
                     chunk_id="ch_1", status="not_ready", detail="chunk ch_1 is not ready (status not_ready)"
                 )
             ),
@@ -1050,7 +1049,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
             {"status": "not_ready", "detail": "chunk ch_1 is not ready (status not_ready)"},
         ),
         (
-            RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial(chunk_id="ch_1", status="done")),
+            RouteClaimOutcome(denied_terminal=TerminalDenial(chunk_id="ch_1", status="done")),
             "route claim denied — chunk not claimable",
             {"status": "done", "detail": "chunk is terminal"},
         ),

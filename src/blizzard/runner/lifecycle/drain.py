@@ -14,7 +14,8 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
-from blizzard.runner.hub.client import HubClientError
+from blizzard.runner.hub.client import HubClientError, PushedFact
+from blizzard.runner.hub.outbound import buffered_completion, buffered_gate
 from blizzard.runner.hub.outbound_buffer import BufferedFact
 from blizzard.runner.leases import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
@@ -30,11 +31,8 @@ from blizzard.runner.lifecycle.model import (
     spend_cap_reached,
 )
 from blizzard.runner.lifecycle.spawn import SpawnConfig
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.wire.chunk import ChunkUsageTotalView
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse
-from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -101,12 +99,9 @@ class OutboundDrain:
     def _flush_run(self, run: list[BufferedFact]) -> bool:
         """Push one contiguous run of generic-kind facts to POST /events in a single
         request, then ack every seq the run carried."""
-        batch = RunnerFactBatch(
-            runner_id=self.ctx.config.runner_id,
-            facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run],
-        )
+        pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run]
         try:
-            ack = self.ctx.hub.push_facts(batch)
+            ack = self.ctx.hub.push_facts(self.ctx.config.runner_id, pushed)
         except HubClientError:
             return False  # hub unreachable — the whole run stays buffered, retried next tick
         # Every chunk this run named a fact for, so a later get() this tick sees the push.
@@ -126,7 +121,7 @@ class OutboundDrain:
         Idempotent by construction: the apply is epoch-idempotent, and the response is acted on
         only while the lease is still active, so a re-flush past a lost ack just clears the
         buffer."""
-        submission = CompletionSubmission.model_validate(json.loads(fact.payload)["submission"])
+        submission = buffered_completion(fact)
         _CP_BEFORE_SUBMIT.reached()
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
@@ -150,7 +145,7 @@ class OutboundDrain:
 
         There is no next envelope to continue into, so the flush closes the lease and holds the
         environments. The apply is natural-key idempotent, so a re-flush just clears the buffer."""
-        submission = DecisionSubmission.model_validate(json.loads(fact.payload)["submission"])
+        submission = buffered_gate(fact)
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
                 response = self.ctx.hub.submit_decision(fact.chunk_id or "", submission)
@@ -170,7 +165,7 @@ class OutboundDrain:
         _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
         return True
 
-    def _consume(self, lease: Lease, response: ApplyResponse) -> None:
+    def _consume(self, lease: Lease, response: ApplyReply) -> None:
         """Record the closure and continue in place per the hub's apply-response.
 
         Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap

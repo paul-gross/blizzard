@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
-from blizzard.wire.envelope import NodeEnvelope
+from blizzard.runner.node_steps.envelope import Envelope
 
 
 @domain_model
@@ -14,7 +14,7 @@ from blizzard.wire.envelope import NodeEnvelope
 class JudgementPrompt:
     """One attempt's prompt, over the node and the checks run at its worker's exit."""
 
-    envelope: NodeEnvelope
+    envelope: Envelope
     check_results: list[ExecutedCheck]
 
     def render(self) -> str:

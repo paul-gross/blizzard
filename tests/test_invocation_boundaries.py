@@ -22,8 +22,8 @@ from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -177,7 +177,7 @@ def test_judgement_launch_opens_a_judge_boundary_at_the_current_generation(tmp_p
 
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     tail = TranscriptPosition(token='{"main": 256, "sidecars": {}}')
     transcript_source = FakeTranscriptSource(tail_positions_by_session={"sess-a": tail})
     harness = FakeHarness(

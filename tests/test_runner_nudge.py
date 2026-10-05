@@ -20,8 +20,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.wire.envelope import ApplyResponse
-from blizzard.wire.graph import ProducesEntry
+from blizzard.runner.node_steps.envelope import ProducesSpec
+from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
     CountingAttachmentStore,
     FakeCheckRunner,
@@ -260,7 +260,7 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = _AttachingOnResumeHarness(
         store=store,
         clock=clock,
@@ -315,9 +315,9 @@ def test_unmet_produces_resume_picks_up_a_git_commit_declared_on_the_next_exit(t
         "build",
         node_id="nd_build",
         choices=_CHOICES,
-        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+        produces=[ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = _DeclaringGitCommitOnResumeHarness(
         store=store,
         clock=clock,
@@ -379,7 +379,7 @@ def test_second_premature_exit_under_the_same_lease_and_epoch_falls_through_to_j
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
@@ -425,7 +425,7 @@ def test_resume_fact_already_set_skips_a_second_resume_attempt(tmp_path: Path) -
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
@@ -476,7 +476,7 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     hub.envelopes["ch_1"] = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
-    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="pass",
@@ -519,8 +519,8 @@ def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
     per unmet spec, never the deprecated `attach` alias, and every rendered line is
     `#`-prefixed so the mock harness's prompt-is-program `exec` still sees a legal no-op."""
     missing = [
-        ProducesEntry(name="review-findings", kind=ArtifactKind.ASSET),
-        ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT),
+        ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
+        ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
     ]
 
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])

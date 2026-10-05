@@ -26,7 +26,7 @@ from blizzard.runner.lifecycle.judgement.exit_route import (
     route_exit,
 )
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
-from blizzard.wire.envelope import EnvelopeChoice
+from blizzard.runner.node_steps.envelope import Choice
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
@@ -35,8 +35,8 @@ _LAUNCHED = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _FRESH = _LAUNCHED + timedelta(minutes=1)
 _STALE = _LAUNCHED + ELICITATION_STALENESS_THRESHOLD + timedelta(seconds=1)
 _CHOICES = [
-    EnvelopeChoice(name="pass", description="meets criteria", requires_checks=True),
-    EnvelopeChoice(name="fail", description="does not"),
+    Choice(name="pass", description="meets criteria", requires_checks=True),
+    Choice(name="fail", description="does not"),
 ]
 _ASK = OpenAsk(
     lease_id="lease_1",
