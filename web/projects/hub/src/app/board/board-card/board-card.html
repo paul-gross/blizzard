@@ -14,7 +14,7 @@
   >
     <span class="tid">
       <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
-      <span class="nd" data-testid="chunk-node" [attr.title]="card().nodeId || null">{{
+      <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{
         nodeLabel(card())
       }}</span>
     </span>

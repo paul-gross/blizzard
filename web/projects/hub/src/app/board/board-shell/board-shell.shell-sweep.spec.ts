@@ -8,7 +8,7 @@ import { BoardShell } from './board-shell';
 /**
  * A long current-node name must truncate inside its card rather than widen its lane:
  * a real layout claim jsdom cannot make, since it never lays out the lane grid. Every
- * lane has to keep its equal width inside a 1440px viewport, and the full name stays on the card's
+ * lane has to keep its equal width inside a 1440px viewport, and the full name stays readable from the card's
  * `title`.
  *
  * Excluded from the default `ng test` run like every `*.shell-sweep.spec.ts` — run it
@@ -60,8 +60,8 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
       const widths = columns.map((column) => column.getBoundingClientRect().width);
       expect(Math.max(...widths) - Math.min(...widths), `lanes lost their equal widths: ${widths.join(', ')}`).toBeLessThan(2);
       const node = root.querySelector<HTMLElement>('[data-testid="chunk-node"]');
-      expect(node!.getAttribute('title')).toBe('nd_long');
-      expect(node!.textContent!.trim()).toBe(LONG_NODE);
+      expect(node!.getAttribute('title')).toContain(LONG_NODE);
+      expect(node!.scrollWidth, 'node name is not clipped').toBeGreaterThan(node!.clientWidth);
     } finally {
       root.remove();
     }

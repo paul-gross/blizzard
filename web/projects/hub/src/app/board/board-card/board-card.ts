@@ -124,6 +124,13 @@ export class BoardCardComponent {
     return card.status === 'stopped' ? 'stopped' : card.node;
   }
 
+  /** The node slot's hover text: the full label the card clips, with the raw node id
+   * beside it when the label is a name rather than that id. */
+  protected nodeTitle(card: BoardCard): string | null {
+    const label = this.nodeLabel(card);
+    return card.nodeId && card.nodeId !== label ? `${label} (${card.nodeId})` : label || null;
+  }
+
   /** What the blocked marking names, beside the status: the one unmet prerequisite's compact
    * ref, or a count once there is more than one — pinned by `board-card.spec.ts`'s "counts the
    * prerequisites instead of naming the first…" case. */
