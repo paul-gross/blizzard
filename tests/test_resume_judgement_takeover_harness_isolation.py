@@ -303,7 +303,6 @@ def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) 
         FixedClock(_NOW),
         FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -321,6 +320,8 @@ def _open_scope(store, chunk_id: str) -> TakeoverOpenScope:  # type: ignore[no-u
         active_lease=store.active_lease_for_chunk(chunk_id),
         latest_lease_with_session=store.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=store.latest_epoch(chunk_id),
+        active_parked=_active_in(store, chunk_id, store.parked_lease_ids()),
+        submission_pending=_active_in(store, chunk_id, store.pending_submission_lease_ids()),
     )
 
 
@@ -372,7 +373,6 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
         FixedClock(_NOW),
         FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -393,3 +393,8 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     # No takeover was ever recorded for the failed chunk — the fact-before-command ordering
     # (module docstring) never wrote a partial record for an owner it couldn't resolve past.
     assert store.open_takeover_for_chunk("ch_b") is None
+
+
+def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+    active = store.active_lease_for_chunk(chunk_id)
+    return active is not None and active.lease_id in lease_ids

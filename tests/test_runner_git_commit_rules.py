@@ -8,6 +8,7 @@ record a declaration writes, and confirming and converging declared pointers.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import MappingProxyType
 
 import pytest
 
@@ -15,11 +16,12 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.worktree import WorktreeGitError
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases import Lease, worker_lease
 from blizzard.runner.leases.lease_auth import LeaseToken, LeaseTokenRejected
-from blizzard.runner.leases.worker_lease import WorkerLease
+from blizzard.runner.leases.worker_lease import WorkerLease, WorkerLeaseStanding, WorkerVerb
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclaration,
+    GitCommitDeclarationOnClosedLease,
     GitCommitDeclarationRecord,
     GitCommitDeclarationTooLate,
     GitCommitDeclarationUnknownRepo,
@@ -131,6 +133,16 @@ def test_declared_after_outcome_pending_too_late() -> None:
 
 def test_closed_reference_lease_accepts_the_declaration_but_rides_no_completion() -> None:
     assert _declared(active=False).rides_completion is False
+
+
+def test_a_standing_whose_verbs_exclude_git_commit_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Today's verb table accepts a git-commit on every standing; the refusal is pinned against a
+    table that would not."""
+    verbs = {**worker_lease.WORKER_VERBS, WorkerLeaseStanding.TAKEOVER_REFERENCE: frozenset({WorkerVerb.ASK})}
+    monkeypatch.setattr(worker_lease, "WORKER_VERBS", MappingProxyType(verbs))
+    with pytest.raises(GitCommitDeclarationOnClosedLease) as refused:
+        _declared(active=False)
+    assert refused.value.lease_id == "lease_1"
 
 
 # --- confirming a declaration -------------------------------------------------------------

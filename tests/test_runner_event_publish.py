@@ -108,6 +108,8 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ig
         active_lease=store.active_lease_for_chunk(chunk_id),
         latest_lease_with_session=store.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=store.latest_epoch(chunk_id),
+        active_parked=_active_in(store, chunk_id, store.parked_lease_ids()),
+        submission_pending=_active_in(store, chunk_id, store.pending_submission_lease_ids()),
     )
 
 
@@ -522,7 +524,6 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         FixedClock(_NOW),
         FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -562,7 +563,6 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         FixedClock(_NOW),
         probe,
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -913,3 +913,8 @@ def test_no_broker_wired_publishes_nothing_and_raises_nothing(tmp_path: Path) ->
     Fill(ctx).run()  # must not raise
 
     assert store.list_active_leases()  # the mutation itself still happened
+
+
+def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+    active = store.active_lease_for_chunk(chunk_id)
+    return active is not None and active.lease_id in lease_ids

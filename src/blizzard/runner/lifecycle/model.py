@@ -820,6 +820,45 @@ def advance_move(
     return AdvanceMove.RUNNING if alive else AdvanceMove.EXITED
 
 
+class ExitedMove(StrEnum):
+    """What ADVANCE does about an exited worker, decided in three stages around the reads each needs."""
+
+    AWAIT_ELICITATION = "await-elicitation"
+    COLLECT = "collect"
+    CLASSIFY = "classify"
+    PARK_ON_USAGE_LIMIT = "park-on-usage-limit"
+    RECORD_OVERLOAD = "record-overload"
+    CLOSE_OVERLOAD_STREAK = "close-overload-streak"
+    BACK_OFF = "back-off"
+    PARK_ON_ASK = "park-on-ask"
+    JUDGE = "judge"
+
+
+def exited_worker_elicitation_move(*, in_flight: bool, still_pending: bool) -> ExitedMove:
+    """First stage: a launched verdict elicitation is collected, never re-judged, and never pre-empted
+    by an ask the worker raised before it exited. A live one under the staleness bound is awaited."""
+    if not in_flight:
+        return ExitedMove.CLASSIFY
+    return ExitedMove.AWAIT_ELICITATION if still_pending else ExitedMove.COLLECT
+
+
+def exited_worker_classified_move(*, usage_limited: bool, overloaded: bool) -> ExitedMove:
+    """Second stage, over the one exit's classification: a usage limit outranks provider overload (the
+    two are mutually exclusive reasons), and a clean exit closes any open overload streak. An overload's
+    write decides the third stage, so it is named here, not decided."""
+    if usage_limited:
+        return ExitedMove.PARK_ON_USAGE_LIMIT
+    return ExitedMove.RECORD_OVERLOAD if overloaded else ExitedMove.CLOSE_OVERLOAD_STREAK
+
+
+def exited_worker_settled_move(*, backing_off: bool, unforwarded_ask: bool) -> ExitedMove:
+    """Third stage, once the overload write (if any) is known: a lease backing off in place waits, an
+    exit holding an unforwarded ask parks on it, and anything else is judged."""
+    if backing_off:
+        return ExitedMove.BACK_OFF
+    return ExitedMove.PARK_ON_ASK if unforwarded_ask else ExitedMove.JUDGE
+
+
 def open_slots(max_agents: int, active: int) -> int:
     """How many new claims FILL may make this tick."""
     return max(max_agents - active, 0)

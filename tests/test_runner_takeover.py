@@ -68,7 +68,6 @@ def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -133,6 +132,8 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ig
         active_lease=store.active_lease_for_chunk(chunk_id),
         latest_lease_with_session=store.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=store.latest_epoch(chunk_id),
+        active_parked=_active_in(store, chunk_id, store.parked_lease_ids()),
+        submission_pending=_active_in(store, chunk_id, store.pending_submission_lease_ids()),
     )
 
 
@@ -268,7 +269,6 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         FixedClock(_NOW),
         FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -799,3 +799,8 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(tmp_pat
 
     assert opened.env["BLIZZARD_LEASE_TOKEN"]
     assert not [n for n in opened.env if n.startswith(("OTEL_", "CLAUDE_CODE_"))]
+
+
+def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+    active = store.active_lease_for_chunk(chunk_id)
+    return active is not None and active.lease_id in lease_ids

@@ -496,7 +496,6 @@ def _wire_hosted_app(
         clock,
         process,
         takeover=runner_stores.takeover,
-        asks=runner_stores.asks,
         outbound=runner_stores.outbound,
         tokens=runner_stores.tokens,
         elicitations=runner_stores.elicitations,
