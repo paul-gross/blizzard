@@ -48,7 +48,7 @@ class FederatedIdentity:
         past the leeway."""
         if any(not claims.get(name) for name in REQUIRED_CLAIMS):
             raise FederationTokenError("token is missing a required claim")
-        if jti_retention(claims) + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS) <= now:
+        if jti_retention(claims) <= now:
             raise FederationTokenError("token expired")
         email = claims.get("email")
         return cls(
@@ -60,12 +60,12 @@ class FederatedIdentity:
 
 
 def jti_retention(claims: Mapping[str, object]) -> datetime:
-    """Until when a token's ``jti`` is remembered against replay: its own ``exp`` — raising
-    :class:`FederationTokenError` when that is not a timestamp."""
+    """Until when a token is accepted, and so its ``jti`` remembered against replay: its own ``exp``
+    plus the clock-skew leeway — raising :class:`FederationTokenError` when ``exp`` is not a timestamp."""
     exp = claims.get("exp")
     if isinstance(exp, bool) or not isinstance(exp, int | float):
         raise FederationTokenError("token expiry is not a timestamp")
-    return datetime.fromtimestamp(exp, tz=UTC)
+    return datetime.fromtimestamp(exp, tz=UTC) + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS)
 
 
 @dataclass(frozen=True)

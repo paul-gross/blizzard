@@ -16,7 +16,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
-from blizzard.runner.auth.validate import FederationToken, FederationTokenError
+from blizzard.runner.auth.validate import CLOCK_SKEW_LEEWAY_SECONDS, FederationToken, FederationTokenError
 
 pytestmark = pytest.mark.unit
 
@@ -135,4 +135,30 @@ def test_an_unknown_kid_is_rejected() -> None:
     with pytest.raises(FederationTokenError):
         FederationToken(
             token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+        ).identity()
+
+
+class _FixedClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def now(self) -> datetime:
+        return self._now
+
+
+def test_a_jti_is_still_refused_inside_the_leeway_after_exp() -> None:
+    private_key, jwk = _keypair()
+    exp = datetime.now(UTC).replace(microsecond=0)
+    token = _sign(private_key, claims=_claims(exp=int(exp.timestamp())))
+    jti_cache = _FakeJtiCache()
+    FederationToken(
+        token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=_FixedClock(exp)
+    ).identity()
+    with pytest.raises(FederationTokenError, match="replay"):
+        FederationToken(
+            token,
+            runner_id=_RUNNER_ID,
+            jwks=_jwks_cache(jwk),
+            jti_cache=jti_cache,
+            clock=_FixedClock(exp + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS - 1)),
         ).identity()
