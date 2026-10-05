@@ -107,8 +107,7 @@ def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str |
     waiting for its next tick — scoped to one segment, one chunk, or every candidate
     (neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero
     ``remaining`` on a chunk/all-scoped call means running it again continues from where
-    it left off. A segment that is not visible (superseded, non-final, or unknown) derives
-    nothing and is reported as such."""
+    it left off. A segment that is not visible derives nothing."""
     if segment_id is not None and chunk_id is not None:
         raise click.ClickException("--segment and --chunk are mutually exclusive")
     body: dict[str, object] = {"limit": limit}

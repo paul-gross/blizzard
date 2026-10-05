@@ -226,7 +226,7 @@
           "short_help": "Read the derived transcript-event projection, every ``/events`` filter as a flag: a bounded page by default, or the whole filtered set streamed as NDJSON to stdout under ``--ndjson``."
         },
         "re-derive": {
-          "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off. A segment that is not visible (superseded, non-final, or unknown) derives\nnothing and is reported as such.",
+          "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off. A segment that is not visible derives nothing.",
           "params": [
             {
               "help": "Force one visible segment, regardless of its candidacy.",

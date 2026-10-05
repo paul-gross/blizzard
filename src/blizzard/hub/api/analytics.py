@@ -67,10 +67,9 @@ _STREAM_BATCH_SIZE = 500
 
 @router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(ANALYTICS_ADMIN))])
 def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends(get_services)]) -> ReDeriveResponse:
-    """A segment scope forces that one segment regardless of its candidacy, but refuses
-    one that is not visible; a chunk or all scope derives up to ``limit`` of that scope's
-    current candidates and reports how many remain, so the caller drives to convergence
-    with repeated calls."""
+    """A segment scope forces that one visible segment regardless of its candidacy; a chunk
+    or all scope derives up to ``limit`` of that scope's current candidates and reports how
+    many remain, so the caller drives to convergence with repeated calls."""
     try:
         scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
     except ReDeriveScopeRefused as exc:

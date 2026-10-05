@@ -1,6 +1,5 @@
 """A re-derive counts only the segments it actually derived, through the real service and
-store: a segment named that no longer stores content derives nothing and is not counted, and a
-segment-scoped force refuses a segment the sweep does not count as visible."""
+store: a segment named that no longer stores content derives nothing and is not counted."""
 
 from __future__ import annotations
 
@@ -51,9 +50,6 @@ def test_a_stored_segment_is_counted(tmp_path: Path) -> None:
 
     assert by_segment.derived == 1
     assert by_chunk.derived == 0  # the forced derive left its marker current: no candidate remains
-
-
-# --- a segment force overrides candidacy, not visibility ---------------------------------------
 
 
 def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True) -> None:  # type: ignore[no-untyped-def]
@@ -116,19 +112,16 @@ def test_the_route_reports_a_not_visible_segment(tmp_path: Path) -> None:
 
 def test_a_sweep_after_a_refused_force_appends_no_drop_fact(tmp_path: Path) -> None:
     hub, chunk_id = _hub_with_one_segment(tmp_path)
-    hub.services.event_derivation.sweep()  # sg_1 derived
+    hub.services.event_derivation.sweep()
     _push(hub, chunk_id, segment_id="sg_2", supersedes="sg_1")
-    hub.services.event_derivation.sweep()  # sg_1 no longer visible: dropped once
+    hub.services.event_derivation.sweep()
     assert _count(hub, s.transcript_event_drops) == 1
 
     assert _force(hub, "sg_1")["not_visible"] is True
-    hub.clock.advance(FORCED_FULL_PASS_FLOOR + timedelta(seconds=1))  # the next sweep runs, not skipped
+    hub.clock.advance(FORCED_FULL_PASS_FLOOR + timedelta(seconds=1))
     hub.services.event_derivation.sweep()
 
     assert _count(hub, s.transcript_event_drops) == 1
-
-
-# --- a scope re-derive excludes a candidate whose graph pin does not resolve --------------------
 
 
 def test_a_scope_re_derive_excludes_an_unresolvable_pin_candidate_from_derived(tmp_path: Path) -> None:
@@ -139,7 +132,6 @@ def test_a_scope_re_derive_excludes_an_unresolvable_pin_candidate_from_derived(t
     assert deleted.status_code == 202, deleted.text
 
     service = hub.services.event_derivation_service
-    # the orphan must be a candidate, or its exclusion from `derived` proves nothing
     assert {"sg_1", "sg_orphan"} <= set(service.candidate_segment_ids())
     outcome = service.re_derive(ReDeriveScope(), limit=10)
 

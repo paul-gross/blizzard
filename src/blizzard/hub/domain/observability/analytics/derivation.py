@@ -68,10 +68,9 @@ class ReDeriveScopeRefused(ValueError):
 @domain_model
 @dataclass(frozen=True)
 class ReDeriveScope:
-    """What one re-derive covers: one segment, forced regardless of its candidacy while visible; or the
-    candidates of one chunk, or of every chunk. A segment force overrides candidacy, not
-    visibility: a segment the sweep does not count as visible derives nothing. An id that
-    names nothing derives nothing — re-derive is a convergence trigger, not a read."""
+    """What one re-derive covers: one segment, forced regardless of its candidacy but only while visible; or the
+    candidates of one chunk, or of every chunk. An id that names nothing derives nothing —
+    re-derive is a convergence trigger, not a read."""
 
     segment_id: str | None = None
     chunk_id: str | None = None
@@ -92,8 +91,8 @@ class ReDeriveScope:
 @domain_model
 @dataclass(frozen=True)
 class ReDeriveOutcome:
-    """How many segments a re-derive derived — successes only — and how many candidates remain.
-    ``not_visible`` marks a segment-scoped call refused because the segment is not visible."""
+    """How many segments a re-derive derived — successes only — and how many candidates remain;
+    ``not_visible`` marks a segment force refused for want of visibility."""
 
     derived: int
     remaining: int
@@ -223,8 +222,7 @@ class EventDerivationService:
     def re_derive(self, scope: ReDeriveScope, *, limit: int) -> ReDeriveOutcome:
         """Derive ``scope``: its one segment, or up to ``limit`` of its current candidates.
         ``derived`` counts the segments actually derived — a candidate gone by now, or one
-        with no resolvable graph pin, is not counted. A segment that is not visible is
-        refused outright: no derivation and no marker write."""
+        with no resolvable graph pin, is not counted. A segment that is not visible is refused: no derive, no marker."""
         if scope.segment_id is not None:
             if not self._events.visible_segment_ids(segment_id=scope.segment_id):
                 return ReDeriveOutcome(derived=0, remaining=0, not_visible=True)
