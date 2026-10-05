@@ -43,7 +43,7 @@ def _build_basic(settings: WorkspaceSettings, held_ids: HeldIds) -> IWorkspacePr
         settings.effective_workspace_root,
         repos=settings.repos,
         max_environments=settings.max_environments,
-        ,
+        base_branch=settings.base_branch,
         held_ids=held_ids,
     )
 

@@ -4,12 +4,15 @@ no clock."""
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import pytest
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.runner.hub.client import ClaimConflict, ClaimedRoute, RouteClaimOutcome
+from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.hub.outbound_buffer import (
     COMPLETION_KIND,
     DECISION_KIND,
@@ -18,6 +21,7 @@ from blizzard.runner.hub.outbound_buffer import (
     answer_delivered_payload,
     command_failed_event,
     escalation_payload,
+    event_payload,
     lease_minted_payload,
     question_asked_payload,
     submission_payload,
@@ -175,3 +179,59 @@ def test_route_claim_outcome_requires_exactly_one() -> None:
             conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"),
         )
     assert RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2")).won is False
+
+
+_EVENT_FIELDS: dict[str, object] = {
+    "chunk_id": "ch_1",
+    "lease_id": "lease_1",
+    "node_name": "build",
+    "message": "make failed",
+    "detail": {"command": "make"},
+}
+
+
+def test_event_payload_carries_every_field() -> None:
+    assert event_payload(kind="command-failed", **_EVENT_FIELDS) == {  # type: ignore[arg-type]
+        "severity": "warning",
+        "kind": "command-failed",
+        "chunk_id": "ch_1",
+        "lease_id": "lease_1",
+        "node_name": "build",
+        "message": "make failed",
+        "detail": {"command": "make"},
+    }
+
+
+@dataclass
+class _RecordingOutbound:
+    rows: list[dict[str, object]] = field(default_factory=list)
+
+    def enqueue_outbound(self, **row: object) -> int:
+        self.rows.append(row)
+        return len(self.rows)
+
+
+@dataclass
+class _OutboundOnlyStores:
+    outbound: _RecordingOutbound = field(default_factory=_RecordingOutbound)
+    tokens: object = None
+
+
+@dataclass
+class _OutboundOnlyContext:
+    stores: _OutboundOnlyStores = field(default_factory=_OutboundOnlyStores)
+    clock: object = None
+    events: None = None
+
+
+def test_outbound_event_enqueues_the_event_payload_under_its_chunk_and_lease() -> None:
+    ctx = _OutboundOnlyContext()
+    OutboundFacts(ctx).event(kind="command-failed", at=_T0, **_EVENT_FIELDS)  # type: ignore[arg-type]
+    [row] = ctx.stores.outbound.rows
+    assert (row["kind"], row["chunk_id"], row["lease_id"], row["created_at"]) == (
+        "event.recorded",
+        "ch_1",
+        "lease_1",
+        _T0,
+    )
+    assert json.loads(str(row["payload"])) == event_payload(kind="command-failed", **_EVENT_FIELDS)  # type: ignore[arg-type]

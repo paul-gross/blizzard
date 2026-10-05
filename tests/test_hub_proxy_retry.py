@@ -277,3 +277,42 @@ def test_a_caller_supplied_timeout_caps_every_attempt_and_the_whole_forward(tmp_
     assert excinfo.value.status_code == 502
     assert seen_timeouts[0] == 3.0
     assert all(t <= 3.0 for t in seen_timeouts)
+
+
+def _refusing_proxy(tmp_path: Path, clock: ManualMonotonicClock, seen_timeouts: list[float]) -> HubProxy:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_timeouts.append(request.extensions["timeout"]["pool"])
+        raise httpx.ConnectError("connection refused")
+
+    return _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
+
+
+@pytest.mark.unit
+def test_each_attempt_and_backoff_is_drawn_from_the_budget_elapsed_since_a_nonzero_start(tmp_path: Path) -> None:
+    """Elapsed time is measured from the forward's own start, not from the clock's zero:
+    over a clock already reading 100s, an 8s budget gives each attempt exactly what is left
+    and schedules every backoff that still fits whole."""
+    seen_timeouts: list[float] = []
+    clock = ManualMonotonicClock(reading=100.0)
+    proxy = _refusing_proxy(tmp_path, clock, seen_timeouts)
+
+    with pytest.raises(HTTPException):
+        proxy.get("/api/fleet/chunks/ch_1", timeout=8.0)
+
+    assert seen_timeouts == [8.0, 7.5, 6.5, 4.5, 0.5]
+    assert clock.delays == [0.5, 1.0, 2.0, 4.0]
+
+
+@pytest.mark.unit
+def test_a_remaining_budget_exactly_equal_to_the_next_backoff_stops_retrying(tmp_path: Path) -> None:
+    """A backoff that would land exactly on the budget's end is not scheduled: after one
+    0.5s delay a 1.5s budget has 1.0s left, which equals the next 1s backoff."""
+    seen_timeouts: list[float] = []
+    clock = ManualMonotonicClock(reading=100.0)
+    proxy = _refusing_proxy(tmp_path, clock, seen_timeouts)
+
+    with pytest.raises(HTTPException):
+        proxy.get("/api/fleet/chunks/ch_1", timeout=1.5)
+
+    assert clock.delays == [0.5]
+    assert seen_timeouts == [1.5, 1.0]

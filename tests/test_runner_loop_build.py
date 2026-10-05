@@ -8,14 +8,17 @@ Both roots that build a ``ClaudeCodeAdapter`` are covered.
 from __future__ import annotations
 
 import json
+import shlex
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import blizzard.runner.app as runner_app
+import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
@@ -44,11 +47,13 @@ from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
+from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
 from tests.runner_fakes import FakeHub, FakeProbe, loop_context, loop_graph, make_store, make_stores
+from tests.support import InMemoryTraceExporter
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -417,7 +422,7 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
 ) -> None:
     """A driver of repeated ticks hands one graph in: its platform tracer reaches the tick's context, its
     hub client is instrumented, and the tick does not close it."""
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), hub_url="http://hub.test:8421")
     graph = build_runner_process(config)
     ticked: list[object] = []
     instrumented: list[httpx.Client | httpx.AsyncClient] = []
@@ -428,7 +433,10 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
         LoopWiring.of(config).tick_once(process=graph)
         assert ticked == [graph.platform_tracing.tracer] * 2
         assert len(instrumented) == 2
-        assert not graph.executor._shutdown
+        for client in instrumented:
+            assert type(client) is httpx.Client
+            assert client.base_url == httpx.URL(config.hub_url)
+        assert graph.executor.submit(lambda: "open").result() == "open"
     finally:
         graph.close()
 
@@ -699,3 +707,82 @@ def test_process_graph_sets_no_harness_telemetry_variable_without_both_switches(
 ) -> None:
     env = _harness_telemetry_env(tmp_path, harness_telemetry=harness_telemetry, platform=platform)
     assert _harness_telemetry_names(env) == []
+
+
+@pytest.mark.unit
+def test_read_stores_narrow_lease_traces_to_the_same_instance(tmp_path: Path) -> None:
+    stores = make_stores(make_store(f"sqlite:///{tmp_path / 'runner.db'}"))
+    assert RunnerReadStores.of(stores).lease_traces is stores.lease_traces
+
+
+@pytest.mark.unit
+def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built: list[dict[str, object]] = []
+
+    def record(**kwargs: object) -> object:
+        built.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(composition, "LeaseTraceSweep", record)
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), tracing=TracingConfig(sweep_seconds=7)
+    )
+    exporter = InMemoryTraceExporter()
+    graph = build_runner_process(
+        config, environ={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}, trace_exporter=exporter
+    )
+    try:
+        (kwargs,) = built
+        assert kwargs["config"] is config.tracing
+        assert kwargs["exporter"] is exporter
+    finally:
+        graph.close()
+
+
+@pytest.mark.unit
+def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_root(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=f"sqlite:///{tmp_path / 'runner.db'}",
+        workspace_provider="basic",
+        workspace_root="scratch",
+        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+    )
+    hosted = build_hosted_app(config)
+    try:
+        store = make_store(config.db_url)
+        store.record_lease(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                runner_id=config.runner_id,
+                retries_max=2,
+                created_at=_NOW,
+            )
+        )
+        store.record_spawn(
+            "lease_1",
+            pid=100,
+            process_start_time="start-100",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+            spawned_at=_NOW,
+        )
+        store.record_binding(
+            chunk_id="ch_1", environment_id="e1", workdir=str(tmp_path / "scratch" / "e1"), bound_at=_NOW
+        )
+        store.record_closure(
+            lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW
+        )
+        with TestClient(hosted.app) as client:
+            (escalation,) = client.get("/api/escalations").json()["items"]
+        assert escalation["wrapped_takeover_command"] == (
+            f"blizzard runner takeover ch_1 --dir {shlex.quote(str(config.root))}"
+        )
+    finally:
+        hosted.close()
