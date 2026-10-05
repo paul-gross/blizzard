@@ -91,8 +91,7 @@ class ReDeriveScope:
 @domain_model
 @dataclass(frozen=True)
 class ReDeriveOutcome:
-    """How many segments a re-derive derived — successes only — and how many candidates remain;
-    ``not_visible`` marks a segment force refused for want of visibility."""
+    """Segments a re-derive derived (successes only), candidates remaining, and whether a segment force was refused."""
 
     derived: int
     remaining: int
