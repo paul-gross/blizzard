@@ -512,7 +512,7 @@ class UsageFact:
     estimated_cost_usd: float | None = None
 
     def cost_partial(self) -> bool:
-        """Whether this invocation carries neither a billed nor an estimated amount."""
+        """Whether this row lacks both ``cost_usd`` and ``estimated_cost_usd``: :class:`UsageTotal`'s per-row test."""
         return self.cost_usd is None and self.estimated_cost_usd is None
 
 
