@@ -232,9 +232,10 @@ class LandRun:
         var exits non-zero naming it, before anything reaches the forge."""
         env = env or ScriptEnv()
         # Required vars are read in table order, so the first one missing is the one named.
-        forge_url = env.require(_ENV_FORGE_URL).rstrip("/")
-        base_branch = env.require(_ENV_BASE_BRANCH)
         commits: list[dict[str, str]] = env.require_json(_ENV_GIT_COMMITS)
+        # No commit pointer resolves to no repository, so no forge variable is injected; there is nothing to land.
+        forge_url = env.require(_ENV_FORGE_URL).rstrip("/") if commits else ""
+        base_branch = env.require(_ENV_BASE_BRANCH) if commits else ""
         return cls(
             forge_url=forge_url,
             base_branch=base_branch,

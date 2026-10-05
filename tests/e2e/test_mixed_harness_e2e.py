@@ -87,7 +87,13 @@ from tests.crash.support import (
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import create_work_sources, daemon_log_sink, free_port
+from tests.support import (
+    create_repositories,
+    create_work_sources,
+    daemon_log_sink,
+    fixture_repositories,
+    free_port,
+)
 
 pytestmark = [
     pytest.mark.e2e,
@@ -437,6 +443,9 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             await_http(hub, "/api/health", proc=hub_proc)
             if fleet_traces.available:
                 create_work_sources(hub, default_work_sources(forge_port))
+                create_repositories(
+                    hub, fixture_repositories(default_work_sources(forge_port), f"http://127.0.0.1:{forge_port}")
+                )
 
             # 1. Mint the mixed graph and resolve each node's id (`GET/POST /api/graphs`'s
             # own `GraphView` — the wire shape this test's board/analytics assertions below

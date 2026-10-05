@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -24,13 +24,19 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.secret_referrers import retired_names_query
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_lifecycle_facts
 
 
-def _retired_names_query():  # type: ignore[no-untyped-def]
-    return retired_names_query(repository_lifecycle_facts)
+def _retirements(conn: Connection, names: list[str] | None = None) -> dict[str, datetime]:
+    """When each currently-retired repository's newest retirement fact was set."""
+    newest = select(func.max(repository_lifecycle_facts.c.id)).group_by(repository_lifecycle_facts.c.name)
+    query = select(repository_lifecycle_facts.c.name, repository_lifecycle_facts.c.set_at).where(
+        repository_lifecycle_facts.c.id.in_(newest), repository_lifecycle_facts.c.retired.is_(True)
+    )
+    if names is not None:
+        query = query.where(repository_lifecycle_facts.c.name.in_(names))
+    return {row.name: row.set_at for row in conn.execute(query)}
 
 
 def _check_secret(conn: Connection, secret: str) -> None:
@@ -182,21 +188,21 @@ class RepositoryRecordStore:
             return {}
         with self._store.read("get_many") as conn:
             rows = conn.execute(select(repositories).where(repositories.c.name.in_(names))).all()
-            retired = set(
-                conn.execute(_retired_names_query().where(repository_lifecycle_facts.c.name.in_(names))).scalars()
-            )
-        return {row.name: self._of(row, retired=row.name in retired) for row in rows}
+            retired = _retirements(conn, names)
+        return {row.name: self._of(row, retired_at=retired.get(row.name)) for row in rows}
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(repositories).order_by(repositories.c.name)).all()
-            retired = set(conn.execute(_retired_names_query()).scalars())
+            retired = _retirements(conn)
         return [
-            self._of(row, retired=row.name in retired) for row in rows if include_retired or row.name not in retired
+            self._of(row, retired_at=retired.get(row.name))
+            for row in rows
+            if include_retired or row.name not in retired
         ]
 
     @staticmethod
-    def _of(row, *, retired: bool) -> ConfiguredRepository:  # type: ignore[no-untyped-def]
+    def _of(row, *, retired_at: datetime | None) -> ConfiguredRepository:  # type: ignore[no-untyped-def]
         return ConfiguredRepository(
             name=row.name,
             fields=RepositoryFields(
@@ -209,7 +215,8 @@ class RepositoryRecordStore:
             revision=row.revision,
             created_at=row.created_at,
             created_by=row.created_by,
-            retired=retired,
+            retired=retired_at is not None,
+            retired_at=retired_at,
         )
 
 

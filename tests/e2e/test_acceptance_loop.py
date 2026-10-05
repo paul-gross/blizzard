@@ -52,8 +52,10 @@ from tests.e2e.fleet_traces import (
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.harness_sections import claude_code, opencode, sections
 from tests.support import (
+    create_repositories,
     create_work_sources,
     daemon_log_sink,
+    fixture_repositories,
     fixture_work_source,
     free_port,
     read_daemon_log,
@@ -69,7 +71,7 @@ pytestmark = [
 ]
 
 # The fixture project repo the loop drives and the owner the forge/hub address it under
-# (BZ_FORGE_OWNER; see `hub/graphs/scripts/land_default.py`).
+# (the repository record's owner; see `hub/graphs/scripts/land_default.py`).
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"
@@ -328,8 +330,6 @@ def _hub(
     export_to = collector if collector is not None and collector.available else None
     env = {
         **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
-        "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
-        "BZ_FORGE_OWNER": OWNER,
         # A short batch delay puts the inline platform spans in the file before the sweep's roots.
         **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
         **(extra_env or {}),
@@ -376,9 +376,10 @@ def _hub(
         if not rehost:
             # The one work source every scenario ingests against; `annotate` opts it into
             # the forge-status label sweep.
-            create_work_sources(
-                client, [fixture_work_source(REPO_NAME, REPO, f"http://127.0.0.1:{forge_port}", annotate=annotate)]
-            )
+            forge_api = f"http://127.0.0.1:{forge_port}"
+            sources = [fixture_work_source(REPO_NAME, REPO, forge_api, annotate=annotate)]
+            create_work_sources(client, sources)
+            create_repositories(client, fixture_repositories(sources, forge_api))
         yield client
     finally:
         client.close()

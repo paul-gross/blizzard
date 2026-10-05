@@ -91,16 +91,6 @@ from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
-ENV_FORGE_URL = "BZ_FORGE_URL"
-ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-# Qualifies a bare (worktree-name-only) delivery repo into the forge's ``owner/name`` coordinate.
-ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
-# Defaults to "blizzard" when unset, qualifying a bare repo name into that owner.
-DEFAULT_FORGE_OWNER = "blizzard"
-# The branch every PR/merge targets, so a PR's ``base`` resolves instead of 422-ing.
-ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
-DEFAULT_FORGE_BASE_BRANCH = "main"
-
 #: The transcript-event derivation sweep's own interval — a module
 #: constant; its own change probe skips the pass when nothing changed.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
@@ -400,7 +390,6 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
     # The one process-scoped clock and the stores and leaf services built once over it —
     # the work-source registry and `build_services` below both take the same core.
     core = build_process_core(engine)
@@ -419,7 +408,6 @@ def build_hosted_app(
         instrument_client=platform_tracing.instrument_client,
     )
     _announce_ignored_work_source_blocks(config)
-    base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -437,12 +425,9 @@ def build_hosted_app(
         core,
         events=EventBroker(),
         work_sources=work_source_registry,
-        base_branch=base_branch,
+        secrets=live.secrets,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
-        forge_url=os.environ.get(ENV_FORGE_URL),
-        forge_token=os.environ.get(ENV_FORGE_TOKEN),
-        forge_owner=owner,
         public_url=config.public_url,
         forge_http_client=forge_client,
         oauth_providers=oauth_providers,

@@ -8,6 +8,7 @@ command-runner seams."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
-from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, report_lease
+from tests.support import DEFAULT_FIXTURE_REPOSITORIES, FakeHubCommandRunner, FakeHubWorkdir, build_hub, report_lease
 from tests.test_pin_hub_delivery import _mint_and_claim, _writable
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -75,12 +76,20 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
     return DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")).verify()
 
 
-def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact]) -> list[dict[str, str]]:
+def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact], *owners: str) -> list[list[dict[str, str]]]:
     """Record ``submitted`` as the chunk's build artifacts, run ``deliver``, and return the
-    ``BZ_HUB_GIT_COMMITS`` list the land script received."""
+    ``BZ_HUB_GIT_COMMITS`` list each land-script run received."""
     runner = FakeHubCommandRunner()
     (tmp_path / "hub").mkdir()
-    hub = build_hub(tmp_path / "hub", hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(
+        tmp_path / "hub",
+        hub_command_runner=runner,
+        hub_workdir=FakeHubWorkdir(),
+        repositories=[
+            replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url="https://api.github.com")
+            for owner in owners
+        ],
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     rows = [
         StoredArtifact(
@@ -118,8 +127,7 @@ def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact]) -> lis
     node = graph.node_by_id(nodes["deliver"])
     assert node is not None
     hub.services.hub_node.run(chunk, graph, node, epoch=1)
-    assert runner.calls, "deliver never ran its land script"
-    return json.loads(runner.calls[0][2]["BZ_HUB_GIT_COMMITS"])
+    return [json.loads(call[2]["BZ_HUB_GIT_COMMITS"]) for call in runner.calls]
 
 
 def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
@@ -129,18 +137,18 @@ def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
         commits={"e1": "a" * 40, "e2": "a" * 40},
     )
 
-    payload = _deliver_payload(tmp_path, submitted)
+    runs = _deliver_payload(tmp_path, submitted, "acme")
 
-    assert payload == [{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]
+    assert runs == [[{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]]
 
 
-def test_one_name_at_two_owners_delivers_two_qualified_entries(tmp_path: Path) -> None:
+def test_one_name_at_two_owners_is_refused_since_delivery_lands_under_one_owner(tmp_path: Path) -> None:
     submitted = _submit(
         tmp_path,
         origins={"e1": "https://github.com/owner-a/widget", "e2": "https://github.com/owner-b/widget"},
         commits={"e1": "a" * 40, "e2": "b" * 40},
     )
 
-    payload = _deliver_payload(tmp_path, submitted)
+    runs = _deliver_payload(tmp_path, submitted, "owner-a", "owner-b")
 
-    assert {e["repo"] for e in payload} == {"owner-a/widget", "owner-b/widget"}
+    assert runs == [], "a chunk spanning two owners has no single landing target; no land script may run"

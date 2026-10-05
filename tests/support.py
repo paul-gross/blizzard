@@ -7,6 +7,7 @@ Builds the store-backed ``host`` composition with the work-item read seam replac
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import json
@@ -47,7 +48,7 @@ from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
-from blizzard.hub.composition import HubServices, build_hub_core, build_services
+from blizzard.hub.composition import HubServices, build_hub_core, build_live_config, build_services
 from blizzard.hub.config import (
     AUTH_MODE_NONE,
     AUTH_MODE_OAUTH,
@@ -73,7 +74,8 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.secrets import IHubKeyProvider
+from blizzard.hub.domain.config.repositories import RepositoryFields
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
@@ -727,14 +729,43 @@ def checkpoint_sqlite(db_url: str) -> None:
         engine.dispose()
 
 
+#: The repository every hub built without an explicit ``repositories`` carries — the ``acme/widget``
+#: the component tier's commits name — so a deliver node resolves them.
+DEFAULT_FIXTURE_REPOSITORIES = (
+    RepositoryFields(
+        forge_api_url="http://forge.fixture",
+        owner="acme",
+        repo="widget",
+        base_branch="main",
+        secret_name="fixture-forge-token",
+    ),
+)
+
+
+def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path) -> None:
+    """Write ``repositories`` and the secret they name straight into the store, as an operator's
+    ``blizzard hub repo create`` would — a no-op for none, and for a store an earlier build already seeded."""
+    if not repositories:
+        return
+    authoring = config_authoring(
+        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+    )
+    for fields in repositories:
+        name = f"{fields.owner}-{fields.repo}"
+        if RepositoryRecordStore(hub_store_connections(engine)).get(name) is not None:
+            continue
+        with contextlib.suppress(SecretAlreadyExists):
+            authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
+        authoring.create_repository(name, fields, OP)
+
+
 def build_hub(
     tmp_path: Path,
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
-    base_branch: str = "main",
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
-    forge_owner: str | None = None,
+    repositories: Sequence[RepositoryFields] | None = None,
     public_url: str | None = None,
     runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
@@ -779,6 +810,7 @@ def build_hub(
     else:
         shutil.copyfile(hub_migration_prototype(), db_path)
     engine = create_engine_from_url(db_url)
+    seed_repositories(engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path)
 
     built_sources: dict[str, IWorkSource] = dict(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
@@ -795,22 +827,23 @@ def build_hub(
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
+    secret_keys = hub_key_provider({}, data_dir=tmp_path)
+    live = build_live_config(core, secret_keys=secret_keys)
     services = build_services(
         core,
         events=events,
         work_sources=work_source_registry,
-        base_branch=base_branch,
+        secrets=live.secrets,
         hub_command_runner=hub_command_runner,
         hub_workdir=hub_workdir,
         hub_workdir_root=tmp_path / "hub_workdirs",
         hub_marker_callback_base_url="http://testserver",
-        forge_owner=forge_owner,
         public_url=public_url,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
-        secret_keys=hub_key_provider({}, data_dir=tmp_path),
+        secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=transcript_caps,
         system_artifacts=system_artifacts,
@@ -851,6 +884,41 @@ def fixture_work_source(name: str, locator: str, api_base: str, *, annotate: boo
     )
 
 
+def ensure_fixture_secret(hub: httpx.Client) -> None:
+    """Create :data:`FIXTURE_FORGE_SECRET` unless an earlier seeding already did."""
+    secret = hub.post("/api/secrets", json={"name": FIXTURE_FORGE_SECRET, "value": "fixture-token"})
+    assert secret.status_code in (201, 409), secret.text
+
+
+def fixture_repository(name: str, forge_api_url: str, *, owner: str, base_branch: str = "main") -> dict[str, str]:
+    """A repository record body on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
+    return {
+        "name": name,
+        "forge_api_url": forge_api_url,
+        "owner": owner,
+        "repo": name,
+        "base_branch": base_branch,
+        "secret_name": FIXTURE_FORGE_SECRET,
+    }
+
+
+def fixture_repositories(sources: Sequence[WorkSourceDocument], forge_api_url: str) -> list[dict[str, str]]:
+    """One repository record per source's ``owner/repo`` locator, on the fixture forge's ``main``."""
+    return [
+        fixture_repository(source.locator.rpartition("/")[2], forge_api_url, owner=source.locator.partition("/")[0])
+        for source in sources
+    ]
+
+
+def create_repositories(hub: httpx.Client, repositories: Sequence[dict[str, str]]) -> None:
+    """Create repository ``repositories`` — and the secret they name — through a running hub's own
+    API, so a deliver node resolves its chunk's commits against them."""
+    ensure_fixture_secret(hub)
+    for repository in repositories:
+        created = hub.post("/api/repositories", json=repository)
+        assert created.status_code == 201, created.text
+
+
 def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:
     """Create ``sources``, and the secret they name, through a running hub's own API.
 
@@ -858,8 +926,7 @@ def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]
     through this once the hub answers, or its own ingests fail."""
     if not sources:
         return
-    secret = hub.post("/api/secrets", json={"name": FIXTURE_FORGE_SECRET, "value": "fixture-token"})
-    assert secret.status_code == 201, secret.text
+    ensure_fixture_secret(hub)
     for source in sources:
         created = hub.post("/api/work-sources", json=source.model_dump())
         assert created.status_code == 201, created.text

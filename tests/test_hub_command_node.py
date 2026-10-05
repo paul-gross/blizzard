@@ -46,6 +46,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
@@ -435,9 +436,10 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
         workdir="/tmp/ch_x",
         epoch=1,
         artifacts=[artifact],
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        forge_url="http://forge",
+        repository=ResolvedRepository(
+            forge_api_url="http://forge", owner="acme", base_branch="main", secret_name="forge-token"
+        ),
         forge_token="tok",
     ).vars
     assert env["BZ_HUB_CHUNK_ID"] == "ch_x"
@@ -496,7 +498,6 @@ def _env_with(artifacts: list[StoredArtifact]) -> dict[str, str]:
         workdir="/tmp/ch_x",
         epoch=9,
         artifacts=artifacts,
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
     ).vars
 
@@ -548,7 +549,6 @@ def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
         workdir="/tmp/ch_x",
         epoch=1,
         artifacts=[],
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
         marker_token="",
     ).vars
@@ -564,7 +564,6 @@ def test_build_hub_env_carries_the_feature_title_when_given() -> None:
         workdir="/tmp/ch_x",
         epoch=1,
         artifacts=[],
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
         feature_title="Add rate limiting to the widget API",
     ).vars
@@ -582,7 +581,6 @@ def test_build_hub_env_links_the_board_only_from_a_declared_public_url() -> None
             workdir="/tmp/ch_x",
             epoch=1,
             artifacts=[],
-            base_branch="main",
             marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
             public_url=public_url,
         ).vars
@@ -606,7 +604,6 @@ def test_build_hub_env_takes_the_board_url_from_the_shared_helper(monkeypatch: p
         workdir="/tmp/ch_x",
         epoch=1,
         artifacts=[],
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
         public_url="https://blizzard.example.com",
     ).vars
@@ -1102,13 +1099,13 @@ nodes:
         node_id=merge_node.node_id,
         node_name="merge",
         epoch=1,
-        name="merged/acme-widget",
+        name="merged/acme/widget",
         content="c",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
-    apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme-widget")
+    apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
     assert apply.json()["outcome"] == "hub_node_taken"
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -1767,7 +1764,6 @@ def _env_for_expectation(*, expects: bool) -> dict[str, str]:
         workdir="/tmp/ch_x",
         epoch=1,
         artifacts=[],
-        base_branch="main",
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
         expects_git_commits=expects,
     ).vars

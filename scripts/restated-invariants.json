@@ -538,26 +538,6 @@
           "reason": "Public README delivery overview: its reader has no workspace context to resolve the workflow convention, so the behavior is stated inline."
         }
       ]
-    },
-    {
-      "id": "forge-owner-default-is-blizzard",
-      "statement": "BZ_FORGE_OWNER, unset, defaults to the literal owner \"blizzard\".",
-      "owner": "src/blizzard/hub/app.py#<module>",
-      "owner_kind": "module",
-      "owner_assert": {
-        "quote": "Defaults to \"blizzard\" when unset"
-      },
-      "markers": [
-        "defaulting to blizzard when unset"
-      ],
-      "sites": [
-        {
-          "file": "docs/deployment/install.md",
-          "symbol": "configuration-and-credentials",
-          "role": "allowed",
-          "reason": "Operator-facing deployment doc. The constant is the owner; this is the one place its literal default value is written in prose, for an operator configuring /etc/blizzard/hub.env."
-        }
-      ]
     }
   ]
 }

@@ -1,16 +1,18 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
 Every field is required, so an edit carrying ``None`` on any field is refused naming it.
-The rows are inert: nothing reads them for delivery yet."""
+A hub step resolves its chunk's commit pointers against them (:func:`resolve_chunk_repositories`)."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
+from enum import StrEnum
 from typing import ClassVar, Protocol
 from urllib.parse import urlparse
 
+from blizzard.foundation.repo_ref import RepoRef
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
@@ -79,6 +81,8 @@ class ConfiguredRepository:
     created_at: datetime
     created_by: str
     retired: bool = False
+    #: When the newest retirement fact was set; ``None`` while the record is enabled.
+    retired_at: datetime | None = None
 
     @classmethod
     def new(
@@ -133,6 +137,126 @@ class RepositoryEdit:
     repo: str | None | UnsetType = UNSET
     base_branch: str | None | UnsetType = UNSET
     secret_name: str | None | UnsetType = UNSET
+
+
+@domain_model
+@dataclass(frozen=True)
+class ResolvedRepository:
+    """The one repository record a chunk's commits resolved to — the forge, owner, base branch
+    and secret every delivery variable is filled from."""
+
+    forge_api_url: str
+    owner: str
+    base_branch: str
+    secret_name: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class CommitOrigin:
+    """A commit pointer's repository as delivery knows it: its bare ``name`` and the origin
+    coordinate it encodes, if any (``host`` and ``owner`` are empty for a ``file://`` origin)."""
+
+    name: str
+    host: str = ""
+    owner: str = ""
+
+    @classmethod
+    def of(cls, origin_url: str | None, name: str) -> CommitOrigin:
+        """``name`` may itself be ``owner/name``; the origin's own coordinate wins when it has one."""
+        ref = RepoRef.parse(origin_url) if origin_url else None
+        if ref is not None:
+            return cls(name=ref.name, host=ref.host, owner=ref.owner)
+        owner, _, bare = name.rpartition("/")
+        return cls(name=bare, owner=owner)
+
+
+class RepositoryOutcome(StrEnum):
+    RESOLVED = "resolved"
+    NOTHING_TO_RESOLVE = "nothing-to-resolve"
+    UNRESOLVED = "repository-unresolved"
+    DISAGREE = "repositories-disagree"
+
+
+@domain_model
+@dataclass(frozen=True)
+class RepositoryResolution:
+    """The outcome of resolving a chunk's commit pointers. ``target`` is set exactly when
+    ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`; ``qualified`` maps each origin's
+    index to the ``owner/repo`` it resolved to."""
+
+    outcome: RepositoryOutcome
+    target: ResolvedRepository | None = None
+    qualified: tuple[str, ...] = ()
+    detail: str = ""
+
+
+def _forge_host(forge_api_url: str) -> str:
+    """The host the forge's API fronts — GitHub's ``api.`` prefix is not part of its web host."""
+    host = urlparse(forge_api_url).netloc.rpartition("@")[2].lower()
+    return host.removeprefix("api.")
+
+
+def _candidates(origin: CommitOrigin, rows: list[ConfiguredRepository]) -> list[ConfiguredRepository]:
+    found = [row for row in rows if row.fields.repo == origin.name]
+    if origin.owner:
+        found = [row for row in found if row.fields.owner.lower() == origin.owner.lower()]
+    if origin.host:
+        found = [
+            row for row in found if _forge_host(row.fields.forge_api_url) == origin.host.lower().removeprefix("api.")
+        ]
+    return found
+
+
+def resolve_chunk_repositories(
+    origins: list[CommitOrigin], rows: list[ConfiguredRepository], *, minted_at: datetime
+) -> RepositoryResolution:
+    """Resolve each commit pointer to a repository record, then require they all agree.
+
+    A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
+    when it encodes them. Only records standing for the chunk count: an enabled one, or one
+    retired after the chunk was minted. No pointers is not a refusal — there is nothing to land."""
+    if not origins:
+        return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
+    standing = [row for row in rows if row.retired_at is None or row.retired_at > minted_at]
+    picked: list[ConfiguredRepository] = []
+    for origin in origins:
+        found = _candidates(origin, standing)
+        label = f"{origin.owner}/{origin.name}" if origin.owner else origin.name
+        if not found:
+            return RepositoryResolution(RepositoryOutcome.UNRESOLVED, detail=f"no repository record stands for {label}")
+        if len(found) > 1:
+            names = ", ".join(sorted(row.name for row in found))
+            return RepositoryResolution(
+                RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {names}"
+            )
+        picked.append(found[0])
+    first = picked[0].fields
+    for row in picked[1:]:
+        f = row.fields
+        for label, mine, theirs in (
+            ("forge_api_url", first.forge_api_url, f.forge_api_url),
+            ("owner", first.owner, f.owner),
+            ("base_branch", first.base_branch, f.base_branch),
+            ("secret_name", first.secret_name, f.secret_name),
+        ):
+            if mine != theirs:
+                return RepositoryResolution(
+                    RepositoryOutcome.DISAGREE,
+                    detail=f"repositories {picked[0].name} and {row.name} disagree on {label}: {mine!r} vs {theirs!r}",
+                )
+    return RepositoryResolution(
+        RepositoryOutcome.RESOLVED,
+        target=ResolvedRepository(first.forge_api_url, first.owner, first.base_branch, first.secret_name),
+        qualified=tuple(f"{row.fields.owner}/{row.fields.repo}" for row in picked),
+    )
+
+
+def resolve_repository(origin: CommitOrigin, rows: list[ConfiguredRepository]) -> ConfiguredRepository | None:
+    """The single enabled record ``origin`` names, or ``None`` — unmatched or ambiguous. A
+    point-in-time lookup with no chunk to date it by, so retired records never match."""
+    found = _candidates(origin, [row for row in rows if row.retired_at is None])
+    return found[0] if len(found) == 1 else None
 
 
 def validate_name(name: str) -> None:

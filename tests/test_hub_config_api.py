@@ -18,7 +18,7 @@ _DEMO = {"name": "demo", "provider": "github", "locator": "acme/demo", "secret":
 
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
-    hub = build_hub(tmp_path)
+    hub = build_hub(tmp_path, repositories=())
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": _SENTINEL}).status_code == 201
     return hub
 
@@ -254,7 +254,7 @@ def test_no_secret_value_reaches_a_change_row_or_the_log_route(hub: HubHarness) 
 
 
 def test_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth")
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=())
     admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
     contributor = {
         "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
@@ -376,7 +376,7 @@ def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub
 
 
 def test_repository_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth")
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=())
     admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
     contributor = {
         "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"

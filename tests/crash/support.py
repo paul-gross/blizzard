@@ -23,7 +23,14 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
-from tests.support import create_work_sources, daemon_log_sink, fixture_work_source, write_mock_harness_credentials
+from tests.support import (
+    create_repositories,
+    create_work_sources,
+    daemon_log_sink,
+    fixture_repositories,
+    fixture_work_source,
+    write_mock_harness_credentials,
+)
 
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
@@ -811,8 +818,6 @@ def start_hub(
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     env = {
         **os.environ,
-        "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
-        "BZ_FORGE_OWNER": OWNER,
     }
     _apply_crash_env(env, crash_point)
     if extra_env:
@@ -828,7 +833,9 @@ def start_hub(
     if first_start:
         with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as hub:
             await_http(hub, "/api/health", proc=proc)
-            create_work_sources(hub, work_sources if work_sources is not None else default_work_sources(forge_port))
+            seeded = work_sources if work_sources is not None else default_work_sources(forge_port)
+            create_work_sources(hub, seeded)
+            create_repositories(hub, fixture_repositories(seeded, f"http://127.0.0.1:{forge_port}"))
     return proc
 
 
