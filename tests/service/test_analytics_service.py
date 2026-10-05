@@ -55,7 +55,7 @@ def test_a_segment_scoped_call_forces_that_one_segment(tmp_path: Path) -> None:
         resp = hub.post("/api/analytics/re-derive", json={"segment_id": "sg_1"})
 
         assert resp.status_code == 200, resp.text
-        assert resp.json() == {"derived": 1, "remaining": 0}
+        assert resp.json() == {"derived": 1, "remaining": 0, "not_visible": False}
 
 
 def test_a_chunk_scoped_bounded_call_converges_over_repeated_calls(tmp_path: Path) -> None:
@@ -68,15 +68,15 @@ def test_a_chunk_scoped_bounded_call_converges_over_repeated_calls(tmp_path: Pat
 
         first = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id, "limit": 2})
         assert first.status_code == 200, first.text
-        assert first.json() == {"derived": 2, "remaining": 1}
+        assert first.json() == {"derived": 2, "remaining": 1, "not_visible": False}
 
         second = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id, "limit": 2})
         assert second.status_code == 200, second.text
-        assert second.json() == {"derived": 1, "remaining": 0}
+        assert second.json() == {"derived": 1, "remaining": 0, "not_visible": False}
 
         third = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id, "limit": 2})
         assert third.status_code == 200, third.text
-        assert third.json() == {"derived": 0, "remaining": 0}
+        assert third.json() == {"derived": 0, "remaining": 0, "not_visible": False}
 
 
 def test_a_call_naming_both_a_segment_and_a_chunk_is_422(tmp_path: Path) -> None:
