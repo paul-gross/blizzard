@@ -477,7 +477,7 @@ def test_a_night_of_chunks_is_exported_end_to_end(tmp_path: Path) -> None:
                 "--since",
                 night_began.strftime(_SINCE_FORMAT),
                 "--until",
-                (datetime.now() + timedelta(seconds=2)).strftime(_SINCE_FORMAT),
+                datetime.now().strftime(_SINCE_FORMAT),
             )
             night.blizzard("hub", "egress", "backfill", *window)
             backfilled = proof.read_rows(parquet_dir, "parquet", backfill=True)

@@ -159,6 +159,7 @@ def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
 
+        client.register_runner("runner-parity", "ws1")
         outcome = client.claim_route(
             RouteClaim(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
         )
