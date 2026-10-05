@@ -30,7 +30,7 @@ class _FakeResponse:
 def test_scope_create_posts_slug_and_description(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"slug": "blizzard", "description": "the repo", "retired": False})
 
@@ -82,7 +82,7 @@ def test_scope_list_on_no_scopes_prints_a_friendly_message(monkeypatch: pytest.M
 def test_scope_edit_patches_the_description(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, {"slug": "blizzard", "description": "new", "retired": False})
 
@@ -101,7 +101,7 @@ def test_scope_edit_patches_the_description(monkeypatch: pytest.MonkeyPatch) -> 
 def test_scope_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"slug": "blizzard", "retired": True})
 
@@ -119,7 +119,7 @@ def test_scope_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPat
 def test_scope_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"slug": "blizzard", "retired": False})
 
@@ -133,7 +133,7 @@ def test_scope_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_scope_retire_maps_an_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404)
 
     monkeypatch.setattr(httpx, "post", fake_post)

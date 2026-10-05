@@ -91,6 +91,7 @@ def routine_create(
             "default_effort": default_effort,
             "default_harnesses": list(default_harnesses),
         },
+        door=True,
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"routine rejected: {cli.detail(resp, 'validation failed')}")
@@ -156,7 +157,7 @@ def routine_edit(
         "default_harnesses": list(default_harnesses) or None,
     }
     body = {"name": resp.json()["name"], **{k: v for k, v in given.items() if v is not None}}
-    resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body)
+    resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body, door=True)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"routine edit rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
@@ -177,7 +178,7 @@ def routine_scope_add(cli: CliContext, routine_id: str, scope_slug: str) -> None
 
     404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
     malformed SCOPE_SLUG."""
-    resp = cli.send("put", f"/api/routines/{routine_id}/scopes/{scope_slug}")
+    resp = cli.send("put", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"scope add rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(
@@ -199,7 +200,7 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
     404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
     malformed SCOPE_SLUG, or on naming ROUTINE_ID's own default scope — always a member
     of its own set."""
-    resp = cli.send("delete", f"/api/routines/{routine_id}/scopes/{scope_slug}")
+    resp = cli.send("delete", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"scope remove rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(
@@ -247,6 +248,7 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) ->
         f"POST /routines/{{id}}/{verb}",
         json_body={"by": by},
         on_status={404: f"unknown routine {name!r}"},
+        door=True,
     )
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"

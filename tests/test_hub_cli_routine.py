@@ -50,7 +50,7 @@ class _FakeResponse:
 def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(
             201,
@@ -92,7 +92,7 @@ def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPat
 def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
@@ -110,7 +110,7 @@ def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.Monk
 def test_routine_create_collects_repeated_harnesses_options(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, object]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
@@ -135,7 +135,7 @@ def test_routine_create_collects_repeated_harnesses_options(monkeypatch: pytest.
 
 @pytest.mark.unit
 def test_routine_create_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "no enabled graph named 'ghost' exists"})
 
     monkeypatch.setattr(httpx, "post", fake_post)
@@ -218,8 +218,11 @@ def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    doors: list[str | None] = []
+
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
+        doors.append((headers or {}).get("X-Blizzard-Door"))
         return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": True})
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -230,6 +233,7 @@ def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyP
 
     assert result.exit_code == 0, result.output
     assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/retire", {"by": "paul"})]
+    assert doors == ["cli"]
     assert "retired" in result.output
 
 
@@ -240,7 +244,7 @@ def test_routine_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
         return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": False})
 
@@ -262,7 +266,7 @@ def test_routine_retire_unknown_name_raises_without_a_retire_request(monkeypatch
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append(url)
         return _FakeResponse(202, {})
 
@@ -374,7 +378,7 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
         get_calls.append(url)
         return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
 
-    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         patch_calls.append((url, json))
         return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
 
@@ -403,7 +407,7 @@ def test_routine_edit_sends_only_the_options_given(monkeypatch: pytest.MonkeyPat
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
 
-    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         patch_calls.append(json)
         return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
 
@@ -445,7 +449,7 @@ def test_config_changes_accepts_the_scope_and_routine_kinds(monkeypatch: pytest.
 def test_routine_scope_add_links_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
@@ -464,7 +468,7 @@ def test_routine_scope_add_links_the_scope(monkeypatch: pytest.MonkeyPatch) -> N
 def test_routine_scope_add_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
@@ -480,7 +484,7 @@ def test_routine_scope_add_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.unit
 def test_routine_scope_add_on_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown routine rtn_ghost"})
 
     monkeypatch.setattr(httpx, "put", fake_put)
@@ -492,7 +496,7 @@ def test_routine_scope_add_on_unknown_routine(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.unit
 def test_routine_scope_add_on_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown scope ghost"})
 
     monkeypatch.setattr(httpx, "put", fake_put)
@@ -504,7 +508,7 @@ def test_routine_scope_add_on_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 def test_routine_scope_add_on_malformed_slug(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
 
     monkeypatch.setattr(httpx, "put", fake_put)
@@ -518,7 +522,7 @@ def test_routine_scope_add_on_malformed_slug(monkeypatch: pytest.MonkeyPatch) ->
 def test_routine_scope_remove_unlinks_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
@@ -537,7 +541,7 @@ def test_routine_scope_remove_unlinks_the_scope(monkeypatch: pytest.MonkeyPatch)
 def test_routine_scope_remove_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
@@ -553,7 +557,7 @@ def test_routine_scope_remove_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 def test_routine_scope_remove_refuses_the_default_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "routine 'rtn_1's default scope 'blizzard' cannot be unlinked"})
 
     monkeypatch.setattr(httpx, "delete", fake_delete)
@@ -572,7 +576,7 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
         get_calls.append(params)
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening", "graph_name": "alpha"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
         return _FakeResponse(
             201,
@@ -613,7 +617,7 @@ def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
         return _FakeResponse(
             201,
@@ -648,7 +652,7 @@ def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(
             201,
             {
@@ -682,7 +686,7 @@ def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pyte
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append(url)
         return _FakeResponse(201, {})
 
@@ -700,7 +704,7 @@ def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -719,7 +723,7 @@ def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(503, {"detail": "scope 'blizzard' is retired"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -745,7 +749,7 @@ def test_routine_run_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
