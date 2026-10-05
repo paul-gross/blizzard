@@ -124,6 +124,35 @@ def test_trend_reports_reopened_on_its_own_not_folded_into_created_or_outflow(tm
     assert first["reopened"] == 1
 
 
+def test_trend_counts_a_reopen_whose_exit_precedes_the_window(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_routine(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_fact(hub, "fin_1", kind="add", recorded_at=datetime(2025, 12, 1, tzinfo=UTC))
+    _seed_fact(hub, "fin_1", kind="resolved", recorded_at=datetime(2025, 12, 5, tzinfo=UTC))
+    _seed_fact(hub, "fin_1", kind="reopened", recorded_at=datetime(2026, 1, 4, tzinfo=UTC))
+
+    first = hub.client.get("/api/routines/trend", params=_params()).json()["periods"][0]
+
+    assert first["reopened"] == 1
+
+
+@pytest.mark.parametrize("prior", ["gone", "delivered"])
+def test_trend_does_not_count_a_reopen_from_gone_or_delivered(tmp_path: Path, prior: str) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_routine(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_fact(hub, "fin_1", kind="add", recorded_at=datetime(2025, 12, 1, tzinfo=UTC))
+    _seed_fact(hub, "fin_1", kind=prior, recorded_at=datetime(2025, 12, 5, tzinfo=UTC))
+    _seed_fact(hub, "fin_1", kind="reopened", recorded_at=datetime(2026, 1, 4, tzinfo=UTC))
+
+    first = hub.client.get("/api/routines/trend", params=_params()).json()["periods"][0]
+
+    assert first["reopened"] == 0
+
+
 def test_trend_excludes_withdrawals_from_outflow(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)

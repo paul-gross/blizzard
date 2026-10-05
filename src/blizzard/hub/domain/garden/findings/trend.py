@@ -23,11 +23,14 @@ TREND_FACT_KINDS = frozenset({"add", "reopened"}) | EXIT_KINDS
 @dataclass(frozen=True)
 class TrendFact:
     """One `finding_facts` row inside the window, joined to its own finding's
-    `introduced_at` — the shape `facts_for_trend` returns."""
+    `introduced_at` — the shape `facts_for_trend` returns. `prior_kind` is the kind of the
+    finding's newest fact before this one, even when that fact precedes the window; it is
+    read only for a `reopened` fact and is `None` otherwise."""
 
     kind: str
     recorded_at: datetime
     introduced_at: datetime | None
+    prior_kind: str | None = None
 
 
 @domain_model
@@ -36,7 +39,9 @@ class TrendPeriod:
     """One fixed-length slice of the window: findings created, exits per kind, the two
     roll-ups — `outflow` is `resolved` + `gone-confirmed`, `withdrawn` is the other
     three — and `reopened`, an exited finding's own undo, counted on its own so a
-    resolve-reopen-resolve cycle reads as one creation, two exits, one reopen."""
+    resolve-reopen-resolve cycle reads as one creation, two exits, one reopen. A reopen
+    from `gone` or `delivered` undoes no exit, so it is not trend inflow and is not
+    counted."""
 
     period_start: datetime
     period_end: datetime
@@ -104,7 +109,8 @@ class TrendWindow:
 class IReadGardenTrendRepository(Protocol):
     def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
         """Every `add`/exit-kind fact for `routine_name` recorded in `[since, until)`,
-        each joined to its own finding's `introduced_at`."""
+        each joined to its own finding's `introduced_at`; a `reopened` fact also carries the
+        kind of the finding's newest earlier fact, whether or not it falls in the window."""
         ...
 
 
@@ -152,7 +158,8 @@ def compute_trend(
             if fact.kind == "add":
                 created_counts[index] += 1
             elif fact.kind == "reopened":
-                reopened_counts[index] += 1
+                if fact.prior_kind in EXIT_KINDS:
+                    reopened_counts[index] += 1
             elif fact.kind in EXIT_KINDS:
                 exit_counts[index][fact.kind] += 1
     periods = [
