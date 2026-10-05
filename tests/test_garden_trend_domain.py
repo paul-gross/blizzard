@@ -18,8 +18,10 @@ _SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)  # two 7-day periods
 
 
-def _fact(kind: str, *, day: int, introduced_at: datetime | None = None) -> TrendFact:
-    return TrendFact(kind=kind, recorded_at=datetime(2026, 1, day, tzinfo=UTC), introduced_at=introduced_at)
+def _fact(kind: str, *, day: int, introduced_at: datetime | None = None, prior_kind: str | None = None) -> TrendFact:
+    return TrendFact(
+        kind=kind, recorded_at=datetime(2026, 1, day, tzinfo=UTC), introduced_at=introduced_at, prior_kind=prior_kind
+    )
 
 
 def test_periods_span_the_window_in_fixed_width_slices() -> None:
@@ -102,7 +104,12 @@ def test_withdrawn_excludes_outflow() -> None:
 
 
 def test_reopened_is_counted_on_its_own_not_folded_into_created_or_any_exit() -> None:
-    facts = [_fact("add", day=2), _fact("resolved", day=3), _fact("reopened", day=4), _fact("resolved", day=5)]
+    facts = [
+        _fact("add", day=2),
+        _fact("resolved", day=3),
+        _fact("reopened", day=4, prior_kind="resolved"),
+        _fact("resolved", day=5),
+    ]
 
     trend = compute_trend(
         facts, routine_name="nightly", since=_SINCE, until=_UNTIL, period_days=7, introduced_boundary=_SINCE
@@ -113,6 +120,20 @@ def test_reopened_is_counted_on_its_own_not_folded_into_created_or_any_exit() ->
     assert period.outflow == 2
     assert period.reopened == 1
     assert "reopened" not in period.exits
+
+
+@pytest.mark.parametrize(("prior_kind", "counted"), [("resolved", 1), ("gone", 0), ("delivered", 0)])
+def test_reopened_counts_only_when_it_undoes_an_exit(prior_kind: str, counted: int) -> None:
+    trend = compute_trend(
+        [_fact("reopened", day=4, prior_kind=prior_kind)],
+        routine_name="nightly",
+        since=_SINCE,
+        until=_UNTIL,
+        period_days=7,
+        introduced_boundary=_SINCE,
+    )
+
+    assert trend.periods[0].reopened == counted
 
 
 def test_age_cut_splits_created_findings_by_introduced_at_against_the_boundary() -> None:
