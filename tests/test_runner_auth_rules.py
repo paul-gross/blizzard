@@ -89,6 +89,6 @@ def test_expired_past_leeway_refused_at_injected_now() -> None:
     assert FederatedIdentity.from_claims(claims, now=_NOW - timedelta(seconds=1)).username == "alice"
 
 
-def test_jti_retained_until_exp() -> None:
+def test_jti_retained_until_exp_plus_leeway() -> None:
     exp = _NOW + timedelta(minutes=5)
-    assert jti_retention(_claims(exp=int(exp.timestamp()))) == exp
+    assert jti_retention(_claims(exp=int(exp.timestamp()))) == exp + timedelta(seconds=30)
