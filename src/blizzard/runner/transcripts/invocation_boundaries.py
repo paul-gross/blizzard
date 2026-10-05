@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "BOUNDARY_TRANSITIONS",
@@ -98,7 +98,7 @@ def spawn_boundary_kind(*, resumed: bool) -> InvocationBoundaryKind:
     return "resume" if resumed else "spawn"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class InvocationBoundaryStart:
     """Where an invocation boundary's range currently starts: the newest advance's own

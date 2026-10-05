@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
+from blizzard.foundation.completion_gates import ChecksGate
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor, JudgedBy
@@ -28,7 +29,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.produces import Produces
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, FollowLatest, Graph, GraphStanding, Node
-from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, WorkItemProposal
 
 
 class CompletionRefused(Exception):

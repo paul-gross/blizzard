@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 
 _LANDLOCK_CREATE_RULESET = 444
 _LANDLOCK_ADD_RULE = 445
@@ -70,7 +70,7 @@ class LandlockUnavailable(RuntimeError):
     """The kernel cannot provide the required inherited filesystem boundary."""
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class _LandlockPath:
     path: Path

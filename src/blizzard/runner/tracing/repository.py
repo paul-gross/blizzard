@@ -8,12 +8,12 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.facts import LeaseTraceFacts
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseTraceCheckpoint:
     """One ``trace_cursor`` row: where the cursor stood after a pass, and what that pass told."""
@@ -23,7 +23,7 @@ class LeaseTraceCheckpoint:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseTraceExportFailure:
     """One ``trace-export-failed`` latch row: when the outage began."""

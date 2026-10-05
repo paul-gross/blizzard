@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import DerivedContext
 
 AttributeValue = str | int | float | bool | tuple[str, ...]
@@ -27,7 +27,7 @@ class SpanStatus(StrEnum):
     ERROR = "ERROR"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SpanEvent:
     name: str
@@ -35,7 +35,7 @@ class SpanEvent:
     attributes: Attributes = field(default_factory=dict)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SpanLink:
     """A link to another span's root; ``context`` is derived, never looked up."""
@@ -44,7 +44,7 @@ class SpanLink:
     attributes: Attributes = field(default_factory=dict)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FinishedSpan:
     context: DerivedContext

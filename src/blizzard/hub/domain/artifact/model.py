@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 # One conservative URL path segment — no `/`, since the consuming route percent-encodes a
 # bare name into it. Shared by both name grammars below (`canon:one-owner`).
@@ -81,7 +81,7 @@ class AssetArtifact:
 Artifact = GitCommitArtifact | AssetArtifact
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StoredArtifact:
     """The flat storage row: variant fields compressed into one ``data`` string.

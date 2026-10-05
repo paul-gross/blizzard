@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
@@ -28,7 +28,7 @@ from blizzard.hub.secrets.internal.directory_keys import DirectoryKeyProvider
 from blizzard.hub.secrets.internal.env_keys import EnvKeyProvider
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RotationResult:
     key_id: str

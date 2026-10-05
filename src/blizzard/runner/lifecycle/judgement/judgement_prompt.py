@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.wire.envelope import NodeEnvelope
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class JudgementPrompt:
     """One attempt's prompt, over the node and the checks run at its worker's exit."""

@@ -14,7 +14,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
@@ -89,7 +89,7 @@ def claude_code_section(sections: HarnessSections) -> ClaudeCodeSection:
     return section
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessSettings:
     """The runner-wide values every binding is built from: the runner ``root``, the worker

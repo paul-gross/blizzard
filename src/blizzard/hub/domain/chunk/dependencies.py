@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, IWriteChunkDependenciesRepository
@@ -222,7 +222,7 @@ class BlockedMarking:
         return cls(prerequisite_chunk_id=unmet_prerequisite_chunk_ids[0], unmet_count=len(unmet_prerequisite_chunk_ids))
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChunkNeighbor:
     """One neighbor at one hop of :func:`derive_chunk_neighborhood` —
@@ -235,7 +235,7 @@ class ChunkNeighbor:
     satisfied: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChunkNeighborhood:
     """A chunk's standing edges one hop each way."""

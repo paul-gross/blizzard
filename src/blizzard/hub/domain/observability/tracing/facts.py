@@ -9,12 +9,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.foundation.migration_source import MigrationSource
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.graph.model import Graph
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedLease:
     """A ``lease_facts`` row. Deliberately carries no runner id: ownership is read from epoch owners."""
@@ -23,7 +23,7 @@ class TracedLease:
     minted_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedEpochOwner:
     """An ``epoch_owners`` row — ``runner_id`` ``None`` meaning the hub."""
@@ -33,7 +33,7 @@ class TracedEpochOwner:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedTransition:
     epoch: int
@@ -45,7 +45,7 @@ class TracedTransition:
     choice_name: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedMigration:
     epoch: int
@@ -59,7 +59,7 @@ class TracedMigration:
     choice_name: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedRestart:
     epoch: int
@@ -72,7 +72,7 @@ class TracedRestart:
     decision_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedEscalation:
     epoch: int
@@ -80,7 +80,7 @@ class TracedEscalation:
     decision_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedDecision:
     """A ``decisions`` row; ``imposed_by_runner_id`` is non-null exactly for a runner gate."""
@@ -92,7 +92,7 @@ class TracedDecision:
     imposed_by_runner_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedDecisionResolution:
     """The moment a person decided — not when the holding runner picked it up."""
@@ -103,31 +103,31 @@ class TracedDecisionResolution:
     choice: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedRequeue:
     requeued_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedRouteRelease:
     released_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedChunkStop:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedChunkCompletion:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedQuestion:
     """A ``questions`` row with its answer's instant; the question and answer text never ride."""
@@ -138,7 +138,7 @@ class TracedQuestion:
     answered_at: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedPause:
     """A pause fact: ``paused`` sets it, ``paused=False`` lifts it. Carries no ``set_by``."""
@@ -148,7 +148,7 @@ class TracedPause:
     set_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedHubExecSlot:
     """A ``hub_exec_slot`` row — keyed by node, with no epoch."""
@@ -159,7 +159,7 @@ class TracedHubExecSlot:
     released_at: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedHubPoll:
     """A ``hub_node_poll`` row, recorded at the epoch the chunk arrived at the hub node with."""
@@ -170,7 +170,7 @@ class TracedHubPoll:
     polled_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedBounce:
     """A ``chunk_bounces`` row, without its envelope."""
@@ -180,19 +180,19 @@ class TracedBounce:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedRouteCreation:
     created_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedPromotion:
     promoted_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TracedPrerequisiteMet:
     """The instant a prerequisite completed, resolved by the hydrator from the prerequisite's own facts."""
@@ -200,7 +200,7 @@ class TracedPrerequisiteMet:
     met_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StepFacts:
     """Everything step identification reads about one chunk.

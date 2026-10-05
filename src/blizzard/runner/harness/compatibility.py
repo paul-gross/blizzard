@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 
 class CompatibilityProbe(StrEnum):
@@ -113,7 +113,7 @@ def _state(value: EvidenceState | str) -> EvidenceState:
         raise CompatibilityContractError(f"unknown compatibility evidence state: {value!r}") from exc
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ProbeObservation:
     """Raw observation: ``observed`` is success, ``absent`` is deliberate neutral absence, and failed or ambiguous
@@ -165,7 +165,7 @@ def classify_observation(observation: ProbeObservation) -> CompatibilityClassifi
     return CompatibilityClassification.BLOCKING
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ProbeResult:
     """One classified probe result retained in the complete report."""

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "BUCKET_CAPACITY",
@@ -54,7 +54,7 @@ class Bucket:
         return (now - self.at).total_seconds() >= capacity / refill_per_second
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReceiverCount:
     """Items accepted and dropped since the runner started."""

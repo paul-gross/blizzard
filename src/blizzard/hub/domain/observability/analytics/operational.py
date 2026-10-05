@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OperationalCriteria:
     """Every filter the operational datasets owe — the scope shared
@@ -30,7 +30,7 @@ class OperationalCriteria:
     until: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DurationStats:
     """One grouping key's step-duration rollup — ``key`` is a node id or a graph
@@ -44,7 +44,7 @@ class DurationStats:
     avg_seconds: float
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SpendStats:
     """One grouping key's usage/cost rollup — ``key`` is a node, graph, or chunk
@@ -96,7 +96,7 @@ def fold_spend_by_name(rows: list[SpendStats]) -> list[SpendStats]:
     return sorted(out, key=lambda r: r.key)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChunkSpendPage:
     """A bounded, keyset-paginated page of :class:`SpendStats` keyed by chunk id —
@@ -107,7 +107,7 @@ class ChunkSpendPage:
     next_cursor: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OutcomeStats:
     """One node's judged-choice distribution and attempt-failure count — two
@@ -123,7 +123,7 @@ class OutcomeStats:
 # --- pure folds — typed facts in, decided rows out ------------------------------------
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TransitionMovement:
     """One ``transitions`` row already narrowed to what the folds below read — never touches the
@@ -139,7 +139,7 @@ class TransitionMovement:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MigrationMovement:
     """One ``chunk_migrations`` row narrowed the same way as :class:`TransitionMovement`.
@@ -155,7 +155,7 @@ class MigrationMovement:
     recorded_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseEpoch:
     """One deduped ``(chunk_id, epoch)``'s earliest mint (A7) — a candidate attempt
@@ -166,7 +166,7 @@ class LeaseEpoch:
     minted_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StepDuration:
     """One measured step interval: the exited node (``None`` for the first
@@ -331,7 +331,7 @@ def resolve_attempt_failures(
     return failures
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class JudgedChoiceCount:
     """One ``(from_node_id, choice_name)`` occurrence count from the judged-distribution

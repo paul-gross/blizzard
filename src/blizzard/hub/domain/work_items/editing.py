@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
@@ -71,7 +71,7 @@ def prepare_mint(
     return pointer, chunk, at
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CreatedWorkItem:
     """The result of filing a hub-owned work item — the item plus the
@@ -81,7 +81,7 @@ class CreatedWorkItem:
     chunk_id: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WithdrawnWorkItem:
     """The result of withdrawing a hub-owned work item — the item itself,

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
@@ -83,7 +83,7 @@ def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
     )
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class NodeArtifacts:
     """One chunk's envelope artifacts, read through the layered forward to the hub."""

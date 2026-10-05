@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 
@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 TREND_FACT_KINDS = frozenset({"add", "reopened"}) | EXIT_KINDS
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TrendFact:
     """One `finding_facts` row inside the window, joined to its own finding's
@@ -30,7 +30,7 @@ class TrendFact:
     introduced_at: datetime | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TrendPeriod:
     """One fixed-length slice of the window: findings created, exits per kind, the two
@@ -47,7 +47,7 @@ class TrendPeriod:
     reopened: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TrendAgeCut:
     """The cut over the window's created findings, against a caller-supplied
@@ -59,7 +59,7 @@ class TrendAgeCut:
     unattributed: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Trend:
     routine_name: str

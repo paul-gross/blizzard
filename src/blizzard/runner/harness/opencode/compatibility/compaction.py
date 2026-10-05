@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.opencode.compatibility.loopback import (
     ILoopbackTransport,
     LoopbackRequest,
@@ -41,7 +41,7 @@ RecordHttpOperation = Callable[[str, str, str, int | None], None]
 StopProcess = Callable[[OpenCodeStartedProcess], bool]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeCompactionResult:
     """The sanitized transcript samples collected around one compaction request."""

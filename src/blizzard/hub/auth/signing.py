@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 #: RS256 key size — the conventional minimum for an RSA signing key.
 _KEY_SIZE_BITS = 2048
@@ -28,7 +28,7 @@ _FILE_MODE = 0o600
 _KID_BYTES = 12
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class _KeyMeta:
     current_kid: str

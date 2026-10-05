@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.graphs.scripts.land_common import (
     ForgeReadDegraded,
     LandedRevisionUnknown,
@@ -313,7 +313,7 @@ def _rerun_marker(repo: str, name: str, head_sha: str) -> str:
     return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Findings:
     """The ``delivery-findings`` marker body — plain markdown a resolve worker reads, not

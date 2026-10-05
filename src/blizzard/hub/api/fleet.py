@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
@@ -105,7 +105,6 @@ _log = get_logger("blizzard.hub.fleet")
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
 
-@domain_model
 @dataclass(frozen=True)
 class FleetRequest:
     """One fleet-router call: who it resolved to, and the hub policy it is judged under.
@@ -405,7 +404,7 @@ def get_chunk_analytics_counts_files(
     rows, over the window it names, gated on the chunk carrying a run context rather than
     on operator credentials."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria()))
+    return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
@@ -416,7 +415,7 @@ def get_chunk_analytics_counts_skills(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria()))
+    return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
@@ -427,7 +426,7 @@ def get_chunk_analytics_counts_agent_types(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria()))
+    return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria))
 
 
 @router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
@@ -439,9 +438,7 @@ def get_chunk_analytics_counts_nodes(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
     _routine_run_or_404(chunk_id, services)
-    return counts_response(
-        named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria()), by_name)
-    )
+    return counts_response(named_counts(services.analytics_events.counts_by_node(window.event_scope.criteria), by_name))
 
 
 @router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)

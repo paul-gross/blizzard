@@ -9,7 +9,7 @@ from typing import Literal, Protocol
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
@@ -82,7 +82,7 @@ class BufferedFact:
         return self.kind == COMPLETION_KIND
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OutboundFactEntry:
     """One hub-bound fact off the outbound buffer, acked or not. The same table as
@@ -171,7 +171,7 @@ def submission_payload(submission_json: Mapping[str, object]) -> dict[str, objec
     return {"submission": dict(submission_json)}
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OutboundEventFields:
     """The message and detail one operational event carries, before :func:`event_payload` frames it."""

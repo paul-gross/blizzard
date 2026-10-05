@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 
 # The runner-owned directory the published harness-config snapshots live under.
@@ -70,7 +70,7 @@ class HarnessLayout:
     compose: Callable[[HarnessComposition], None] | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessComposition:
     """What a layout's compose hook is given: the staged directory it may rewrite and the
@@ -80,7 +80,7 @@ class HarnessComposition:
     source_dir: Path
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessSource:
     """One harness directory found in the bundle and where its snapshot copy lives."""
@@ -91,7 +91,7 @@ class HarnessSource:
     entry_points: tuple[str, ...]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class BundleSnapshot:
     """The facts of a loaded bundle — names and paths only, never file contents."""

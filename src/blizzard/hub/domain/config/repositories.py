@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import ClassVar, Protocol
 from urllib.parse import urlparse
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
@@ -51,7 +51,7 @@ class RepositorySecretUnavailable(ConfigFieldError):
         super().__init__("secret_name", f"secret {secret} is {'retired' if retired else 'unknown'}")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RepositoryFields:
     """The mutable fields of a repository, by wire name."""
@@ -123,7 +123,7 @@ class ConfiguredRepository:
         return moved, ConfigChange.of(ctx, RecordKind.REPOSITORY, self.name, moved.revision, op, flip, at)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RepositoryEdit:
     """A sparse edit: :data:`UNSET` leaves a field; ``None`` is refused on every field."""

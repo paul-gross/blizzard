@@ -50,6 +50,8 @@ _MOVED_HOMES = {
     "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
     "PROVIDER_ANTHROPIC": "blizzard.runner.subscriptions.subscription_sampler",
     "PROVIDER_OPENAI": "blizzard.runner.subscriptions.subscription_sampler",
+    "Coverage": "blizzard.foundation.completion_gates",
+    "ChecksGate": "blizzard.foundation.completion_gates",
     "SpanEvent": "blizzard.foundation.trace_spans",
     "FinishedSpan": "blizzard.foundation.trace_spans",
     "SpanLink": "blizzard.foundation.trace_spans",
@@ -2133,7 +2135,7 @@ def test_configured_write_guard_catches_a_second_holder(tmp_path: Path) -> None:
 
 # Data roles (``bzh:data-roles``). Every check reads source only — no scanned module is imported.
 
-_ROLE_MARKERS = frozenset({"domain_model", "entity", "dto", "collaborator"})
+_ROLE_MARKERS = frozenset({"domain_model", "dto", "adapter_model", "collaborator"})
 _ROLES_MODULE = "blizzard.foundation.roles"
 _PORT_NAME = re.compile(r"^I[A-Z]")
 _EXCEPTION_NAMES = frozenset(
@@ -2147,6 +2149,71 @@ _DRIVER_PACKAGES = frozenset(_DOMAIN_CORE_FORBIDDEN)
 _DIRECT_WRAPPERS = frozenset({"Optional", "Union", "Annotated", "InitVar", "Final"})
 _PROPERTY_DECORATORS = frozenset({"property", "cached_property"})
 _CONSTRUCTOR_DUNDERS = frozenset({"__init__", "__new__", "__post_init__"})
+#: The app boundary, relative to the source root: the packages where the app meets the outside.
+_APP_BOUNDARY = tuple(Path(p) for p in ("wire", "hub/api", "hub/cli", "runner/api", "runner/cli", "cli"))
+#: The runner's hub client — the adapter that sends and receives the ``wire/`` contract.
+_WIRE_CLIENT = Path("runner/hub")
+#: The modules outside the app boundary still importing a ``wire/`` model — a closed list that only
+#: shrinks, as each concept maps the wire to its own domain models at its edge.
+_WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
+    {
+        "hub/domain/chunk/model.py",
+        "hub/domain/chunk/proposals.py",
+        "hub/domain/execution/apply.py",
+        "hub/domain/execution/auth/commit_pointer.py",
+        "hub/domain/execution/auth/produces.py",
+        "hub/domain/execution/auth/proposals.py",
+        "hub/domain/execution/claim.py",
+        "hub/domain/execution/completion.py",
+        "hub/domain/execution/decisions.py",
+        "hub/domain/execution/eligibility.py",
+        "hub/domain/execution/envelope.py",
+        "hub/domain/execution/facts.py",
+        "hub/domain/execution/questions.py",
+        "hub/domain/garden/delivery/materialize.py",
+        "hub/domain/garden/delivery/validation.py",
+        "hub/domain/garden/review/validation.py",
+        "hub/domain/garden/runs/history.py",
+        "hub/domain/observability/analytics/events.py",
+        "hub/domain/observability/analytics/extraction.py",
+        "hub/events/broker.py",
+        "hub/store/internal/runner_registry_store.py",
+        "hub/store/internal/transcript_event_store.py",
+        "runner/events/broker.py",
+        "runner/events/publisher.py",
+        "runner/harness/adapter.py",
+        "runner/harness/capability_snapshot.py",
+        "runner/harness/claude_code/adapter.py",
+        "runner/harness/opencode/adapter.py",
+        "runner/leases/escalations.py",
+        "runner/lifecycle/attempt.py",
+        "runner/lifecycle/claim.py",
+        "runner/lifecycle/drain.py",
+        "runner/lifecycle/held_chunk.py",
+        "runner/lifecycle/judgement/artifacts.py",
+        "runner/lifecycle/judgement/checks.py",
+        "runner/lifecycle/judgement/git_commits.py",
+        "runner/lifecycle/judgement/judgement.py",
+        "runner/lifecycle/judgement/judgement_prompt.py",
+        "runner/lifecycle/judgement/produces.py",
+        "runner/lifecycle/judgement/verdict.py",
+        "runner/lifecycle/model.py",
+        "runner/lifecycle/session.py",
+        "runner/lifecycle/spawn.py",
+        "runner/lifecycle/takeover.py",
+        "runner/loop/context.py",
+        "runner/loop/steps.py",
+        "runner/selftest/checks.py",
+        "runner/store/internal/usage_store.py",
+        "runner/throttle/pause.py",
+        "runner/tracing/sweep.py",
+        "runner/transcripts/internal/http_archived_transcript_repository.py",
+        "runner/transcripts/internal/segment_projection.py",
+        "runner/transcripts/transcript_drain.py",
+        "runner/usage/recorder.py",
+        "runner/usage/repository.py",
+    }
+)
 
 
 def _terminal(expr: ast.AST | None) -> str | None:
@@ -2537,22 +2604,34 @@ def _role_marker_violations(src_root: Path, paths: Iterable[Path] | None = None)
     return violations
 
 
-def _in_store_internal(rel: Path) -> bool:
-    """Whether a module path relative to the source root sits under a store package's ``internal/``."""
-    parts = rel.parts[:-1]
-    return "store" in parts and "internal" in parts[parts.index("store") + 1 :]
+def _in_app_boundary(rel: Path) -> bool:
+    """Whether a module path relative to the source root sits in an app-boundary package."""
+    return any(rel.is_relative_to(package) for package in _APP_BOUNDARY)
 
 
-def _entity_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
-    """Every ``@entity`` in ``paths`` outside a store package's ``internal/`` directory, and every
-    Protocol member in ``paths`` whose annotations name an ``@entity`` declared anywhere under
-    ``src_root`` — by its own name or an import alias of it."""
+def _boundary_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every ``@dto`` or pydantic model in ``paths`` outside the app boundary, and every
+    ``@domain_model`` or ``@adapter_model`` inside it."""
     scan = _role_scan(src_root)
-    entities = {site.node.name for site in scan.sites if "entity" in site.markers}
     violations: list[str] = []
     for site in scan.sites_in(paths):
-        if "entity" in site.markers and not _in_store_internal(site.path.relative_to(src_root)):
-            violations.append(f"{scan.where(site)} is an @entity outside a store package's internal/ directory")
+        inside = _in_app_boundary(site.path.relative_to(src_root))
+        if not inside and "dto" in site.markers:
+            violations.append(f"{scan.where(site)} is a @dto outside the app boundary")
+        elif not inside and scan.inferred_role(site) == "pydantic":
+            violations.append(f"{scan.where(site)} is a pydantic model outside the app boundary")
+        elif inside and (core := [m for m in site.markers if m in ("domain_model", "adapter_model")]):
+            violations.append(f"{scan.where(site)} is a @{core[0]} inside the app boundary")
+    return violations
+
+
+def _adapter_model_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
+    """Every Protocol member in ``paths`` whose annotations name an ``@adapter_model`` declared
+    anywhere under ``src_root`` — by its own name or an import alias of it."""
+    scan = _role_scan(src_root)
+    adapter_models = {site.node.name for site in scan.sites if "adapter_model" in site.markers}
+    violations: list[str] = []
+    for site in scan.sites_in(paths):
         if "Protocol" not in site.bases:
             continue
         for item in site.node.body:
@@ -2567,10 +2646,26 @@ def _entity_violations(src_root: Path, paths: Iterable[Path] | None = None) -> l
                 continue
             mentioned = set().union(*(_mentioned_types(a, scan.aliases) for a in annotations))
             local = scan.imports.get(site.path, {})
-            named = {local.get(name, ("", name))[1] for name in mentioned} & entities
+            named = {local.get(name, ("", name))[1] for name in mentioned} & adapter_models
             if named:
-                violations.append(f"{scan.where(site)}.{member} names @entity {sorted(named)}")
+                violations.append(f"{scan.where(site)}.{member} names @adapter_model {sorted(named)}")
     return violations
+
+
+def _wire_import_violations(src_root: Path, *, listed: frozenset[str], exempt: frozenset[Path]) -> list[str]:
+    """Every module under ``src_root`` — outside the app boundary, the runner's hub client, and
+    ``exempt`` — importing ``blizzard.wire`` that ``listed`` does not name, and every ``listed``
+    module (relative to ``src_root``) that imports none."""
+    importers: set[str] = set()
+    for path in sorted(src_root.rglob("*.py")):
+        rel = path.relative_to(src_root)
+        if _in_app_boundary(rel) or rel.is_relative_to(_WIRE_CLIENT) or path in exempt:
+            continue
+        if any(m == "blizzard.wire" or m.startswith("blizzard.wire.") for m in _imported_modules(path)):
+            importers.add(rel.as_posix())
+    unlisted = [f"{rel} imports a wire/ model outside the app boundary" for rel in sorted(importers - listed)]
+    stale = [f"{rel} is listed as a wire/ importer yet imports none" for rel in sorted(listed - importers)]
+    return unlisted + stale
 
 
 def _domain_model_collaborator_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
@@ -2690,21 +2785,39 @@ def _dto_method_violations(src_root: Path, paths: Iterable[Path] | None = None) 
 
 
 def test_every_data_class_declares_exactly_one_role() -> None:
-    """Every ``@dataclass`` and ``NamedTuple`` carries exactly one of ``@domain_model``,
-    ``@entity``, ``@dto`` — unless its shape infers its role (port, error, enum, pydantic,
-    orchestration), which it then never annotates (``bzh:data-roles``)."""
+    """Every ``@dataclass`` and ``NamedTuple`` carries exactly one of ``@domain_model``, ``@dto``,
+    ``@adapter_model``, ``@collaborator`` — unless its shape infers its role (port, error, enum,
+    pydantic, orchestration), which it then never annotates (``bzh:data-roles``)."""
     violations = _role_marker_violations(_SRC_DIR)
     assert not violations, f"data roles — {len(violations)} data class(es) misdeclare a role: {violations}"
 
 
-def test_an_entity_lives_in_a_store_package_and_crosses_no_protocol() -> None:
-    """An ``@entity`` is a persistence row private to its store adapter: it lives under a store
-    package's ``internal/`` and no Protocol member's signature names it (``bzh:data-roles``)."""
-    violations = _entity_violations(_SRC_DIR)
-    assert not violations, f"data roles — {len(violations)} entity leak(s): {violations}"
+def test_a_dto_lives_at_the_app_boundary() -> None:
+    """A ``@dto`` or pydantic model is the app's contract with the outside, so it lives in an
+    app-boundary package, and a ``@domain_model`` or ``@adapter_model`` never does
+    (``bzh:data-roles``)."""
+    violations = _boundary_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} class(es) on the wrong side of the boundary: {violations}"
 
 
-def test_a_domain_model_holds_no_port_or_clock() -> None:
+def test_only_the_boundary_names_a_wire_model() -> None:
+    """A ``wire/`` model is named only at the app boundary, by the runner's hub client, and by a
+    composition root; every other importer is on a closed list that only shrinks
+    (``bzh:data-roles``)."""
+    violations = _wire_import_violations(
+        _SRC_DIR, listed=_WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY, exempt=_COMPOSITION_ROOTS
+    )
+    assert not violations, f"data roles — {len(violations)} wire/ import(s) off the list: {violations}"
+
+
+def test_an_adapter_model_crosses_no_protocol() -> None:
+    """An ``@adapter_model`` is an outside system's format private to its adapter: no Protocol
+    member's signature names it (``bzh:data-roles``)."""
+    violations = _adapter_model_violations(_SRC_DIR)
+    assert not violations, f"data roles — {len(violations)} adapter-model leak(s): {violations}"
+
+
+def test_a_domain_model_holds_no_collaborator() -> None:
     """A ``@domain_model`` carries rules, not collaborators: no field mentions a port, a clock, a
     driver handle, or a ``@collaborator`` or orchestration class (``bzh:data-roles``)."""
     violations = _domain_model_collaborator_violations(_SRC_DIR)
@@ -2719,8 +2832,8 @@ def test_a_collaborator_does_work_and_every_clock_is_one() -> None:
 
 
 def test_a_dto_has_only_constructors_projections_and_properties() -> None:
-    """A ``@dto`` is data crossing a boundary: its methods are constructors, projections, and
-    properties only (``bzh:data-roles``)."""
+    """A ``@dto`` is the app's contract with the outside, not a home for rules: its methods are
+    constructors, projections, and properties only (``bzh:data-roles``)."""
     violations = _dto_method_violations(_SRC_DIR)
     assert not violations, f"data roles — {len(violations)} dto method(s) carry behavior: {violations}"
 
@@ -2735,7 +2848,7 @@ from typing import Literal, NamedTuple, Optional, Protocol, Self
 import httpx
 from sqlalchemy import Connection
 
-from blizzard.foundation.roles import collaborator, domain_model, dto, entity
+from blizzard.foundation.roles import adapter_model, collaborator, domain_model, dto
 from blizzard.ports import AppError, Driver, IClock, IThing, Service, SystemClock
 """
 
@@ -2778,7 +2891,7 @@ def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
     [
         "@dataclass\nclass Bare:\n    x: int\n",
         "class Pair(NamedTuple):\n    x: int\n",
-        "@dto\n@entity\n@dataclass\nclass Doubled:\n    x: int\n",
+        "@dto\n@adapter_model\n@dataclass\nclass Doubled:\n    x: int\n",
         "@dto\n@dto\n@dataclass\nclass Twice:\n    x: int\n",
         "@dto\n@dataclass\nclass Failure(AppError):\n    x: int\n",
         "@dto\nclass IPort(Protocol):\n    def go(self) -> None: ...\n",
@@ -2808,7 +2921,7 @@ def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, sour
     "source",
     [
         "@dto\n@dataclass(frozen=True)\nclass Page:\n    x: int\n",
-        "@entity\nclass Row(NamedTuple):\n    x: int\n",
+        "@adapter_model\nclass Row(NamedTuple):\n    x: int\n",
         "from blizzard.foundation import roles\n\n@roles.domain_model\n@dataclass\nclass Model:\n    x: int\n",
         "import blizzard.foundation.roles\n\n@blizzard.foundation.roles.dto\n@dataclass\nclass Dotted:\n    x: int\n",
         "from ...foundation.roles import dto as data\n\n@data\n@dataclass\nclass Relative:\n    x: int\n",
@@ -2835,8 +2948,8 @@ def test_role_marker_check_admits_a_declared_or_inferred_role(tmp_path: Path, so
     assert _role_marker_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source})) == []
 
 
-_ENTITY_ROW = "@entity\n@dataclass\nclass NodeRow:\n    x: int\n"
-_ENTITY_IMPORT = "from blizzard.hub.store.internal.rows import NodeRow\n\n"
+_ROW_MODEL = "@adapter_model\n@dataclass\nclass NodeRow:\n    x: int\n"
+_ROW_IMPORT = "from blizzard.hub.store.internal.rows import NodeRow\n\n"
 
 
 @pytest.mark.parametrize(
@@ -2853,47 +2966,104 @@ _ENTITY_IMPORT = "from blizzard.hub.store.internal.rows import NodeRow\n\n"
         "row: NodeRow",
     ],
 )
-def test_entity_check_catches_an_entity_in_a_protocol_signature(tmp_path: Path, member: str) -> None:
-    protocol = f"{_ENTITY_IMPORT}Rows = list[NodeRow]\n\nclass IRepo(Protocol):\n    {member}\n"
-    src = _plant_roles(tmp_path, {"hub/store/internal/rows.py": _ENTITY_ROW, "hub/domain/repo.py": protocol})
-    violations = _entity_violations(src)
+def test_adapter_model_check_catches_one_in_a_protocol_signature(tmp_path: Path, member: str) -> None:
+    protocol = f"{_ROW_IMPORT}Rows = list[NodeRow]\n\nclass IRepo(Protocol):\n    {member}\n"
+    src = _plant_roles(tmp_path, {"hub/store/internal/rows.py": _ROW_MODEL, "hub/domain/repo.py": protocol})
+    violations = _adapter_model_violations(src)
     assert len(violations) == 1, violations
     assert "IRepo" in violations[0]
 
 
-def test_entity_check_catches_an_entity_under_an_import_alias(tmp_path: Path) -> None:
+def test_adapter_model_check_catches_one_under_an_import_alias(tmp_path: Path) -> None:
     protocol = (
         "from blizzard.hub.store.internal.rows import NodeRow as R\n\n"
         "class IRepo(Protocol):\n    def get(self) -> R: ...\n"
     )
-    src = _plant_roles(tmp_path, {"hub/store/internal/rows.py": _ENTITY_ROW, "hub/domain/repo.py": protocol})
-    violations = _entity_violations(src)
+    src = _plant_roles(tmp_path, {"hub/store/internal/rows.py": _ROW_MODEL, "hub/domain/repo.py": protocol})
+    violations = _adapter_model_violations(src)
     assert len(violations) == 1, violations
-    assert "IRepo.get names @entity ['NodeRow']" in violations[0]
+    assert "IRepo.get names @adapter_model ['NodeRow']" in violations[0]
 
 
-@pytest.mark.parametrize("rel", ["hub/domain/rows.py", "hub/store/rows.py", "hub/store/rows/internal.py"])
-def test_entity_check_catches_an_entity_outside_a_store_internal_directory(tmp_path: Path, rel: str) -> None:
-    violations = _entity_violations(_plant_roles(tmp_path, {rel: _ENTITY_ROW}))
-    assert len(violations) == 1, violations
-    assert "outside a store package's internal/ directory" in violations[0]
-
-
-def test_entity_check_admits_an_entity_its_adapter_maps_to_a_dto(tmp_path: Path) -> None:
-    adapter = f"{_ENTITY_IMPORT}class Adapter:\n    def get(self) -> NodeRow: ...\n"
+def test_adapter_model_check_admits_one_its_adapter_maps_to_a_domain_model(tmp_path: Path) -> None:
+    adapter = f"{_ROW_IMPORT}class Adapter:\n    def get(self) -> NodeRow: ...\n"
     protocol = (
-        "@dto\n@dataclass\nclass Node:\n    x: int\n\n"
+        "@domain_model\n@dataclass\nclass Node:\n    x: int\n\n"
         "class IRepo(Protocol):\n    def get(self) -> Node: ...\n    def kind(self) -> Literal['NodeRow']: ...\n"
     )
     src = _plant_roles(
         tmp_path,
         {
-            "hub/store/internal/rows.py": _ENTITY_ROW,
+            "hub/store/internal/rows.py": _ROW_MODEL,
             "hub/store/internal/adapter.py": adapter,
             "hub/domain/repo.py": protocol,
         },
     )
-    assert _entity_violations(src) == []
+    assert _adapter_model_violations(src) == []
+
+
+_PAGE_DTO = "@dto\n@dataclass\nclass Page:\n    x: int\n"
+_VIEW_MODEL = "from pydantic import BaseModel\n\nclass View(BaseModel):\n    x: int\n\nclass Sub(View):\n    y: int\n"
+
+
+@pytest.mark.parametrize(
+    ("rel", "source", "expected"),
+    [
+        ("hub/domain/mod.py", _PAGE_DTO, 1),
+        ("runner/hub/client.py", _PAGE_DTO, 1),
+        ("client/mod.py", _PAGE_DTO, 1),
+        ("hub/domain/mod.py", _VIEW_MODEL, 2),
+        ("hub/api/mod.py", "@domain_model\n@dataclass\nclass Model:\n    x: int\n", 1),
+        ("wire/mod.py", _ROW_MODEL, 1),
+    ],
+)
+def test_boundary_check_catches_a_class_on_the_wrong_side(tmp_path: Path, rel: str, source: str, expected: int) -> None:
+    violations = _boundary_violations(_plant_roles(tmp_path, {rel: source}))
+    assert len(violations) == expected, violations
+
+
+@pytest.mark.parametrize(
+    ("rel", "source"),
+    [
+        ("hub/api/mod.py", _PAGE_DTO),
+        ("runner/cli/mod.py", _PAGE_DTO),
+        ("cli/mod.py", _PAGE_DTO),
+        ("wire/mod.py", _VIEW_MODEL),
+        ("hub/domain/mod.py", "@domain_model\n@dataclass\nclass Model:\n    x: int\n"),
+        ("hub/store/internal/rows.py", _ROW_MODEL),
+        ("runner/harness/claude_code/adapter.py", _ROW_MODEL),
+    ],
+)
+def test_boundary_check_admits_a_class_on_its_own_side(tmp_path: Path, rel: str, source: str) -> None:
+    assert _boundary_violations(_plant_roles(tmp_path, {rel: source})) == []
+
+
+_WIRE_IMPORT = "from blizzard.wire.chunk import ChunkView\n"
+
+
+@pytest.mark.parametrize(
+    ("files", "listed", "fragment"),
+    [
+        ({"hub/domain/mod.py": _WIRE_IMPORT}, frozenset(), "hub/domain/mod.py imports a wire/ model"),
+        ({"runner/leases/mod.py": "import blizzard.wire.chunk\n"}, frozenset(), "runner/leases/mod.py imports"),
+        ({"hub/domain/mod.py": ""}, frozenset({"hub/domain/mod.py"}), "hub/domain/mod.py is listed"),
+    ],
+)
+def test_wire_import_check_catches_an_unlisted_or_stale_importer(
+    tmp_path: Path, files: dict[str, str], listed: frozenset[str], fragment: str
+) -> None:
+    violations = _wire_import_violations(_plant_roles(tmp_path, files), listed=listed, exempt=frozenset())
+    assert len(violations) == 1, violations
+    assert fragment in violations[0]
+
+
+def test_wire_import_check_admits_the_boundary_the_hub_client_a_root_and_a_listed_module(tmp_path: Path) -> None:
+    importers = ("hub/api/mod.py", "wire/view.py", "runner/hub/client.py", "hub/app.py", "hub/domain/listed.py")
+    src = _plant_roles(tmp_path, dict.fromkeys(importers, _WIRE_IMPORT))
+    violations = _wire_import_violations(
+        src, listed=frozenset({"hub/domain/listed.py"}), exempt=frozenset({src / "hub/app.py"})
+    )
+    assert violations == []
 
 
 @pytest.mark.parametrize(

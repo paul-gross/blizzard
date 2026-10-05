@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.pkce import Pkce
 
 _CLIENT_ID = "cli"
@@ -155,7 +155,7 @@ class Loopback(Login):
         return self.callback.code
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class PasteCode(Login):
     """The headless fallback: ``prompt_for_code`` is a seam over ``click.prompt``, so a test needs no terminal."""

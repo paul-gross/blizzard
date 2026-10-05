@@ -10,10 +10,10 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ScratchRepo:
     """An initialized, single-commit scratch git repo — touches no fleet state."""

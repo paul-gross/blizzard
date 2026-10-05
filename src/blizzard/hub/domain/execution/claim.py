@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -209,7 +209,7 @@ class ClaimAdmission:
         return node
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ClaimResult:
     """A won claim — the route fact, its first node envelope, and the route's plaintext

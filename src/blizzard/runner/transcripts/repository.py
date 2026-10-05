@@ -12,11 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.transcripts import TranscriptUnavailable, TurnKind
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ToolCall:
     """A tool invocation, structured — mirrors
@@ -35,7 +35,7 @@ class ToolCall:
     output_patch: bool = False
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Sidechain:
     """A subagent's private conversation, nested under its spawning tool turn (or, when
@@ -51,7 +51,7 @@ class Sidechain:
     parent_tool_use_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Turn:
     """One conversation turn, carried in full. ``tool``/``sidechain`` populate only
@@ -79,7 +79,7 @@ def recent_window[T](turns: Sequence[T], *, max_turns: int = MAX_TURNS) -> tuple
     return list(turns[-max_turns:] if capped else turns), capped
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Transcript:
     """A lease's parsed session — the transcript read model. ``available=False`` carries

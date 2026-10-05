@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -49,7 +49,7 @@ __all__ = [
 ]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptBackfillReport:
     """What one pass did, counted by session. Every count is local: ``imported`` means read
@@ -63,7 +63,7 @@ class TranscriptBackfillReport:
     capped: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptReshipReport:
     """What one re-ship landed. ``segment_id`` is the NEW segment carrying the content;

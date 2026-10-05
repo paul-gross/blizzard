@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.transcripts.ledger import CHUNK_BUDGET_EXCEEDED, TranscriptSegmentState
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
 PumpOutcome = Literal["caught_up", "incomplete", "not_attempted", "stuck"]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PreRead:
     """Whether a segment is read this window. ``read``: go ahead. ``stop``: stop shipping it
@@ -58,7 +58,7 @@ def pre_read(
     return PreRead(action="read")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WindowPlan:
     """What one read window turns into. ``advance_cursor``: no content, but the source moved

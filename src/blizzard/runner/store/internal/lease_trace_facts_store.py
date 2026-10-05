@@ -16,7 +16,7 @@ from typing import Any, cast
 from sqlalchemy import Connection, Row, and_, func, insert, or_, select
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.roles import entity
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs
@@ -69,7 +69,7 @@ from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceChec
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class _FactRead:
     """One ``LeaseTraceFacts`` row-tuple field: the lease it keys on, the columns its row declares, and its builder.

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
 from blizzard.runner.subscriptions.subscription_sampler import (
@@ -61,7 +61,7 @@ class ContextSampleState:
         return not (state is not None and (state.max_context_tokens or 0) > warn_tokens)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExternalUsageAttemptSummary:
     """This ``slug``'s own newest sampling attempt — what the probe, ``runner
@@ -76,7 +76,7 @@ class ExternalUsageAttemptSummary:
     renewal: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class InvocationCost:
     """The two cost figures one usage fact persists, decided by :func:`derive_invocation_cost`."""
@@ -123,7 +123,7 @@ class _RangeStart(Protocol):
     def start_unreadable(self) -> bool: ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChargeRange:
     """The transcript range one invocation is charged for: from ``start`` (``None`` is the

@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.status import IStoreStatusReader, StoreStatus
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Readiness:
     """The evaluated readiness of a daemon — derived, never stored (``bzh:facts-not-status``)."""

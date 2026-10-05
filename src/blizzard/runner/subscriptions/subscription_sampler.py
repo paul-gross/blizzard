@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 
@@ -61,7 +61,7 @@ class ExternalSubscriptionUsageWindow:
         return self.utilization_pct >= 100.0 and self.resets_at > now
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageSnapshot:
     """One sample of every window a declared subscription's account reported at ``sampled_at``.
@@ -82,7 +82,7 @@ MISS_REASON_TEXT: dict[SampleMissReason, str] = {
 }
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SampleMiss:
     """One sampling attempt that produced nothing, with why — replaces a

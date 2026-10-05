@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
@@ -57,7 +57,7 @@ class ReplayUnavailable(Exception):
     """A wet replay with no exporter wired — tracing is off."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReplayResult:
     """What a replay told, or with ``dry_run`` would have told. ``failed`` is set when the exporter refused

@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation.migration_source import MigrationSource
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import StepKey
 from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -55,7 +55,7 @@ class Interval:
         return _ms(self.start, self.end)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StepSummary:
     """One closed step. ``runner_id`` is the holder as a span reports it — a gate's holding runner included."""

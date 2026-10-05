@@ -6,14 +6,14 @@ from typing import Any, NamedTuple
 
 import pytest
 
-from blizzard.foundation.roles import ROLE_ATTRIBUTE, collaborator, domain_model, dto, entity
+from blizzard.foundation.roles import ROLE_ATTRIBUTE, adapter_model, collaborator, domain_model, dto
 
 pytestmark = pytest.mark.unit
 
 _MARKERS: list[tuple[Callable[[type[Any]], type[Any]], str]] = [
     (domain_model, "domain_model"),
-    (entity, "entity"),
     (dto, "dto"),
+    (adapter_model, "adapter_model"),
     (collaborator, "collaborator"),
 ]
 
@@ -58,7 +58,7 @@ def test_the_decorated_class_keeps_its_type_and_fields() -> None:
         items: tuple[str, ...]
         cursor: str | None = None
 
-    @entity
+    @adapter_model
     class Row(NamedTuple):
         id: int
         name: str

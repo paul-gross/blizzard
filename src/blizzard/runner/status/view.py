@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import (
     EnvBinding,
     IReadEnvironmentRepository,
@@ -116,7 +116,7 @@ class HubConnectivity:
         return cls(endpoint=endpoint, reachable=reachable, last_contact_at=contact_at, buffer_depth=buffer_depth)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunnerStatusSummary:
     """Identity, pause state, capacities, hub connectivity, and last tick — ``GET /runner``."""
@@ -179,7 +179,7 @@ class EnvironmentSlot:
         return cls(environment_id=binding.environment_id, chunk_id=binding.chunk_id, held_since=binding.bound_at)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EscalationView:
     """One parked escalation with its literal, ready-to-paste resume command. The
@@ -202,7 +202,7 @@ class EscalationView:
     cause: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenTakeoverView:
     """One open operator takeover — the recovery surface

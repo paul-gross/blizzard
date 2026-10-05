@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
@@ -27,7 +27,7 @@ from blizzard.hub.domain.runners.route import Route
 _log = get_logger("blizzard.hub.registry")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReleasedRoute:
     """One route the retire release pass released — the chunk and its ``route_released.id``."""
@@ -36,7 +36,7 @@ class ReleasedRoute:
     released_id: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RetireOutcome:
     """What one retire wrote: ``fact_id`` is ``None`` on a re-run over an already-retired

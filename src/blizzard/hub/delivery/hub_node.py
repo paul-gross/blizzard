@@ -20,7 +20,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.repo_ref import repo_identity
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
@@ -84,7 +84,7 @@ _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
 _MARKER_PREFIX = "merged/"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HubRunResult:
     """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran.
@@ -179,7 +179,7 @@ class GitCommits:
         return repo_identity(row.forge, row.repo or row.name)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HubEnv:
     """A hub command node's injected env, assembled from already-loaded domain inputs."""

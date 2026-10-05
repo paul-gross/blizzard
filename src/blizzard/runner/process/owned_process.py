@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 
 class IOwnedProcessControl(Protocol):
@@ -41,7 +41,7 @@ class IOwnedProcessControl(Protocol):
         ...
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class KillTarget:
     """What a teardown signals: the recorded process ``group`` or, with no group recorded, the

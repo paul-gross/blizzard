@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from sqlalchemy.engine import make_url
 
 from blizzard.foundation.forwarded import TrustedProxies
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
@@ -313,7 +313,7 @@ class OAuthProviderConfig:
         return tuple(providers)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AuthConfig:
     """Resolved ``[auth]`` config — the human-auth rollout knob.

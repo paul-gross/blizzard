@@ -16,7 +16,7 @@ from typing import Any, Literal, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import (
     EnvBinding,
@@ -654,7 +654,7 @@ def _linkable(batch: TranscriptBatch, parents: Mapping[str, str]) -> bool:
     return any(_parent_of(sc, parents) is not None for sc in batch.unlinked_sidechains)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class _BuiltRecords:
     """:func:`_build_records`'s return. ``turn_count`` is the SHIPPED count — real turns plus

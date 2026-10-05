@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.auth_core import Permission, Role
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 
 
 @domain_model
@@ -52,7 +52,7 @@ class Session:
     last_seen_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ProviderIdentity:
     """What a provider conformer resolves a code exchange to. Lives here,
@@ -84,7 +84,7 @@ class AuthStateEntry:
     user_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AuthFact:
     """One append-only row in ``auth_facts`` — the non-chunk-scoped

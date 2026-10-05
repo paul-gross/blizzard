@@ -18,7 +18,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.foundation.roles import entity
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.graph.model import (
     Choice,
@@ -48,7 +48,7 @@ from blizzard.hub.store.schema import (
 )
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class ListColumn[T]:
     """One JSON ``TEXT`` column holding a list — the shell each entry codec below fills in.
@@ -68,7 +68,7 @@ class ListColumn[T]:
         raise NotImplementedError
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class TextColumn(ListColumn[str]):
     """A ``list[str]`` column — a node's ``checks``, a session's ``model``."""
@@ -80,7 +80,7 @@ class TextColumn(ListColumn[str]):
         return str(raw)
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class ProducesColumn(ListColumn[ProducesSpec]):
     """The ``graph_nodes.produces`` column.
@@ -97,7 +97,7 @@ class ProducesColumn(ListColumn[ProducesSpec]):
         return ProducesSpec(name=str(raw["name"]), kind=ArtifactKind(str(raw["kind"])))
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class RunColumn(ListColumn[RunStep]):
     """The ``graph_nodes.run`` column — a hub command node's steps (#65)."""
@@ -114,7 +114,7 @@ PRODUCES = ProducesColumn()
 RUN = RunColumn()
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class SessionRow:
     def values(self, decl: SessionDecl, *, graph_id: str, ordinal: int) -> dict[str, Any]:
@@ -145,7 +145,7 @@ class SessionRow:
         )
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class GraphArtifactRow:
     def values(self, artifact: GraphArtifact, *, graph_id: str) -> dict[str, Any]:
@@ -160,7 +160,7 @@ class GraphArtifactRow:
         return GraphArtifact(name=row.name, content=row.content, ordinal=row.ordinal)
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class ChoiceRow:
     def values(self, choice: Choice, *, node_id: str) -> dict[str, Any]:
@@ -181,7 +181,7 @@ class ChoiceRow:
         )
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class EdgeRow:
     def values(self, edge: Edge) -> dict[str, Any]:
@@ -207,7 +207,7 @@ class EdgeRow:
         )
 
 
-@entity
+@adapter_model
 @dataclass(frozen=True)
 class NodeRow:
     """An empty ``run`` stores NULL rather than ``[]``, which reads back empty either way."""

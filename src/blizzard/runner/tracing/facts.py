@@ -9,11 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseGrantFact:
     """A ``leases`` row."""
@@ -25,7 +25,7 @@ class LeaseGrantFact:
     created_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseContextFact:
     """A ``lease_context`` row; ``None`` declares unknown."""
@@ -41,7 +41,7 @@ class LeaseContextFact:
     resolved_effort: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseClosureFact:
     """A ``lease_closures`` row; ``reason`` verbatim, mint reasons included."""
@@ -50,7 +50,7 @@ class LeaseClosureFact:
     closed_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SpawnFact:
     """A ``lease_spawns`` row — identity only, never its process facts."""
@@ -63,7 +63,7 @@ class SpawnFact:
     identified_at: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class BoundaryFact:
     """An ``invocation_boundaries`` row — never its transcript position."""
@@ -75,7 +75,7 @@ class BoundaryFact:
     closed_at: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TokenUsageFact:
     """A ``usage_facts`` row."""
@@ -95,14 +95,14 @@ class TokenUsageFact:
     harness_version: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SessionEndFact:
     id: int
     ended_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ContextSampleFact:
     """A ``context_samples`` row; ``context_tokens`` ``None`` is an unmeasurable sample."""
@@ -112,7 +112,7 @@ class ContextSampleFact:
     context_tokens: int | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ParkFact:
     """A ``park_facts`` row — the question's id, never its text."""
@@ -122,7 +122,7 @@ class ParkFact:
     parked_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ParkResumeFact:
     id: int
@@ -130,14 +130,14 @@ class ParkResumeFact:
     resumed_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PauseParkFact:
     id: int
     parked_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PauseResumeFact:
     """A ``pause_park_resumes`` row."""
@@ -146,7 +146,7 @@ class PauseResumeFact:
     resumed_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OverloadFact:
     """An ``overload_facts`` row; ``resume_after`` ``None`` is a recorded fall-through."""
@@ -158,7 +158,7 @@ class OverloadFact:
     resume_after: datetime | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TakeoverFact:
     """A ``takeovers`` row — never its working directory or session."""
@@ -167,7 +167,7 @@ class TakeoverFact:
     opened_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TakeoverEndFact:
     id: int
@@ -175,7 +175,7 @@ class TakeoverEndFact:
     ended_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NudgeFact:
     id: int
@@ -183,7 +183,7 @@ class NudgeFact:
     nudged_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CheckResultFact:
     """A ``check_results`` row — the outcome only, never the command or its output."""
@@ -193,7 +193,7 @@ class CheckResultFact:
     passed: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ChecksRanFact:
     id: int
@@ -201,7 +201,7 @@ class ChecksRanFact:
     ran_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LeaseTraceFacts:
     """One closed lease's facts; every row tuple holds only that lease's rows."""

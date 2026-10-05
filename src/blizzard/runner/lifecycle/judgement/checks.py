@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT
 from blizzard.wire.envelope import NodeConfig
 
@@ -36,7 +36,7 @@ class CheckPlan:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExecutedCheck:
     """One check command's runner-executed outcome, read back from the durable store.

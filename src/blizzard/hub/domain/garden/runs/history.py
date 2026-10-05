@@ -20,7 +20,7 @@ from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -30,7 +30,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveredSet:
     """One `finding_sets` row a run delivered — the list read's own per-set shape
@@ -50,7 +50,7 @@ class DeliveredSet:
     gone_count: int
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunEscalation:
     """The two things an escalated run carries, and nothing else (the hub records no
@@ -63,7 +63,7 @@ class RunEscalation:
     wrapped_takeover_command: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunSummary:
     """One run in a time window — `list_runs`'s own row."""
@@ -78,7 +78,7 @@ class RunSummary:
     delivered: list[DeliveredSet]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AddedFinding:
     """One `add` op a delivered set's artifact named — `finding_id` is the finding it
@@ -92,7 +92,7 @@ class AddedFinding:
     introduced: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ObservedFinding:
     """One `observed` op a delivered set's artifact named. The artifact repeats no
@@ -106,7 +106,7 @@ class ObservedFinding:
     summary: str | None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GoneFinding:
     """One `gone` op a delivered set's artifact named."""
@@ -115,7 +115,7 @@ class GoneFinding:
     note: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveredSetDelta:
     """One delivered set's own published delta — added, observed, and gone kept as
@@ -129,7 +129,7 @@ class DeliveredSetDelta:
     gone: list[GoneFinding]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunDelta:
     """One run's full detail — `run_delta`'s own read: its identity, its derived
@@ -145,7 +145,7 @@ class RunDelta:
     sets: list[DeliveredSetDelta]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunIdentity:
     """One chunk's own run identity, joined through its `chunk_work_refs`/`work_items`
@@ -158,7 +158,7 @@ class RunIdentity:
     minted_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RunDeliveries:
     """One run in a time window, plus every `finding_sets` row it delivered —
@@ -168,7 +168,7 @@ class RunDeliveries:
     delivered: list[DeliveredSet]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeliveredSetRaw:
     """One delivered set's own artifact text, plus the finding ids its `add` facts

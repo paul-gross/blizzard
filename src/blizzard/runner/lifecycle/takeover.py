@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -155,7 +155,7 @@ class OpenTakeover:
         return SessionReference(self.harness_id, self.session_id)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TakeoverOpenScope:
     """The chunk-keyed facts :meth:`TakeoverService.open` reads, resolved at the edge
@@ -173,7 +173,7 @@ class TakeoverOpenScope:
     requeue_pending: bool = False
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TakeoverCloseScope:
     """The chunk-keyed fact :meth:`TakeoverService.close` reads, resolved at the edge
@@ -368,7 +368,7 @@ def _state(open_takeover: OpenTakeover | None) -> TakeoverState:
     return TakeoverState.NONE if open_takeover is None else TakeoverState.OPEN
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenedTakeover:
     """What :meth:`TakeoverService.open` returns — the CLI execs ``command`` verbatim."""

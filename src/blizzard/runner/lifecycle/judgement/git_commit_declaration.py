@@ -12,7 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
@@ -95,7 +95,7 @@ def require_listed_repo(environment_id: str, repo: str, known: Sequence[str]) ->
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class GitCommitDeclarationRecord:
     """The declaration row to append: the declaration, the lease, chunk, node and epoch
@@ -114,7 +114,7 @@ class GitCommitDeclarationRecord:
     rides_completion: bool
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DeclaredGitCommit:
     """What a landed declaration reports back: the environment it resolved to, and a note

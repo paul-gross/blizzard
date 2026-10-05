@@ -10,12 +10,12 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.claude_code.denials import CLAUDE_CODE_DENIED_TOOLS
 from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND, SESSION_END_HOOK_COMMAND
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class WorkerSettings:
     """The worker hook set as a Claude Code settings document (the ``--settings`` file)."""

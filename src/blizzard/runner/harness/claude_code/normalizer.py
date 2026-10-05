@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
     NormalizedTurn,
@@ -305,7 +305,7 @@ class Run:
         return _first_field(self.records, key)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class ToolInput:
     """A tool call's ``input``, never coerced from a non-object value — see
@@ -327,7 +327,7 @@ class ToolInput:
         return cls({}, json.dumps(raw), "other")
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class NormalizedFile:
     """One JSONL file's records, normalized. ``agent_id_by_tool_turn`` is *attachment* — an id

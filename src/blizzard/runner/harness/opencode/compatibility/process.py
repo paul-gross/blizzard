@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
-from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockPolicy,
     LandlockUnavailable,
@@ -32,7 +32,7 @@ _LINE_QUEUE_LIMIT_BYTES = 256 * 1024
 _DRAIN_AFTER_STOP_SECONDS = 0.5
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OpenCodeProcessResult:
     """Captured output from one attempted OpenCode command."""

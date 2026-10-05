@@ -10,7 +10,7 @@ from collections.abc import Iterable, Set
 from dataclasses import dataclass
 from typing import Literal
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.transcripts.ledger import TranscriptBackfillLease, TranscriptSegmentState
 
@@ -102,7 +102,7 @@ def newest_superseder(
         current = max(successors, key=lambda s: s.stamped_at)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentOpening:
     """The coordinates a new segment opens at, before its ``stamped_at``."""

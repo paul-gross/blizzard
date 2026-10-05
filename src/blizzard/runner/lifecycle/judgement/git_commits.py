@@ -12,7 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
@@ -27,7 +27,7 @@ from blizzard.wire.completion import SubmittedArtifact
 Key = tuple[str, str]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class CommandFailure:
     """A confirmation that failed, as the ``command-failed`` fact reports it."""
@@ -36,7 +36,7 @@ class CommandFailure:
     stderr_tail: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PointerGroup:
     """One repository identity's distinct confirmed pointers, and the failure to report when

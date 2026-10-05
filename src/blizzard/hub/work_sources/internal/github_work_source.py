@@ -14,7 +14,7 @@ from typing import ClassVar
 import httpx
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -28,7 +28,7 @@ _log = get_logger("blizzard.hub.work_sources")
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class Label:
     """One domain marker rendered as the GitHub label this adapter writes."""

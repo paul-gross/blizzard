@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
@@ -22,7 +22,7 @@ from blizzard.wire.envelope import TIER_PREFIX, NodeConfig, RotatePolicyView
 _log = get_logger("blizzard.runner.loop")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResumeTarget:
     """A node-entry spawn's resume target — the session to resume (``None`` for a fresh
@@ -208,7 +208,7 @@ class SessionResolver:
             return None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SkippedHarness:
     """One acceptable-set member :class:`HarnessSelector` passed over, and why —
@@ -218,7 +218,7 @@ class SkippedHarness:
     reason: str  # "unknown" | "unavailable" | "unhealthy" | "no-authored-tier" | "not-a-member"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class HarnessSelection:
     """A fresh mint's resolved owner among a node's acceptable set, or ``None`` when nothing

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage, invocation_row, step_row
 from blizzard.hub.domain.observability.egress.schema import (
@@ -149,7 +149,7 @@ def late_chunks(window: TraceWindow, usage: Sequence[AttributedUsage]) -> list[s
     return sorted({row.chunk_id for row in usage if row.chunk_id not in held})
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class StepsPassPlan:
     """What a steps pass writes: ``rows`` in cursor order, the ``advanced`` cursor, and whether that
@@ -202,7 +202,7 @@ def plan_steps_pass(
     return StepsPassPlan(sorted_step_rows(batch), advanced, moved)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class InvocationRows:
     """The rows a page of usage yields, and the usage ``skipped`` for holding no runner step."""

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
@@ -42,7 +42,7 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DecisionSubmitResult:
     """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
@@ -58,7 +58,7 @@ class DecisionSubmitResult:
         return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ResolutionResult:
     """The outcome of a resolution attempt (first-write-wins)."""

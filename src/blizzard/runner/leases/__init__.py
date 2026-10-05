@@ -19,7 +19,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.leases import LeaseState
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.environments.repository import EnvBinding, IReadEnvironmentRepository, group_bindings_by_chunk
 from blizzard.runner.harness.identity import SessionReference
@@ -75,7 +75,7 @@ __all__ = [
 ]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkRefStamp:
     """One work ref as the mint's envelope delivered it; ``label`` is the hub-rendered source-native
@@ -86,7 +86,7 @@ class WorkRefStamp:
     label: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewLease:
     """A node-step lease at mint — before the worker exists."""
@@ -111,7 +111,7 @@ class NewLease:
     work_refs: tuple[WorkRefStamp, ...] | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PoolHead:
     """A named session pool's current head. ``resolved_model``/
@@ -170,7 +170,7 @@ class Lease:
         return SessionReference(harness_id=self.harness_id, session_id=self.session_id)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ClosedLease:
     """A lease joined with its closure fact — the panel's recent-history read.
@@ -292,7 +292,7 @@ class LeaseActivity:
         return "running"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ClosedLeaseActivity:
     """A closed lease and its closure fact — no liveness facts, no binding (long released)."""

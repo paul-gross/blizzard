@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
@@ -92,7 +92,7 @@ BRAKE_TRANSITIONS: Mapping[BrakeState, Mapping[BrakeVerb, BrakeVerdict]] = Mappi
 )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LocalPauseFact:
     """One local pause or start fact to append, with the hub-bound report it carries."""
@@ -198,7 +198,7 @@ def usage_limit_reason(harness_id: str, resets_at: datetime | None) -> str:
     return f"usage limit: {harness_id}{suffix}"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PausePark:
     """One open pause park: a lease dormant on an operator pause,

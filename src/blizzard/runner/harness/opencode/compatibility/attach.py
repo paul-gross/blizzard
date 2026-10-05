@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.opencode.compatibility.loopback import (
     ILoopbackTransport,
     LoopbackRequest,
@@ -41,7 +41,7 @@ _STREAM_HOP_BY_HOP_HEADERS = frozenset(
 )
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeAttachRequest:
     """One request made by the attached client, without retaining its body."""
@@ -56,7 +56,7 @@ class OpenCodeAttachRequest:
     event_stream_bytes: int = 0
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeAttachSignal:
     """The server-side signals that the interactive client attached to the requested session."""

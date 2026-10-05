@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ProcStat:
     """One process's ``/proc/<pid>/stat`` fields after ``comm`` — ``state`` at 0, ``starttime`` at 19.

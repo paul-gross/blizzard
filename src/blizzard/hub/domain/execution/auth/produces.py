@@ -3,17 +3,18 @@ declaration.
 
 The backstop against a submission carrying no explicit attachment and no covering git
 commit for a declared name. Its coverage predicate is shared via
-:class:`~blizzard.wire.completion.Coverage`, so the two models cannot drift."""
+:class:`~blizzard.foundation.completion_gates.Coverage`, so the two models cannot drift."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.completion_gates import Coverage
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.completion import Coverage, SubmittedArtifact
+from blizzard.wire.completion import SubmittedArtifact
 
 _log = get_logger("blizzard.hub.produces_auth")
 

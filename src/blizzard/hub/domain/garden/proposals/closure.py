@@ -13,7 +13,7 @@ from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.model import (
@@ -126,7 +126,7 @@ class GardenProposalClosure:
         )
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class MintingAccept:
     """What an accept that mints an item writes: the item's title and composed body, and
@@ -165,7 +165,7 @@ def accept_reason(reason: str | None) -> str | None:
     return reason.strip() or None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AcceptedGardenProposal:
     """The result of accepting a garden proposal — the closure record, plus the minted

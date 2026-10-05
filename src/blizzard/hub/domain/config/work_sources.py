@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar, Protocol
 
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import KNOWN_WORK_SOURCE_PROVIDERS, RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
@@ -78,7 +78,7 @@ class BuiltInWorkSource(Exception):
         super().__init__(f"work source {RESERVED_HUB_SOURCE_NAME} is built in and cannot be changed")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkSourceFields:
     """The mutable fields of a work source, by wire name."""
@@ -151,7 +151,7 @@ class ConfiguredWorkSource:
         return moved, ConfigChange.of(ctx, RecordKind.WORK_SOURCE, self.name, moved.revision, op, flip, at)
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkSourceEdit:
     """A sparse edit: :data:`UNSET` leaves a field, ``None`` clears a nullable one."""

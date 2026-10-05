@@ -9,10 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class WorkspaceRepo:
     """A repository cloned into a basic workspace's shared projects directory."""
@@ -21,7 +21,7 @@ class WorkspaceRepo:
     url: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AcquiredEnvironment:
     """An acquired environment: its opaque id and its working directory.
@@ -32,7 +32,7 @@ class AcquiredEnvironment:
     workdir: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class RepoBinding:
     """Where repo ``name`` lives in an env, and what forge it pushes to.

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
@@ -21,7 +21,7 @@ from blizzard.hub.domain.observability.tracing.summary import StepSummary
 _MONEY_SCALE = Decimal("0.000000001")
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExportedStep:
     """One ``steps`` row; field order is the column order."""
@@ -70,7 +70,7 @@ class ExportedStep:
     exported_at: datetime
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class AttributedUsage:
     """A hub ``usage_facts`` row with the identity columns :class:`UsageFact` does not carry."""
@@ -81,7 +81,7 @@ class AttributedUsage:
     fact: UsageFact
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExportedInvocation:
     """One ``invocations`` row; field order is the column order."""

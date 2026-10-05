@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -172,7 +172,7 @@ class _PendingOpenCodeIdentity:
         return None
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class _UsageStep:
     """A completed step and the ``(provider, model)`` its message named, if any."""

@@ -10,13 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.transcripts.repository import Turn
 
 ArchivedTranscriptStatus = Literal["found", "empty", "refused", "unreachable"]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ArchivedTranscript:
     """The hub's answer to one ``(chunk_id, node_id, epoch)`` archived-transcript read.

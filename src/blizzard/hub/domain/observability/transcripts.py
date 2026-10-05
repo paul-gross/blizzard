@@ -15,7 +15,7 @@ from typing import Literal, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
@@ -94,7 +94,7 @@ class TranscriptCaps:
         return at - RUNNER_RATE_WINDOW
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptSlice:
     """One shipped turn-range slice, store-shaped: ``turns_json`` is the record's turns,
@@ -129,7 +129,7 @@ class TranscriptSlice:
         return len(self.turns_json.encode("utf-8"))
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentSummary:
     """One segment's aggregated metadata — every stored/rejected record folded into
@@ -151,7 +151,7 @@ class SegmentSummary:
     harness_id: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class SegmentRecordContent:
     """One record's decompressed turns, in the order the content route concatenates them.
@@ -307,7 +307,7 @@ def stored_turns(records: Iterable[SegmentRecordContent]) -> list[str]:
     return [r.turns_json for r in records if not r.rejected]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class TranscriptIngestResult:
     """:meth:`TranscriptIngestService.ingest`'s own return — the per-seq outcome

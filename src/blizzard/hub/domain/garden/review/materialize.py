@@ -14,7 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, Id
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
@@ -32,7 +32,7 @@ class ReviewFindingsOutcome(Enum):
     FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewReviewFinding:
     """A fully-formed ``findings`` row — id already minted (`bzh:domain-takes-objects`).
@@ -48,7 +48,7 @@ class NewReviewFinding:
     raised_by_chunk_id: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class NewReviewFindingFact:
     """A fully-formed ``finding_facts`` row, minus ``recorded_at`` — every fact in one
@@ -59,7 +59,7 @@ class NewReviewFindingFact:
     ref: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every

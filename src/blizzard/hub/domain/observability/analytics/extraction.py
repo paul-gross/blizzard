@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.dialects import DIALECTS
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
@@ -27,7 +27,7 @@ def read_version(named: str | None) -> str:
     return named or EXTRACTOR_VERSION
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the

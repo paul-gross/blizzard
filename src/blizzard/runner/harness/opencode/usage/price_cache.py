@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import adapter_model, domain_model
 
 _log = get_logger("blizzard.runner.harness")
 
@@ -51,7 +51,7 @@ class OpenCodeContextTier:
     rate: OpenCodeRate
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class OpenCodeStepTokens:
     """One step's token counts, split the way a priced rate is."""

@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
@@ -37,7 +37,7 @@ class RunnerPrincipal:
     workspace_id: str
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class AuthMode:
     """The runner-auth rollout brake — the one place a refusal decides raise vs. log."""

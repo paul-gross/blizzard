@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import DecisionChoice, DocketEntry, GateDecision
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class LiveDecisionStatus:
     """A live gate decision's identity and resolution — no choices, no

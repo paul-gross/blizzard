@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.settings import (
     ENV_TRACES_ENDPOINT,
     configured_endpoint,
@@ -23,7 +23,7 @@ ENV_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
 TRACES_PATH = "/v1/traces"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class OtlpDestination:
     """The full URL to post to and the headers to send with it."""

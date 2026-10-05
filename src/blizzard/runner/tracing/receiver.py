@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, CLI_ATTRIBUTES, CLI_SCOPE, LEASE_ID
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord, ReceivedSpan, Scalar
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.harness.harness_telemetry_plan import (
     CLAUDE_CODE_SCOPES,
@@ -50,7 +50,7 @@ MAX_STRING_CHARS = 1024
 _WORKER = "worker"
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class Allowlist:
     """The one scope a span may arrive under and the attributes it may carry, each with its declared value
@@ -62,7 +62,7 @@ class Allowlist:
     stamp_runner: bool = False
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Admission[T]:
     """``kept`` are the rebuilt items to forward; ``dropped`` counts those refused."""
@@ -197,7 +197,7 @@ _PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
 _CLAUDE_CODE_ALLOWLIST = Allowlist(scope=CLAUDE_CODE_TRACING_SCOPE, attributes=None, stamp_runner=True)
 
 
-@dto
+@adapter_model
 @dataclass(frozen=True)
 class SpanRouting:
     """One trace export, routed. ``claude`` is Claude Code's own tracing scope (kept only under

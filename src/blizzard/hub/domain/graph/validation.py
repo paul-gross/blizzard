@@ -12,7 +12,7 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.foundation.roles import domain_model, dto
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import is_valid_graph_artifact_name
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
 from blizzard.hub.domain.graph.model import (
@@ -50,7 +50,7 @@ class GraphValidationError(Exception):
         self.result = result
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ValidationResult:
     """The outcome of validating a graph definition."""

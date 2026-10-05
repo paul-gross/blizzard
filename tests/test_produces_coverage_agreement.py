@@ -1,6 +1,6 @@
 """The hub backstop and the runner nudge agree on produces-coverage.
 
-Both must call the one shared :class:`~blizzard.wire.completion.Coverage` rather
+Both must call the one shared :class:`~blizzard.foundation.completion_gates.Coverage` rather
 than each re-derive "covered" inline. Drives both predicates over one scenario matrix and
 asserts they agree on the expected verdict.
 """

@@ -16,7 +16,7 @@ from decimal import Context, Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "ColumnSpec",
@@ -57,7 +57,7 @@ class ColumnType(StrEnum):
     STRING_LIST = "list<string>"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ColumnSpec:
     name: str
@@ -66,7 +66,7 @@ class ColumnSpec:
     meaning: str
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class DatasetSchema:
     """A dataset's name, contract major version, and ordered columns."""
@@ -76,7 +76,7 @@ class DatasetSchema:
     columns: tuple[ColumnSpec, ...]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressPass:
     """One export pass's identity: the caller's start instant (UTC), whether it is a backfill, and the hub's extractor
@@ -87,7 +87,7 @@ class EgressPass:
     extractor_version: str | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressValues:
     """One row's values by column name, with the opaque cursor position it was read at."""
@@ -96,7 +96,7 @@ class EgressValues:
     values: Mapping[str, object]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressBatch:
     """The rows of one dataset that fall in one date partition."""
@@ -107,14 +107,14 @@ class EgressBatch:
     rows: Sequence[EgressValues]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressWriterSettings:
     max_rows_per_file: int
     min_free_bytes: int = 1024**3
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class PlacedFile:
     """A data file in its final place; ``path`` is relative to the export directory."""
@@ -138,7 +138,7 @@ class EgressFailureCause(StrEnum):
     HARD_LINKS_UNSUPPORTED = "hard-links-unsupported"
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class EgressFailure:
     """A write that placed nothing further; ``free_bytes``/``required_bytes`` are set for ``LOW_DISK``."""
@@ -149,13 +149,13 @@ class EgressFailure:
     required_bytes: int | None = None
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class FilesWritten:
     files: tuple[PlacedFile, ...]
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class ManifestCommitted:
     path: str
