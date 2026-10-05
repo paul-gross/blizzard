@@ -4,6 +4,7 @@ ack-on-already-applied, and the per-run bound."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
@@ -16,11 +17,12 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
+from blizzard.runner.hub.client import TranscriptPush, TranscriptPushAck
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts import transcript_drain as transcript_drain_module
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -397,8 +399,7 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     # The hub side of a first delivery attempt completing durably, with no local
     # post-ack work ever running — the exact window `_CP_AFTER_SUBMIT` names.
     delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
-    record = TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
-    hub.push_transcripts(TranscriptSegmentBatch(runner_id="r1", records=[record]))
+    hub.push_transcripts("r1", [TranscriptPush(seq=delta.seq, body=json.loads(delta.payload))])
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
@@ -547,8 +548,8 @@ def test_drain_makes_one_request_against_a_slow_hub_and_stays_within_the_tick_bu
             self._clock = clock
             self._step = step
 
-        def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
-            ack = super().push_transcripts(batch)
+        def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+            ack = super().push_transcripts(runner_id, records)
             self._clock.advance(self._step)
             return ack
 
@@ -796,7 +797,7 @@ def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_fina
     drain = TranscriptDrain(ctx)
     content_delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
     rendered = drain._render(content_delta, {})
-    assert drain._estimated_size(content_delta) >= len(rendered.model_dump_json().encode("utf-8"))
+    assert drain._estimated_size(content_delta) >= len(_wire_json(rendered).encode("utf-8"))
 
     ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
@@ -804,7 +805,7 @@ def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_fina
     final_delta = next(d for d in ctx.stores.transcript_ledger.pending_transcript_outbound() if d.final)
     final_segments = ctx.stores.transcript_ledger.transcript_segments([final_delta.segment_id])
     final_rendered = drain._render(final_delta, final_segments)
-    assert drain._estimated_size(final_delta) >= len(final_rendered.model_dump_json().encode("utf-8"))
+    assert drain._estimated_size(final_delta) >= len(_wire_json(final_rendered).encode("utf-8"))
 
 
 def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() -> None:
@@ -868,9 +869,10 @@ def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -
     batches: list[TranscriptSegmentBatch] = []
     push = hub.push_transcripts
 
-    def capture(batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
-        batches.append(batch)
-        return push(batch)
+    def capture(runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+        shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
+        batches.append(TranscriptSegmentBatch(runner_id=runner_id, records=shipped))
+        return push(runner_id, records)
 
     hub.push_transcripts = capture  # type: ignore[method-assign]
     ctx = _ctx(hub)
@@ -921,3 +923,8 @@ def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -
     assert "\U0001f642" in text
     assert not any("\ud800" <= ch <= "\udfff" for ch in text)
     json.dumps(batches[0].model_dump(mode="json"), ensure_ascii=False).encode("utf-8")
+
+
+def _wire_json(push: TranscriptPush) -> str:
+    """The record as the hub client ships it — the size the drain's estimate must bound."""
+    return TranscriptSegmentRecord.model_validate({"seq": push.seq, **push.body}).model_dump_json()

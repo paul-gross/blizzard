@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
-from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError
+from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError, TranscriptPush
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.node_steps.submissions import Completion
@@ -242,7 +242,7 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
             )
         ],
     )
-    ack = _client(handler).push_transcripts(batch)
+    ack = _client(handler).push_transcripts(batch.runner_id, _pushes(batch))
     assert (ack.high_water, ack.applied) == (3, [3])
 
 
@@ -280,7 +280,7 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
             )
         ],
     )
-    client.push_transcripts(batch)
+    client.push_transcripts(batch.runner_id, _pushes(batch))
     client.peek_queue((), policy="pass-over")  # a plain route, to prove it still rides the client's own default
 
     assert seen_timeouts[0] == 5.0  # the transcript route's own short override
@@ -513,3 +513,7 @@ def test_409_on_a_route_that_does_not_opt_in_stays_a_plain_hub_client_error() ->
     with pytest.raises(HubClientError) as raised:
         client.submit_completion("ch_1", Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build"))
     assert type(raised.value) is HubClientError
+
+
+def _pushes(batch: TranscriptSegmentBatch) -> list[TranscriptPush]:
+    return [TranscriptPush(seq=r.seq, body=r.model_dump(mode="json", exclude={"seq"})) for r in batch.records]

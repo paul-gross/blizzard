@@ -19,6 +19,7 @@ from sqlalchemy import select
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.observability.analytics.extraction import extract_events
+from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Fill, Pull
@@ -535,10 +536,11 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
 
                 # --- analytics derivation, per lineage's own proven dialect kind ---
                 claude_turns = [
-                    TurnSegmentView.model_validate(t) for t in _segment_turns(runner_client, claude_id, claude_segments)
+                    TranscriptTurn.of_stored(TurnSegmentView.model_validate(t).model_dump(mode="json"))
+                    for t in _segment_turns(runner_client, claude_id, claude_segments)
                 ]
                 opencode_turns = [
-                    TurnSegmentView.model_validate(t)
+                    TranscriptTurn.of_stored(TurnSegmentView.model_validate(t).model_dump(mode="json"))
                     for t in _segment_turns(runner_client, opencode_id, opencode_segments)
                 ]
 

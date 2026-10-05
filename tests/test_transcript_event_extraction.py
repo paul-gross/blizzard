@@ -7,7 +7,7 @@ import pytest
 
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.observability.analytics.extraction import extract_events
-from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
+from blizzard.hub.domain.observability.transcripts import TranscriptTurn, TurnSidechain, TurnToolCall
 
 pytestmark = pytest.mark.unit
 
@@ -16,13 +16,13 @@ _DIALECT = "claude-code-jsonl/2"
 
 def _tool_turn(
     index: int, name: str, input: dict[str, object], *, timestamp: str | None = None, sidechain=None
-) -> TurnSegmentView:
-    return TurnSegmentView(
+) -> TranscriptTurn:
+    return TranscriptTurn(
         index=index,
         kind="tool",
         timestamp=timestamp,
         text="",
-        tool=ToolCallSegmentView(
+        tool=TurnToolCall(
             name=name,
             input=input,
             input_unparsed=None,
@@ -37,8 +37,8 @@ def _tool_turn(
     )
 
 
-def _env_turn(index: int) -> TurnSegmentView:
-    return TurnSegmentView(
+def _env_turn(index: int) -> TranscriptTurn:
+    return TranscriptTurn(
         index=index,
         kind="env",
         timestamp=None,
@@ -138,7 +138,7 @@ def test_a_linked_sidechain_turn_carries_depth_one_and_its_own_agent_type() -> N
         0,
         "Agent",
         {"subagent_type": "explorer", "prompt": "find X"},
-        sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[inner]),
+        sidechain=TurnSidechain(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[inner]),
     )
 
     events = extract_events([spawn], normalizer_version=_DIALECT)
@@ -158,7 +158,7 @@ def test_an_agent_call_nested_in_a_sidechain_mints_an_agent_spawn_event_at_depth
         0,
         "Agent",
         {"subagent_type": "explorer", "prompt": "find X"},
-        sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
+        sidechain=TurnSidechain(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
     )
 
     events = extract_events([outer_spawn], normalizer_version=_DIALECT)
@@ -178,13 +178,13 @@ def test_a_nested_sidechain_turn_carries_depth_two_and_the_nearest_enclosing_age
         0,
         "Agent",
         {"subagent_type": "coder", "prompt": "implement"},
-        sidechain=SidechainSegmentView(agent_id="a2", agent_type="coder", turns=[innermost], link="uuid-chain"),
+        sidechain=TurnSidechain(agent_id="a2", agent_type="coder", turns=[innermost], link="uuid-chain"),
     )
     outer_spawn = _tool_turn(
         0,
         "Agent",
         {"subagent_type": "reviewer", "prompt": "review"},
-        sidechain=SidechainSegmentView(agent_id="a1", agent_type="reviewer", turns=[middle_spawn], link="uuid-chain"),
+        sidechain=TurnSidechain(agent_id="a1", agent_type="reviewer", turns=[middle_spawn], link="uuid-chain"),
     )
 
     events = extract_events([outer_spawn], normalizer_version=_DIALECT)
@@ -204,7 +204,7 @@ def test_an_unresolved_sidechain_turn_carries_depth_but_no_agent_type() -> None:
         0,
         "Agent",
         {"subagent_type": "explorer", "prompt": "find X"},
-        sidechain=SidechainSegmentView(agent_id=None, agent_type=None, link="unlinked", turns=[inner]),
+        sidechain=TurnSidechain(agent_id=None, agent_type=None, link="unlinked", turns=[inner]),
     )
 
     events = extract_events([spawn], normalizer_version=_DIALECT)
@@ -314,7 +314,7 @@ def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> No
         0,
         "task",
         {"subagent_type": "explorer", "prompt": "find X"},
-        sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
+        sidechain=TurnSidechain(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
     )
 
     events = extract_events([outer_spawn], normalizer_version=_OPENCODE)
@@ -338,7 +338,7 @@ def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> 
         0,
         "bash",
         {"command": "echo hi"},
-        sidechain=SidechainSegmentView(agent_id=None, agent_type="explorer", link="unlinked", turns=[inner]),
+        sidechain=TurnSidechain(agent_id=None, agent_type="explorer", link="unlinked", turns=[inner]),
     )
 
     events = extract_events([outer], normalizer_version=_OPENCODE)
