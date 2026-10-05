@@ -18,6 +18,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import LocalLeaseService, NewLease
+from blizzard.wire.lease import LeaseView
 from tests.runner_fakes import FakeProbe, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
@@ -222,3 +223,56 @@ def test_parked_state_reaches_the_wire_via_real_park_facts(tmp_path: Path) -> No
     items = resp.json()["items"]
     assert len(items) == 1
     assert items[0]["state"] == "parked"
+
+
+def _spawn(store) -> None:  # type: ignore[no-untyped-def]
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+
+
+def _seed_active(store) -> None:  # type: ignore[no-untyped-def]
+    _spawn(store)
+
+
+def _seed_parked(store) -> None:  # type: ignore[no-untyped-def]
+    _spawn(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
+
+
+def _seed_spawning(store) -> None:  # type: ignore[no-untyped-def]
+    pass
+
+
+def _seed_closed(store) -> None:  # type: ignore[no-untyped-def]
+    _spawn(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(
+    ("seed", "now", "state"),
+    [
+        (_seed_active, _NOW, "running"),
+        (_seed_parked, _NOW, "parked"),
+        (_seed_spawning, _NOW, "spawning"),
+        (_seed_active, _NOW + timedelta(hours=2), "stale"),
+        (_seed_closed, _NOW, "closed"),
+    ],
+)
+def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed, now: datetime, state: str) -> None:  # type: ignore[no-untyped-def]
+    app, store = _app_with_leases(tmp_path, clock=FixedClock(now), probe=FakeProbe(alive={(100, "start-100")}))
+    _seed_lease(store)
+    seed(store)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/leases")
+
+    assert resp.status_code == 200, resp.text
+    (item,) = resp.json()["items"]
+    assert item["state"] == state
+    assert list(item) == list(LeaseView.model_fields)

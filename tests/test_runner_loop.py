@@ -855,6 +855,37 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("workspace_root", "environments", "expected_cwd"),
+    [
+        ("", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], "/ws/e1"),
+        ("", [], None),
+        ("/ws", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], "/ws"),
+    ],
+)
+def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(  # type: ignore[no-untyped-def]
+    tmp_path, workspace_root, environments, expected_cwd
+):
+    """The segment carries the cwd the worker was spawned into: the workspace root when one is
+    configured, else the first environment's workdir, else nothing."""
+    store = _store(tmp_path)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", workspace_root=workspace_root),
+    )
+
+    Spawner(ctx).spawn("ch_1", _build_envelope(), environments, via="test")
+
+    segments = ctx.stores.transcript_ledger.transcript_segments_for_chunk("ch_1")
+    assert len(segments) == 1
+    assert segments[0].spawn_cwd == expected_cwd
+
+
+@pytest.mark.unit
 def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_version(tmp_path):  # type: ignore[no-untyped-def]
     """``observe_version`` is read BEFORE the spawn and is bounded and non-raising at the
     adapter, so a lease still gets its pid recorded with no version at all, never an

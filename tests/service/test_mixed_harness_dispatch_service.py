@@ -505,8 +505,8 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
                 cwds = _segment_spawn_cwds(config, chunk_id)
                 assert cwds, chunk_id
                 assert all(cwds), cwds
-                if config.workspace_root:
-                    assert set(cwds) == {config.workspace_root}, cwds
+                assert config.workspace_root
+                assert set(cwds) == {config.workspace_root}, cwds
 
             # --- usage recorded (judgement resolved into a completion means both a spawn
             # and a judge invocation earned their own facts), per lineage — never crossed ---

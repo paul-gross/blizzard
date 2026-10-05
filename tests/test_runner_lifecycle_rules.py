@@ -548,6 +548,27 @@ def test_held_chunk_move_table() -> None:
     assert move(_view(ChunkStatus.DELIVERING)) is HeldChunkMove.POLL_HUB_NODE
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("route", "with_decision", "expected"),
+    [
+        # No decision never detaches a gate, whether the route is unset or foreign.
+        (None, False, HeldChunkMove.HOLD),
+        ("r2", False, HeldChunkMove.HOLD),
+        # An unset route reads as routed away: a decision under it detaches.
+        (None, True, HeldChunkMove.RELEASE_DETACHED_GATE),
+    ],
+)
+def test_held_chunk_move_detaches_a_gate_only_with_a_decision_routed_away(
+    route: str | None, with_decision: bool, expected: HeldChunkMove
+) -> None:
+    decision = (
+        ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok") if with_decision else None
+    )
+    view = _view(ChunkStatus.WAITING_ON_HUMAN, route=route, decision=decision)
+    assert held_chunk_move(view, runner_id=_ME, local_latest_epoch=1, taken_over=False) is expected
+
+
 def test_takeover_suppresses_only_session_arms() -> None:
     def move(view: ChunkState) -> HeldChunkMove:
         return held_chunk_move(view, runner_id=_ME, local_latest_epoch=1, taken_over=True)

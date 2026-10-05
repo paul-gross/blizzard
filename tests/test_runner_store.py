@@ -250,6 +250,51 @@ def test_without_a_released_closure_an_earlier_transitioned_session_is_still_ret
     assert head is not None and head.session_id == "sess-1"
 
 
+def _close(store, lease, reason, at, chunk="ch_1"):  # type: ignore[no-untyped-def]
+    store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason=reason, closed_at=at)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("node_name", "expected"), [("build", "sess-build"), ("review", "sess-review"), (None, "sess-review")]
+)
+def test_latest_session_filters_by_node_name_after_a_release(tmp_path, node_name, expected):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint_with_session(store, lease="lease_1", session="sess-old", epoch=1, at=_NOW)
+    _close(store, "lease_1", "released", _NOW + timedelta(minutes=1))
+    _mint_with_session(store, lease="lease_2", session="sess-build", epoch=2, at=_NOW + timedelta(minutes=2))
+    _mint_with_session(
+        store,
+        lease="lease_3",
+        session="sess-review",
+        epoch=3,
+        at=_NOW + timedelta(minutes=3),
+        node="nd_review",
+        node_name="review",
+    )
+    assert _session_id(store, "ch_1", node_name) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("closure_chunk", "reason", "closed_offset", "visible"),
+    [
+        # A lease created exactly at the release instant is behind the barrier (strictly after).
+        ("ch_1", "released", timedelta(minutes=1), False),
+        # Another chunk's release is no barrier for this chunk.
+        ("ch_2", "released", timedelta(minutes=2), True),
+        # A newer closure that is not a release is no barrier either.
+        ("ch_1", "failed", timedelta(minutes=2), True),
+    ],
+)
+def test_latest_session_release_barrier(tmp_path, closure_chunk, reason, closed_offset, visible):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store, chunk=closure_chunk, lease="lease_0")
+    _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW + timedelta(minutes=1))
+    _close(store, "lease_0", reason, _NOW + closed_offset, chunk=closure_chunk)
+    assert _session_id(store, "ch_1", "build") == ("sess-1" if visible else None)
+
+
 @pytest.mark.component
 def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
