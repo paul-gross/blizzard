@@ -5816,7 +5816,8 @@ export type RunnerFact = {
  * The hub's per-batch acknowledgement against its high-water mark.
  *
  * ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition
- * the pushed seqs, and ``rejected`` names seqs refused for a non-idempotency reason.
+ * the pushed seqs, and ``rejected`` names seqs refused for a non-idempotency reason. ``route_ended`` is the subset of
+ * ``rejected`` refused because the fact's chunk has no live route.
  */
 export type RunnerFactAck = {
     /**
@@ -5835,6 +5836,10 @@ export type RunnerFactAck = {
      * Rejected
      */
     rejected?: Array<number>;
+    /**
+     * Route Ended
+     */
+    route_ended?: Array<number>;
     /**
      * Runner Id
      */

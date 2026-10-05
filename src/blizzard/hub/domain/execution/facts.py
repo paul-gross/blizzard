@@ -176,13 +176,15 @@ class PushedFact:
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the runner's new high-water mark, the
     pushed seqs partitioned into applied, already applied, and rejected for a non-idempotency
-    reason, and per freshly-applied fact the id of the row it wrote. ``row_id_by_seq`` carries an
+    reason, ``route_ended`` the subset of those refused because the fact's chunk has no live route,
+    and per freshly-applied fact the id of the row it wrote. ``row_id_by_seq`` carries an
     entry only for a kind whose own id is not already in its payload."""
 
     high_water: int
     applied: list[int]
     already_applied: list[int]
     rejected: list[int]
+    route_ended: list[int]
     row_id_by_seq: dict[int, int]
 
 
@@ -223,6 +225,7 @@ class FactIngestService:
         applied: list[int] = []
         already: list[int] = []
         rejected: list[int] = []
+        route_ended: list[int] = []
         row_id_by_seq: dict[int, int] = {}
 
         for fact in sorted(pushed, key=lambda f: f.seq):
@@ -234,6 +237,8 @@ class FactIngestService:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
                 rejected.append(fact.seq)
+                if self._route_ended(fact):
+                    route_ended.append(fact.seq)
                 continue
             mark = fact.seq
             applied.append(fact.seq)
@@ -252,7 +257,22 @@ class FactIngestService:
             rejected=len(rejected),
         )
         return FactIngestResult(
-            high_water=mark, applied=applied, already_applied=already, rejected=rejected, row_id_by_seq=row_id_by_seq
+            high_water=mark,
+            applied=applied,
+            already_applied=already,
+            rejected=rejected,
+            route_ended=route_ended,
+            row_id_by_seq=row_id_by_seq,
+        )
+
+    def _route_ended(self, fact: PushedFact) -> bool:
+        """Whether a rejected fact was refused because its chunk has no live route: a route-token-gated
+        kind whose chunk's route is gone, whichever of the gate or the write fence refused it."""
+        chunk_id = Payload(fact.payload).text("chunk_id")
+        return (
+            chunk_id is not None
+            and requires_route_token(fact.kind, chunk_id) is True
+            and self._route.route_of(chunk_id) is None
         )
 
     @staticmethod

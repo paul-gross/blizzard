@@ -8903,7 +8903,7 @@
         "type": "object"
       },
       "RunnerFactAck": {
-        "description": "The hub's per-batch acknowledgement against its high-water mark.\n\n``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition\nthe pushed seqs, and ``rejected`` names seqs refused for a non-idempotency reason.",
+        "description": "The hub's per-batch acknowledgement against its high-water mark.\n\n``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition\nthe pushed seqs, and ``rejected`` names seqs refused for a non-idempotency reason. ``route_ended`` is the subset of\n``rejected`` refused because the fact's chunk has no live route.",
         "properties": {
           "already_applied": {
             "default": [],
@@ -8931,6 +8931,14 @@
               "type": "integer"
             },
             "title": "Rejected",
+            "type": "array"
+          },
+          "route_ended": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Route Ended",
             "type": "array"
           },
           "runner_id": {

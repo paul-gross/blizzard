@@ -111,7 +111,16 @@ class OutboundDrain:
             if fact.seq in ack.rejected:
                 # A contract rejection is not idempotency — surface it, but do not wedge the
                 # FIFO drain on a fact the hub will never accept: ack and move on.
-                _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
+                if fact.seq in ack.route_ended:
+                    _log.warning(
+                        "hub rejected buffered fact",
+                        reason="chunk route ended",
+                        seq=fact.seq,
+                        kind=fact.kind,
+                        chunk_id=fact.chunk_id,
+                    )
+                else:
+                    _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
         self._ack_run(run)
         return True
 

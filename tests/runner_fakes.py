@@ -462,7 +462,7 @@ class FakeHub:
             mark = fact.seq
             applied.append(fact.seq)
         self.high_water[runner_id] = mark
-        return FactPushAck(high_water=mark, applied=applied, already_applied=already, rejected=[])
+        return FactPushAck(high_water=mark, applied=applied, already_applied=already, rejected=[], route_ended=[])
 
     def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         if self.down:

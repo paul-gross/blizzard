@@ -170,6 +170,29 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
     assert ctx.stores.outbound.pending_outbound() == []
 
 
+def test_run_logs_a_route_ended_rejection_at_warning_and_any_other_at_error() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    seqs = [_enqueue_generic(ctx) for _ in range(3)]
+
+    real_push_facts = hub.push_facts
+
+    def _reject_two(runner_id, facts):  # type: ignore[no-untyped-def]
+        ack = real_push_facts(runner_id, facts)
+        return replace(ack, applied=[seqs[0]], rejected=[seqs[1], seqs[2]], route_ended=[seqs[1]])
+
+    hub.push_facts = _reject_two  # type: ignore[method-assign]
+
+    with capture_logs() as logs:
+        OutboundDrain(ctx).run()
+
+    rejections = {entry["seq"]: entry for entry in logs if entry["event"] == "hub rejected buffered fact"}
+    assert rejections[seqs[1]]["log_level"] == "warning"
+    assert rejections[seqs[1]]["reason"] == "chunk route ended"
+    assert rejections[seqs[2]]["log_level"] == "error"
+    assert ctx.stores.outbound.pending_outbound() == []
+
+
 def test_run_contains_a_non_transport_failure_so_pull_returns_and_the_tick_goes_on() -> None:
     hub = FakeHub()
     ctx = _ctx(hub)

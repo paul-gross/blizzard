@@ -37,7 +37,8 @@ class ChunkNotFoundError(HubClientError):
 
 class ChunkEndedError(HubClientError):
     """The hub refuses a chunk-scoped call because the chunk has ended (409) — terminal, not transient:
-    an envelope read with no current runner node, or a rekey of a route on a ``done``/``stopped`` chunk.
+    an envelope read with no current runner node, or a rekey of a route on a ``done``/``stopped`` chunk —
+    or because it has no live route (404 on a rekey).
     ``detail`` is the hub's refusal text. Still a :class:`HubClientError`, so an unaware caller retries."""
 
     def __init__(self, message: str, *, detail: str) -> None:
@@ -237,12 +238,14 @@ class PushedFact:
 class FactPushAck:
     """The hub's acknowledgement of one push against its high-water mark: the new mark, and the
     pushed seqs partitioned into applied, already applied, and rejected for a non-idempotency
-    reason."""
+    reason. ``route_ended`` is the subset of ``rejected`` the hub refused because the fact's chunk
+    has no live route."""
 
     high_water: int
     applied: list[int]
     already_applied: list[int]
     rejected: list[int]
+    route_ended: list[int]
 
 
 @domain_model
@@ -365,5 +368,5 @@ class IHubClient(IChunkStatusReader, Protocol):
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
         capability token. Why it exists: `src/blizzard/hub/domain/execution/claim.py`'s
         ``ClaimService.rekey``. Raises :class:`ChunkEndedError` when the live route sits on an
-        ended chunk."""
+        ended chunk (409) or the chunk has no live route (404)."""
         ...

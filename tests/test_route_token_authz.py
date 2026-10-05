@@ -225,6 +225,30 @@ def test_usage_recorded_applies_without_a_token_even_under_enforce(tmp_path: Pat
     assert resp.json()["applied"] == [1]
 
 
+def test_lease_minted_for_a_chunk_whose_route_was_released_is_rejected_as_route_ended(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, _node_id = _ingest(hub)
+    token = _claim(hub, chunk_id)
+    report_lease(hub, chunk_id, epoch=1, seq=1, route_token=token)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+
+    ack = report_lease(hub, chunk_id, epoch=1, seq=2, route_token=token)
+
+    assert ack["rejected"] == [2]
+    assert ack["route_ended"] == [2]
+
+
+def test_a_rejection_on_a_chunk_with_a_live_route_is_not_route_ended(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, _node_id = _ingest(hub)
+    _claim(hub, chunk_id)
+
+    ack = report_lease(hub, chunk_id, epoch=1, seq=1, route_token="stolen-guess")
+
+    assert ack["rejected"] == [1]
+    assert ack["route_ended"] == []
+
+
 # route.released invalidates the token; a fresh claim's token is accepted (AC 5)
 
 
