@@ -325,7 +325,8 @@ neither number comes from measured compaction data — none exists yet.
 `[worker]` `env_passthrough` in `blizzard-runner.toml` widens the fixed base allowlist (`PATH`, `HOME`, `USER`, `LANG`,
 `LC_*`, `TERM`, `TMPDIR`) every worker, judge, and resume child environment is built from; empty (the scaffold default)
 means base allowlist only, and a daemon credential such as `BZ_HUB_TOKEN` is absent from every worker child by
-construction unless deliberately named there.
+construction unless deliberately named there. `runner init` seeds the list from `BZ_RUNNER_ENV_PASSTHROUGH`
+(comma-separated names), the way it seeds `BZ_RUNNER_GATES`.
 
 With `[tracing] harness_telemetry` on, a Claude Code worker's environment also carries the variables that point its
 metrics, logs and traces at the runner; [tracing.md](./tracing.md#harness-telemetry) owns them.

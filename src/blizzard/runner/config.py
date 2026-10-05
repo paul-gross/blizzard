@@ -64,6 +64,7 @@ ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
 # Where the harness writes session transcripts; empty resolves to a default at
 # the composition root, never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
+ENV_ENV_PASSTHROUGH = "BZ_RUNNER_ENV_PASSTHROUGH"  # comma-separated names seeded into [worker] env_passthrough
 # The browser-reachable base URLs this runner answers on, comma-separated.
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
@@ -766,6 +767,7 @@ class RunnerConfig:
         produces a runnable config; each falls back to its dataclass default."""
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
         gates = os.environ.get(ENV_GATES)
+        passthrough = os.environ.get(ENV_ENV_PASSTHROUGH, "")
         public_urls = os.environ.get(ENV_PUBLIC_URL, "")
         return cls(
             root=root,
@@ -789,6 +791,7 @@ class RunnerConfig:
             # Empty on a fresh scaffold means the baked-in preamble is used.
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
+            worker_env_passthrough=tuple(n.strip() for n in passthrough.split(",") if n.strip()),
             public_urls=PublicOrigins.entries(public_urls.split(","), ConfigError),
         )
 
