@@ -39,6 +39,7 @@ from blizzard.runner.lifecycle.model import (
     CompletionClosure,
     CompletionMove,
     DecisionMove,
+    ExitedMove,
     FailureMove,
     Fenced,
     HeldChunkMove,
@@ -62,6 +63,9 @@ from blizzard.runner.lifecycle.model import (
     crash_orphaned,
     decision_move,
     escalation_mint_admitted,
+    exited_worker_classified_move,
+    exited_worker_elicitation_move,
+    exited_worker_settled_move,
     failure_move,
     gate_resolution_lease_id,
     held_chunk_move,
@@ -748,3 +752,41 @@ def test_rotation_breach_order() -> None:
     assert not model_drifted(None, "sonnet")
     assert not model_drifted("opus", None)
     assert not model_drifted("opus", "opus")
+
+
+@pytest.mark.parametrize(
+    ("in_flight", "still_pending", "expected"),
+    [
+        (False, False, ExitedMove.CLASSIFY),
+        (True, True, ExitedMove.AWAIT_ELICITATION),
+        (True, False, ExitedMove.COLLECT),
+    ],
+)
+def test_exited_worker_elicitation_move(in_flight: bool, still_pending: bool, expected: ExitedMove) -> None:
+    assert exited_worker_elicitation_move(in_flight=in_flight, still_pending=still_pending) is expected
+
+
+@pytest.mark.parametrize(
+    ("usage_limited", "overloaded", "expected"),
+    [
+        (True, False, ExitedMove.PARK_ON_USAGE_LIMIT),
+        (True, True, ExitedMove.PARK_ON_USAGE_LIMIT),
+        (False, True, ExitedMove.RECORD_OVERLOAD),
+        (False, False, ExitedMove.CLOSE_OVERLOAD_STREAK),
+    ],
+)
+def test_exited_worker_classified_move(usage_limited: bool, overloaded: bool, expected: ExitedMove) -> None:
+    assert exited_worker_classified_move(usage_limited=usage_limited, overloaded=overloaded) is expected
+
+
+@pytest.mark.parametrize(
+    ("backing_off", "unforwarded_ask", "expected"),
+    [
+        (True, False, ExitedMove.BACK_OFF),
+        (True, True, ExitedMove.BACK_OFF),
+        (False, True, ExitedMove.PARK_ON_ASK),
+        (False, False, ExitedMove.JUDGE),
+    ],
+)
+def test_exited_worker_settled_move(backing_off: bool, unforwarded_ask: bool, expected: ExitedMove) -> None:
+    assert exited_worker_settled_move(backing_off=backing_off, unforwarded_ask=unforwarded_ask) is expected

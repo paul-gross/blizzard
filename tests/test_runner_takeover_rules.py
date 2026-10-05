@@ -3,6 +3,7 @@ store, no harness, no clock (``blizzard.runner.lifecycle.takeover``)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -89,7 +90,7 @@ def _scope(**overrides: object) -> TakeoverOpenScope:
 
 
 def _admit(scope: TakeoverOpenScope, *, force: bool = False, parked: bool = False, pending: bool = False):  # type: ignore[no-untyped-def]
-    return admit_takeover(scope, force=force, active_parked=parked, submission_pending=pending)
+    return admit_takeover(replace(scope, active_parked=parked, submission_pending=pending), force=force)
 
 
 def test_admit_takeover_refusals() -> None:

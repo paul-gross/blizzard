@@ -47,7 +47,6 @@ def _app_with_takeover(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,

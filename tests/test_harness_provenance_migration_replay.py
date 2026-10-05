@@ -289,7 +289,6 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
         FixedClock(_NOW),
         FakeProbe(),
         takeover=store,
-        asks=store,
         outbound=store,
         tokens=store,
         elicitations=store,
@@ -304,9 +303,16 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
         active_lease=store.active_lease_for_chunk("ch_takeover"),
         latest_lease_with_session=store.latest_lease_with_session_for_chunk("ch_takeover"),
         latest_epoch=store.latest_epoch("ch_takeover"),
+        active_parked=_active_in(store, "ch_takeover", store.parked_lease_ids()),
+        submission_pending=_active_in(store, "ch_takeover", store.pending_submission_lease_ids()),
     )
 
     opened = service.open(scope, force=True)  # the reference lease's worker still reads live
 
     assert opened.harness_id == CLAUDE_CODE_HARNESS_ID
     assert "sess-takeover-old" in opened.command
+
+
+def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+    active = store.active_lease_for_chunk(chunk_id)
+    return active is not None and active.lease_id in lease_ids

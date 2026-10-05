@@ -33,16 +33,20 @@ def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:
 def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpenScope:
     """The chunk-keyed facts :meth:`~blizzard.runner.lifecycle.takeover.TakeoverService.open`
     reads: the open takeover, the held bindings, the active and latest leases, the
-    fence-epoch floor, and whether a runner requeue of the chunk is pending."""
+    fence-epoch floor, whether a runner requeue of the chunk is pending, and whether the active
+    lease is ask-parked or has a submission buffered."""
     stores = RunnerWiring.of(request).read_stores()
+    active = stores.lease_record.active_lease_for_chunk(chunk_id)
     return TakeoverOpenScope(
         chunk_id=chunk_id,
         open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id),
         bindings=stores.environments.bindings_for_chunk(chunk_id),
-        active_lease=stores.lease_record.active_lease_for_chunk(chunk_id),
+        active_lease=active,
         latest_lease_with_session=stores.lease_record.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=stores.lease_record.latest_epoch(chunk_id),
         requeue_pending=chunk_id in stores.requeue.pending_requeue_chunk_ids(),
+        active_parked=active is not None and active.lease_id in stores.asks.parked_lease_ids(),
+        submission_pending=active is not None and active.lease_id in stores.outbound.pending_submission_lease_ids(),
     )
 
 

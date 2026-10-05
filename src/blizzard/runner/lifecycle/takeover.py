@@ -30,7 +30,6 @@ from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, Unavaila
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -162,7 +161,8 @@ class TakeoverOpenScope:
     (``bzh:domain-takes-objects``): the runner holds no chunk entity, so this names
     exactly the facts the rule's refusals and reference-lease derivation read from
     ``chunk_id`` — the open takeover, the held bindings, the active and latest leases,
-    the fence-epoch floor, and whether a runner requeue of the chunk is pending."""
+    the fence-epoch floor, whether a runner requeue of the chunk is pending, and whether the active
+    lease is ask-parked or already has a submission buffered."""
 
     chunk_id: str
     open_takeover: OpenTakeover | None
@@ -171,6 +171,8 @@ class TakeoverOpenScope:
     latest_lease_with_session: Lease | None
     latest_epoch: int
     requeue_pending: bool = False
+    active_parked: bool = False
+    submission_pending: bool = False
 
 
 @domain_model
@@ -308,9 +310,7 @@ class TakeoverAdmission:
     hold_epoch: int
 
 
-def admit_takeover(
-    scope: TakeoverOpenScope, *, force: bool, active_parked: bool, submission_pending: bool
-) -> TakeoverAdmission:
+def admit_takeover(scope: TakeoverOpenScope, *, force: bool) -> TakeoverAdmission:
     """Admit a takeover over ``scope.chunk_id``, or raise the refusal.
 
     The chunk must be held here with no open takeover and no pending runner requeue. A live worker — an
@@ -324,10 +324,10 @@ def admit_takeover(
     if scope.requeue_pending:
         raise ChunkNotTakeable(f"chunk {chunk_id} has a runner requeue pending — let it spawn, then take over")
     active = scope.active_lease
-    live = active is not None and not active_parked
+    live = active is not None and not scope.active_parked
     if live and not force:
         raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
-    if live and submission_pending:
+    if live and scope.submission_pending:
         raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
     reference = active if active is not None else scope.latest_lease_with_session
     if reference is None or reference.session is None:
@@ -416,7 +416,6 @@ class TakeoverService:
         process: IOwnedProcessControl,
         *,
         takeover: IWriteTakeoverRepository,
-        asks: IReadAskRepository,
         outbound: IWriteOutboundRepository,
         tokens: IWriteTokenRepository,
         elicitations: IWriteElicitationRepository,
@@ -426,7 +425,6 @@ class TakeoverService:
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._takeover = takeover
-        self._asks = asks
         self._outbound = outbound
         self._tokens = tokens
         self._elicitations = elicitations
@@ -444,12 +442,7 @@ class TakeoverService:
         ``scope`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
         chunk_id = scope.chunk_id
         active = scope.active_lease
-        admission = admit_takeover(
-            scope,
-            force=force,
-            active_parked=active is not None and active.lease_id in self._asks.parked_lease_ids(),
-            submission_pending=active is not None and active.lease_id in self._outbound.pending_submission_lease_ids(),
-        )
+        admission = admit_takeover(scope, force=force)
         reference, session, workdir, live = admission.reference, admission.session, admission.workdir, admission.live
         # Resolve before the fact-before-command write: an unavailable recorded owner blocks
         # this takeover rather than opening it and then offering no usable command.

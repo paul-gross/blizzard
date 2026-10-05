@@ -33,12 +33,16 @@ from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, elicitation_still_pending
 from blizzard.runner.lifecycle.model import (
     AdvanceMove,
+    ExitedMove,
     Fenced,
     LeaseReconcileMove,
     ReapMove,
     TakeoverHolds,
     advance_move,
     crash_orphaned,
+    exited_worker_classified_move,
+    exited_worker_elicitation_move,
+    exited_worker_settled_move,
     lease_reconcile_move,
     open_slots,
     reap_move,
@@ -534,44 +538,50 @@ class Advance(Step):
         ``None`` — this pre-check cannot see that one; it is recorded mid-elicitation."""
         if lease.session_id is None:
             return  # not spawned — REAP's residue (guarded by the caller too)
-        elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
-        if elicitation is not None:
-            if elicitation_still_pending(self.ctx, elicitation):
-                # Live and under the staleness bound — the steady-state case. `collect`
-                # would early-return here anyway; skip the envelope/binding fetch it never uses.
-                return
-            judgement = Judgement.of(self.ctx, lease)
-            if judgement is not None:
+        ctx = self.ctx
+        elicitation = ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        move = exited_worker_elicitation_move(
+            in_flight=elicitation is not None,
+            # Live and under the staleness bound — `collect` would early-return anyway, so the
+            # envelope/binding fetch it never uses is skipped.
+            still_pending=elicitation is not None and elicitation_still_pending(ctx, elicitation),
+        )
+        if move is ExitedMove.AWAIT_ELICITATION:
+            return
+        if move is ExitedMove.COLLECT:
+            judgement = Judgement.of(ctx, lease)
+            if judgement is not None and elicitation is not None:
                 judgement.collect(elicitation)
             return
-        # A usage-limited generation is classified ahead of the ask pre-check and judging
-        # alike: the exit is neither an ask nor a verdict to judge, it is the
-        # harness itself reporting it could not run at all.
-        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-        output = self.ctx.worker_files.read_stdout(lease.lease_id, generation)
-        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-        lines = self.ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
-        limit = classify_worker_usage_limit(self.ctx, lease, output, lines)
-        if limit is not None:
-            engage_and_park_worker(self.ctx, lease, limit)
+        # A usage limit and a provider overload are classified ahead of the ask pre-check and
+        # judging alike: the exit is neither an ask nor a verdict to judge, it is the harness
+        # itself reporting it could not run at all. Both read the one `output`/`lines` pair.
+        generation = ctx.stores.liveness.lease_generation(lease.lease_id)
+        output = ctx.worker_files.read_stdout(lease.lease_id, generation)
+        bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        lines = ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
+        limit = classify_worker_usage_limit(ctx, lease, output, lines)
+        overload = None if limit is not None else classify_worker_overload(ctx, lease, output, lines)
+        move = exited_worker_classified_move(usage_limited=limit is not None, overloaded=overload is not None)
+        backing_off = False
+        if move is ExitedMove.PARK_ON_USAGE_LIMIT and limit is not None:
+            engage_and_park_worker(ctx, lease, limit)
             return
-        # A provider-overloaded generation is classified right alongside the usage limit
-        # — the two are mutually exclusive exit reasons for the one exit,
-        # both read from the same `output`/`lines` pair read once above.
-        overload = classify_worker_overload(self.ctx, lease, output, lines)
-        if overload is not None:
-            if record_worker_overload(self.ctx, lease, overload, generation=generation):
-                return  # backing off in place — the next tick's `backing_off_facts` picks it up
-            # Streak limit reached: fall through to today's ordinary path below.
+        if move is ExitedMove.RECORD_OVERLOAD and overload is not None:
+            # False at the streak limit: fall through to today's ordinary path below.
+            backing_off = record_worker_overload(ctx, lease, overload, generation=generation)
         else:
-            reset_if_streak_open(self.ctx, lease)
+            reset_if_streak_open(ctx, lease)
         # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
         # failure. Not a spawn, so it proceeds regardless of the local brake.
-        ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)
-        if ask is not None:
-            DormantSession(self.ctx, lease).park_on_ask(ask)
+        ask = ctx.stores.asks.unforwarded_ask(lease.lease_id)
+        move = exited_worker_settled_move(backing_off=backing_off, unforwarded_ask=ask is not None)
+        if move is ExitedMove.BACK_OFF:
+            return  # backing off in place — the next tick's `backing_off_facts` picks it up
+        if move is ExitedMove.PARK_ON_ASK and ask is not None:
+            DormantSession(ctx, lease).park_on_ask(ask)
             return
-        judgement = Judgement.of(self.ctx, lease)
+        judgement = Judgement.of(ctx, lease)
         if judgement is not None:
             judgement.run()
 
