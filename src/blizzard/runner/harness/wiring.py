@@ -1,11 +1,9 @@
 """The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`;
 every other consumer iterates what it declares (``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS`
-declares the harness order once, Claude Code first — the first enabled binding is the default harness —
-and :func:`harness_catalog` pairs each section kind with its binding's declaration by id.
-
-Importing this module loads only each adapter's ``section`` module: the config roster and the lazy
-``blizzard runner`` command map read sections alone, so a worker verb never pays for an adapter's
-graph. Each declaration loads the first time a caller builds, publishes, or reports from it."""
+declares the harness order once, Claude Code first (the first enabled binding is the default), and
+:func:`harness_catalog` pairs each section kind with its binding's declaration by id. Importing it loads
+only each adapter's ``section`` module, so the config roster and lazy command map never pay for an
+adapter's graph; a declaration loads the first time a caller builds, publishes, or reports from it."""
 
 from __future__ import annotations
 

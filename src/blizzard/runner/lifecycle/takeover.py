@@ -115,12 +115,10 @@ TAKEOVER_TRANSITIONS: Mapping[TakeoverState, Mapping[TakeoverVerb, TakeoverVerdi
 @domain_model
 @dataclass(frozen=True)
 class OpenTakeover:
-    """An open operator takeover — the human-in-session fact.
-
-    ``lease_id`` always names the reference lease, active or already closed. ``fence_epoch`` is set only
-    when a live worker was force-killed; ``reference_epoch`` is the reference lease's own epoch;
-    ``hold_epoch`` is the chunk's latest epoch when the takeover opened, which sits above the
-    reference lease when a sessionless lease (an escalation mint) followed it."""
+    """An open operator takeover — the human-in-session fact. ``lease_id`` names the reference lease,
+    active or closed; ``fence_epoch`` is set only when a live worker was force-killed; ``reference_epoch``
+    is the reference lease's own epoch; ``hold_epoch`` is the chunk's latest epoch when the takeover
+    opened, above the reference lease when a sessionless lease (an escalation mint) followed it."""
 
     takeover_id: str
     chunk_id: str

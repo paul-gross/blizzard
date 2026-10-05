@@ -40,8 +40,7 @@ class EscalationVerb(StrEnum):
     REQUEUE = "requeue"
 
 
-#: The verbs legal from each state, which the store's supersession guard mirrors; a requeue leaves the escalation
-#: open, a superseded one accepts nothing.
+#: Verbs legal per state (the store's supersession guard mirrors it); a requeue leaves it open, superseded takes none.
 ESCALATION_TRANSITIONS: Mapping[EscalationState, frozenset[EscalationVerb]] = MappingProxyType(
     {
         EscalationState.OPEN: frozenset(EscalationVerb),
