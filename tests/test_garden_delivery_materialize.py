@@ -24,10 +24,16 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery
+from blizzard.hub.domain.garden.formats import (
+    DeliveredDelta,
+    FindingAddOp,
+    FindingGoneOp,
+    FindingObservedOp,
+    ProposalCandidate,
+)
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
-from blizzard.wire.garden_proposal import GardenProposalCandidate
+from tests.garden_artifacts import add_op, candidate
 
 pytestmark = pytest.mark.unit
 
@@ -73,25 +79,23 @@ def _fin() -> str:
 
 def _add(
     *, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None, ref: str | None = None
-) -> AddFindingOp:
+) -> FindingAddOp:
     payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
     if introduced is not None:
         payload["introduced"] = introduced
     if ref is not None:
         payload["ref"] = ref
-    return AddFindingOp.model_validate(payload)
+    return add_op(payload)
 
 
-def _proposal(*, findings: list[str]) -> GardenProposalCandidate:
-    return GardenProposalCandidate.model_validate(
-        {"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": findings}
-    )
+def _proposal(*, findings: list[str]) -> ProposalCandidate:
+    return candidate({"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": findings})
 
 
 def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
@@ -140,7 +144,7 @@ def test_deliver_threads_a_resolved_introduced_at_onto_the_new_finding() -> None
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     commit_at = datetime(2025, 12, 25, tzinfo=UTC)
-    delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(
         run=_RUN, deltas=[delta], proposals=[], introduced_at={("blizzard", "b" * 40): commit_at}
     )
@@ -156,7 +160,7 @@ def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() ->
     unattributed, never a `KeyError`."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], introduced_at={})
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
@@ -168,9 +172,9 @@ def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() ->
 def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(
+    delta = DeliveredDelta(
         scope="runner",
-        findings=[ObservedFindingOp(id="fin_1"), GoneFindingOp(id="fin_2", note="fixed upstream")],
+        findings=[FindingObservedOp(id="fin_1"), FindingGoneOp(id="fin_2", note="fixed upstream")],
     )
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
@@ -191,7 +195,7 @@ def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> 
     actor of the `delivered` fact it confirms, never `None`."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(
         run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", "u_1")}
     )
@@ -210,7 +214,7 @@ def test_deliver_a_gone_op_against_a_finding_absent_from_gone_settlements_stays_
     before, carrying no actor."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
@@ -225,7 +229,7 @@ def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too()
     exit rather than falling through to a plain `gone` flag."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(
         run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", None)}
     )
@@ -241,7 +245,7 @@ def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too()
 def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_facts() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", revisions={}, measurement="12 findings", findings=[])
+    delta = DeliveredDelta(scope="runner", revisions={}, measurement="12 findings", findings=[])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
@@ -258,11 +262,11 @@ def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_fac
 def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta_a = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(locus="a.py:1")])
-    delta_b = FindingDelta(
+    delta_a = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(locus="a.py:1")])
+    delta_b = DeliveredDelta(
         scope="runner",
         revisions={"blizzard": "b" * 40},
-        findings=[ObservedFindingOp(id="fin_1"), _add(locus="b.py:2")],
+        findings=[FindingObservedOp(id="fin_1"), _add(locus="b.py:2")],
     )
     validated = ValidatedDelivery(run=_RUN, deltas=[delta_a, delta_b], proposals=[])
 
@@ -320,7 +324,7 @@ def test_deliver_resolves_a_proposals_ref_citation_against_the_id_its_own_add_op
     rows, never the submission-local spelling."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    delta = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
     proposal = _proposal(findings=["new-1"])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[proposal], proposal_sources=["docket"])
 
@@ -343,7 +347,7 @@ def test_deliver_resolves_a_proposal_mixing_a_ref_and_a_prior_runs_live_id() -> 
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     prior_live = _fin()
-    delta = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
     proposal = _proposal(findings=[prior_live, "new-1"])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[proposal], proposal_sources=["docket"])
 

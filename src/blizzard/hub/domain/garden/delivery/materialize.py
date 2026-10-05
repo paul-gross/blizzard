@@ -19,9 +19,9 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery, is_finding_id_shaped, single_repo_of
+from blizzard.hub.domain.garden.formats import FindingAddOp, FindingGoneOp, FindingObservedOp
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
 
 
 class DeliveryOutcome(Enum):
@@ -179,7 +179,7 @@ def build_delivery_plan(
         facts: list[NewFindingFact] = []
         single_repo = single_repo_of(delta)
         for op in delta.findings:
-            if isinstance(op, AddFindingOp):
+            if isinstance(op, FindingAddOp):
                 finding_id = Id.mint_at(FINDING_PREFIX, at).value
                 if op.ref is not None:
                     finding_id_by_ref[op.ref] = finding_id
@@ -203,12 +203,12 @@ def build_delivery_plan(
                 facts.append(
                     NewFindingFact(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
                 )
-            elif isinstance(op, ObservedFindingOp):
+            elif isinstance(op, FindingObservedOp):
                 facts.append(
                     NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
                 )
             else:
-                assert isinstance(op, GoneFindingOp)
+                assert isinstance(op, FindingGoneOp)
                 # A delivered finding's gone completes its exit rather than flagging it.
                 kind, actor = validated.gone_settlements.get(op.id, ("gone", None))
                 facts.append(

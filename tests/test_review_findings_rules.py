@@ -13,6 +13,7 @@ from blizzard.foundation.ids import FINDING_PREFIX, Id
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.garden.formats import DeferredReviewEntry
 from blizzard.hub.domain.garden.review.materialize import (
     NewReviewFinding,
     NewReviewFindingFact,
@@ -27,7 +28,7 @@ from blizzard.hub.domain.garden.review.validation import (
     require_review_delta,
 )
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.finding import DeferredReviewFindingEntry
+from tests.garden_artifacts import deferred_entry
 
 pytestmark = pytest.mark.unit
 
@@ -48,8 +49,8 @@ _NODE = Node(
 )
 
 
-def _deferred(ref: str, *, scope: str = "blizzard") -> DeferredReviewFindingEntry:
-    return DeferredReviewFindingEntry.model_validate(
+def _deferred(ref: str, *, scope: str = "blizzard") -> DeferredReviewEntry:
+    return deferred_entry(
         {
             "ref": ref,
             "disposition": "deferred",

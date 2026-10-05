@@ -6,7 +6,7 @@ gardening: runs are readable).
 enumerable (`bzh:facts-not-status`) — a run's `outcome` is derived fresh from the
 chunk's own facts every read, never stored, the way every other chunk status is. The
 delta a delivered set actually published is read back from its own artifact, parsed as
-`FindingDelta` — never reconstructed from `finding_facts` — and an add op is linked
+`DeliveredDelta` — never reconstructed from `finding_facts` — and an add op is linked
 to the finding id it minted positionally, by the order `GardenDelivery.deliver` wrote
 both in; a set predating that linkage naturally yields no matched adds rather than a
 fabricated one."""
@@ -24,10 +24,15 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.garden.delivery.validation import parse_delta
 from blizzard.hub.domain.garden.findings.model import Finding, IReadFindingRepository
+from blizzard.hub.domain.garden.formats import (
+    DeliveredDelta,
+    FindingAddOp,
+    FindingGoneOp,
+    FindingObservedOp,
+    IGardenFormats,
+)
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
-from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 
 
 @domain_model
@@ -248,12 +253,12 @@ def _outcome_and_escalation(chunk_graph_id: str, facts: ChunkFacts) -> tuple[Chu
     return outcome, _escalation(chunk_graph_id, facts)
 
 
-def _observed_ids(delta: FindingDelta) -> list[str]:
+def _observed_ids(delta: DeliveredDelta) -> list[str]:
     """Every finding id one parsed artifact's `observed` ops name, in artifact order."""
-    return [op.id for op in delta.findings if isinstance(op, ObservedFindingOp)]
+    return [op.id for op in delta.findings if isinstance(op, FindingObservedOp)]
 
 
-def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
+def _set_delta(raw: DeliveredSetRaw, delta: DeliveredDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
     """Fold one delivered set's parsed artifact into its own added/observed/gone groups —
     an add op is zipped positionally against `raw.add_finding_ids`, never
     `strict`: a set predating the `finding_facts.finding_set_id` linkage carries no add
@@ -266,7 +271,7 @@ def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str,
     observed: list[ObservedFinding] = []
     gone: list[GoneFinding] = []
     for op in delta.findings:
-        if isinstance(op, AddFindingOp):
+        if isinstance(op, FindingAddOp):
             added.append(
                 AddedFinding(
                     finding_id=next(add_ids, None),
@@ -276,7 +281,7 @@ def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str,
                     introduced=op.introduced,
                 )
             )
-        elif isinstance(op, ObservedFindingOp):
+        elif isinstance(op, FindingObservedOp):
             row = findings.get(op.id)
             observed.append(
                 ObservedFinding(
@@ -286,7 +291,7 @@ def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str,
                     summary=row.summary if row is not None else None,
                 )
             )
-        elif isinstance(op, GoneFindingOp):
+        elif isinstance(op, FindingGoneOp):
             gone.append(GoneFinding(finding_id=op.id, note=op.note))
     return DeliveredSetDelta(
         finding_set_id=raw.finding_set_id,
@@ -363,12 +368,14 @@ class GardenRunService:
         chunk_records: IReadChunkRecordRepository,
         chunk_facts: IReadChunkFactsRepository,
         findings: IReadFindingRepository,
+        formats: IGardenFormats,
         clock: IClock,
     ) -> None:
         self._repo = repo
         self._chunk_records = chunk_records
         self._chunk_facts = chunk_facts
         self._findings = findings
+        self._formats = formats
         self._clock = clock
 
     def list_runs(self, *, since: datetime | None = None, until: datetime | None = None) -> list[RunSummary]:
@@ -392,7 +399,7 @@ class GardenRunService:
         facts = self._chunk_facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
         parsed = [
-            (raw, parse_delta(raw.finding_set_id, raw.artifact_data))
+            (raw, self._formats.finding_delta(raw.finding_set_id, raw.artifact_data))
             for raw in self._repo.delivered_sets(chunk.chunk_id)
         ]
         # Every observed id the run named, across all its sets, is read in one batched

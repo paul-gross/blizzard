@@ -17,6 +17,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.record import ChunkPage
 from blizzard.hub.domain.garden.findings.model import Finding, FindingFact, FindingPage
@@ -188,6 +189,7 @@ def _service(
         repo=repo or _FakeRepo(),
         chunk_records=chunk_records or _FakeChunkRecords(),
         chunk_facts=chunk_facts or _FakeChunkFacts(),
+        formats=GardenFormats(),
         findings=findings or _FakeFindings(),
         clock=FixedClock(_UNTIL),
     )
