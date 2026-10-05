@@ -8,17 +8,20 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.client import RouteClaimOutcome
 from blizzard.runner.leases import Lease
-from blizzard.runner.leases.closure import ESCALATION_MINT
+from blizzard.runner.leases.closure import ESCALATION_MINT, cause_of
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.escalations import ParkedEscalation
 from blizzard.runner.lifecycle.model import (
+    COMPLETION_CLOSURES,
     LEASE_MOVES,
     AdvanceMove,
     ApplyMove,
     ClaimVerdict,
+    CompletionClosure,
     CompletionMove,
     DecisionMove,
     FailureMove,
@@ -33,6 +36,7 @@ from blizzard.runner.lifecycle.model import (
     RestartDisposition,
     TakeoverHolds,
     UnpauseMove,
+    adopt_enters_node,
     advance_move,
     answer_ready,
     apply_move,
@@ -302,6 +306,17 @@ def test_recovery_owner() -> None:
     assert recovery_owner(_lease(harness_id="oc")) == "oc"
 
 
+def test_adopt_enters_a_node_the_latest_lease_did_not_run_unless_it_is_a_restart_entry() -> None:
+    held = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=1)
+    restarted = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=2, restart_epochs=[2]
+    )
+    assert adopt_enters_node(_lease(), held, "nd_review") is True
+    assert adopt_enters_node(_lease(), held, "nd_build") is False
+    assert adopt_enters_node(None, held, "nd_build") is False
+    assert adopt_enters_node(_lease(), restarted, "nd_review") is False
+
+
 # --- minting ---------------------------------------------------------------------------------- #
 
 
@@ -533,7 +548,10 @@ def test_spend_cap_escalation_is_local() -> None:
     # Capped at an advancing step: closed escalated — the escalation reads open locally — and the
     # next node is not entered.
     assert completion_move(ApplyOutcome.NEXT, capped=True) is CompletionMove.ESCALATE_SPEND_CAP
-    assert not brake_defers(LeaseMove.CLOSE_APPLIED)
+    closure = COMPLETION_CLOSURES[CompletionMove.ESCALATE_SPEND_CAP]
+    assert (closure.reason, closure.escalation_cause) == ("escalated", "spend-cap")
+    assert cause_of(closure.reason, closure.escalation_cause) == "spend-cap"
+    assert COMPLETION_CLOSURES[CompletionMove.CLOSE_AND_APPLY] == CompletionClosure(LeaseClosureReason.TRANSITIONED)
 
 
 def test_decision_move() -> None:

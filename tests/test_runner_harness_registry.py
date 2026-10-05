@@ -115,6 +115,21 @@ def test_capability_snapshot_refreshes_each_harness_health_with_its_own_adapter_
 
 
 @pytest.mark.unit
+def test_capability_snapshot_with_no_health_cache_reports_every_harness_available() -> None:
+    """The registration push fails open: a caller with no health cache asserts no harness unhealthy."""
+    claude, opencode = _harness(), _harness()
+    claude.harness_version, opencode.harness_version = "1.0", "2.0"
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=claude), OPENCODE_HARNESS_ID: HarnessBinding(adapter=opencode)}
+    )
+
+    snapshot = capability_snapshot(registry)
+
+    assert [entry.harness_id for entry in snapshot] == [CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID]
+    assert all(entry.available for entry in snapshot)
+
+
+@pytest.mark.unit
 def test_registry_distinguishes_a_known_unavailable_capability() -> None:
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness())})
 

@@ -13,8 +13,10 @@ from blizzard.runner.leases.asks import (
     AskOnClosedLease,
     AskState,
     OpenAsk,
+    ask_states,
     check_askable,
-    unshadowed,
+    newest_unforwarded,
+    open_asks_of,
 )
 
 pytestmark = pytest.mark.unit
@@ -62,29 +64,72 @@ def test_an_ask_on_a_takeovers_closed_reference_lease_is_refused() -> None:
         check_askable(WorkerLease(lease=_lease(), active=False))
 
 
-# --- unshadowed ---------------------------------------------------------------------------
+# --- ask states ---------------------------------------------------------------------------
 
 
 def test_only_the_newest_unforwarded_ask_per_lease_stays_open() -> None:
     newer, older = _ask("q_2", minutes=5), _ask("q_1")
-    assert unshadowed([newer, older], forwarded=[]) == [newer]
+    assert open_asks_of([newer, older], forwarded=[]) == [newer]
 
 
-def test_forwarded_asks_are_never_shadowed() -> None:
+def test_forwarded_asks_are_never_superseded() -> None:
     unforwarded, parked = _ask("q_3", minutes=9), _ask("q_2", minutes=5)
-    shadowed = _ask("q_1")
-    assert unshadowed([unforwarded, parked, shadowed], forwarded=["q_2"]) == [unforwarded, parked]
+    superseded = _ask("q_1")
+    assert open_asks_of([unforwarded, parked, superseded], forwarded=["q_2"]) == [unforwarded, parked]
 
 
-def test_asks_on_different_leases_never_shadow_each_other() -> None:
+def test_a_superseded_ask_stays_superseded_once_the_newer_ask_is_forwarded_or_answered() -> None:
+    newer, older = _ask("q_2", minutes=5), _ask("q_1")
+    assert open_asks_of([newer, older], forwarded=["q_2"]) == [newer]
+    assert open_asks_of([newer, older], forwarded=["q_2"], answered=["q_2"]) == []
+    assert ask_states([newer, older], forwarded=["q_2"], answered=["q_2"]) == {
+        "q_2": AskState.ANSWERED,
+        "q_1": AskState.SUPERSEDED,
+    }
+
+
+def test_asks_on_different_leases_never_supersede_each_other() -> None:
     mine, theirs = _ask("q_2", minutes=5), _ask("q_1", lease_id="lease_2")
-    assert unshadowed([mine, theirs], forwarded=[]) == [mine, theirs]
+    assert open_asks_of([mine, theirs], forwarded=[]) == [mine, theirs]
 
 
 def test_a_single_ask_is_kept_as_is() -> None:
     only = _ask("q_1")
-    assert unshadowed([only], forwarded=[]) == [only]
-    assert unshadowed([], forwarded=["q_1"]) == []
+    assert open_asks_of([only], forwarded=[]) == [only]
+    assert open_asks_of([], forwarded=["q_1"]) == []
+
+
+def test_only_the_newest_ask_is_forwarded_and_only_until_it_is() -> None:
+    newer, older = _ask("q_2", minutes=5), _ask("q_1")
+    assert newest_unforwarded([newer, older], forwarded=[]) == newer
+    assert newest_unforwarded([newer, older], forwarded=["q_2"]) is None
+    assert newest_unforwarded([], forwarded=[]) is None
+
+
+_TIMELINES = (
+    (("ask", "q_1"), ("ask", "q_2"), ("park", "q_2"), ("resume", "q_2")),
+    (("ask", "q_1"), ("park", "q_1"), ("resume", "q_1"), ("ask", "q_2"), ("park", "q_2")),
+    (("ask", "q_1"), ("park", "q_1"), ("ask", "q_2"), ("resume", "q_1"), ("park", "q_2")),
+)
+
+
+@pytest.mark.parametrize("timeline", _TIMELINES)
+def test_each_derived_state_change_is_one_the_transition_table_declares(timeline: tuple[tuple[str, str], ...]) -> None:
+    """The derivation agrees with :data:`ASK_TRANSITIONS`: as asks, parks, and resumes land, each ask
+    moves only along a declared edge, and a superseded ask never leaves its state."""
+    asks: list[OpenAsk] = []
+    forwarded: set[str] = set()
+    answered: set[str] = set()
+    states: dict[str, AskState] = {}
+    for minute, (event, question_id) in enumerate(timeline):
+        if event == "ask":
+            asks.insert(0, _ask(question_id, minutes=minute))
+        (forwarded if event == "park" else answered if event == "resume" else set()).add(question_id)
+        now = ask_states(asks, forwarded=forwarded, answered=answered)
+        for asked, state in now.items():
+            before = states.get(asked, AskState.UNFORWARDED)
+            assert state == before or state in ASK_TRANSITIONS[before], (asked, before, state)
+        states = now
 
 
 def test_only_an_unforwarded_ask_can_be_superseded() -> None:

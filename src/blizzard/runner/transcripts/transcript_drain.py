@@ -165,7 +165,17 @@ class TranscriptDrain:
         except HubClientError:
             return False  # hub unreachable — the batch stays buffered, retried next tick; the fact lane is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
+        refused = set(ack.refused)
         for delta in deltas:
+            if delta.seq in refused:
+                # The hub owns this record's (chunk, epoch) elsewhere — it stores none of it and moves its
+                # high-water past it. Acked so the drain never wedges, but never silently.
+                _log.warning(
+                    "hub refused buffered transcript record — its epoch is not this runner's",
+                    seq=delta.seq,
+                    segment_id=delta.segment_id,
+                    chunk_id=delta.chunk_id,
+                )
             if delta.seq in ack.capped:
                 # A cap rejection is not idempotency — surface it, but do not wedge the FIFO
                 # drain on a record the hub will never store in full: ack and move on.

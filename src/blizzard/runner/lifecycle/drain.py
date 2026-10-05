@@ -19,6 +19,7 @@ from blizzard.runner.leases import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.held_chunk import HeldChunk, HeldChunkContext
 from blizzard.runner.lifecycle.model import (
+    COMPLETION_CLOSURES,
     CompletionMove,
     DecisionMove,
     completion_move,
@@ -186,14 +187,13 @@ class OutboundDrain:
             cost, cap = breach
             # Closed escalated, so the escalation reads open here like any other, and the next node is
             # not entered, so no attempt there is spent.
+            closure = COMPLETION_CLOSURES[move]
             attempt = Attempt(self.ctx, lease)
-            attempt.close(
-                LeaseClosureReason.ESCALATED, self.ctx.clock.now(), escalation_cause=EscalationCause.SPEND_CAP
-            )
+            attempt.close(closure.reason, self.ctx.clock.now(), escalation_cause=closure.escalation_cause)
             _CP_AFTER_CLOSURE.reached()
             attempt.escalate(cause=EscalationCause.SPEND_CAP, detail=spend_cap_detail(cost, cap))
             return
-        Attempt(self.ctx, lease).close(LeaseClosureReason.TRANSITIONED, self.ctx.clock.now())
+        Attempt(self.ctx, lease).close(COMPLETION_CLOSURES[CompletionMove.CLOSE_AND_APPLY].reason, self.ctx.clock.now())
         _CP_AFTER_CLOSURE.reached()
         HeldChunk(self.ctx, lease.chunk_id).apply(
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)

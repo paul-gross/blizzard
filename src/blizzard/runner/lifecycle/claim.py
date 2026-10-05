@@ -27,6 +27,8 @@ from blizzard.runner.leases.operator_requests import IReadRequeueRepository
 from blizzard.runner.lifecycle.model import (
     ClaimVerdict,
     InterruptedClaimMove,
+    adopt_enters_node,
+    claim_denial_fields,
     claim_disposition,
     claim_verdict,
     interrupted_claim_move,
@@ -55,7 +57,7 @@ _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the rou
 
 #: What each lost claim logs before its binding is released.
 _CLAIM_LOSS_LOG: dict[ClaimVerdict, str] = {
-    ClaimVerdict.PAUSED: "route claim denied — runner paused at the hub",
+    ClaimVerdict.PAUSED: "route claim denied — the hub refused this runner",
     ClaimVerdict.NOT_CLAIMABLE: "route claim denied — chunk not claimable",
     ClaimVerdict.DEPENDENCY: "route claim denied — unmet prerequisite",
     ClaimVerdict.INCOMPATIBLE: "route claim denied — runner incompatible with chunk",
@@ -132,7 +134,12 @@ class ReadyQueue:
         if disposition.drop_entry:
             self._entries.remove(entry)
         if disposition.release:
-            _log.info(_CLAIM_LOSS_LOG[disposition.verdict], chunk_id=chunk_id, runner_id=self.ctx.config.runner_id)
+            _log.info(
+                _CLAIM_LOSS_LOG[disposition.verdict],
+                chunk_id=chunk_id,
+                runner_id=self.ctx.config.runner_id,
+                **claim_denial_fields(outcome),
+            )
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return disposition.keep_filling
         assert outcome.claimed is not None  # a won claim carries its route
@@ -250,7 +257,7 @@ class InterruptedClaims:
             self._resume_requeued(chunk_id, view.latest_epoch)
         elif move is InterruptedClaimMove.ADOPT:
             if self._owns_node_entry(chunk_id, view, bindings):
-                self._adopt(chunk_id, view.latest_epoch)
+                self._adopt(chunk_id, view)
         elif move is InterruptedClaimMove.RECLAIM:
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif move is InterruptedClaimMove.RELEASE_REQUEUED_ELSEWHERE:
@@ -279,7 +286,7 @@ class InterruptedClaims:
             lease_in_binding_tenure=self.ctx.stores.lease_record.has_lease_in_binding_tenure(chunk_id, bound_at),
         )
 
-    def _adopt(self, chunk_id: str, latest_epoch: int | None) -> None:
+    def _adopt(self, chunk_id: str, view: ChunkStatusView) -> None:
         """Spawn the current node for a claimed chunk whose spawn never minted a lease.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
@@ -299,13 +306,17 @@ class InterruptedClaims:
                 return  # hub unreachable — the binding is durable; retry next tick
             self.ctx.chunk_views.invalidate(chunk_id)  # named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
-        envelope = self._envelope(chunk_id, "adopted", latest_epoch)
+        envelope = self._envelope(chunk_id, "adopted", view.latest_epoch)
         if envelope is None:
             return
+        latest = self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id)
+        acquired = Environments(bindings).acquired
+        if adopt_enters_node(latest, view, envelope.node.node_id):
+            _log.info("adopting held claim — entering its current node", chunk_id=chunk_id)
+            Spawner(self.ctx).enter_node(chunk_id, envelope, acquired, via="adopt")
+            return
         _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(
-            chunk_id, envelope, Environments(bindings).acquired, via="adopt", harness_id=self._latest_owner(chunk_id)
-        )
+        Spawner(self.ctx).spawn(chunk_id, envelope, acquired, via="adopt", harness_id=recovery_owner(latest))
 
     def _resume_requeued(self, chunk_id: str, latest_epoch: int | None) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
@@ -350,11 +361,13 @@ class InterruptedClaims:
             self.ctx.chunk_views.invalidate(chunk_id)  # a later get() this tick sees the win
         verdict = reclaim_verdict(outcome)
         if verdict is ClaimVerdict.PAUSED:
-            # Refused outright because this runner is paused upstream, not lost to another runner.
-            self._release(chunk_id, "interrupted claim denied — runner paused at the hub")
+            # Refused outright because the hub refuses this runner, not lost to another runner.
+            self._release(
+                chunk_id, "interrupted claim denied — the hub refused this runner", **claim_denial_fields(outcome)
+            )
             return
         if verdict is ClaimVerdict.LOST or outcome.claimed is None:
-            self._release(chunk_id, "interrupted claim lost the race — releasing binding")
+            self._release(chunk_id, "interrupted claim not won — releasing binding", **claim_denial_fields(outcome))
             return
         _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held

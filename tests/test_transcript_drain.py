@@ -368,6 +368,23 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
     assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_capped"}
 
 
+def test_drain_acks_a_hub_refused_record_with_a_warning() -> None:
+    """A record whose (chunk, epoch) the hub owns elsewhere is acked so the FIFO moves on, and logged."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    refused_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.refuse_transcript_seqs = {refused_seq}
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert hub.transcripts_pushed == []
+    warned = [e for e in logs if e["event"].startswith("hub refused buffered transcript record")]
+    assert [(e["seq"], e["segment_id"], e["log_level"]) for e in warned] == [(refused_seq, segment_id, "warning")]
+
+
 def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     """A crash in the after-submit.before-ack window (`_CP_AFTER_SUBMIT`) must not read
     the retry's ack as ordinary idempotency — the hub's replay response must still

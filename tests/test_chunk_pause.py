@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -757,15 +758,19 @@ def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_tear
     assert _usage_payloads(store) == []
 
 
-def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(tmp_path):  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(("session", "resume_from"), [(None, None), (SessionMode.RESUME, "sess-a")])
+def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(  # type: ignore[no-untyped-def]
+    tmp_path, session, resume_from
+):
     """A paused chunk starts no worker on the apply arm: the binding is held, and FILL's adopt of
-    the running chunk at the runner's own epoch enters the node once the pause lifts."""
+    the running chunk at the runner's own epoch enters the node once the pause lifts — through the
+    node's declared session, so a resuming node continues the chunk's session."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
-    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, session=session)
     hub.envelopes["ch_1"] = next_env
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = _make_ctx(store, hub, harness, FakeProbe())
@@ -780,3 +785,4 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"
+    assert harness.resume_froms == [resume_from]

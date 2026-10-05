@@ -2660,9 +2660,9 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch)
     epochs: list[int | None] = []
     original = InterruptedClaims._adopt
 
-    def traced_adopt(self, chunk_id, latest_epoch):  # type: ignore[no-untyped-def]
-        epochs.append(latest_epoch)
-        return original(self, chunk_id, latest_epoch)
+    def traced_adopt(self, chunk_id, view):  # type: ignore[no-untyped-def]
+        epochs.append(view.latest_epoch)
+        return original(self, chunk_id, view)
 
     monkeypatch.setattr(InterruptedClaims, "_adopt", traced_adopt)
     Fill(ctx).run()
@@ -3156,6 +3156,9 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     assert payload["chunk_id"] == "ch_1"
     assert payload["cause"] == "retries-exhausted"
     assert payload["detail"].startswith("retries 2 of 2 used; last failure: ")
+    escalation = store.open_escalation_for_chunk("ch_1")
+    assert escalation is not None
+    assert escalation.cause == "retries-exhausted"
     # It resumes from the session's own spawn cwd, where a directory-scoped harness finds it.
     takeover_command = payload["takeover_command"]
     assert takeover_command.startswith(f"cd {expected_cwd} &&") and "--resume" in takeover_command

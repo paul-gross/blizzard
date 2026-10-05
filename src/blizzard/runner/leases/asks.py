@@ -30,8 +30,10 @@ __all__ = [
     "IWriteAskRepository",
     "OpenAsk",
     "QuestionPark",
+    "ask_states",
     "check_askable",
-    "unshadowed",
+    "newest_unforwarded",
+    "open_asks_of",
 ]
 
 
@@ -82,7 +84,7 @@ class AskState(StrEnum):
     SUPERSEDED = "superseded"
 
 
-#: The states one ask may move to from each; only an unforwarded ask is superseded (:func:`unshadowed`).
+#: The states one ask may move to from each; only an unforwarded ask is superseded (:func:`ask_states`).
 ASK_TRANSITIONS: Mapping[AskState, frozenset[AskState]] = MappingProxyType(
     {
         AskState.UNFORWARDED: frozenset({AskState.FORWARDED, AskState.SUPERSEDED}),
@@ -106,28 +108,50 @@ def check_askable(worker: WorkerLease) -> None:
         )
 
 
-def unshadowed(asks_newest_first: Iterable[OpenAsk], *, forwarded: Iterable[str]) -> list[OpenAsk]:
-    """``asks_newest_first`` without the unforwarded asks a newer unforwarded ask on the
-    same lease supersedes — the same "newest" :meth:`IReadAskRepository.unforwarded_ask`
-    forwards. ``forwarded`` names the question ids already forwarded and parked; those asks
-    always stay. Order is preserved."""
-    parked = set(forwarded)
+def ask_states(
+    asks_newest_first: Iterable[OpenAsk], *, forwarded: Iterable[str], answered: Iterable[str] = ()
+) -> dict[str, AskState]:
+    """Each ask's :class:`AskState` by question id: answered once a park resume names it, forwarded
+    once a park fact does, else superseded when any newer ask on its lease exists — forwarded,
+    answered, or not — else the lease's one unforwarded ask. A superseded ask stays superseded."""
+    parked, resumed = set(forwarded), set(answered)
     seen: set[str] = set()
-    kept: list[OpenAsk] = []
+    states: dict[str, AskState] = {}
     for ask in asks_newest_first:
-        if ask.question_id not in parked:
-            if ask.lease_id in seen:
-                continue
-            seen.add(ask.lease_id)
-        kept.append(ask)
-    return kept
+        if ask.question_id in resumed:
+            states[ask.question_id] = AskState.ANSWERED
+        elif ask.question_id in parked:
+            states[ask.question_id] = AskState.FORWARDED
+        elif ask.lease_id in seen:
+            states[ask.question_id] = AskState.SUPERSEDED
+        else:
+            states[ask.question_id] = AskState.UNFORWARDED
+        seen.add(ask.lease_id)
+    return states
+
+
+def open_asks_of(
+    asks_newest_first: Iterable[OpenAsk], *, forwarded: Iterable[str], answered: Iterable[str] = ()
+) -> list[OpenAsk]:
+    """``asks_newest_first`` narrowed to the open ones — unforwarded or forwarded and unanswered,
+    never superseded (:func:`ask_states`). Order is preserved."""
+    asks = list(asks_newest_first)
+    states = ask_states(asks, forwarded=forwarded, answered=answered)
+    return [ask for ask in asks if states[ask.question_id] in (AskState.UNFORWARDED, AskState.FORWARDED)]
+
+
+def newest_unforwarded(asks_newest_first: Iterable[OpenAsk], *, forwarded: Iterable[str]) -> OpenAsk | None:
+    """One lease's ask to forward: its newest ask, while no park fact names it — an older
+    unforwarded ask is superseded, so it is never forwarded behind a newer one."""
+    newest = next(iter(asks_newest_first), None)
+    return newest if newest is not None and newest.question_id not in set(forwarded) else None
 
 
 class IReadAskRepository(Protocol):
     """Read-only ask/park queries (held by read-path edges)."""
 
     def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
-        """The lease's newest ask not yet parked — its question_id has no park fact.
+        """The lease's newest ask while no park fact names it (:func:`newest_unforwarded`).
 
         Once parked, the park fact references the question_id, so the same ask is not
         re-parked; a resumed worker that asks *again* mints a fresh question_id,

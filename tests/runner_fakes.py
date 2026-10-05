@@ -390,6 +390,7 @@ class FakeHub:
         # Seqs to cap-reject-but-ack, scripted — the real ingest service's own
         # size/budget/rate rejection, which no fake could otherwise surface to a test.
         self.reject_transcript_seqs: set[int] = set()
+        self.refuse_transcript_seqs: set[int] = set()  # acked, never stored: another owner's (chunk, epoch)
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
@@ -462,7 +463,7 @@ class FakeHub:
             raise HubClientError("fake hub is down")
         self.push_transcripts_calls.append([record.seq for record in batch.records])
         mark = self.transcript_high_water.get(batch.runner_id, 0)
-        applied, already, capped = [], [], []
+        applied, already, capped, refused = [], [], [], []
         for record in sorted(batch.records, key=lambda r: r.seq):
             if record.seq <= mark:
                 # Mirrors the real hub's own replay fix: a lost-ack retry of an
@@ -473,6 +474,9 @@ class FakeHub:
                     already.append(record.seq)
                 continue
             mark = record.seq
+            if record.seq in self.refuse_transcript_seqs:
+                refused.append(record.seq)
+                continue
             if record.seq in self.reject_transcript_seqs:
                 # Cap-rejected-but-acked: the mark still advances past it
                 # (`TranscriptIngestService._apply` — every reachable outcome advances the mark).
@@ -482,7 +486,12 @@ class FakeHub:
             applied.append(record.seq)
         self.transcript_high_water[batch.runner_id] = mark
         return TranscriptSegmentAck(
-            runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already, capped=capped
+            runner_id=batch.runner_id,
+            high_water=mark,
+            applied=applied,
+            already_applied=already,
+            capped=capped,
+            refused=refused,
         )
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:

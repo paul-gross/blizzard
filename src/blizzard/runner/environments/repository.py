@@ -7,10 +7,10 @@ release orchestration reads the clock and the held bindings, and writes what the
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import ClassVar, Literal, Protocol
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 
@@ -23,8 +23,6 @@ __all__ = [
     "release_instants",
     "require_unheld",
 ]
-
-EnvironmentHolding = Literal["free", "held"]
 
 
 class EnvironmentHeldError(RuntimeError):
@@ -48,12 +46,6 @@ class EnvBinding:
     environment_id: str
     workdir: str
     bound_at: datetime
-
-    #: Each holding -> the holdings an environment may move to from it.
-    TRANSITIONS: ClassVar[Mapping[EnvironmentHolding, frozenset[EnvironmentHolding]]] = {
-        "free": frozenset({"held"}),
-        "held": frozenset({"free"}),
-    }
 
     def release_instant(self, now: datetime) -> datetime:
         """The instant a release of this binding is stamped: ``now``, never earlier than the

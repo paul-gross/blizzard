@@ -158,6 +158,7 @@ def test_miss_records_miss_kind_and_null_payload() -> None:
     assert attempt.snapshot is None
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED
     assert attempt.miss_reason is SampleMissReason.CREDENTIAL_LAPSED
+    assert attempt.result is SampleMissReason.CREDENTIAL_LAPSED
     assert (attempt.slug, attempt.sampled_at, attempt.renewal) == ("max", _NOW, "failed:timed_out")
 
 
@@ -168,3 +169,4 @@ def test_snapshot_records_sampled_kind() -> None:
     assert attempt.snapshot == snapshot
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
     assert attempt.miss_reason is None
+    assert attempt.result == snapshot

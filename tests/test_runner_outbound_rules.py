@@ -19,7 +19,6 @@ from blizzard.runner.hub.outbound_buffer import (
     command_failed_event,
     escalation_payload,
     lease_minted_payload,
-    outbound_ack_applies,
     question_asked_payload,
     submission_payload,
     transcript_truncated_event,
@@ -67,11 +66,6 @@ def test_completion_and_decision_are_submissions() -> None:
 
 def test_ack_transition_table() -> None:
     assert {"pending": frozenset({"ack"}), "acked": frozenset()} == OUTBOUND_TRANSITIONS
-
-
-def test_ack_of_acked_fact_is_noop() -> None:
-    assert outbound_ack_applies(None) is True
-    assert outbound_ack_applies(_T0) is False
 
 
 def test_lease_minted_payload() -> None:

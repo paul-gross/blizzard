@@ -31,7 +31,6 @@ __all__ = [
     "escalation_payload",
     "event_payload",
     "lease_minted_payload",
-    "outbound_ack_applies",
     "question_asked_payload",
     "submission_payload",
     "transcript_truncated_event",
@@ -53,12 +52,6 @@ OUTBOUND_TRANSITIONS: dict[OutboundFactState, frozenset[Literal["ack"]]] = {
     "pending": frozenset({"ack"}),
     "acked": frozenset(),
 }
-
-
-def outbound_ack_applies(acked_at: datetime | None) -> bool:
-    """Whether an ack writes over a fact whose ``acked_at`` is this, per :data:`OUTBOUND_TRANSITIONS`."""
-    state: OutboundFactState = "acked" if acked_at is not None else "pending"
-    return "ack" in OUTBOUND_TRANSITIONS[state]
 
 
 @domain_model
