@@ -266,26 +266,30 @@ describe('FleetFindingPanel', () => {
     expect(el.querySelector('[data-testid="gardening-finding-panel-reopen"]')).toBeNull();
   });
 
-  it('also offers reopen once the finding has exited', async () => {
+  it('offers reopen and no exit verb once the finding has exited', async () => {
     const fixture = await mount({ vm: RESOLVED_VM, canControl: true });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-finding-panel-reopen"]')).toBeTruthy();
+    for (const verb of ['resolve', 'confirm-gone', 'wont-fix', 'not-a-finding']) {
+      expect(el.querySelector(`[data-testid="gardening-finding-panel-${verb}"]`)).toBeNull();
+    }
   });
 
-  it('renders every triage verb as a call-to-action-sized button, matching the Proposals panel', async () => {
+  it('renders every exit verb as a call-to-action-sized button, matching the Proposals panel', async () => {
+    const fixture = await mount({ canControl: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const verb of ['resolve', 'confirm-gone', 'wont-fix', 'not-a-finding']) {
+      expect(el.querySelector(`[data-testid="gardening-finding-panel-${verb}"]`)?.classList.contains('cta')).toBe(true);
+    }
+  });
+
+  it('renders reopen as a call-to-action-sized button, matching the Proposals panel', async () => {
     const fixture = await mount({ vm: RESOLVED_VM, canControl: true });
     const el = fixture.nativeElement as HTMLElement;
 
-    for (const testid of [
-      'gardening-finding-panel-resolve',
-      'gardening-finding-panel-confirm-gone',
-      'gardening-finding-panel-wont-fix',
-      'gardening-finding-panel-not-a-finding',
-      'gardening-finding-panel-reopen',
-    ]) {
-      expect(el.querySelector(`[data-testid="${testid}"]`)?.classList.contains('cta')).toBe(true);
-    }
+    expect(el.querySelector('[data-testid="gardening-finding-panel-reopen"]')?.classList.contains('cta')).toBe(true);
   });
 
   it('emits triage with the clicked verb', async () => {

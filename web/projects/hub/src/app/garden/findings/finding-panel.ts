@@ -64,9 +64,9 @@ export interface FindingPanelVm {
  *
  * Which verbs render depends on whether the finding has exited, read straight off
  * `finding-state.ts`'s own {@link isFindingExited} rather than re-derived locally:
- * the four exit verbs always render (`canControl` gating aside), and `reopen`
- * renders only once the finding has exited — resolving a finding that hasn't
- * exited is a real, always-available action; reopening one that hasn't isn't.
+ * the four exit verbs render only while the finding has not exited, and `reopen`
+ * renders only once it has (`canControl` gating aside) — the hub refuses an exit
+ * verb on an exited finding, and reopening one that hasn't exited.
  */
 @Component({
   selector: 'app-finding-panel',
