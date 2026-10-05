@@ -52,7 +52,7 @@ def _jwks_cache(jwk: dict[str, str]) -> JwksCache:
 
 
 def _sign(private_key: object, *, claims: dict[str, object]) -> str:
-    return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})
+    return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
 
 
 def _claims(**overrides: object) -> dict[str, object]:
