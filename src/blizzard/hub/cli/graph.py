@@ -133,25 +133,22 @@ def graph_sync(cli: CliContext) -> None:
 
 @graph_group.command("retire", cls=FleetCommand)
 @click.argument("graph_id")
-@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
-def graph_retire(cli: CliContext, graph_id: str, by: str) -> None:
+def graph_retire(cli: CliContext, graph_id: str) -> None:
     """Retire GRAPH_ID — excludes it from name resolution; in-flight chunks run on."""
-    _set_graph_lifecycle(cli, graph_id, verb="retire", by=by)
+    _set_graph_lifecycle(cli, graph_id, verb="retire")
 
 
 @graph_group.command("enable", cls=FleetCommand)
 @click.argument("graph_id")
-@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
-def graph_enable(cli: CliContext, graph_id: str, by: str) -> None:
+def graph_enable(cli: CliContext, graph_id: str) -> None:
     """Re-enable a retired GRAPH_ID — restores normal newest-per-name derivation."""
-    _set_graph_lifecycle(cli, graph_id, verb="enable", by=by)
+    _set_graph_lifecycle(cli, graph_id, verb="enable")
 
 
 @graph_group.command("follow-latest", cls=FleetCommand)
 @click.argument("graph_id")
 @click.argument("value", type=click.Choice(["true", "false", "inherit"]))
-@click.option("--by", "by", default="operator", help="Who is setting the policy (recorded on the fact).")
-def graph_follow_latest(cli: CliContext, graph_id: str, value: str, by: str) -> None:
+def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
     """Set GRAPH_ID's follow-latest policy: true, false, or inherit.
 
     With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint
@@ -161,7 +158,7 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str, by: str) -> 
     resp = cli.post(
         f"/api/graphs/{graph_id}/follow-latest",
         "POST /graphs/{id}/follow-latest",
-        json_body={"follow_latest": follow_latest, "by": by},
+        json_body={"follow_latest": follow_latest},
         on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
@@ -170,11 +167,11 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str, by: str) -> 
     cli.show_lines(body, f"graph {graph_id} follow-latest is now {rendered}")
 
 
-def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str, by: str) -> None:
+def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str) -> None:
     resp = cli.post(
         f"/api/graphs/{graph_id}/{verb}",
         f"POST /graphs/{{id}}/{verb}",
-        json_body={"by": by},
+        json_body={},
         on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()

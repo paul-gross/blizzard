@@ -130,7 +130,7 @@ def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_
     superseded_id = _mint(hub, _GRAPH_A)
     hub.clock.advance(timedelta(hours=1))
     newest_id = _mint(hub, _GRAPH_A)
-    retired = hub.client.post(f"/api/graphs/{old_id}/retire", json={"by": "op"})
+    retired = hub.client.post(f"/api/graphs/{old_id}/retire")
     assert retired.status_code == 202, retired.text
 
     resp = hub.client.get("/api/graphs")

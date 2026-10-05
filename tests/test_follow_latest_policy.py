@@ -247,7 +247,7 @@ def test_a_newer_mint_that_is_retired_moves_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, follow_latest=True)
     chunk_id, build_node, v2 = _arm(hub)
     pinned = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
-    assert hub.client.post(f"/api/graphs/{v2}/retire", json={"by": "op"}).status_code == 202
+    assert hub.client.post(f"/api/graphs/{v2}/retire").status_code == 202
 
     assert _complete(hub, chunk_id, build_node).json()["outcome"] != "migrated"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == pinned
@@ -264,7 +264,7 @@ def test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint(tmp_path: P
     v2 = _mint(hub, _YAML.format(name="default-delivery", prompt="Build, but better."))
     chunk_id, build_node = _claimed_chunk(hub)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == v2
-    assert hub.client.post(f"/api/graphs/{v2}/retire", json={"by": "op"}).status_code == 202
+    assert hub.client.post(f"/api/graphs/{v2}/retire").status_code == 202
     assert hub.services.graphs.get_enabled_by_name("default-delivery").graph_id == v1  # type: ignore[union-attr]
 
     assert _complete(hub, chunk_id, build_node).json()["outcome"] != "migrated"
@@ -320,8 +320,8 @@ def test_the_policy_and_the_retire_brake_are_independent(tmp_path: Path) -> None
     graph_id = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
     _set_policy(hub, graph_id, True)
 
-    assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "op"}).json()["follow_latest"] is True
-    assert hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "op"}).json()["follow_latest"] is True
+    assert hub.client.post(f"/api/graphs/{graph_id}/retire").json()["follow_latest"] is True
+    assert hub.client.post(f"/api/graphs/{graph_id}/enable").json()["follow_latest"] is True
 
     assert _set_policy(hub, graph_id, None).json()["retired"] is False
 

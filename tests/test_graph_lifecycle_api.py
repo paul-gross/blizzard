@@ -7,6 +7,7 @@ back to the newest non-retired version (or ``None`` once all are retired), and 4
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
@@ -65,13 +66,31 @@ def test_retire_returns_202_and_the_view_reports_retired(tmp_path: Path) -> None
     hub = build_hub(tmp_path)
     graph_id = _mint(hub)
 
-    resp = hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "paul"})
+    resp = hub.client.post(f"/api/graphs/{graph_id}/retire")
 
     assert resp.status_code == 202, resp.text
     body = resp.json()
     assert body["retired"] is True
     assert body["enabled"] is False
     assert body["graph_id"] == graph_id
+
+
+def _recorded_actors(tmp_path: Path, table: str) -> list[str]:
+    with sqlite3.connect(tmp_path / "hub.db") as conn:
+        return [row[0] for row in conn.execute(f"select set_by from {table} order by id")]
+
+
+def test_the_lifecycle_and_policy_routes_record_the_authenticated_caller_not_a_body_by(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub)
+
+    assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "mallory"}).status_code == 202
+    assert hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "mallory"}).status_code == 202
+    policy = hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": True, "by": "mallory"})
+    assert policy.status_code == 202
+
+    assert _recorded_actors(tmp_path, "graph_lifecycle_facts") == ["operator", "operator"]
+    assert _recorded_actors(tmp_path, "graph_policy_facts") == ["operator"]
 
 
 def test_a_freshly_minted_graph_reports_enabled_and_not_retired(tmp_path: Path) -> None:
@@ -101,7 +120,7 @@ def test_retire_does_not_change_the_immutable_graph_row(tmp_path: Path) -> None:
     graph_id = _mint(hub)
     before = hub.client.get(f"/api/graphs/{graph_id}").json()
 
-    hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{graph_id}/retire")
 
     after = hub.client.get(f"/api/graphs/{graph_id}").json()
     assert after["name"] == before["name"]
@@ -113,9 +132,9 @@ def test_retire_does_not_change_the_immutable_graph_row(tmp_path: Path) -> None:
 def test_enable_reverses_a_retire(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     graph_id = _mint(hub)
-    hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{graph_id}/retire")
 
-    resp = hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "operator"})
+    resp = hub.client.post(f"/api/graphs/{graph_id}/enable")
 
     assert resp.status_code == 202, resp.text
     body = resp.json()
@@ -128,7 +147,7 @@ def test_enable_on_a_never_retired_graph_is_a_harmless_no_op(tmp_path: Path) -> 
     hub = build_hub(tmp_path)
     graph_id = _mint(hub)
 
-    resp = hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "operator"})
+    resp = hub.client.post(f"/api/graphs/{graph_id}/enable")
 
     assert resp.status_code == 202, resp.text
     assert resp.json()["retired"] is False
@@ -136,13 +155,13 @@ def test_enable_on_a_never_retired_graph_is_a_harmless_no_op(tmp_path: Path) -> 
 
 def test_retire_unknown_graph_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/graphs/gr_does_not_exist/retire", json={"by": "operator"})
+    resp = hub.client.post("/api/graphs/gr_does_not_exist/retire")
     assert resp.status_code == 404
 
 
 def test_enable_unknown_graph_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/graphs/gr_does_not_exist/enable", json={"by": "operator"})
+    resp = hub.client.post("/api/graphs/gr_does_not_exist/enable")
     assert resp.status_code == 404
 
 
@@ -166,7 +185,7 @@ def test_retiring_the_newest_version_falls_effective_back_to_the_prior_one(tmp_p
     hub.clock.advance(timedelta(hours=1))
     new_id = _mint(hub)
 
-    hub.client.post(f"/api/graphs/{new_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{new_id}/retire")
 
     rows = {row["graph_id"]: row for row in hub.client.get("/api/graphs").json()}
     assert rows[new_id]["retired"] is True
@@ -181,8 +200,8 @@ def test_retiring_every_version_of_a_name_marks_none_effective(tmp_path: Path) -
     hub.clock.advance(timedelta(hours=1))
     new_id = _mint(hub)
 
-    hub.client.post(f"/api/graphs/{old_id}/retire", json={"by": "operator"})
-    hub.client.post(f"/api/graphs/{new_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{old_id}/retire")
+    hub.client.post(f"/api/graphs/{new_id}/retire")
 
     rows = {row["graph_id"]: row for row in hub.client.get("/api/graphs").json()}
     assert rows[old_id]["effective"] is False
@@ -192,10 +211,10 @@ def test_retiring_every_version_of_a_name_marks_none_effective(tmp_path: Path) -
 def test_re_enabling_restores_effective(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     graph_id = _mint(hub)
-    hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{graph_id}/retire")
     assert hub.client.get("/api/graphs").json()[0]["effective"] is False
 
-    hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{graph_id}/enable")
 
     assert hub.client.get("/api/graphs").json()[0]["effective"] is True
 

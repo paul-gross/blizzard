@@ -1300,14 +1300,7 @@ export const getGraphApiGraphsGraphIdGet = <ThrowOnError extends boolean = false
  * Re-enable a retired graph — restores normal newest-per-name derivation.
  * Idempotent on an already-enabled graph; 404 on an unknown id.
  */
-export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boolean = false>(options: Options<EnableGraphApiGraphsGraphIdEnablePostData, ThrowOnError>): RequestResult<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError> => (options.client ?? client).post<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError>({
-    url: '/api/graphs/{graph_id}/enable',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boolean = false>(options: Options<EnableGraphApiGraphsGraphIdEnablePostData, ThrowOnError>): RequestResult<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError> => (options.client ?? client).post<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError>({ url: '/api/graphs/{graph_id}/enable', ...options });
 
 /**
  * Set Graph Follow Latest
@@ -1333,14 +1326,7 @@ export const setGraphFollowLatestApiGraphsGraphIdFollowLatestPost = <ThrowOnErro
  * Retire a graph — excludes it from name resolution; the claim on any chunk
  * already pinned to it runs on untouched. 404 on an unknown id.
  */
-export const retireGraphApiGraphsGraphIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireGraphApiGraphsGraphIdRetirePostData, ThrowOnError>): RequestResult<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError>({
-    url: '/api/graphs/{graph_id}/retire',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const retireGraphApiGraphsGraphIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireGraphApiGraphsGraphIdRetirePostData, ThrowOnError>): RequestResult<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError>({ url: '/api/graphs/{graph_id}/retire', ...options });
 
 /**
  * Health

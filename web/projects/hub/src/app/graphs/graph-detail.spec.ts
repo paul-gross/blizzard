@@ -86,7 +86,7 @@ describe('GraphDetail', () => {
 
     const calls = stub.forRoute('/api/graphs/gr_build_v2/retire', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    expect(calls[0].body).toBeUndefined();
   });
 
   it('fires the enable client call for a retired graph once the header emits enable (operator confirmed)', async () => {
@@ -103,7 +103,7 @@ describe('GraphDetail', () => {
 
     const calls = stub.forRoute('/api/graphs/gr_build_v2/enable', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    expect(calls[0].body).toBeUndefined();
   });
 
   it('surfaces a 409 refusal from retire rather than swallowing it', async () => {

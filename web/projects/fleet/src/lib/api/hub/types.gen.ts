@@ -3663,18 +3663,6 @@ export type GraphEdgeView = {
 };
 
 /**
- * GraphLifecycleRequest
- *
- * Retire or re-enable a graph — records who flipped it.
- */
-export type GraphLifecycleRequest = {
-    /**
-     * By
-     */
-    by?: string;
-};
-
-/**
  * GraphMintRequest
  *
  * A graph definition to mint — the raw YAML body.
@@ -3758,10 +3746,6 @@ export type GraphNodeView = {
  * hub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it.
  */
 export type GraphPolicyRequest = {
-    /**
-     * By
-     */
-    by?: string;
     /**
      * Follow Latest
      */
@@ -11411,7 +11395,7 @@ export type GetGraphApiGraphsGraphIdGetResponses = {
 export type GetGraphApiGraphsGraphIdGetResponse = GetGraphApiGraphsGraphIdGetResponses[keyof GetGraphApiGraphsGraphIdGetResponses];
 
 export type EnableGraphApiGraphsGraphIdEnablePostData = {
-    body: GraphLifecycleRequest;
+    body?: never;
     path: {
         /**
          * Graph Id
@@ -11471,7 +11455,7 @@ export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses = {
 export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponse = SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses[keyof SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses];
 
 export type RetireGraphApiGraphsGraphIdRetirePostData = {
-    body: GraphLifecycleRequest;
+    body?: never;
     path: {
         /**
          * Graph Id
