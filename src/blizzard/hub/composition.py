@@ -59,7 +59,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
@@ -142,13 +142,15 @@ from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
-from blizzard.hub.secrets import secret_cipher
+from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.secrets import StoreSecretReader, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -404,6 +406,22 @@ class HubCore:
     config_changes: ConfigChangeStore
     config_apply: ConfigApplyStore
     clock: IClock
+
+
+@dataclass(frozen=True)
+class LiveConfig:
+    """The process's one built-object cache and the one secret reader its builders reveal
+    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
+
+    objects: ConfigObjectCache
+    secrets: ISecretReader
+
+
+def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
+    return LiveConfig(
+        objects=ConfigObjectCache(ConfigRevisionsStore(core.store_connections)),
+        secrets=StoreSecretReader(catalog=core.secrets, sealed=core.secrets, cipher=secret_cipher(secret_keys)),
+    )
 
 
 def build_process_core(engine: Engine) -> HubCore:
