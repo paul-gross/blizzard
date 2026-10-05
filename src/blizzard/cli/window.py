@@ -43,6 +43,17 @@ def until_option(*, required: bool = False) -> Any:
     )
 
 
+def utc_now() -> datetime:
+    """The caller's clock — the seam tests move."""
+    return datetime.now(UTC)
+
+
+def refuse_future_until(until: datetime) -> None:
+    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told."""
+    if until.astimezone(UTC) > utc_now():
+        raise click.ClickException("--until must not be in the future")
+
+
 def replay_windows(since: datetime, until: datetime, width_seconds: int | None) -> list[tuple[datetime, datetime]]:
     """``[since, until)`` as consecutive UTC windows of at most ``width_seconds``; one window if no width is known."""
     start, stop = since.astimezone(UTC), until.astimezone(UTC)

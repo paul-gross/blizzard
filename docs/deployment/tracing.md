@@ -635,8 +635,8 @@ event's `since` and `until` paste straight in.
 - **Each request is bounded, a range is not.** A request's window is half-open, from `since` up to but not including
   `until`. It must be positive, no wider than `replay_max_window` seconds in the `[tracing]` block, and end at or
   before now; the daemon refuses a wider one with the limit named, and one ending in the future outright. The
-  `hub traces replay` and `runner traces replay` commands take any past range — end it at or before now, since a range
-  whose `--until` is in the future stops at its last window: they read the limit from the daemon and split the range
+  `hub traces replay` and `runner traces replay` commands take any past range and refuse a future `--until` against the command line's own clock before sending any
+  window: they read the limit from the daemon and split the range
   into consecutive windows of at most that width, printing a
   line per window to standard error. Replay runs inside each request, so a window takes a while, and a command line
   client waits up to ten minutes for each. If a window fails, whether the daemon refuses it or the request itself fails

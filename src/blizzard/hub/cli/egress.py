@@ -9,7 +9,7 @@ from typing import Any
 import click
 import httpx
 
-from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.cli.window import refuse_future_until, since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
@@ -99,6 +99,7 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
     """Write the rows of [since, until) again, as the live export would have, without moving a cursor. The files
     carry backfill in their names, each row lands in its own date's partition, and a loader keeps the copy with the
     latest exported_at. A window over backfill_max_window is refused, not split."""
+    refuse_future_until(until)
     body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
     resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
     if resp.status_code == httpx.codes.BAD_GATEWAY:

@@ -322,3 +322,24 @@ def test_the_cli_names_where_to_resume_when_a_window_request_itself_fails(
     assert result.exit_code != 0
     assert "window 1 of 2" in result.output
     assert f"resume with --since {start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')}" in result.output
+
+
+@pytest.mark.component
+def test_the_cli_refuses_a_future_until_before_sending_any_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, _ = _hub(tmp_path)
+    bodies = _relay(hub, monkeypatch)
+    now = hub.clock.now()
+    monkeypatch.setattr("blizzard.cli.window.utc_now", lambda: now)
+    start = now - timedelta(seconds=3600 * 3)
+
+    result = CliRunner().invoke(
+        hub_group,
+        ["traces", "replay", "--since", _local(start), "--until", _local(now + timedelta(seconds=1))],
+        env=_ENV,
+    )
+
+    assert result.exit_code != 0
+    assert "--until must not be in the future" in result.output
+    assert bodies == []

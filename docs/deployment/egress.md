@@ -244,7 +244,7 @@ the last pass and file, the last error and the free space. Run it first, and aga
   `blizzard hub egress backfill --since <t>
   --until <t>`, narrowed with `--dataset`. The rows are assembled as live
   ones are, from the record as it stands, into new files with `backfill` in their names. A window over
-  `backfill_max_window`, or one whose `--until` is in the future, is refused. A window that reaches past a dataset's
+  `backfill_max_window`, or one whose `--until` is in the future, is refused (the command refuses a future `--until` itself, before it sends). A window that reaches past a dataset's
   live cursor is written anyway, and the live export writes those rows again when its cursor gets there. `--dry-run`
   counts and writes nothing, and works with the export off, which is a cheap way to size a window; without it, a hub
   with the export off refuses the backfill.
