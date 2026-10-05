@@ -1325,10 +1325,9 @@ export const getGraphApiGraphsGraphIdGet = <ThrowOnError extends boolean = false
  *
  * Sparse-edit this graph's mutable flags; 404 on an unknown id.
  *
- * An absent ``follow_latest`` writes nothing. A present one — explicit ``null``
- * included — appends a policy fact rather than mutating the immutable ``graphs`` row,
- * scoped to this one mint. A graph is not a configured record, so the flag carries no
- * revision and no change row.
+ * An absent ``follow_latest`` writes nothing; a present one, ``null`` included, appends
+ * a policy fact scoped to this mint. A graph is not a configured record: no revision,
+ * no change row.
  */
 export const patchGraphApiGraphsGraphIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchGraphApiGraphsGraphIdPatchData, ThrowOnError>): RequestResult<PatchGraphApiGraphsGraphIdPatchResponses, PatchGraphApiGraphsGraphIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchGraphApiGraphsGraphIdPatchResponses, PatchGraphApiGraphsGraphIdPatchErrors, ThrowOnError>({
     url: '/api/graphs/{graph_id}',
@@ -1352,9 +1351,8 @@ export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boole
  *
  * Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.
  *
- * Kept for clients that cannot be redeployed; it calls the same domain verb and still
- * answers ``202``. ``true``/``false``/``null`` set the policy, explicit ``null``
- * reverting to the hub default. Idempotent, and 404 on an unknown id.
+ * Kept for clients that cannot be redeployed: the same domain verb, answering ``202``.
+ * Idempotent, and 404 on an unknown id.
  *
  * @deprecated
  */

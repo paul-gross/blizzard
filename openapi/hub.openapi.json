@@ -19312,7 +19312,7 @@
         ]
       },
       "patch": {
-        "description": "Sparse-edit this graph's mutable flags; 404 on an unknown id.\n\nAn absent ``follow_latest`` writes nothing. A present one \u2014 explicit ``null``\nincluded \u2014 appends a policy fact rather than mutating the immutable ``graphs`` row,\nscoped to this one mint. A graph is not a configured record, so the flag carries no\nrevision and no change row.",
+        "description": "Sparse-edit this graph's mutable flags; 404 on an unknown id.\n\nAn absent ``follow_latest`` writes nothing; a present one, ``null`` included, appends\na policy fact scoped to this mint. A graph is not a configured record: no revision,\nno change row.",
         "operationId": "patch_graph_api_graphs__graph_id__patch",
         "parameters": [
           {
@@ -19409,7 +19409,7 @@
     "/api/graphs/{graph_id}/follow-latest": {
       "post": {
         "deprecated": true,
-        "description": "Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.\n\nKept for clients that cannot be redeployed; it calls the same domain verb and still\nanswers ``202``. ``true``/``false``/``null`` set the policy, explicit ``null``\nreverting to the hub default. Idempotent, and 404 on an unknown id.",
+        "description": "Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.\n\nKept for clients that cannot be redeployed: the same domain verb, answering ``202``.\nIdempotent, and 404 on an unknown id.",
         "operationId": "set_graph_follow_latest_api_graphs__graph_id__follow_latest_post",
         "parameters": [
           {
