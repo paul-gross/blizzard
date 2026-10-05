@@ -11,6 +11,7 @@ import pytest
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ConfigDeclaration,
+    DeclaredReferences,
     RepositoryDeclaration,
     SecretNotActive,
     StoredConfig,
@@ -26,6 +27,9 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceEdit,
     WorkSourceFields,
 )
+from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
+from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
+from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit
 from blizzard.hub.domain.kernel.unset import UNSET
 
 pytestmark = pytest.mark.unit
@@ -180,3 +184,117 @@ def test_an_edit_that_leaves_every_field_unset_compares_nothing() -> None:
     assert WorkSourceEdit().annotate is UNSET
     plan = _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored(sources=(_source(),)))
     assert plan.writes == ()
+
+
+# --- Scopes and routines, reached through the record Protocol ---------------------
+
+
+def _scope_entry(slug: str = "core", description: str = "", **stated: object) -> ScopeDeclaration:
+    return ScopeDeclaration(name=slug, description=description, edit=ScopeEdit(**stated))  # type: ignore[arg-type]
+
+
+def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: object) -> RoutineDeclaration:
+    declared: dict[str, object] = {"graph_name": "alpha", "default_scope_slug": "core", **fields}
+    return RoutineDeclaration(
+        name="nightly",
+        routine_id="rtn_1",
+        default_model=(),
+        default_effort=None,
+        default_harnesses=(),
+        edit=RoutineEdit(name="nightly", **declared),  # type: ignore[arg-type]
+        scopes=scopes,
+        **declared,  # type: ignore[arg-type]
+    )
+
+
+def _stored_routine(*, retired: bool = False) -> Routine:
+    return Routine(
+        routine_id="rtn_1",
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug="core",
+        created_at=_AT,
+        revision=4,
+        retired=retired,
+    )
+
+
+def _garden(
+    *,
+    scopes: tuple[Scope, ...] = (),
+    routines: tuple[Routine, ...] = (),
+    known: frozenset[str] = frozenset({"core"}),
+    linked: dict[str, tuple[str, ...]] | None = None,
+) -> StoredConfig:
+    return StoredConfig(
+        work_sources={},
+        repositories={},
+        secrets={},
+        scopes={s.slug: s for s in scopes},
+        routines={r.name: r for r in routines},
+        references=DeclaredReferences(scopes=known, enabled_graphs=frozenset({"alpha"}), linked_scopes=linked or {}),
+    )
+
+
+def test_scopes_reconcile_before_routines_and_a_stated_set_settles_after_the_create() -> None:
+    declaration = ConfigDeclaration(
+        routines=(_routine_entry(scopes=("core", "edge")),), scopes=(_scope_entry(), _scope_entry("edge"))
+    )
+    plan = _plan(declaration, _garden(known=frozenset({"core", "edge"})))
+    assert [(o.kind, o.key, o.op) for o in plan.outcomes] == [
+        (RecordKind.SCOPE, "core", ChangeOp.CREATE),
+        (RecordKind.SCOPE, "edge", ChangeOp.CREATE),
+        (RecordKind.ROUTINE, "nightly", ChangeOp.CREATE),
+        (RecordKind.ROUTINE, "nightly", ChangeOp.EDIT),
+    ]
+    settle = plan.writes[-1]
+    assert (settle.from_revision, settle.change.revision) == (1, 2)
+    assert plan.outcomes[-1].diff[0].new == ["core", "edge"]
+
+
+def test_a_stored_routine_as_declared_is_unchanged_and_a_retired_one_is_enabled() -> None:
+    linked = {"nightly": ("core",)}
+    same = _plan(
+        ConfigDeclaration(routines=(_routine_entry(scopes=("core",)),)),
+        _garden(routines=(_stored_routine(),), linked=linked),
+    )
+    assert (same.writes, [o.op for o in same.outcomes]) == ((), [None])
+    retired = _plan(
+        ConfigDeclaration(routines=(_routine_entry(),)),
+        _garden(routines=(_stored_routine(retired=True),), linked=linked),
+    )
+    assert [(w.change.op, w.from_revision) for w in retired.writes] == [(ChangeOp.ENABLE, 4)]
+
+
+def test_a_stored_scope_edits_only_a_stated_description() -> None:
+    stored = Scope(slug="core", description="old", created_at=_AT, revision=2)
+    unstated = _plan(ConfigDeclaration(scopes=(_scope_entry(),)), _garden(scopes=(stored,)))
+    assert unstated.writes == ()
+    created = _plan(ConfigDeclaration(scopes=(_scope_entry(description="new"),)), _garden())
+    assert created.outcomes[0].op is ChangeOp.CREATE
+    stated = ScopeDeclaration(name="core", description="new", edit=ScopeEdit(description="new"))
+    edited = _plan(ConfigDeclaration(scopes=(stated,)), _garden(scopes=(stored,)))
+    assert [(w.change.op, w.from_revision) for w in edited.writes] == [(ChangeOp.EDIT, 2)]
+
+
+@pytest.mark.parametrize(
+    ("entry", "known", "field"),
+    [
+        (_routine_entry(default_scope_slug="nope"), frozenset({"core"}), "default_scope_slug"),
+        (_routine_entry(scopes=("core", "nope")), frozenset({"core"}), "scopes"),
+        (_routine_entry(graph_name="missing"), frozenset({"core"}), "graph_name"),
+    ],
+)
+def test_a_routine_naming_what_does_not_resolve_is_refused_at_its_entry(
+    entry: RoutineDeclaration, known: frozenset[str], field: str
+) -> None:
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(ConfigDeclaration(routines=(entry,)), _garden(known=known))
+    assert (refused.value.section, refused.value.index) == ("routines", 0)
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == field
+
+
+def test_a_stored_routine_keeps_its_graph_even_when_that_graph_no_longer_resolves() -> None:
+    stored = replace(_stored_routine(), graph_name="retired-graph")
+    plan = _plan(ConfigDeclaration(routines=(_routine_entry(graph_name="retired-graph"),)), _garden(routines=(stored,)))
+    assert [o.op for o in plan.outcomes] == [None]

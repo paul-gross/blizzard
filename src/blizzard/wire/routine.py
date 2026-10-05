@@ -19,6 +19,23 @@ class RoutineCreateRequest(BaseModel):
     default_harnesses: list[str] = []
 
 
+class RoutineDocument(BaseModel):
+    """A routine as a document entry, keyed by its immutable ``name`` — the model whose JSON Schema
+    ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope
+    always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
+    stored or declared in the same document, and ``graph_name`` must name an enabled graph."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    graph_name: str
+    default_scope_slug: str
+    default_model: list[str] = []
+    default_effort: str | None = None
+    default_harnesses: list[str] = []
+    scopes: list[str] = []
+
+
 class RoutineEditRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set. A present
     ``name`` must equal the routine's current one; an explicit ``null`` clears

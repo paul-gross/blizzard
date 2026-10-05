@@ -41,6 +41,14 @@ class ScopeSlugError(ValueError):
     """A scope slug is empty or outside ``[a-z0-9-]+`` — names the offending value."""
 
 
+class ScopeSlugTakenError(ValueError):
+    """A scope create lost the race to a concurrent mint of the same slug."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"a scope with slug {slug!r} already exists")
+        self.slug = slug
+
+
 @domain_model
 @dataclass(frozen=True)
 class ScopeSlug:
@@ -106,6 +114,11 @@ class Scope:
         ScopeVerb.RUN_AGAINST: ENABLED_ONLY,
         ScopeVerb.READ: ANY_STATE,
     }
+
+    @property
+    def name(self) -> str:
+        """The key the scope's change rows and document entry carry — its slug."""
+        return self.slug
 
     @staticmethod
     def allows(verb: ScopeVerb, *, retired: bool) -> bool:

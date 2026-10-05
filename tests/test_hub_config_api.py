@@ -588,3 +588,165 @@ def test_apply_needs_config_edit_and_export_needs_fleet_view(tmp_path: Path) -> 
     assert _apply_json(hub, document, headers=admin).status_code == 200
     assert hub.client.get("/api/config/export").status_code == 401
     assert hub.client.get("/api/config/export", headers=guest).status_code == 200
+
+
+# --- Scopes and routines in a document ---------------------------------------------
+
+_GRAPH = """
+name: {name}
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+"""
+_SCOPE_ENTRY = {"slug": "core", "description": "the core"}
+_ROUTINE_ENTRY = {"name": "nightly", "graph_name": "alpha", "default_scope_slug": "core", "scopes": ["core", "edge"]}
+_GARDEN = {
+    "version": 1,
+    "scopes": [_SCOPE_ENTRY, {"slug": "edge"}],
+    "routines": [_ROUTINE_ENTRY],
+}
+
+
+def _mint_graph(hub: HubHarness, name: str = "alpha") -> None:
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH.format(name=name)})
+    assert resp.status_code == 201, resp.text
+
+
+def _rows(applied) -> list[tuple[str, str, str]]:  # type: ignore[no-untyped-def]
+    assert applied.status_code == 200, applied.text
+    return [(o["kind"], o["key"], o["op"]) for o in applied.json()["outcomes"]]
+
+
+def _routine(hub: HubHarness, name: str = "nightly") -> dict:  # type: ignore[type-arg]
+    return next(r for r in hub.client.get("/api/routines").json() if r["name"] == name)
+
+
+def test_the_schema_endpoint_serves_scopes_and_routines(hub: HubHarness) -> None:
+    scopes = hub.client.get("/api/config/schema/scopes").json()
+    assert scopes["required"] == ["slug"] and scopes["additionalProperties"] is False
+    routines = hub.client.get("/api/config/schema/routines").json()
+    assert routines["required"] == ["name", "graph_name", "default_scope_slug"]
+    assert "scopes" in routines["properties"] and routines["additionalProperties"] is False
+
+
+def test_scopes_and_routines_create_then_stand_unchanged(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    dry = _apply_json(hub, _GARDEN, dry_run=True)
+    assert _rows(dry) == [
+        ("scope", "core", "create"),
+        ("scope", "edge", "create"),
+        ("routine", "nightly", "create"),
+        ("routine", "nightly", "edit"),
+    ]
+    assert hub.client.get("/api/routines").json() == []
+    assert hub.client.get("/api/scopes/core").status_code == 404
+    real = _apply_json(hub, _GARDEN)
+    assert real.json()["outcomes"] == dry.json()["outcomes"]
+    routine = _routine(hub)
+    assert (routine["default_scope_slug"], routine["revision"]) == ("core", 2)
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["core", "edge"]
+    assert hub.client.get("/api/scopes/core").json()["description"] == "the core"
+    assert _rows(_apply_json(hub, _GARDEN)) == [
+        ("scope", "core", "unchanged"),
+        ("scope", "edge", "unchanged"),
+        ("routine", "nightly", "unchanged"),
+    ]
+    rows = [r for r in _changes(hub) if r["record_kind"] in ("scope", "routine")]
+    assert {r["door"] for r in rows} == {"apply"} and len(rows) == 4
+
+
+def test_a_stated_field_is_edited_an_omitted_one_left_and_a_retired_record_enabled(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    _mint_graph(hub, "beta")
+    _apply_json(hub, _GARDEN)
+    routine = _routine(hub)
+    hub.client.post(f"/api/routines/{routine['routine_id']}/retire", json={})
+    hub.client.post("/api/scopes/edge/retire", json={})
+    hub.client.patch(f"/api/routines/{routine['routine_id']}", json={"default_effort": "high"})
+    document = {
+        "version": 1,
+        "scopes": [{"slug": "edge", "description": "outer"}],
+        "routines": [{"name": "nightly", "graph_name": "beta", "default_scope_slug": "edge", "scopes": ["edge"]}],
+    }
+    applied = _apply_json(hub, document)
+    assert _rows(applied) == [
+        ("scope", "edge", "enable"),
+        ("scope", "edge", "edit"),
+        ("routine", "nightly", "enable"),
+        ("routine", "nightly", "edit"),
+        ("routine", "nightly", "edit"),
+    ]
+    edit = applied.json()["outcomes"][3]
+    assert [d["field"] for d in edit["diff"]] == ["graph_name", "default_scope_slug"]
+    relinked = applied.json()["outcomes"][4]["diff"]
+    assert relinked == [{"field": "scopes", "old": ["core", "edge"], "new": ["edge"]}]
+    after = _routine(hub)
+    assert (after["graph_name"], after["default_effort"], after["retired"]) == ("beta", "high", False)
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["edge"]
+
+
+def test_an_entry_without_scopes_leaves_the_linked_set(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    _apply_json(hub, _GARDEN)
+    unstated = {"version": 1, "routines": [{k: v for k, v in _ROUTINE_ENTRY.items() if k != "scopes"}]}
+    assert _rows(_apply_json(hub, unstated)) == [("routine", "nightly", "unchanged")]
+    assert hub.client.get(f"/api/routines/{_routine(hub)['routine_id']}/scopes").json() == ["core", "edge"]
+
+
+def test_garden_refusals_are_located_at_their_entry_and_leave_the_store_unchanged(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    before = _changes(hub)
+    unknown_default = _apply_json(hub, {"version": 1, "routines": [_ROUTINE_ENTRY]})
+    assert unknown_default.status_code == 422
+    assert unknown_default.json()["detail"][0]["loc"] == ["body", "routines", 0, "default_scope_slug"]
+
+    unknown_linked = _apply_json(hub, {"version": 1, "scopes": [_SCOPE_ENTRY], "routines": [_ROUTINE_ENTRY]})
+    assert unknown_linked.json()["detail"][0]["loc"] == ["body", "routines", 0, "scopes"]
+
+    no_graph = _apply_json(hub, {**_GARDEN, "routines": [{**_ROUTINE_ENTRY, "graph_name": "missing"}]})
+    assert no_graph.status_code == 422
+    assert no_graph.json()["detail"][0]["loc"] == ["body", "routines", 0, "graph_name"]
+
+    bad_slug = _apply_json(hub, {"version": 1, "scopes": [_SCOPE_ENTRY, {"slug": "Not A Slug"}]})
+    assert bad_slug.json()["detail"][0]["loc"] == ["body", "scopes", 1, "slug"]
+
+    twice = _apply_json(hub, {"version": 1, "scopes": [_SCOPE_ENTRY, _SCOPE_ENTRY]})
+    assert twice.json()["detail"][0]["loc"][:3] == ["body", "scopes", 1]
+
+    assert _changes(hub) == before
+    assert hub.client.get("/api/scopes/core").status_code == 404
+
+
+def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    _apply_json(hub, _GARDEN)
+    hub.client.post("/api/scopes", json={"slug": "gone"})
+    hub.client.post("/api/scopes/gone/retire", json={})
+    retired = hub.client.post(
+        "/api/routines", json={"name": "old", "graph_name": "alpha", "default_scope_slug": "core"}
+    ).json()
+    hub.client.post(f"/api/routines/{retired['routine_id']}/retire", json={})
+    document = hub.client.get("/api/config/export").json()
+    assert document["scopes"] == [{"slug": "core", "description": "the core"}, {"slug": "edge", "description": ""}]
+    assert document["routines"] == [
+        {
+            "name": "nightly",
+            "graph_name": "alpha",
+            "default_scope_slug": "core",
+            "default_model": [],
+            "default_effort": None,
+            "default_harnesses": [],
+            "scopes": ["core", "edge"],
+        }
+    ]
+    before = _changes(hub)
+    assert {op for _, _, op in _rows(_apply_json(hub, document))} == {"unchanged"}
+    assert _changes(hub) == before

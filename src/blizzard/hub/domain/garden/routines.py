@@ -174,19 +174,19 @@ class Routine:
         routine_id: str,
         name: str,
         graph_name: str,
-        default_scope: Scope,
+        default_scope_slug: str,
         default_model: Sequence[str],
         default_effort: str | None,
         default_harnesses: Sequence[str],
         ctx: ChangeContext,
         at: datetime,
     ) -> tuple[Routine, ConfigChange]:
-        """A new routine at revision 1 pointing at ``default_scope``, with its ``create`` change."""
+        """A new routine at revision 1 pointing at ``default_scope_slug``, with its ``create`` change."""
         record = cls(
             routine_id=routine_id,
             name=name,
             graph_name=graph_name,
-            default_scope_slug=default_scope.slug,
+            default_scope_slug=default_scope_slug,
             created_at=at,
             default_model=list(default_model),
             default_effort=default_effort,
@@ -403,7 +403,7 @@ class RoutineAuthoring:
             routine_id=Id.mint(ROUTINE_PREFIX, self._clock).value,
             name=name,
             graph_name=graph_name,
-            default_scope=scope,
+            default_scope_slug=scope.slug,
             default_model=default_model or [],
             default_effort=default_effort,
             default_harnesses=harnesses,

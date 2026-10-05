@@ -16,6 +16,16 @@ class ScopeCreateRequest(BaseModel):
     description: str = ""
 
 
+class ScopeDocument(BaseModel):
+    """A scope as a document entry — the model whose JSON Schema ``GET /api/config/schema/scopes``
+    serves. A ``description`` the entry omits is left as stored, and is empty on a create."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    description: str = ""
+
+
 class ScopeEditRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set; ``null`` is
     refused. The slug is immutable, so a body carrying it is refused."""

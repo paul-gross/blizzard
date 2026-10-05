@@ -8,10 +8,11 @@ Every write commits its change row — and a default scope's mint — in the sam
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -82,6 +83,61 @@ def move_revision(conn: Connection, routine: Routine, from_revision: int, **valu
         raise ConfigRevisionConflict("routine", routine.name, current=current)
 
 
+def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> None:
+    """The create body, inside the caller's transaction: the row, its default-scope link, and the change."""
+    conn.execute(
+        insert(routines).values(
+            routine_id=routine.routine_id,
+            name=routine.name,
+            **_columns(routine),
+            created_at=routine.created_at,
+            revision=routine.revision,
+        )
+    )
+    link_scope(conn, routine.routine_id, routine.default_scope_slug)
+    append_change(conn, change)
+
+
+def update_routine(conn: Connection, routine: Routine, from_revision: int, change: ConfigChange) -> None:
+    """The edit body, inside the caller's transaction: the compare-and-set, the default-scope link, the change."""
+    move_revision(conn, routine, from_revision, **_columns(routine))
+    link_scope(conn, routine.routine_id, routine.default_scope_slug)
+    append_change(conn, change)
+
+
+def record_routine_lifecycle(
+    conn: Connection,
+    routine: Routine,
+    *,
+    retired: bool,
+    from_revision: int,
+    at: datetime,
+    by: str,
+    change: ConfigChange,
+) -> None:
+    """The lifecycle body, inside the caller's transaction: the compare-and-set, the fact, the change."""
+    move_revision(conn, routine, from_revision)
+    conn.execute(
+        insert(routine_lifecycle_facts).values(routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by)
+    )
+    append_change(conn, change)
+
+
+def set_linked_scopes(
+    conn: Connection, routine: Routine, scopes: Sequence[str], *, from_revision: int, change: ConfigChange
+) -> None:
+    """Move ``routine``'s linked set to exactly ``scopes`` with the compare-and-set and the change."""
+    move_revision(conn, routine, from_revision)
+    conn.execute(
+        delete(routine_scopes).where(
+            routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug.not_in(list(scopes))
+        )
+    )
+    for slug in scopes:
+        link_scope(conn, routine.routine_id, slug)
+    append_change(conn, change)
+
+
 class RoutineStore:
     """Read-write routine adapter over the hub store engine."""
 
@@ -93,17 +149,7 @@ class RoutineStore:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
                 if scope_mint is not None:
                     ensure_scope(conn, scope_mint)
-                conn.execute(
-                    insert(routines).values(
-                        routine_id=routine.routine_id,
-                        name=routine.name,
-                        **_columns(routine),
-                        created_at=routine.created_at,
-                        revision=routine.revision,
-                    )
-                )
-                link_scope(conn, routine.routine_id, routine.default_scope_slug)
-                append_change(conn, change)
+                insert_routine(conn, routine, change)
         except IntegrityError as exc:
             # The post-write re-check: a concurrent create that took the name first
             # loses here, and reads as the same refusal the domain's pre-check raises.
@@ -118,9 +164,7 @@ class RoutineStore:
         with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
             if scope_mint is not None:
                 ensure_scope(conn, scope_mint)
-            move_revision(conn, routine, from_revision, **_columns(routine))
-            link_scope(conn, routine.routine_id, routine.default_scope_slug)
-            append_change(conn, change)
+            update_routine(conn, routine, from_revision, change)
         return routine
 
     def record_lifecycle(
@@ -129,13 +173,9 @@ class RoutineStore:
         """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins — with
         the revision move and the change row."""
         with self._store.write("record_lifecycle", expect=(ConfigRevisionConflict,)) as conn:
-            move_revision(conn, routine, from_revision)
-            conn.execute(
-                insert(routine_lifecycle_facts).values(
-                    routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by
-                )
+            record_routine_lifecycle(
+                conn, routine, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )
-            append_change(conn, change)
         return routine
 
     def get(self, routine_id: str) -> Routine | None:

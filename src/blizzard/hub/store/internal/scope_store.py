@@ -73,6 +73,21 @@ def _retired_slugs(conn: Connection) -> set[str]:
     return {slug for slug, retired in newest.items() if retired}
 
 
+def update_scope(conn: Connection, record: Scope, from_revision: int, change: ConfigChange) -> None:
+    """The edit body, inside the caller's transaction: the compare-and-set and the change."""
+    _move_revision(conn, record, from_revision, description=record.description)
+    append_change(conn, change)
+
+
+def record_scope_lifecycle(
+    conn: Connection, record: Scope, *, retired: bool, from_revision: int, at: datetime, by: str, change: ConfigChange
+) -> None:
+    """The lifecycle body, inside the caller's transaction: the compare-and-set, the fact, the change."""
+    _move_revision(conn, record, from_revision)
+    conn.execute(insert(scope_lifecycle_facts).values(slug=record.slug, retired=retired, set_at=at, set_by=by))
+    append_change(conn, change)
+
+
 class ScopeStore:
     """Read-write scope adapter over the hub store."""
 
@@ -96,8 +111,7 @@ class ScopeStore:
 
     def update(self, record: Scope, *, from_revision: int, change: ConfigChange) -> Scope:
         with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
-            _move_revision(conn, record, from_revision, description=record.description)
-            append_change(conn, change)
+            update_scope(conn, record, from_revision, change)
         return record
 
     def record_lifecycle(
@@ -106,9 +120,9 @@ class ScopeStore:
         """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins — with the
         revision move and the change row."""
         with self._store.write("record_lifecycle", expect=(ConfigRevisionConflict,)) as conn:
-            _move_revision(conn, record, from_revision)
-            conn.execute(insert(scope_lifecycle_facts).values(slug=record.slug, retired=retired, set_at=at, set_by=by))
-            append_change(conn, change)
+            record_scope_lifecycle(
+                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
+            )
         return record
 
     def get(self, slug: str) -> Scope | None:

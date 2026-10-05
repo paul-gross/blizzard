@@ -152,7 +152,7 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
         routine_id="rtn_9",
         name="nightly",
         graph_name="default",
-        default_scope=_SCOPE,
+        default_scope_slug=_SCOPE.slug,
         default_model=model,
         default_effort=None,
         default_harnesses=("claude",),
