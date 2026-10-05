@@ -1,0 +1,49 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title.retired {
+  color: var(--label);
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.rev {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+.sub span {
+  overflow-wrap: anywhere;
+}

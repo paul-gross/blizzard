@@ -1,0 +1,37 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  loadingText="Loading…"
+  errorText="Failed to load the change log."
+  [emptyText]="emptyText()"
+  emptyTestid="admin-change-detail-empty"
+  errorTestid="admin-change-detail-error"
+>
+  @if (vm(); as entry) {
+    <article class="entry" data-testid="admin-change-detail">
+      <header class="hdr">
+        <h2 class="title">{{ entry.title }}</h2>
+        <span class="who" data-testid="admin-change-who">
+          <fleet-when [iso]="entry.at" /> · {{ entry.actor }} via <span class="door">{{ entry.door }}</span>
+        </span>
+      </header>
+      <h3 class="section">What changed</h3>
+      <ul class="changes">
+        @for (row of entry.rows; track row.id) {
+          <li class="change" [attr.data-testid]="'admin-change-row-' + row.id">
+            @if (row.route; as route) {
+              <a class="record" [routerLink]="route">{{ row.title }}</a>
+            } @else {
+              <span class="record">{{ row.title }}</span>
+            }
+            @if (row.revisionStep; as step) {
+              <span class="step">value {{ step }}</span>
+            } @else {
+              <app-config-field-diff [diff]="row.diff" />
+            }
+          </li>
+        }
+      </ul>
+    </article>
+  }
+</fleet-kit-async-state>

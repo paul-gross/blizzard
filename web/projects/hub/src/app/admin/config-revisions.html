@@ -1,0 +1,24 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  loadingText="Loading revisions…"
+  errorText="Failed to load revisions."
+  emptyText="No revisions recorded."
+  [emptyTestid]="testidPrefix() + '-revisions-empty'"
+  [errorTestid]="testidPrefix() + '-revisions-error'"
+>
+  <ul class="revs" [attr.data-testid]="testidPrefix() + '-revisions'">
+    @for (row of rows(); track row.id) {
+      <li class="rev-row">
+        <span class="r">r{{ row.revision }}</span>
+        <span class="what">
+          {{ row.op }}
+          @if (row.fields) {
+            <span class="fields">{{ row.fields }}</span>
+          }
+        </span>
+        <span class="who"><fleet-when [iso]="row.at" /> · {{ row.actor }} via {{ row.door }}</span>
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>

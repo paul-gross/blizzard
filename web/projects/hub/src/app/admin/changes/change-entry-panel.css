@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.who {
+  color: var(--label);
+  font-size: var(--fs-sm);
+}
+.door {
+  color: var(--cyan);
+}
+.section {
+  margin: 8px 0 0;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  font-weight: normal;
+}
+.changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.record {
+  font-size: var(--fs-sm);
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+}
+.step {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--green);
+}

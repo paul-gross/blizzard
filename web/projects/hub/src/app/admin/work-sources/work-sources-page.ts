@@ -1,0 +1,58 @@
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Router, RouterOutlet } from '@angular/router';
+import { asyncState, type KitAsyncStateValue, ViewportService } from 'fleet';
+
+import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
+import {
+  includeRetired,
+  LIFECYCLE_FILTER_PARAM,
+  lifecycleEmptyText,
+  lifecycleFilterParam,
+  parseLifecycleFilter,
+} from '../config-filter.model';
+import { ConfigMaster } from '../config-master';
+import type { ConfigRowVm } from '../config-record-list';
+import { workSourceRows } from './work-sources.model';
+import { injectWorkSourcesQuery } from './work-sources.query';
+
+/**
+ * `/admin/work-sources` — the work source list beside a `<router-outlet>` holding the
+ * source the URL names (`work-source-detail.ts`). The filter rides the query string
+ * and the selection the child route. A container over the presentational
+ * {@link ConfigMaster}.
+ */
+@Component({
+  selector: 'app-work-sources-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ConfigMaster, RouterOutlet],
+  templateUrl: './work-sources-page.html',
+  styleUrl: '../config-page-host.css',
+})
+export class WorkSourcesPage {
+  private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+  private readonly filters = injectQueryFilters();
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
+  protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
+  private readonly sourcesQuery = injectWorkSourcesQuery(() => includeRetired(this.lifecycle()));
+
+  protected readonly selectedKey = injectChildRouteParam('key');
+  protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
+    workSourceRows(this.sourcesQuery.data() ?? [], this.lifecycle()),
+  );
+  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.sourcesQuery, this.rows().length === 0));
+  protected readonly emptyText = computed(() => lifecycleEmptyText('work sources', this.lifecycle()));
+
+  protected onFilter(value: string): void {
+    this.filters.patch({ [LIFECYCLE_FILTER_PARAM]: lifecycleFilterParam(value) });
+  }
+
+  protected onPick(key: string): void {
+    void this.router.navigate(['/admin', 'work-sources', key], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/admin', 'work-sources'], { queryParamsHandling: 'preserve' });
+  }
+}

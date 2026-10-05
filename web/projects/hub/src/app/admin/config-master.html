@@ -1,0 +1,38 @@
+<fleet-kit-master-detail
+  [paneId]="paneId()"
+  [listCaption]="listCaption()"
+  [drilldown]="drilldown()"
+  [hasSelection]="selectedKey() !== null"
+  [backLabel]="backLabel()"
+  [testidPrefix]="testidPrefix()"
+  (back)="back.emit()"
+>
+  <div kit-master-detail-list class="list-pane">
+    @if (filter(); as current) {
+      <div class="filters" [attr.data-testid]="testidPrefix() + '-filters'">
+        <fleet-kit-chips [options]="filterOptions" [selectedValue]="current" (choose)="filterChange.emit($event)" />
+      </div>
+    }
+    <app-config-record-list
+      [rows]="rows()"
+      [state]="state()"
+      [emptyText]="emptyText()"
+      [selectedKey]="selectedKey()"
+      [testidPrefix]="testidPrefix()"
+      (pick)="pick.emit($event)"
+    />
+    @if (hasOlder()) {
+      <div class="older">
+        <fleet-kit-button [disabled]="olderPending()" [testid]="testidPrefix() + '-older'" (click)="older.emit()">
+          Older
+        </fleet-kit-button>
+      </div>
+    }
+    @if (footer(); as note) {
+      <p class="foot">{{ note }}</p>
+    }
+  </div>
+  <div kit-master-detail-detail class="detail-pane">
+    <ng-content />
+  </div>
+</fleet-kit-master-detail>

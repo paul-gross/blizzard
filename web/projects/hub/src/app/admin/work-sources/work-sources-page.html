@@ -1,0 +1,18 @@
+<app-config-master
+  paneId="admin-work-sources"
+  listCaption="Work sources"
+  [filter]="lifecycle()"
+  [rows]="rows()"
+  [state]="state()"
+  [emptyText]="emptyText()"
+  [selectedKey]="selectedKey()"
+  [drilldown]="mobile()"
+  backLabel="Work sources"
+  testidPrefix="admin-work-sources"
+  footer="Retire stops new work; nothing is deleted."
+  (filterChange)="onFilter($event)"
+  (pick)="onPick($event)"
+  (back)="onBack()"
+>
+  <router-outlet />
+</app-config-master>

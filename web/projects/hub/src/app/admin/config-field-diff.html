@@ -1,0 +1,10 @@
+<ul class="diff" [attr.data-testid]="testid()">
+  @for (row of rows(); track row.field) {
+    <li class="diff-row">
+      <span class="field">{{ row.field }}</span>
+      <span class="old">{{ row.old }}</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="new">{{ row.new }}</span>
+    </li>
+  }
+</ul>

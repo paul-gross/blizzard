@@ -1,0 +1,58 @@
+<ng-template #revisionFact>
+  r{{ vm()?.revision }}
+  @if (lastChange(); as last) {
+    <span class="dim" [attr.data-testid]="testidPrefix() + '-last-change'">
+      · <fleet-when [iso]="last.at" /> by {{ last.actor }} via {{ last.door }}
+    </span>
+  }
+</ng-template>
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  loadingText="Loading…"
+  errorText="Failed to load this record."
+  [emptyText]="emptyText()"
+  [emptyTestid]="testidPrefix() + '-detail-empty'"
+  [errorTestid]="testidPrefix() + '-detail-error'"
+>
+  @if (vm(); as record) {
+    <article class="record" [attr.data-testid]="testidPrefix() + '-detail'">
+      <header class="hdr">
+        <h2 class="name">{{ record.name }}</h2>
+        @for (badge of record.badges; track badge.label) {
+          <fleet-kit-badge [tone]="badge.tone" variant="soft">{{ badge.label }}</fleet-kit-badge>
+        }
+      </header>
+      <fleet-kit-fact-list [rows]="factRows()" [testid]="testidPrefix() + '-facts'" />
+      @if (record.note; as note) {
+        <p class="note">{{ note }}</p>
+      }
+      @if (cliCommand(); as command) {
+        <p class="cli" [attr.data-testid]="testidPrefix() + '-cli'">Change it with <code>{{ command }}</code></p>
+      }
+      @if (record.links; as group) {
+        <h3 class="section">{{ group.heading }}</h3>
+        @if (group.links.length > 0) {
+          <ul class="links" [attr.data-testid]="testidPrefix() + '-links'">
+            @for (link of group.links; track link.kind + link.name) {
+              <li>
+                <span class="dim">{{ link.kind }}</span>
+                @if (link.route; as route) {
+                  <a [routerLink]="route">{{ link.name }}</a>
+                } @else {
+                  <span>{{ link.name }}</span>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="note" [attr.data-testid]="testidPrefix() + '-links-empty'">{{ group.emptyText }}</p>
+        }
+      }
+      @if (record.hasHistory) {
+        <h3 class="section">Revisions</h3>
+        <app-config-revisions [rows]="revisions()" [state]="revisionsState()" [testidPrefix]="testidPrefix()" />
+      }
+    </article>
+  }
+</fleet-kit-async-state>

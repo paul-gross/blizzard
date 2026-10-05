@@ -1,0 +1,18 @@
+<app-config-master
+  paneId="admin-repositories"
+  listCaption="Repositories"
+  [filter]="lifecycle()"
+  [rows]="rows()"
+  [state]="state()"
+  [emptyText]="emptyText()"
+  [selectedKey]="selectedKey()"
+  [drilldown]="mobile()"
+  backLabel="Repositories"
+  testidPrefix="admin-repositories"
+  footer="Retire stops new deliveries; nothing is deleted."
+  (filterChange)="onFilter($event)"
+  (pick)="onPick($event)"
+  (back)="onBack()"
+>
+  <router-outlet />
+</app-config-master>
