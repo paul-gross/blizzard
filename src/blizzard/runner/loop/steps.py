@@ -748,19 +748,21 @@ class ExternalUsageSample(Step):
         anchor = ctx.stores.usage.last_external_usage_attempt_at(resolved.slug)
         if not sample_due(anchor, ctx.clock.now(), resolved.sample_interval_seconds):
             return
-        sampler = resolved.samplable
+        sampler = resolved.sampler
         if sampler is None:
+            # A declaration its provider binds no sampler to stays declared and unsampled, with no
+            # attempt row, since no sampler failed.
             return
         # Renewal, if this provider binds one, runs before the sample on this same cadence
         # gate, never its own; a failed or not-due renewal never stops the sample.
         renewal = self._renewal_value(resolved)
         attempt = external_usage_attempt(sampler.sample(), slug=resolved.slug, renewal=renewal, at=ctx.clock.now())
-        if attempt.snapshot is None:
-            assert attempt.miss_reason is not None  # a miss always carries its reason
+        result = attempt.result
+        if isinstance(result, SampleMissReason):
             payload = None
-            report_payload = json.dumps(self._miss_payload(resolved, attempt.miss_reason, missed_at=attempt.sampled_at))
+            report_payload = json.dumps(self._miss_payload(resolved, result, missed_at=attempt.sampled_at))
         else:
-            payload = report_payload = json.dumps(self._payload(resolved, attempt.snapshot))
+            payload = report_payload = json.dumps(self._payload(resolved, result))
         seq = ctx.stores.usage.record_external_usage_attempt(
             slug=attempt.slug,
             sampled_at=attempt.sampled_at,

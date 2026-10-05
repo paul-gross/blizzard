@@ -46,8 +46,8 @@ class HeldChunk:
                 self.chunk_id, next_envelope, Environments(bindings).acquired, via="apply-response"
             )
         elif move is ApplyMove.HOLD_PAUSED:
-            # The binding is held; the node is entered once the pause lifts (FILL's adopt of the
-            # running chunk at this runner's own epoch).
+            # The binding is held; once the pause lifts, FILL's adopt of the running chunk at this
+            # runner's own epoch enters the node through its declared session (`adopt_enters_node`).
             _log.info("next node waits out the chunk's pause — holding envs", chunk_id=self.chunk_id)
         elif move is ApplyMove.HOLD_FOR_HUB_NODE:
             _log.info("hub node took over — holding envs until terminal", chunk_id=self.chunk_id)

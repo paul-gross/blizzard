@@ -38,7 +38,7 @@ from blizzard.wire.facts import (
 )
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.route import RouteClaimPausedDenial
+from blizzard.wire.route import RouteClaimPausedDenial, RouteClaimTerminalDenial
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -1018,12 +1018,57 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     with capture_logs() as logs:
         Fill(ctx).run()
 
-    denied = [e for e in logs if e["event"] == "route claim denied — runner paused at the hub"]
+    denied = [e for e in logs if e["event"] == "route claim denied — the hub refused this runner"]
     lost_race = [e for e in logs if e["event"] == "route claim lost the race"]
     assert len(denied) == 1
     assert denied[0]["chunk_id"] == "ch_1"
     assert denied[0]["runner_id"] == "r1"
+    assert denied[0]["detail"] == "runner is paused at the hub"
     assert lost_race == []  # the two outcomes are logged legibly apart, not conflated
+
+
+@pytest.mark.parametrize(
+    ("outcome", "event", "fields"),
+    [
+        (
+            RouteClaimOutcome(
+                denied_paused=RouteClaimPausedDenial(
+                    chunk_id="ch_1", runner_id="r1", detail="runner r1 is not registered at the hub"
+                )
+            ),
+            "route claim denied — the hub refused this runner",
+            {"detail": "runner r1 is not registered at the hub"},
+        ),
+        (
+            RouteClaimOutcome(
+                denied_terminal=RouteClaimTerminalDenial(
+                    chunk_id="ch_1", status="not_ready", detail="chunk ch_1 is not ready (status not_ready)"
+                )
+            ),
+            "route claim denied — chunk not claimable",
+            {"status": "not_ready", "detail": "chunk ch_1 is not ready (status not_ready)"},
+        ),
+        (
+            RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial(chunk_id="ch_1", status="done")),
+            "route claim denied — chunk not claimable",
+            {"status": "done", "detail": "chunk is terminal"},
+        ),
+    ],
+    ids=["unregistered", "not-ready", "ended"],
+)
+def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields):  # type: ignore[no-untyped-def]
+    """Each refusal logs the hub's own status and detail, so an unregistered runner or a not-ready
+    chunk never reads as a paused runner or an ended chunk."""
+    ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    Pull(ctx).run()
+    hub.claim_outcome = outcome
+
+    with capture_logs() as logs:
+        Fill(ctx).run()
+
+    denied = [e for e in logs if e["event"] == event]
+    assert len(denied) == 1
+    assert {key: denied[0][key] for key in fields} == fields
 
 
 # Runner spend ceiling: the tick-level kill-switch over the same local brake.

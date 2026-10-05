@@ -60,7 +60,7 @@ def test_unprobed_harness_reads_available() -> None:
     assert HarnessHealthResult.unprobed("h") == reported_health("h", None)
 
 
-def test_capability_snapshot_unprobed_is_available() -> None:
+def test_reported_health_passes_an_evaluated_result_through() -> None:
     """The registration push reports what the diagnostics route reports: an evaluated result as-is."""
     evaluated = HarnessHealthResult(
         harness_id="h", available=False, cause=HarnessHealthCause.MISSING_BINARY, degradations=()

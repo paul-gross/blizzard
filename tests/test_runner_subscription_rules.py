@@ -1,5 +1,5 @@
-"""Runner subscription rules (unit tier, by value): the sample cadence, which declarations are
-samplable, a lapsed credential, a usage window still holding a limit, credential-renewal timing,
+"""Runner subscription rules (unit tier, by value): the sample cadence, a lapsed
+credential, a usage window still holding a limit, credential-renewal timing,
 and the renewal outcome an attempt row records."""
 
 from __future__ import annotations
@@ -47,12 +47,6 @@ def _resolved(sampler: _Sampler | None) -> ResolvedSubscription:
     return ResolvedSubscription(
         slug="max", name="Max", provider="anthropic", sample_interval_seconds=300, sampler=sampler, renewer=None
     )
-
-
-def test_no_sampler_is_not_samplable() -> None:
-    assert _resolved(None).samplable is None
-    sampler = _Sampler()
-    assert _resolved(sampler).samplable is sampler
 
 
 def test_lapsed_at_expiry() -> None:

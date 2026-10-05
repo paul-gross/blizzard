@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, unshadowed
+from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, newest_unforwarded, open_asks_of
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
@@ -30,14 +30,12 @@ class AskStore:
         self._store = store
 
     def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
-        stmt = (
-            select(asks)
-            .where(asks.c.lease_id == lease_id)
-            .where(asks.c.question_id.not_in(select(park_facts.c.question_id)))
-            .order_by(asks.c.id.desc())
+        stmt = select(asks).where(asks.c.lease_id == lease_id).order_by(asks.c.id.desc())
+        lease_asks = [self._row_to_ask(r) for r in self._store.all(stmt)]
+        parked = select(park_facts.c.question_id).where(
+            park_facts.c.question_id.in_([a.question_id for a in lease_asks])
         )
-        rows = self._store.all(stmt)
-        return self._row_to_ask(rows[0]) if rows else None
+        return newest_unforwarded(lease_asks, forwarded={str(r.question_id) for r in self._store.all(parked)})
 
     def parked_lease_ids(self) -> set[str]:
         pause_parked = {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
@@ -68,14 +66,12 @@ class AskStore:
     def open_asks(self) -> list[OpenAsk]:
         # An ask whose lease has closed is never open — a backstop independent of which
         # path writes the retiring `park_resumes` row.
-        stmt = (
-            select(asks)
-            .where(asks.c.question_id.not_in(select(park_resumes.c.question_id)))
-            .where(asks.c.lease_id.not_in(select(lease_closures.c.lease_id)))
-            .order_by(asks.c.id.desc())
-        )
+        stmt = select(asks).where(asks.c.lease_id.not_in(select(lease_closures.c.lease_id))).order_by(asks.c.id.desc())
         forwarded = {str(r.question_id) for r in self._store.all(select(park_facts.c.question_id))}
-        return unshadowed([self._row_to_ask(r) for r in self._store.all(stmt)], forwarded=forwarded)
+        answered = {str(r.question_id) for r in self._store.all(select(park_resumes.c.question_id))}
+        return open_asks_of(
+            [self._row_to_ask(r) for r in self._store.all(stmt)], forwarded=forwarded, answered=answered
+        )
 
     def record_ask(
         self,

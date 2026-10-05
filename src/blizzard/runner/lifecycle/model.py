@@ -15,7 +15,8 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
-from blizzard.foundation.leases import LeaseState
+from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.leases import LeaseClosureReason, LeaseState
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT
@@ -24,6 +25,7 @@ from blizzard.runner.throttle.pause import PausePark, needs_pause_park
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.envelope import ApplyOutcome, NodeConfig, NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.sse_runner import LeaseChangeCause
 
 if TYPE_CHECKING:
     from blizzard.runner.harness.identity import SessionReference
@@ -258,6 +260,17 @@ def claim_verdict(outcome: RouteClaimOutcome) -> ClaimVerdict:
     return ClaimVerdict.WON
 
 
+def claim_denial_fields(outcome: RouteClaimOutcome) -> dict[str, str]:
+    """What the hub said when it refused a claim, as log fields — the 403 runner refusal's ``detail``
+    (paused, retired, or unregistered at the hub) and the status-carrying 409's ``status`` and ``detail``
+    (an ended chunk, or one not ready yet); nothing for any other outcome."""
+    if outcome.denied_paused is not None:
+        return {"detail": outcome.denied_paused.detail}
+    if outcome.denied_terminal is not None:
+        return {"status": outcome.denied_terminal.status, "detail": outcome.denied_terminal.detail}
+    return {}
+
+
 def claim_disposition(verdict: ClaimVerdict, *, strict: bool) -> ClaimDisposition:
     """A paused denial stops filling — every later claim this tick would be refused the same way.
     A dependency block under strict keeps its entry so the next attempt holds at this head; every
@@ -352,6 +365,16 @@ def recovery_owner(latest: Lease | None) -> str | None:
     """The owner a recovery spawn mints under: the chunk's latest lease's own owner, else none —
     the genuinely fresh case the caller's default decides."""
     return latest.harness_id if latest is not None else None
+
+
+def adopt_enters_node(latest: Lease | None, view: ChunkStatusView, node_id: str) -> bool:
+    """Whether FILL's adopt enters ``node_id`` as a node entry — through the node's declared session
+    and harness selection — rather than spawning it under the latest owner: the chunk's latest lease
+    ran another node, so the chunk moved onto this one while the binding was held (a next node held
+    over a chunk pause, or an entry interrupted before its mint). A restart entry starts its node
+    afresh, so it never continues the session it restarted from."""
+    restart_entry = view.latest_epoch is not None and view.latest_epoch in view.restart_epochs
+    return latest is not None and latest.node_id != node_id and not restart_entry
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -663,6 +686,25 @@ def completion_move(outcome: ApplyOutcome, *, capped: bool) -> CompletionMove:
     if outcome == ApplyOutcome.NEXT and capped:
         return CompletionMove.ESCALATE_SPEND_CAP
     return CompletionMove.CLOSE_AND_APPLY
+
+
+@domain_model
+@dataclass(frozen=True)
+class CompletionClosure:
+    """The closure a closing completion move writes: its reason, and the escalation cause recorded beside it."""
+
+    reason: LeaseChangeCause
+    escalation_cause: EscalationCause | None = None
+
+
+#: The spend-cap arm closes escalated under its own cause, so the escalation reads open locally; an applied
+#: completion closes transitioned.
+COMPLETION_CLOSURES: Mapping[CompletionMove, CompletionClosure] = MappingProxyType(
+    {
+        CompletionMove.ESCALATE_SPEND_CAP: CompletionClosure(LeaseClosureReason.ESCALATED, EscalationCause.SPEND_CAP),
+        CompletionMove.CLOSE_AND_APPLY: CompletionClosure(LeaseClosureReason.TRANSITIONED),
+    }
+)
 
 
 class DecisionMove(StrEnum):

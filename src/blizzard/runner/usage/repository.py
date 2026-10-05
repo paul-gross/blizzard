@@ -197,6 +197,17 @@ class ExternalUsageAttempt:
         return self.snapshot is None
 
     @property
+    def result(self) -> ExternalSubscriptionUsageSnapshot | SampleMissReason:
+        """The sampled snapshot, or — on a miss — the reason it missed."""
+        return self._result()
+
+    def _result(self) -> ExternalSubscriptionUsageSnapshot | SampleMissReason:
+        if self.snapshot is not None:
+            return self.snapshot
+        assert self.miss_reason is not None  # external_usage_attempt pairs every miss with its reason
+        return self.miss_reason
+
+    @property
     def report_kind(self) -> str:
         return self._report_kind()
 

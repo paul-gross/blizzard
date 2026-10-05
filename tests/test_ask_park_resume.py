@@ -379,3 +379,29 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
     assert store.parked_lease_ids() == set()
     assert store.open_asks() == []
     assert store.held_environment_ids() == []
+
+
+def test_a_superseded_ask_is_neither_open_nor_forwarded_once_the_newer_ask_is_parked_and_resumed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A newer ask supersedes an older unforwarded one for good: parking and then resuming the newer
+    ask never brings the older one back as open or as the lease's next ask to forward."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    for minute, question_id in enumerate(("qn_old", "qn_new")):
+        store.record_ask(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            question_id=question_id,
+            question=f"question {question_id}?",
+            options=[],
+            asked_at=_NOW + timedelta(minutes=minute),
+        )
+    assert [ask.question_id for ask in store.open_asks()] == ["qn_new"]
+    assert store.unforwarded_ask("lease_1").question_id == "qn_new"  # type: ignore[union-attr]
+
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_new", parked_at=_NOW)
+    assert [ask.question_id for ask in store.open_asks()] == ["qn_new"]
+    assert store.unforwarded_ask("lease_1") is None
+
+    store.record_park_resume(lease_id="lease_1", question_id="qn_new", resumed_at=_NOW + timedelta(minutes=5))
+    assert store.open_asks() == []
+    assert store.unforwarded_ask("lease_1") is None

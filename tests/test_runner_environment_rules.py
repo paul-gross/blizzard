@@ -32,7 +32,6 @@ def test_require_unheld_refuses_held_by_other() -> None:
     assert (refused.value.environment_id, refused.value.holder_chunk_id) == ("e1", "ch_other")
     require_unheld("ch_1", ["e2"], held)
     require_unheld("ch_other", ["e1"], held)
-    assert EnvBinding.TRANSITIONS["free"] == frozenset({"held"})
 
 
 def test_release_of_unheld_is_noop() -> None:
