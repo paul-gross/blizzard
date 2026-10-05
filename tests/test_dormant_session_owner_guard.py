@@ -20,11 +20,11 @@ from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.usage.recorder import UsageRecorder
-from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.question import QuestionView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.component
@@ -54,10 +54,10 @@ def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:
     return HarnessRegistry(bindings)
 
 
-def _done_chunk(chunk_id: str) -> ChunkStatusView:
+def _done_chunk(chunk_id: str) -> ChunkState:
     """A chunk the hub reports DONE — the held-chunk poll's own release trigger, seeded as
     the sibling every test below asserts ``Advance.run()`` still reached."""
-    return ChunkStatusView(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
+    return ChunkState(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
 
 
 def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
@@ -171,7 +171,7 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, u
     hub = FakeHub()
     # The pause has lifted and the chunk is still routed to this runner — the on_unpause
     # wake's own precondition.
-    hub.chunks["ch_blocked"] = ChunkStatusView(
+    hub.chunks["ch_blocked"] = ChunkState(
         chunk_id="ch_blocked", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
     )
     hub.chunks["ch_done"] = _done_chunk("ch_done")
@@ -343,7 +343,7 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
 
 
 def _answered_question():  # type: ignore[no-untyped-def]
-    return QuestionView(
+    return HubQuestion(
         question_id="qn_1",
         chunk_id="ch_blocked",
         runner_id="r1",

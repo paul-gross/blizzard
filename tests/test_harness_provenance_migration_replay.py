@@ -21,13 +21,13 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
+from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
-from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     FakeHarness,
@@ -129,7 +129,7 @@ def test_backfilled_session_resumes_on_an_answer(tmp_path) -> None:  # type: ign
     assert lease.session == SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-resume-old")
 
     hub = FakeHub()
-    hub.questions["qn_1"] = QuestionView(
+    hub.questions["qn_1"] = HubQuestion(
         question_id="qn_1",
         chunk_id="ch_resume",
         runner_id="r1",

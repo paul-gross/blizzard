@@ -33,8 +33,8 @@ from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
-from blizzard.wire.chunk import ChunkStatusView
 
 if TYPE_CHECKING:
     from blizzard.runner.environments.repository import EnvBinding
@@ -142,7 +142,7 @@ class OpenTakeover:
         ceiling = max((e for e in epochs if e is not None), default=None)
         return ceiling is None or epoch is None or epoch <= ceiling
 
-    def ended_by(self, view: ChunkStatusView) -> bool:
+    def ended_by(self, view: ChunkState) -> bool:
         """The hub has ended the chunk, so the takeover's authorization must not outlive it."""
         return view.status in TERMINAL_STATUSES
 

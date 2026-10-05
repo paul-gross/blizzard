@@ -6,6 +6,7 @@ folds into PULL to mirror the hub's terminal answer as an ``escalation_closures`
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,7 +17,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -61,7 +62,7 @@ def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW): 
 
 
 def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=status,
         latest_epoch=1,
@@ -152,7 +153,7 @@ def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  # type: ign
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.READY,
         latest_epoch=1,
@@ -169,7 +170,7 @@ def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,
         latest_epoch=2,
@@ -188,7 +189,7 @@ def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.WAITING_ON_HUMAN).model_copy(update={"restart_epochs": [1]})
+    hub.chunks["ch_1"] = replace(_chunk(status=ChunkStatus.WAITING_ON_HUMAN), restart_epochs=[1])
 
     Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
 

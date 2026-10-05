@@ -8,6 +8,7 @@ full composed tick since this subsystem's bugs are step-ordering bugs.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -26,6 +27,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
@@ -33,9 +35,8 @@ from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.store import schema as runner_schema
-from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -99,18 +100,18 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
     runner must key on the pause fact, not the derived status, since a paused+asked chunk
     derives ``waiting_on_human`` while still carrying ``pause``.
     """
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=status,
         latest_epoch=1,
         route_runner_id=runner_id,
-        pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
+        pause=ChunkPause(by="operator", set_at="2026-07-16T12:00:00Z"),
     )
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
     """The same chunk unpaused — no ``pause`` view."""
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
         latest_epoch=1,
@@ -200,9 +201,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
     assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
 
     hub = FakeHub()
-    detached = _paused_chunk()
-    detached.route_runner_id = None  # detached at the hub, and paused too
-    hub.chunks["ch_1"] = detached
+    hub.chunks["ch_1"] = replace(_paused_chunk(), route_runner_id=None)  # detached at the hub, and paused too
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -412,7 +411,7 @@ def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path):
     # Paused AND ask-parked: the status hides the pause, the `pause` field is the only witness.
     hub.chunks["ch_1"] = _paused_chunk(status=ChunkStatus.WAITING_ON_HUMAN)
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.questions["q_1"] = QuestionView(
+    hub.questions["q_1"] = HubQuestion(
         question_id="q_1",
         chunk_id="ch_1",
         runner_id="r1",
@@ -464,7 +463,7 @@ def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_
     hub.paused = False  # the hub's *runner* brake (D-043) is off — not the lever under test
     hub.chunks["ch_1"] = _paused_chunk(status=ChunkStatus.WAITING_ON_HUMAN)  # paused AND asked
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.questions["q_1"] = QuestionView(
+    hub.questions["q_1"] = HubQuestion(
         question_id="q_1",
         chunk_id="ch_1",
         runner_id="r1",

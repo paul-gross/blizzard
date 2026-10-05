@@ -20,21 +20,20 @@ from blizzard.foundation.leases import LeaseClosureReason, LeaseState
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_event_types import LeaseChangeCause
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
 from blizzard.runner.throttle.pause import PausePark, needs_pause_park
-from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView
-from blizzard.wire.queue import QueuePeekEntry
 
 if TYPE_CHECKING:
     from blizzard.runner.harness.identity import SessionReference
-    from blizzard.runner.hub.client import RouteClaimOutcome
+    from blizzard.runner.hub.client import HubQuestion, RouteClaimOutcome
     from blizzard.runner.leases.elicitation import PendingElicitation
     from blizzard.runner.leases.escalations import ParkedEscalation
     from blizzard.runner.lifecycle.takeover import OpenTakeover
-    from blizzard.wire.question import QuestionView
 
 _PARTIAL_NOTE = " (PARTIAL — true spend may be higher)"
 
@@ -103,7 +102,7 @@ def spawned(lease: Lease) -> bool:
     return lease.pid is not None and lease.session_id is not None
 
 
-def routed_away(view: ChunkStatusView, runner_id: str) -> bool:
+def routed_away(view: ChunkState, runner_id: str) -> bool:
     """The hub no longer routes the chunk to this runner. A 404 reads as routed away at the call;
     an unreachable hub never does."""
     return view.route_runner_id != runner_id
@@ -160,7 +159,7 @@ class Fenced:
 
     takeovers: TakeoverHolds
 
-    def out(self, view: ChunkStatusView, ref: _FenceRef) -> bool:
+    def out(self, view: ChunkState, ref: _FenceRef) -> bool:
         if self.takeovers.holds_lease(ref):
             return False
         if view.latest_epoch is not None and view.latest_epoch > ref.epoch:
@@ -175,7 +174,7 @@ class Fenced:
 # --------------------------------------------------------------------------------------------- #
 
 
-def pick_claim_entry(entries: Sequence[QueuePeekEntry], *, strict: bool) -> QueuePeekEntry | None:
+def pick_claim_entry(entries: Sequence[QueueEntry], *, strict: bool) -> QueueEntry | None:
     """The entry to claim next: strict holds at a blocked head; pass-over takes the first unblocked."""
     if not entries:
         return None
@@ -262,7 +261,7 @@ def reclaim_verdict(outcome: RouteClaimOutcome) -> ClaimVerdict:
 
 
 def owns_node_entry(
-    view: ChunkStatusView,
+    view: ChunkState,
     *,
     local_epoch: int,
     open_escalation_epoch: int | None,
@@ -300,9 +299,7 @@ class InterruptedClaimMove(StrEnum):
     HOLD = "hold"
 
 
-def interrupted_claim_move(
-    view: ChunkStatusView, *, runner_id: str, requeued: bool, braked: bool
-) -> InterruptedClaimMove:
+def interrupted_claim_move(view: ChunkState, *, runner_id: str, requeued: bool, braked: bool) -> InterruptedClaimMove:
     """A pending requeue outranks everything; it resumes only once the chunk is neither paused nor
     ended, the mark left pending meanwhile. A resolved gate keeps its route live and is left to
     ADVANCE. A running chunk routed here is adopted — when FILL owns its node entry, a check
@@ -334,7 +331,7 @@ def recovery_owner(latest: Lease | None) -> str | None:
     return latest.harness_id if latest is not None else None
 
 
-def adopt_enters_node(latest: Lease | None, view: ChunkStatusView, node_id: str) -> bool:
+def adopt_enters_node(latest: Lease | None, view: ChunkState, node_id: str) -> bool:
     """Whether FILL's adopt enters ``node_id`` as a node entry — through the node's declared session
     and harness selection — rather than spawning it under the latest owner: the chunk's latest lease
     ran another node, so the chunk moved onto this one while the binding was held (a next node held
@@ -471,7 +468,7 @@ class RestartDisposition(StrEnum):
     ABANDON = "abandon"
 
 
-def restart_disposition(view: ChunkStatusView, runner_id: str, *, fenced: bool) -> RestartDisposition:
+def restart_disposition(view: ChunkState, runner_id: str, *, fenced: bool) -> RestartDisposition:
     """A restart-marked lease on a chunk still routed here parks under a pause (the pause outranks a
     move), is preempted when a restart fenced it out while the runner was down, and otherwise
     resumes in place while the chunk runs. Anything else — routed away, ended — is abandoned."""
@@ -514,7 +511,7 @@ class UnpauseMove(StrEnum):
 
 
 def unpause_move(
-    view: ChunkStatusView, runner_id: str, *, ask_parked: bool, judge_parked: bool, has_env_and_session: bool
+    view: ChunkState, runner_id: str, *, ask_parked: bool, judge_parked: bool, has_env_and_session: bool
 ) -> UnpauseMove:
     """Once a pause park has settled and the brake admits a start: a lifted pause on a chunk still
     routed here wakes the session — unless a question underneath it or a standing judge park
@@ -530,7 +527,7 @@ def unpause_move(
     return UnpauseMove.WAKE
 
 
-def answer_ready(question: QuestionView) -> bool:
+def answer_ready(question: HubQuestion) -> bool:
     """A parked session wakes only on an answered question that carries its answer."""
     return question.answered and question.answer is not None
 
@@ -567,7 +564,7 @@ def apply_move(outcome: ApplyOutcome, next_envelope: Envelope | None, *, chunk_p
     return ApplyMove.NONE
 
 
-def chunk_paused(view: ChunkStatusView) -> bool:
+def chunk_paused(view: ChunkState) -> bool:
     """A per-chunk pause stands — the fact, or the status it derives."""
     return view.pause is not None or view.status == ChunkStatus.PAUSED
 
@@ -589,15 +586,13 @@ TAKEOVER_SUPPRESSED_HELD_MOVES: frozenset[HeldChunkMove] = frozenset(
 )
 
 
-def held_chunk_reads_local_epoch(view: ChunkStatusView) -> bool:
+def held_chunk_reads_local_epoch(view: ChunkState) -> bool:
     """The one held-chunk arm that compares against this runner's own latest epoch: a running
     chunk the hub reports an epoch for."""
     return view.status == ChunkStatus.RUNNING and view.latest_epoch is not None
 
 
-def held_chunk_move(
-    view: ChunkStatusView, *, runner_id: str, local_latest_epoch: int, taken_over: bool
-) -> HeldChunkMove:
+def held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: int, taken_over: bool) -> HeldChunkMove:
     """A held chunk with no active lease: an ended chunk releases; a decided gate whose route left
     this runner releases, a decided gate still here resolves; a running chunk at a strictly newer
     hub epoch enters its node; a chunk at a hub node is stepped. The strictly-higher epoch is
@@ -609,7 +604,7 @@ def held_chunk_move(
     return move
 
 
-def _held_chunk_move(view: ChunkStatusView, *, runner_id: str, local_latest_epoch: int) -> HeldChunkMove:
+def _held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: int) -> HeldChunkMove:
     if view.status == ChunkStatus.DONE:
         return HeldChunkMove.RELEASE_DONE
     if view.status == ChunkStatus.STOPPED:
@@ -627,7 +622,7 @@ def _held_chunk_move(view: ChunkStatusView, *, runner_id: str, local_latest_epoc
     return HeldChunkMove.HOLD
 
 
-def gate_resolution_lease_id(parked: Lease | None, decision: ChunkDecisionStatusView) -> str | None:
+def gate_resolution_lease_id(parked: Lease | None, decision: ChunkGate) -> str | None:
     """The resolving submission names the parked lease only when it sits at the decision's epoch."""
     return parked.lease_id if parked is not None and parked.epoch == decision.epoch else None
 
@@ -683,17 +678,17 @@ def decision_move(outcome: ApplyOutcome) -> DecisionMove:
     return DecisionMove.FAIL if outcome == ApplyOutcome.FAILURE else DecisionMove.CLOSE_PARKED
 
 
-def spend_cap_reached(cost: ChunkUsageTotalView, cap: float | None) -> bool:
+def spend_cap_reached(cost: ChunkSpend, cap: float | None) -> bool:
     """The chunk's hub-derived spend — a lower bound — has reached the per-chunk cap."""
     return cap is not None and cost.cost_usd >= cap
 
 
-def spend_cap_partial_note(cost: ChunkUsageTotalView) -> str:
+def spend_cap_partial_note(cost: ChunkSpend) -> str:
     """Flags a spend total that is only a lower bound."""
     return _PARTIAL_NOTE if cost.billed_partial else ""
 
 
-def spend_cap_detail(cost: ChunkUsageTotalView, cap: float) -> str:
+def spend_cap_detail(cost: ChunkSpend, cap: float) -> str:
     """The spend-cap escalation's detail line."""
     return f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{spend_cap_partial_note(cost)})"
 
@@ -763,7 +758,7 @@ class LeaseReconcileMove(StrEnum):
 
 
 def lease_reconcile_move(
-    view: ChunkStatusView, lease: Lease, *, runner_id: str, pause_parked: Container[str], fenced: bool
+    view: ChunkState, lease: Lease, *, runner_id: str, pause_parked: Container[str], fenced: bool
 ) -> LeaseReconcileMove:
     """A stopped or routed-away chunk abandons its lease — under a forced takeover too: a detach
     gives the environments back, person or not. A pause parks a spawned lease once (it outranks a

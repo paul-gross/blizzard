@@ -28,7 +28,7 @@ from blizzard.runner.lifecycle.takeover import (
     bounded_takeover_env,
     takeover_closing,
 )
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 
 pytestmark = pytest.mark.unit
 
@@ -185,9 +185,9 @@ def test_owner_unresolvable_is_takeover_error() -> None:
 def test_ended_by_terminal_view() -> None:
     takeover = _takeover()
     for status in (ChunkStatus.DONE, ChunkStatus.STOPPED):
-        assert takeover.ended_by(ChunkStatusView(chunk_id="ch_1", status=status))
+        assert takeover.ended_by(ChunkState(chunk_id="ch_1", status=status))
     for status in (ChunkStatus.RUNNING, ChunkStatus.NEEDS_HUMAN, ChunkStatus.READY):
-        assert not takeover.ended_by(ChunkStatusView(chunk_id="ch_1", status=status))
+        assert not takeover.ended_by(ChunkState(chunk_id="ch_1", status=status))
 
 
 def test_takeover_skip_scoped_to_reference_epoch() -> None:

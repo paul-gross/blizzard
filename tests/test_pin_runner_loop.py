@@ -19,16 +19,16 @@ from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
-from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
@@ -99,12 +99,12 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
     _seed_running_lease(store)
     store.record_resume_intent(lease_id="lease_1", marked_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.WAITING_ON_HUMAN,  # the lossy read — paused AND asked
         latest_epoch=1,
         route_runner_id="r1",
-        pause=PauseView(by="operator", set_at="2026-08-04T12:00:00Z"),
+        pause=ChunkPause(by="operator", set_at="2026-08-04T12:00:00Z"),
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -308,7 +308,7 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
     store = _store(tmp_path)
     hub = FakeHub()
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", envelope)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     sampler = _ClaimObservingSampler(hub=hub)

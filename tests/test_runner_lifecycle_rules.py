@@ -18,8 +18,11 @@ from blizzard.runner.hub.client import (
     ClaimConflict,
     ClaimedRoute,
     DependencyDenial,
+    HubQuestion,
     IncompatibleDenial,
     PausedDenial,
+    QueueBlock,
+    QueueEntry,
     RouteClaimOutcome,
     TerminalDenial,
 )
@@ -98,18 +101,16 @@ from blizzard.runner.lifecycle.session import (
 )
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.takeover import OpenTakeover
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 from blizzard.runner.throttle.pause import PausePark
-from blizzard.wire.chunk import BlockedView, ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView, PauseView
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
 _ME = "r1"
-_PAUSE = PauseView(by="operator", set_at="2026-10-04T12:00:00Z")
+_PAUSE = ChunkPause(by="operator", set_at="2026-10-04T12:00:00Z")
 
 
 def _lease(*, lease_id: str = "lease_1", epoch: int = 1, spawned: bool = True, harness_id: str | None = "cc") -> Lease:
@@ -135,11 +136,11 @@ def _view(
     *,
     route: str | None = _ME,
     epoch: int | None = 1,
-    pause: PauseView | None = None,
+    pause: ChunkPause | None = None,
     restart_epochs: list[int] | None = None,
-    decision: ChunkDecisionStatusView | None = None,
-) -> ChunkStatusView:
-    return ChunkStatusView(
+    decision: ChunkGate | None = None,
+) -> ChunkState:
+    return ChunkState(
         chunk_id="ch_1",
         status=status,
         route_runner_id=route,
@@ -164,12 +165,12 @@ def _takeover(*, reference_epoch: int | None = 1, fence_epoch: int | None = None
     )
 
 
-def _entry(chunk_id: str, *, blocked: bool = False) -> QueuePeekEntry:
-    return QueuePeekEntry(
+def _entry(chunk_id: str, *, blocked: bool = False) -> QueueEntry:
+    return QueueEntry(
         chunk_id=chunk_id,
         graph_id="g_1",
         position=0,
-        blocked=BlockedView(prerequisite_chunk_id="ch_pre") if blocked else None,
+        blocked=QueueBlock(prerequisite_chunk_id="ch_pre") if blocked else None,
     )
 
 
@@ -268,12 +269,12 @@ def test_reclaim_collapses_denials_to_release() -> None:
 
 
 def test_interrupted_claim_move_table() -> None:
-    def move(view: ChunkStatusView, *, requeued: bool = False, braked: bool = False) -> InterruptedClaimMove:
+    def move(view: ChunkState, *, requeued: bool = False, braked: bool = False) -> InterruptedClaimMove:
         return interrupted_claim_move(view, runner_id=_ME, requeued=requeued, braked=braked)
 
     assert move(_view(), requeued=True) is InterruptedClaimMove.RESUME_REQUEUED
     assert move(_view(route="r2"), requeued=True) is InterruptedClaimMove.RELEASE_REQUEUED_ELSEWHERE
-    decided = ChunkDecisionStatusView(decision_id="dc_1", node_id="nd_gate", epoch=1)
+    decided = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1)
     assert move(_view(decision=decided)) is InterruptedClaimMove.HOLD
     assert move(_view()) is InterruptedClaimMove.ADOPT  # FILL's when it owns the node entry
     assert move(_view(ChunkStatus.READY, route=None)) is InterruptedClaimMove.RECLAIM
@@ -284,7 +285,7 @@ def test_interrupted_claim_move_table() -> None:
 
 
 def test_requeued_resume_waits_out_pause_and_terminal() -> None:
-    def move(view: ChunkStatusView) -> InterruptedClaimMove:
+    def move(view: ChunkState) -> InterruptedClaimMove:
         return interrupted_claim_move(view, runner_id=_ME, requeued=True, braked=False)
 
     assert move(_view(pause=_PAUSE)) is InterruptedClaimMove.HOLD
@@ -295,7 +296,7 @@ def test_requeued_resume_waits_out_pause_and_terminal() -> None:
 
 
 def test_owns_node_entry_epochs() -> None:
-    def owns(view: ChunkStatusView, *, local: int, tenure: bool = True) -> bool:
+    def owns(view: ChunkState, *, local: int, tenure: bool = True) -> bool:
         return owns_node_entry(view, local_epoch=local, open_escalation_epoch=None, lease_in_binding_tenure=tenure)
 
     assert owns(_view(epoch=3), local=3)  # the runner's own epoch
@@ -318,8 +319,8 @@ def test_recovery_owner() -> None:
 
 
 def test_adopt_enters_a_node_the_latest_lease_did_not_run_unless_it_is_a_restart_entry() -> None:
-    held = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=1)
-    restarted = ChunkStatusView(
+    held = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=1)
+    restarted = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id=_ME, latest_epoch=2, restart_epochs=[2]
     )
     assert adopt_enters_node(_lease(), held, "nd_review") is True
@@ -459,7 +460,7 @@ def test_pause_park_settled() -> None:
 
 
 def test_unpause_move_ladder() -> None:
-    def move(view: ChunkStatusView, *, ask: bool = False, judge: bool = False, warm: bool = True) -> UnpauseMove:
+    def move(view: ChunkState, *, ask: bool = False, judge: bool = False, warm: bool = True) -> UnpauseMove:
         return unpause_move(view, _ME, ask_parked=ask, judge_parked=judge, has_env_and_session=warm)
 
     assert move(_view(pause=_PAUSE)) is UnpauseMove.WAIT
@@ -471,12 +472,12 @@ def test_unpause_move_ladder() -> None:
 
 
 def test_answer_ready() -> None:
-    base = QuestionView(
+    base = HubQuestion(
         question_id="qn_1", chunk_id="ch_1", runner_id=_ME, epoch=1, question="?", asked_at="2026-10-04T12:00:00Z"
     )
     assert not answer_ready(base)
-    assert not answer_ready(base.model_copy(update={"answered": True}))
-    assert answer_ready(base.model_copy(update={"answered": True, "answer": "yes"}))
+    assert not answer_ready(replace(base, answered=True))
+    assert answer_ready(replace(base, answered=True, answer="yes"))
 
 
 # --- held chunks ------------------------------------------------------------------------------ #
@@ -510,17 +511,17 @@ def test_held_chunk_reads_local_epoch_only_for_a_running_chunk() -> None:
 
 
 def test_held_chunk_move_table() -> None:
-    def move(view: ChunkStatusView, *, local: int = 1) -> HeldChunkMove:
+    def move(view: ChunkState, *, local: int = 1) -> HeldChunkMove:
         return held_chunk_move(view, runner_id=_ME, local_latest_epoch=local, taken_over=False)
 
-    resolved = ChunkDecisionStatusView(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
+    resolved = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
     assert move(_view(ChunkStatus.DONE)) is HeldChunkMove.RELEASE_DONE
     assert move(_view(ChunkStatus.STOPPED)) is HeldChunkMove.RELEASE_STOPPED
     assert move(_view(ChunkStatus.WAITING_ON_HUMAN, route="r2", decision=resolved)) is (
         HeldChunkMove.RELEASE_DETACHED_GATE
     )
     assert move(_view(ChunkStatus.WAITING_ON_HUMAN, decision=resolved)) is HeldChunkMove.RESOLVE_GATE
-    transitioned = resolved.model_copy(update={"transitioned": True})
+    transitioned = replace(resolved, transitioned=True)
     assert move(_view(ChunkStatus.WAITING_ON_HUMAN, decision=transitioned)) is HeldChunkMove.HOLD
     assert move(_view(epoch=2), local=1) is HeldChunkMove.SPAWN_ADVANCED
     assert move(_view(epoch=1), local=1) is HeldChunkMove.HOLD  # same epoch: a just-escalated chunk
@@ -528,10 +529,10 @@ def test_held_chunk_move_table() -> None:
 
 
 def test_takeover_suppresses_only_session_arms() -> None:
-    def move(view: ChunkStatusView) -> HeldChunkMove:
+    def move(view: ChunkState) -> HeldChunkMove:
         return held_chunk_move(view, runner_id=_ME, local_latest_epoch=1, taken_over=True)
 
-    resolved = ChunkDecisionStatusView(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
+    resolved = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
     assert move(_view(ChunkStatus.WAITING_ON_HUMAN, decision=resolved)) is HeldChunkMove.HOLD
     assert move(_view(epoch=2)) is HeldChunkMove.HOLD
     assert move(_view(ChunkStatus.DONE)) is HeldChunkMove.RELEASE_DONE
@@ -540,7 +541,7 @@ def test_takeover_suppresses_only_session_arms() -> None:
 
 
 def test_gate_resolution_lease_id() -> None:
-    decision = ChunkDecisionStatusView(decision_id="dc_1", node_id="nd_gate", epoch=2, resolved_choice="ok")
+    decision = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=2, resolved_choice="ok")
     assert gate_resolution_lease_id(_lease(epoch=2), decision) == "lease_1"
     assert gate_resolution_lease_id(_lease(epoch=1), decision) is None
     assert gate_resolution_lease_id(None, decision) is None
@@ -571,13 +572,13 @@ def test_decision_move() -> None:
 
 
 def test_spend_cap_reached_and_detail() -> None:
-    cost = ChunkUsageTotalView.zero().model_copy(update={"cost_usd": 7.0})
+    cost = replace(ChunkSpend.zero(), cost_usd=7.0)
     assert spend_cap_reached(cost, 5.0)
     assert spend_cap_reached(cost, 7.0)
     assert not spend_cap_reached(cost, 7.01)
     assert not spend_cap_reached(cost, None)
     assert spend_cap_detail(cost, 5.0) == "spend cap $5.00 reached (spend $7.00)"
-    partial = cost.model_copy(update={"billed_partial": True})
+    partial = replace(cost, billed_partial=True)
     assert (
         spend_cap_detail(partial, 5.0) == "spend cap $5.00 reached (spend $7.00 (PARTIAL — true spend may be higher))"
     )
@@ -631,9 +632,7 @@ def test_crash_orphaned() -> None:
 
 
 def test_lease_reconcile_move() -> None:
-    def move(
-        view: ChunkStatusView, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False
-    ):  # type: ignore[no-untyped-def]
+    def move(view: ChunkState, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False):  # type: ignore[no-untyped-def]
         return lease_reconcile_move(view, lease or _lease(), runner_id=_ME, pause_parked=parked or set(), fenced=fenced)
 
     assert move(_view(ChunkStatus.STOPPED)) is LeaseReconcileMove.ABANDON

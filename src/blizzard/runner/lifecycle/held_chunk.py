@@ -21,9 +21,9 @@ from blizzard.runner.lifecycle.model import (
     held_chunk_reads_local_epoch,
 )
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
+from blizzard.runner.node_steps.chunk_state import ChunkGate
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import Completion
-from blizzard.wire.chunk import ChunkDecisionStatusView
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -144,7 +144,7 @@ class HeldChunk:
         _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=self.chunk_id)
         Spawner(self.ctx).enter_node(self.chunk_id, envelope, Environments(bindings).acquired, via="advance")
 
-    def _resolve_gate(self, decision: ChunkDecisionStatusView) -> None:
+    def _resolve_gate(self, decision: ChunkGate) -> None:
         """Record the resolving transition for a decided gate and continue in place.
 
         Reuses the parked step's epoch — no new lease was minted while parked — and references

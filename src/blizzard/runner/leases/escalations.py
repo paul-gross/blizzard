@@ -15,7 +15,7 @@ from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
-    from blizzard.wire.chunk import ChunkStatusView
+    from blizzard.runner.node_steps.chunk_state import ChunkState
 
 __all__ = [
     "ESCALATION_TRANSITIONS",
@@ -83,7 +83,7 @@ class ParkedEscalation:
             )
         return SessionReference(self.harness_id, self.session_id)
 
-    def superseded_by(self, view: ChunkStatusView, *, runner_id: str, fenced_out: bool) -> bool:
+    def superseded_by(self, view: ChunkState, *, runner_id: str, fenced_out: bool) -> bool:
         """Whether the hub's ``view`` of this escalation's chunk supersedes it: the chunk
         ended (terminal), the hub no longer routes it to ``runner_id`` (requeued away or
         reassigned), or an operator restart fenced this epoch out (``fenced_out``, judged

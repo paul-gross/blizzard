@@ -15,6 +15,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import ExternalUsageSample
 from blizzard.runner.loop.tick import tick
@@ -24,7 +25,6 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageWindow,
     SampleMissReason,
 )
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeCredentialRenewer,
     FakeHarness,
@@ -111,7 +111,7 @@ def _ctx_with_a_claimable_chunk(
 ):  # type: ignore[no-untyped-def]
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     # The spawned worker's (pid, start_time) reads as alive to the probe, so a full
     # `tick()` call's own ADVANCE never treats this same-tick spawn as an exited worker.

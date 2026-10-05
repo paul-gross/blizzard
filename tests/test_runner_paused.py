@@ -28,17 +28,22 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.runner.hub.client import HubClientError, PausedDenial, RouteClaimOutcome, TerminalDenial
+from blizzard.runner.hub.client import (
+    HubClientError,
+    HubQuestion,
+    PausedDenial,
+    QueueEntry,
+    RouteClaimOutcome,
+    TerminalDenial,
+)
 from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.throttle.pause import PauseService
-from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -97,7 +102,7 @@ def _ctx_with_a_claimable_chunk(tmp_path, *, paused: bool):  # type: ignore[no-u
     hub = FakeHub()
     hub.paused = paused
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     ctx = make_context(
         store,
@@ -226,7 +231,7 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore
     hub = FakeHub()
     hub.paused = False
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     probe = FakeProbe()
     ctx = make_context(
@@ -279,7 +284,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkStatusView(
+    return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
         latest_epoch=1,
@@ -312,8 +317,8 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _answered_question(question_id="qn_1") -> QuestionView:  # type: ignore[no-untyped-def]
-    return QuestionView(
+def _answered_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-untyped-def]
+    return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
         runner_id="r1",
@@ -500,7 +505,7 @@ def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause
     # Unpause; the hub already moved to a newer epoch, so FILL leaves the node entry to
     # ADVANCE's held-chunk drive — no deferred-spawn state was needed.
     _pause_locally(store, ctx, paused=False)
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,
         latest_epoch=2,
@@ -765,7 +770,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     # A claimable chunk in the queue too, so FILL's own gate is exercised by the same pass
     # (capacity is not what stops it: max_agents=2 with one lease held).
-    hub.queue = [QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
     ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
     hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
     hub.envelopes["ch_2"] = ch_2_env
@@ -932,12 +937,12 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})  # a live worker for the pause to interrupt
     hub = FakeHub()
     hub.paused = False  # the hub's *runner* brake (D-043) is off — not the lever under test
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.PAUSED,
         latest_epoch=1,
         route_runner_id="r1",
-        pause=PauseView(by="operator", set_at="2026-07-13T12:00:00Z"),
+        pause=ChunkPause(by="operator", set_at="2026-07-13T12:00:00Z"),
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -963,12 +968,12 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
 
     # The other order proves independence rather than luck: re-pause the chunk, clear the LOCAL
     # brake instead, and it must still not resume.
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
         status=ChunkStatus.PAUSED,
         latest_epoch=1,
         route_runner_id="r1",
-        pause=PauseView(by="operator", set_at="2026-07-13T12:05:00Z"),
+        pause=ChunkPause(by="operator", set_at="2026-07-13T12:05:00Z"),
     )
     _pause_locally(store, ctx, paused=False)
     tick(ctx)
@@ -1281,7 +1286,7 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
     hub = FakeHub()
     hub.paused = False
     hub.chunks["ch_1"] = _running_chunk()
-    hub.queue = [QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
     ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
     hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
     hub.envelopes["ch_2"] = ch_2_env
@@ -1316,7 +1321,7 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
     _record_usage(store, cost=7.0, recorded_at=_NOW)
     clock = FixedClock(_NOW)
     hub = FakeHub()
-    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     hub.claim_outcome = claimed_outcome("ch_1", env)
     ctx = make_context(
@@ -1780,7 +1785,7 @@ def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = No
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1, route_runner_id=route_runner_id
     )
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -1824,7 +1829,7 @@ def test_a_hub_paused_runner_does_not_reclaim_a_crash_left_binding(tmp_path):  #
 
 def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp_path):  # type: ignore[no-untyped-def]
     ctx, hub, store, harness, provider = _ctx_with_a_crash_left_binding(tmp_path)
-    hub.chunks["ch_1"] = ChunkStatusView(
+    hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r_other"
     )
     _pause_locally(store, ctx, paused=True)

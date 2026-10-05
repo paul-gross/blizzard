@@ -22,7 +22,7 @@ from blizzard.runner.leases import NewLease
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverOwnerUnresolvable, TakeoverService
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
-from blizzard.wire.chunk import ChunkStatusView
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -114,12 +114,8 @@ def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_sibli
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_a"] = ChunkStatusView(
-        chunk_id="ch_a", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
-    hub.chunks["ch_b"] = ChunkStatusView(
-        chunk_id="ch_b", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
+    hub.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    hub.chunks["ch_b"] = ChunkState(chunk_id="ch_b", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
 
     handle_a = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     handle_b = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=200, process_start_time="start-200", pgid=200)
@@ -162,12 +158,8 @@ def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_a"] = ChunkStatusView(
-        chunk_id="ch_a", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
-    hub.chunks["ch_b"] = ChunkStatusView(
-        chunk_id="ch_b", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
+    hub.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    hub.chunks["ch_b"] = ChunkState(chunk_id="ch_b", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
 
     handle_a = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     harness_a = FakeHarness(handle=handle_a, verdict=None)

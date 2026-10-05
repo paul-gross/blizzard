@@ -21,8 +21,8 @@ from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion
-from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -121,15 +121,13 @@ def test_tick_primes_every_touched_chunk_in_one_batch_call(tmp_path):  # type: i
 
     hub = FakeHub()
     hub.queue = []  # nothing to claim — keep FILL's own reads confined to the fixture
-    hub.chunks["ch_lease"] = ChunkStatusView(chunk_id="ch_lease", status=ChunkStatus.RUNNING, route_runner_id="r1")
+    hub.chunks["ch_lease"] = ChunkState(chunk_id="ch_lease", status=ChunkStatus.RUNNING, route_runner_id="r1")
     # NEEDS_HUMAN + still routed here — neither escalation nor takeover reads as superseded,
     # so PULL's reconcile sweeps leave them exactly as scripted, with no writes of their own.
-    hub.chunks["ch_esc"] = ChunkStatusView(chunk_id="ch_esc", status=ChunkStatus.NEEDS_HUMAN, route_runner_id="r1")
-    hub.chunks["ch_tko"] = ChunkStatusView(chunk_id="ch_tko", status=ChunkStatus.NEEDS_HUMAN, route_runner_id="r1")
+    hub.chunks["ch_esc"] = ChunkState(chunk_id="ch_esc", status=ChunkStatus.NEEDS_HUMAN, route_runner_id="r1")
+    hub.chunks["ch_tko"] = ChunkState(chunk_id="ch_tko", status=ChunkStatus.NEEDS_HUMAN, route_runner_id="r1")
     # WAITING_ON_HUMAN: none of HeldChunk.drive's branches fire — a pure no-op poll.
-    hub.chunks["ch_held"] = ChunkStatusView(
-        chunk_id="ch_held", status=ChunkStatus.WAITING_ON_HUMAN, route_runner_id="r1"
-    )
+    hub.chunks["ch_held"] = ChunkState(chunk_id="ch_held", status=ChunkStatus.WAITING_ON_HUMAN, route_runner_id="r1")
     hub.not_found = {"ch_unknown"}
 
     provider = FakeProvider({"e_held": "/ws/e_held", "e_unknown": "/ws/e_unknown"})
@@ -157,17 +155,17 @@ class _WriteReactingHub(FakeHub):
 
     def push_facts(self, runner_id, facts):  # type: ignore[no-untyped-def]
         ack = super().push_facts(runner_id, facts)
-        self.chunks["ch_a"] = ChunkStatusView(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
+        self.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
         return ack
 
     def submit_completion(self, chunk_id, submission):  # type: ignore[no-untyped-def]
         response = super().submit_completion(chunk_id, submission)
         if chunk_id == "ch_b":
-            self.chunks["ch_b"] = ChunkStatusView(
+            self.chunks["ch_b"] = ChunkState(
                 chunk_id="ch_b",
                 status=ChunkStatus.RUNNING,
                 route_runner_id="r1",
-                cost=ChunkUsageTotalView(
+                cost=ChunkSpend(
                     input_tokens=0,
                     output_tokens=0,
                     cache_read_tokens=0,
@@ -205,12 +203,12 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
 
     hub = _WriteReactingHub()
     hub.queue = []
-    hub.chunks["ch_a"] = ChunkStatusView(chunk_id="ch_a", status=ChunkStatus.READY, route_runner_id=None)
-    hub.chunks["ch_b"] = ChunkStatusView(
+    hub.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.READY, route_runner_id=None)
+    hub.chunks["ch_b"] = ChunkState(
         chunk_id="ch_b",
         status=ChunkStatus.RUNNING,
         route_runner_id="r1",
-        cost=ChunkUsageTotalView(
+        cost=ChunkSpend(
             input_tokens=0,
             output_tokens=0,
             cache_read_tokens=0,

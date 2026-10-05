@@ -31,9 +31,9 @@ from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.runner.usage.recorder import UsageRecorder
-from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -933,9 +933,7 @@ def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path)
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
     fallback_sample = UsageSample(
         kind="resume",
         model="claude-x",
@@ -971,9 +969,7 @@ def test_restart_resume_records_the_crashed_generations_usage_before_waking(tmp_
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
-    )
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
     fallback_sample = UsageSample(
         kind="resume",
         model="claude-x",
