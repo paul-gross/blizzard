@@ -56,8 +56,8 @@ def repo_create(
     """Add repository NAME at revision 1.
 
     Refused when the name or the forge, owner and repo are already taken — a retired repository keeps its
-    claim — or when the secret is missing or retired. A stored repository does not yet change where the hub
-    delivers."""
+    claim — or when the secret is missing or retired. The hub resolves a chunk's commits against the record
+    on its next deliver."""
     body = {
         "name": name,
         "forge_api_url": forge_api_url,
