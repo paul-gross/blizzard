@@ -48,6 +48,15 @@ describe('mergeActivityFeeds', () => {
     expect(mergeActivityFeeds(backfill, live, 10).map((e) => e.seq)).toEqual([-2, -3, 1]);
   });
 
+  it('keeps the backfill row\'s time on a replayed live frame, and a live-only frame\'s own time', () => {
+    const backfill = [event(-1, 10, { key: 'dup' })];
+    const live = [event(1, 500, { key: 'dup' }), event(2, 600, { key: 'fresh' })];
+    expect(mergeActivityFeeds(backfill, live, 10).map((e) => [e.seq, e.at])).toEqual([
+      [1, 10],
+      [2, 600],
+    ]);
+  });
+
   it('sorts oldest to newest on `at` and keeps only the newest `limit`', () => {
     const backfill = [event(-1, 30), event(-2, 10)];
     const live = [event(1, 20), event(2, 40)];
