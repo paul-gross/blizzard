@@ -232,9 +232,10 @@ class SegmentContext:
 class IReadTranscriptEvents(Protocol):
     """Read-only operations over the derived event store and its derivation markers."""
 
-    def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
+    def visible_segment_ids(self, *, chunk_id: str | None = None, segment_id: str | None = None) -> frozenset[str]:
         """Every segment id the hub's own read path would show today — final, not
-        superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given."""
+        superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` and
+        ``segment_id`` when given."""
         ...
 
     def derived_segment_ids(self) -> frozenset[str]:

@@ -114,9 +114,10 @@ export const outcomesByNodeApiAnalyticsOutcomesNodesGet = <ThrowOnError extends 
 /**
  * Re Derive
  *
- * A segment scope forces that one segment regardless of its candidacy; a chunk or
- * all scope derives up to ``limit`` of that scope's current candidates and reports how
- * many remain, so the caller drives to convergence with repeated calls.
+ * A segment scope forces that one segment regardless of its candidacy, but refuses
+ * one that is not visible; a chunk or all scope derives up to ``limit`` of that scope's
+ * current candidates and reports how many remain, so the caller drives to convergence
+ * with repeated calls.
  */
 export const reDeriveApiAnalyticsReDerivePost = <ThrowOnError extends boolean = false>(options: Options<ReDeriveApiAnalyticsReDerivePostData, ThrowOnError>): RequestResult<ReDeriveApiAnalyticsReDerivePostResponses, ReDeriveApiAnalyticsReDerivePostErrors, ThrowOnError> => (options.client ?? client).post<ReDeriveApiAnalyticsReDerivePostResponses, ReDeriveApiAnalyticsReDerivePostErrors, ThrowOnError>({
     url: '/api/analytics/re-derive',

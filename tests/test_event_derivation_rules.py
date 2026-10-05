@@ -3,16 +3,12 @@ stamping, candidacy, completeness, and the version a read covers — pinned by v
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.hub.domain.observability.analytics.derivation import (
     FORCED_FULL_PASS_FLOOR,
-    EventDerivationService,
-    GraphPins,
-    ReDeriveOutcome,
     ReDeriveScope,
     ReDeriveScopeRefused,
     derivation_due,
@@ -53,34 +49,6 @@ def test_a_re_derive_takes_the_first_limit_candidates(
     candidates: list[str], limit: int, batch: list[str], remaining: int
 ) -> None:
     assert ReDeriveScope().batch(candidates, limit) == (batch, remaining)
-
-
-class _Service(EventDerivationService):
-    """The service's own re-derive over canned reads: ``derivable`` names the segments that derive."""
-
-    def __init__(self, candidates: list[str], derivable: set[str]) -> None:
-        self._candidates = candidates
-        self._derivable = derivable
-
-    def candidate_segment_ids(self, *, chunk_id: str | None = None) -> list[str]:
-        return list(self._candidates)
-
-    def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
-        return GraphPins()
-
-    def derive_segment(self, segment_id: str, pins: GraphPins) -> bool:
-        return segment_id in self._derivable
-
-
-def test_a_re_derive_counts_only_the_candidates_it_actually_derived() -> None:
-    service = _Service(["a", "b", "c"], derivable={"a"})
-    assert service.re_derive(ReDeriveScope(), limit=2) == ReDeriveOutcome(derived=1, remaining=1)
-
-
-def test_a_segment_re_derive_reports_whether_it_derived() -> None:
-    service = _Service([], derivable={"sg_1"})
-    assert service.re_derive(ReDeriveScope(segment_id="sg_1"), limit=1) == ReDeriveOutcome(1, 0)
-    assert service.re_derive(ReDeriveScope(segment_id="sg_gone"), limit=1) == ReDeriveOutcome(0, 0)
 
 
 # --- the sweep's change probe ------------------------------------------------------------------

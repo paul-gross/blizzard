@@ -4888,7 +4888,8 @@ export type QueueReplaceRequest = {
 /**
  * ReDeriveRequest
  *
- * Scope the call to one segment (a genuine force, bypassing the candidate check),
+ * Scope the call to one segment (a genuine force, bypassing the candidate check but not
+ * visibility — a superseded, non-final, or unknown segment derives nothing),
  * one chunk's candidates, or every candidate (both unset) — never both a segment and a
  * chunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives
  * exactly one, so it ignores ``limit``.
@@ -4913,13 +4914,18 @@ export type ReDeriveRequest = {
  *
  * How many segments this call derived, and how many still-candidate segments
  * remain in scope — the caller drives to convergence by calling again while
- * ``remaining`` is nonzero.
+ * ``remaining`` is nonzero. ``not_visible`` is true when a segment-scoped call named a
+ * segment that is not visible, so nothing was derived.
  */
 export type ReDeriveResponse = {
     /**
      * Derived
      */
     derived: number;
+    /**
+     * Not Visible
+     */
+    not_visible?: boolean;
     /**
      * Remaining
      */

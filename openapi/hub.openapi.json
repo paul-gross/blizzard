@@ -7582,7 +7582,7 @@
         "type": "object"
       },
       "ReDeriveRequest": {
-        "description": "Scope the call to one segment (a genuine force, bypassing the candidate check),\none chunk's candidates, or every candidate (both unset) \u2014 never both a segment and a\nchunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives\nexactly one, so it ignores ``limit``.",
+        "description": "Scope the call to one segment (a genuine force, bypassing the candidate check but not\nvisibility \u2014 a superseded, non-final, or unknown segment derives nothing),\none chunk's candidates, or every candidate (both unset) \u2014 never both a segment and a\nchunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives\nexactly one, so it ignores ``limit``.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -7618,11 +7618,16 @@
         "type": "object"
       },
       "ReDeriveResponse": {
-        "description": "How many segments this call derived, and how many still-candidate segments\nremain in scope \u2014 the caller drives to convergence by calling again while\n``remaining`` is nonzero.",
+        "description": "How many segments this call derived, and how many still-candidate segments\nremain in scope \u2014 the caller drives to convergence by calling again while\n``remaining`` is nonzero. ``not_visible`` is true when a segment-scoped call named a\nsegment that is not visible, so nothing was derived.",
         "properties": {
           "derived": {
             "title": "Derived",
             "type": "integer"
+          },
+          "not_visible": {
+            "default": false,
+            "title": "Not Visible",
+            "type": "boolean"
           },
           "remaining": {
             "title": "Remaining",
@@ -13619,7 +13624,7 @@
     },
     "/api/analytics/re-derive": {
       "post": {
-        "description": "A segment scope forces that one segment regardless of its candidacy; a chunk or\nall scope derives up to ``limit`` of that scope's current candidates and reports how\nmany remain, so the caller drives to convergence with repeated calls.",
+        "description": "A segment scope forces that one segment regardless of its candidacy, but refuses\none that is not visible; a chunk or all scope derives up to ``limit`` of that scope's\ncurrent candidates and reports how many remain, so the caller drives to convergence\nwith repeated calls.",
         "operationId": "re_derive_api_analytics_re_derive_post",
         "requestBody": {
           "content": {
