@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.events import FeedListing
 
 pytestmark = pytest.mark.unit
 
@@ -143,3 +144,34 @@ def test_json_prints_the_raw_response_including_detail(monkeypatch: pytest.Monke
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == body
+
+
+@pytest.mark.parametrize(
+    ("row", "line"),
+    [
+        (
+            {"runner_id": None, "chunk_id": "ch_a", "node_name": "build"},
+            "2026-08-12T09:00:00Z  warning  attempt-failed chunk=ch_a node=build  retried",
+        ),
+        (
+            {"runner_id": "r1", "chunk_id": None, "node_name": "build"},
+            "2026-08-12T09:00:00Z  warning  attempt-failed runner=r1 node=build  retried",
+        ),
+        (
+            {"runner_id": "r1", "chunk_id": "ch_a", "node_name": None},
+            "2026-08-12T09:00:00Z  warning  attempt-failed runner=r1 chunk=ch_a  retried",
+        ),
+        (
+            {"runner_id": "", "chunk_id": "", "node_name": ""},
+            "2026-08-12T09:00:00Z  warning  attempt-failed  retried",
+        ),
+        (
+            {},
+            "2026-08-12T09:00:00Z  warning  attempt-failed  retried",
+        ),
+    ],
+)
+def test_an_event_lacking_runner_chunk_or_node_omits_just_that_token(row: dict[str, object], line: str) -> None:
+    sparse = {k: v for k, v in _EVENT.items() if k not in ("runner_id", "chunk_id", "node_name")} | row
+
+    assert FeedListing([sparse]).line(sparse) == line

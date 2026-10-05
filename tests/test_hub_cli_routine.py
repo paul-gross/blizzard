@@ -1069,3 +1069,26 @@ def test_routine_proposal_counts_renders_the_origin_tokens_and_never_none(
     assert expected in result.output
     assert "None" not in result.output
     assert "created_by" not in result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("argv", "routine", "header"),
+    [
+        (["nightly"], "nightly", "2026-01-01T00:00:00+00:00 .. 2026-01-15T00:00:00+00:00  routine=nightly"),
+        ([], None, "2026-01-01T00:00:00+00:00 .. 2026-01-15T00:00:00+00:00"),
+        ([], "", "2026-01-01T00:00:00+00:00 .. 2026-01-15T00:00:00+00:00"),
+    ],
+)
+def test_routine_proposal_counts_header_names_the_routine_scope_only_when_there_is_one(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str], routine: str | None, header: str
+) -> None:
+    body = {**_PROPOSAL_COUNTS_BODY, "routine": routine}
+    monkeypatch.setattr(httpx, "get", lambda url, *, params, timeout: _FakeResponse(200, body))
+    result = CliRunner().invoke(
+        hub_group,
+        ["routine", "proposal-counts", *argv, "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0] == header

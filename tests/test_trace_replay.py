@@ -209,7 +209,7 @@ def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, o
     bodies: list[dict[str, object]] = []
 
     def post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> httpx.Response:
-        assert timeout > 15.0
+        assert timeout == 600.0
         bodies.append(json)
         return hub.client.post(url, json=json)
 
