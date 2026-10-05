@@ -141,6 +141,20 @@ def warehouse(directory: Path, fmt: str) -> duckdb.DuckDBPyConnection:
     return connection
 
 
+def events_warehouse(directory: Path) -> duckdb.DuckDBPyConnection:
+    """DuckDB over the NDJSON ``events`` files in place, with the dictionary's two views over them."""
+    connection = duckdb.connect()
+    connection.execute("SET TimeZone = 'UTC'")
+    pattern = f"{directory}/events/v1/*/*{SUFFIX['ndjson']}"
+    connection.execute(
+        f"CREATE VIEW events AS SELECT * FROM read_json_auto('{pattern}', format = 'newline_delimited', "
+        "union_by_name = true, sample_size = -1)"
+    )
+    for view in ("events_current", "events_by_version"):
+        connection.execute(f"CREATE VIEW {view} AS {(_CONTRACT_DIR / f'{view}.sql').read_text().strip()}")
+    return connection
+
+
 def published_newest_identities(directory: Path, fmt: str) -> dict[str, set[Any]]:
     """The identities the published newest-copy views return."""
     connection = warehouse(directory, fmt)
