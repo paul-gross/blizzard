@@ -8,7 +8,7 @@ from urllib.parse import quote, urlsplit
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
@@ -74,15 +74,13 @@ class DeliveryRead:
     @classmethod
     def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
         prs: dict[tuple[str, int], DeliveryPr] = {}
-        landed = dict(sources.legacy_landed)
+        landed = {**sources.legacy_landed, **LandedRepos.of(sources.markers).shas}
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
         external_epochs: set[int] = set()
         # Write order settles replacement references for the same repo.
         for row in sources.markers:
-            if row.name.startswith("merged/"):
-                landed[row.name.removeprefix("merged/")] = row.data.strip()
-            elif row.name == "awaiting-external-merge":
+            if row.name == "awaiting-external-merge":
                 external_epochs.add(row.epoch)
             elif row.name.startswith("delivery-pr/"):
                 try:

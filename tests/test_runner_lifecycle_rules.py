@@ -480,8 +480,15 @@ def test_pause_park_settled() -> None:
 
 
 def test_unpause_move_ladder() -> None:
-    def move(view: ChunkState, *, ask: bool = False, judge: bool = False, warm: bool = True) -> UnpauseMove:
-        return unpause_move(view, _ME, ask_parked=ask, judge_parked=judge, has_env_and_session=warm)
+    def move(
+        view: ChunkState, *, braked: bool = False, ask: bool = False, judge: bool = False, warm: bool = True
+    ) -> UnpauseMove:
+        return unpause_move(view, _ME, braked=braked, ask_parked=ask, judge_parked=judge, has_env_and_session=warm)
+
+    assert move(_view(), braked=True) is UnpauseMove.WAIT
+    # The brake outranks the ask-parked clear: the pause-park stands until the brake lifts.
+    assert move(_view(), braked=True, ask=True) is UnpauseMove.WAIT
+    assert move(_view(), braked=True, judge=True) is UnpauseMove.WAIT
 
     assert move(_view(pause=_PAUSE)) is UnpauseMove.WAIT
     assert move(_view(route="r2")) is UnpauseMove.WAIT
