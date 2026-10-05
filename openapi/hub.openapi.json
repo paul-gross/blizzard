@@ -2870,6 +2870,71 @@
         "title": "CompletionSubmission",
         "type": "object"
       },
+      "ConfigApplyOutcome": {
+        "description": "One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and\n``unchanged`` for a named record that needed none; ``diff`` is empty for ``unchanged``.",
+        "properties": {
+          "diff": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeView"
+            },
+            "title": "Diff",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "title": "Op",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "op"
+        ],
+        "title": "ConfigApplyOutcome",
+        "type": "object"
+      },
+      "ConfigApplyResponse": {
+        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``.\n``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run.",
+        "properties": {
+          "apply_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Id"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigApplyOutcome"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "outcomes"
+        ],
+        "title": "ConfigApplyResponse",
+        "type": "object"
+      },
       "ConfigChangeView": {
         "description": "One row of the change log.",
         "properties": {
@@ -2964,6 +3029,46 @@
           "changes"
         ],
         "title": "ConfigChangesPage",
+        "type": "object"
+      },
+      "ConfigDocument": {
+        "additionalProperties": false,
+        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry.",
+        "properties": {
+          "repositories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RepositoryDocument"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "secrets": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Secrets",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          },
+          "work_sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkSourceDocument"
+            },
+            "title": "Work Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "ConfigDocument",
         "type": "object"
       },
       "CreateWorkItemProposal": {
@@ -6319,7 +6424,8 @@
           "fin",
           "fins",
           "gprop",
-          "dep"
+          "dep",
+          "apl"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -15828,6 +15934,65 @@
         ]
       }
     },
+    "/api/config/apply": {
+      "post": {
+        "description": "Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged.",
+        "operationId": "apply_config_api_config_apply_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigDocument"
+              }
+            },
+            "application/yaml": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Config",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/config/changes": {
       "get": {
         "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key`.",
@@ -15918,6 +16083,28 @@
           }
         },
         "summary": "List Changes",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/config/export": {
+      "get": {
+        "description": "Every active, non-built-in work source and repository with every field, and every active secret name,\nas a document that applies back as a no-op. Retired records are left out, since applying one would enable it.",
+        "operationId": "export_config_api_config_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Export Config",
         "tags": [
           "config"
         ]

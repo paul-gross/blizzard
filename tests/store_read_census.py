@@ -92,6 +92,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -1121,6 +1122,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         repositories=RepositoryRecordStore(store_connections),
         secrets=secret_store,
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
+        apply_writer=ConfigApplyStore(store_connections),
         clock=clock,
     )
     operator = ChangeContext(actor="operator", door=Door.API)

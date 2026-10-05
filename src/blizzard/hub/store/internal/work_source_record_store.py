@@ -53,6 +53,82 @@ def _columns(record: ConfiguredWorkSource) -> dict[str, object]:
     }
 
 
+def insert_record(conn: Connection, record: ConfiguredWorkSource, change: ConfigChange) -> None:
+    """The create body, inside the caller's transaction. :class:`WorkSourceSecretUnavailable`,
+    :class:`WorkSourceNameTaken` or :class:`WorkSourceLocatorTaken` when refused."""
+    _check_secret(conn, record.fields.secret)
+    if conn.execute(select(work_sources.c.name).where(work_sources.c.name == record.name)).first():
+        raise WorkSourceNameTaken(record.name)
+    holder = conn.execute(
+        select(work_sources.c.name).where(
+            work_sources.c.provider == record.fields.provider,
+            work_sources.c.locator == record.fields.locator,
+        )
+    ).first()
+    if holder is not None:
+        raise WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder.name)
+    conn.execute(
+        insert(work_sources).values(
+            name=record.name,
+            **_columns(record),
+            revision=record.revision,
+            created_at=record.created_at,
+            created_by=record.created_by,
+        )
+    )
+    append_change(conn, change)
+
+
+def update_record(conn: Connection, record: ConfiguredWorkSource, from_revision: int, change: ConfigChange) -> None:
+    """The compare-and-set edit body, inside the caller's transaction."""
+    _check_secret(conn, record.fields.secret)
+    holder = conn.execute(
+        select(work_sources.c.name).where(
+            work_sources.c.provider == record.fields.provider,
+            work_sources.c.locator == record.fields.locator,
+            work_sources.c.name != record.name,
+        )
+    ).first()
+    if holder is not None:
+        raise WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder.name)
+    moved = conn.execute(
+        update(work_sources)
+        .where(work_sources.c.name == record.name, work_sources.c.revision == from_revision)
+        .values(**_columns(record), revision=record.revision)
+    ).rowcount
+    if moved != 1:
+        raise ConfigRevisionConflict("work source", record.name, current=_revision(conn, record.name))
+    append_change(conn, change)
+
+
+def record_lifecycle_fact(
+    conn: Connection,
+    record: ConfiguredWorkSource,
+    *,
+    retired: bool,
+    from_revision: int,
+    at: datetime,
+    by: str,
+    change: ConfigChange,
+) -> None:
+    """The retire/enable body, inside the caller's transaction. Enabling re-checks the secret."""
+    if not retired:
+        _check_secret(conn, record.fields.secret)
+    moved = conn.execute(
+        update(work_sources)
+        .where(work_sources.c.name == record.name, work_sources.c.revision == from_revision)
+        .values(revision=record.revision)
+    ).rowcount
+    if moved != 1:
+        raise ConfigRevisionConflict("work source", record.name, current=_revision(conn, record.name))
+    conn.execute(insert(work_source_lifecycle_facts).values(name=record.name, retired=retired, set_at=at, set_by=by))
+    append_change(conn, change)
+
+
+def _revision(conn: Connection, name: str) -> int:
+    return conn.execute(select(work_sources.c.revision).where(work_sources.c.name == name)).scalar_one()
+
+
 class WorkSourceRecordStore:
     """Read-write work-source adapter over the hub store."""
 
@@ -64,27 +140,7 @@ class WorkSourceRecordStore:
             with self._store.write(
                 "create", expect=(WorkSourceSecretUnavailable, WorkSourceNameTaken, WorkSourceLocatorTaken)
             ) as conn:
-                _check_secret(conn, record.fields.secret)
-                if conn.execute(select(work_sources.c.name).where(work_sources.c.name == record.name)).first():
-                    raise WorkSourceNameTaken(record.name)
-                holder = conn.execute(
-                    select(work_sources.c.name).where(
-                        work_sources.c.provider == record.fields.provider,
-                        work_sources.c.locator == record.fields.locator,
-                    )
-                ).first()
-                if holder is not None:
-                    raise WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder.name)
-                conn.execute(
-                    insert(work_sources).values(
-                        name=record.name,
-                        **_columns(record),
-                        revision=record.revision,
-                        created_at=record.created_at,
-                        created_by=record.created_by,
-                    )
-                )
-                append_change(conn, change)
+                insert_record(conn, record, change)
         except IntegrityError as exc:  # a concurrent create won the race
             raise WorkSourceNameTaken(record.name) from exc
         return record
@@ -93,24 +149,7 @@ class WorkSourceRecordStore:
         with self._store.write(
             "update", expect=(WorkSourceSecretUnavailable, WorkSourceLocatorTaken, ConfigRevisionConflict)
         ) as conn:
-            _check_secret(conn, record.fields.secret)
-            holder = conn.execute(
-                select(work_sources.c.name).where(
-                    work_sources.c.provider == record.fields.provider,
-                    work_sources.c.locator == record.fields.locator,
-                    work_sources.c.name != record.name,
-                )
-            ).first()
-            if holder is not None:
-                raise WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder.name)
-            moved = conn.execute(
-                update(work_sources)
-                .where(work_sources.c.name == record.name, work_sources.c.revision == from_revision)
-                .values(**_columns(record), revision=record.revision)
-            ).rowcount
-            if moved != 1:
-                raise ConfigRevisionConflict("work source", record.name, current=self._revision(conn, record.name))
-            append_change(conn, change)
+            update_record(conn, record, from_revision, change)
         return record
 
     def record_lifecycle(
@@ -126,24 +165,10 @@ class WorkSourceRecordStore:
         with self._store.write(
             "record_lifecycle", expect=(WorkSourceSecretUnavailable, ConfigRevisionConflict)
         ) as conn:
-            if not retired:
-                _check_secret(conn, record.fields.secret)
-            moved = conn.execute(
-                update(work_sources)
-                .where(work_sources.c.name == record.name, work_sources.c.revision == from_revision)
-                .values(revision=record.revision)
-            ).rowcount
-            if moved != 1:
-                raise ConfigRevisionConflict("work source", record.name, current=self._revision(conn, record.name))
-            conn.execute(
-                insert(work_source_lifecycle_facts).values(name=record.name, retired=retired, set_at=at, set_by=by)
+            record_lifecycle_fact(
+                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )
-            append_change(conn, change)
         return record
-
-    @staticmethod
-    def _revision(conn: Connection, name: str) -> int:
-        return conn.execute(select(work_sources.c.revision).where(work_sources.c.name == name)).scalar_one()
 
     def get(self, name: str) -> ConfiguredWorkSource | None:
         return self.get_many([name]).get(name)

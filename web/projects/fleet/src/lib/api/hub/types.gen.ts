@@ -1816,6 +1816,52 @@ export type CompletionSubmission = {
 };
 
 /**
+ * ConfigApplyOutcome
+ *
+ * One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and
+ * ``unchanged`` for a named record that needed none; ``diff`` is empty for ``unchanged``.
+ */
+export type ConfigApplyOutcome = {
+    /**
+     * Diff
+     */
+    diff?: Array<FieldChangeView>;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Op
+     */
+    op: string;
+};
+
+/**
+ * ConfigApplyResponse
+ *
+ * What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
+ * ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run.
+ */
+export type ConfigApplyResponse = {
+    /**
+     * Apply Id
+     */
+    apply_id?: string | null;
+    /**
+     * Dry Run
+     */
+    dry_run: boolean;
+    /**
+     * Outcomes
+     */
+    outcomes: Array<ConfigApplyOutcome>;
+};
+
+/**
  * ConfigChangeView
  *
  * One row of the change log.
@@ -1877,6 +1923,32 @@ export type ConfigChangesPage = {
      * Next Before
      */
     next_before?: number | null;
+};
+
+/**
+ * ConfigDocument
+ *
+ * A declarative configuration document. Each entry is the kind's own document model, so a field an
+ * entry omits is left as stored; ``secrets`` lists secret names that must already be active.
+ * ``GET /api/config/export`` writes every field of every entry.
+ */
+export type ConfigDocument = {
+    /**
+     * Repositories
+     */
+    repositories?: Array<RepositoryDocument>;
+    /**
+     * Secrets
+     */
+    secrets?: Array<string>;
+    /**
+     * Version
+     */
+    version: 1;
+    /**
+     * Work Sources
+     */
+    work_sources?: Array<WorkSourceDocument>;
 };
 
 /**
@@ -4048,7 +4120,8 @@ export const IdPrefix = {
     FIN: 'fin',
     FINS: 'fins',
     GPROP: 'gprop',
-    DEP: 'dep'
+    DEP: 'dep',
+    APL: 'apl'
 } as const;
 
 /**
@@ -9529,6 +9602,36 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
 
+export type ApplyConfigApiConfigApplyPostData = {
+    body: ConfigDocument;
+    path?: never;
+    query?: {
+        /**
+         * Dry Run
+         */
+        dry_run?: boolean;
+    };
+    url: '/api/config/apply';
+};
+
+export type ApplyConfigApiConfigApplyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApplyConfigApiConfigApplyPostError = ApplyConfigApiConfigApplyPostErrors[keyof ApplyConfigApiConfigApplyPostErrors];
+
+export type ApplyConfigApiConfigApplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigApplyResponse;
+};
+
+export type ApplyConfigApiConfigApplyPostResponse = ApplyConfigApiConfigApplyPostResponses[keyof ApplyConfigApiConfigApplyPostResponses];
+
 export type ListChangesApiConfigChangesGetData = {
     body?: never;
     path?: never;
@@ -9570,6 +9673,22 @@ export type ListChangesApiConfigChangesGetResponses = {
 };
 
 export type ListChangesApiConfigChangesGetResponse = ListChangesApiConfigChangesGetResponses[keyof ListChangesApiConfigChangesGetResponses];
+
+export type ExportConfigApiConfigExportGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/export';
+};
+
+export type ExportConfigApiConfigExportGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigDocument;
+};
+
+export type ExportConfigApiConfigExportGetResponse = ExportConfigApiConfigExportGetResponses[keyof ExportConfigApiConfigExportGetResponses];
 
 export type GetSchemaApiConfigSchemaKindGetData = {
     body?: never;

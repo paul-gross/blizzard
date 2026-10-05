@@ -1,16 +1,20 @@
 """``ConfigAuthoring`` — the one writer of configured records.
 
-Every verb loads nothing: it takes the record the edge resolved (``bzh:domain-takes-objects``),
-asks the record's model for the change, and hands the write repository the record write together with the
-:class:`ConfigChange` it must commit in the same transaction (``bzh:configured-record``).
-A write that changes nothing writes nothing: no revision moves and no row is appended.
-
-Secrets route through here too; :mod:`.secret_lifecycle` decides their change rows."""
+Every verb takes the record the edge resolved (``bzh:domain-takes-objects``), asks the record's model for the change,
+and hands the write repository the record write with the :class:`ConfigChange` it commits in the same transaction
+(``bzh:configured-record``). A write that changes nothing writes nothing. Secrets route through here too."""
 
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config import secret_lifecycle
+from blizzard.hub.domain.config.apply import (
+    ConfigDeclaration,
+    EntryOutcome,
+    IConfigApplyWriter,
+    StoredConfig,
+    reconcile,
+)
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -41,12 +45,14 @@ class ConfigAuthoring:
         repositories: IWriteRepositoryRecordRepository,
         secrets: IWriteSecretRepository,
         cipher: ISecretCipher,
+        apply_writer: IConfigApplyWriter,
         clock: IClock,
     ) -> None:
         self._work_sources = work_sources
         self._repositories = repositories
         self._secrets = secrets
         self._cipher = cipher
+        self._apply_writer = apply_writer
         self._clock = clock
 
     # --- Work sources ------------------------------------------------------------
@@ -122,6 +128,18 @@ class ConfigAuthoring:
         return self._repositories.record_lifecycle(
             moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
         )
+
+    # --- Apply -------------------------------------------------------------------
+
+    def apply(
+        self, declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, dry_run: bool
+    ) -> tuple[EntryOutcome, ...]:
+        """Reconcile ``declaration`` against ``stored`` and commit every write in one transaction, or
+        — under ``dry_run`` — run that same transaction and roll it back. The outcomes are the same either way."""
+        plan = reconcile(declaration, stored, ctx, at=self._clock.now())
+        if plan.writes:
+            self._apply_writer.apply(plan.writes, dry_run=dry_run)
+        return plan.outcomes
 
     # --- Secrets -----------------------------------------------------------------
 

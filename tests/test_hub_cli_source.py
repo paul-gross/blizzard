@@ -122,3 +122,104 @@ def test_config_changes_carry_the_cli_door_and_no_secret_value(client: TestClien
     assert [(c["door"], c["record_key"]) for c in raw["changes"]] == [("cli", "gh-demo")]
     assert _SENTINEL not in json.dumps(raw)
     assert "no configuration changes" in _cli("config", ["changes", "--key", "absent"]).output
+
+
+# --- config apply and export --------------------------------------------------------
+
+_APPLY_YAML = """\
+version: 1
+secrets: [gh-demo]
+work_sources:
+  - {name: demo, provider: github, locator: acme/demo, secret: gh-demo}
+repositories:
+  - {name: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
+"""
+
+
+def _config(args: list[str]):  # type: ignore[no-untyped-def]
+    return _cli("config", args)
+
+
+def _json_line(output: str) -> dict:  # type: ignore[type-arg]
+    """The verb's JSON payload — the hosted app's log lines share the stream."""
+    return json.loads(next(line for line in output.splitlines() if line.startswith('{"changes"')))
+
+
+def _lines(output: str, op: str) -> list[str]:
+    return [line for line in output.splitlines() if line.startswith(op + " ")]
+
+
+def _changes_count() -> int:
+    return len(_json_line(_config(["changes", "--all", "--json"]).output)["changes"])
+
+
+def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> None:
+    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    as_json = {
+        "version": 1,
+        "work_sources": [{"name": "from-json", "provider": "github", "locator": "acme/j", "secret": "gh-demo"}],
+    }
+    (tmp_path / "a.yaml").write_text(_APPLY_YAML)
+    (tmp_path / "b.json").write_text(json.dumps(as_json))
+    (tmp_path / "c.yml").write_text(_APPLY_YAML)
+    first = _config(["apply", str(tmp_path / "a.yaml")])
+    assert first.exit_code == 0, first.output
+    assert len(_lines(first.output, "create")) == 2
+    from_json = _config(["apply", str(tmp_path / "b.json")])
+    assert from_json.exit_code == 0, from_json.output
+    assert len(_lines(from_json.output, "create")) == 1
+    from_yml = _config(["apply", str(tmp_path / "c.yml")])
+    assert from_yml.exit_code == 0, from_yml.output
+    assert len(_lines(from_yml.output, "unchanged")) == 2
+
+
+def test_an_unknown_extension_is_refused_before_any_request(client: TestClient, tmp_path: Path) -> None:
+    path = tmp_path / "doc.txt"
+    path.write_text(_APPLY_YAML)
+    before = _changes_count()
+    result = _config(["apply", str(path)])
+    assert result.exit_code != 0
+    assert ".yaml" in result.output and ".json" in result.output
+    assert _changes_count() == before
+
+
+def test_a_dry_run_prints_the_outcome_and_writes_nothing(client: TestClient, tmp_path: Path) -> None:
+    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    path = tmp_path / "cfg.yaml"
+    path.write_text(_APPLY_YAML)
+    before = _changes_count()
+    dry = _config(["apply", str(path), "--dry-run"])
+    assert dry.exit_code == 0, dry.output
+    assert len(_lines(dry.output, "create")) == 2
+    assert _changes_count() == before
+    real = _config(["apply", str(path)])
+    assert _lines(real.output, "create") == _lines(dry.output, "create")
+    rows = _json_line(_config(["changes", "--json"]).output)["changes"][:2]
+    assert {r["door"] for r in rows} == {"apply"}
+    assert len({r["apply_id"] for r in rows}) == 1
+
+
+def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, tmp_path: Path) -> None:
+    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    path = tmp_path / "cfg.yaml"
+    path.write_text(_APPLY_YAML)
+    assert _config(["apply", str(path)]).exit_code == 0
+    before = _changes_count()
+    for fmt, suffix in (("yaml", "yaml"), ("json", "json")):
+        exported = _config(["export", "--format", fmt])
+        assert exported.exit_code == 0, exported.output
+        out = tmp_path / f"out.{suffix}"
+        out.write_text(exported.output)
+        replay = _config(["apply", str(out)])
+        assert replay.exit_code == 0, replay.output
+        assert len(_lines(replay.output, "unchanged")) == 2 and not _lines(replay.output, "create")
+    assert json.loads(_config(["export", "--format", "json"]).output)["version"] == 1
+    assert _changes_count() == before
+
+
+def test_a_refused_apply_reports_the_hub_s_refusal(client: TestClient, tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(_APPLY_YAML)
+    result = _config(["apply", str(path)])
+    assert result.exit_code != 0
+    assert "secrets.0: secret gh-demo is unknown" in result.output

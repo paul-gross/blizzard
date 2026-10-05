@@ -231,6 +231,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/repositories/{name}/enable"): CONFIG_EDIT,
     ("GET", "/api/config/schema/{kind}"): FLEET_VIEW,
     ("GET", "/api/config/changes"): FLEET_VIEW,
+    ("GET", "/api/config/export"): FLEET_VIEW,
+    ("POST", "/api/config/apply"): CONFIG_EDIT,
     ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
     ("POST", "/api/work-sources/{source}/items"): CHUNK_CONTROL,
     ("GET", "/api/work-sources/{source}/items/{ref}"): FLEET_VIEW,

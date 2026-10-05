@@ -1,8 +1,14 @@
-"""The configuration change log as served — ``GET /api/config/changes``."""
+"""The configuration surface as served — the change log (``GET /api/config/changes``) and the
+declarative document (``POST /api/config/apply``, ``GET /api/config/export``)."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
+
+from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.work_source import WorkSourceDocument
 
 
 class FieldChangeView(BaseModel):
@@ -33,3 +39,35 @@ class ConfigChangesPage(BaseModel):
 
     changes: list[ConfigChangeView]
     next_before: int | None = None
+
+
+class ConfigDocument(BaseModel):
+    """A declarative configuration document. Each entry is the kind's own document model, so a field an
+    entry omits is left as stored; ``secrets`` lists secret names that must already be active.
+    ``GET /api/config/export`` writes every field of every entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1]
+    secrets: list[str] = []
+    work_sources: list[WorkSourceDocument] = []
+    repositories: list[RepositoryDocument] = []
+
+
+class ConfigApplyOutcome(BaseModel):
+    """One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and
+    ``unchanged`` for a named record that needed none; ``diff`` is empty for ``unchanged``."""
+
+    kind: str
+    key: str
+    op: str
+    diff: list[FieldChangeView] = []
+
+
+class ConfigApplyResponse(BaseModel):
+    """What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
+    ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run."""
+
+    dry_run: bool
+    apply_id: str | None = None
+    outcomes: list[ConfigApplyOutcome]
