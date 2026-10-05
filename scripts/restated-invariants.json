@@ -342,15 +342,15 @@
       ]
     },
     {
-      "id": "takeover-restart-past-escalation-undeferred",
-      "statement": "A restart recorded against a lease the escalation already closed releases no route, so InterruptedClaims.reconcile falls to its adopt arm and the re-entry proceeds rather than being deferred for the already-fenced takeover still open over the chunk.",
+      "id": "takeover-restart-past-escalation-held",
+      "statement": "A restart recorded against a lease the escalation already closed releases no route, so InterruptedClaims.reconcile falls to its adopt arm, which holds while the already-fenced takeover stays open over the chunk and proceeds once it ends.",
       "owner": "tests/test_runner_takeover.py#test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed",
       "owner_kind": "test",
       "owner_assert": {
-        "quote": "reaches this reconcile arm and adopts undeferred"
+        "quote": "the adopt holds while the takeover stands open"
       },
       "markers": [
-        "already fenced takeover still stands open"
+        "adopt holds while the takeover stands open"
       ],
       "sites": [
         {

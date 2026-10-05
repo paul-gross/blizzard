@@ -2673,6 +2673,53 @@ def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub
         assert store.boundary(lease.lease_id, 1, "spawn") is not None
 
 
+def _restarted_holding_unleased_claim(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.set_route_token("ch_1", token="tok", at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id=None,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=1)
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, epoch=1)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+    return store, harness, ctx
+
+
+@pytest.mark.unit
+def test_restart_adopt_holds_while_a_takeover_is_open(tmp_path):  # type: ignore[no-untyped-def]
+    store, harness, ctx = _restarted_holding_unleased_claim(tmp_path)
+
+    with capture_logs() as logs:
+        Fill(ctx).run()
+
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert store.held_environment_ids() == ["e1"]  # the binding is kept
+    held = [entry for entry in logs if entry["event"].startswith("holding interrupted claim")]
+    assert [(e["log_level"], e["chunk_id"], e["takeover_id"]) for e in held] == [("info", "ch_1", "tko_1")]
+
+
+@pytest.mark.unit
+def test_restart_adopt_proceeds_once_the_takeover_closes(tmp_path):  # type: ignore[no-untyped-def]
+    store, harness, ctx = _restarted_holding_unleased_claim(tmp_path)
+    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
+
+    Fill(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "build"
+    assert len(harness.spawns) == 1
+
+
 @pytest.mark.unit
 def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
