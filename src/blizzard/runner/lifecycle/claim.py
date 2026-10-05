@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_ids import StepKey, step_root
@@ -40,6 +41,7 @@ from blizzard.runner.lifecycle.model import (
     recovery_owner,
 )
 from blizzard.runner.lifecycle.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 
@@ -69,6 +71,8 @@ class ClaimStores(SpawnStores, Protocol):
     def environments(self) -> IWriteEnvironmentRepository: ...
     @property
     def requeue(self) -> IReadRequeueRepository: ...
+    @property
+    def takeover(self) -> IReadTakeoverRepository: ...
 
 
 class ClaimConfig(SpawnConfig, Protocol):
@@ -254,7 +258,9 @@ class InterruptedClaims:
         """``braked`` — either pause brake is engaged: the reclaim arm, the only one that makes a
         new hub claim, keeps its binding instead of claiming; every other arm still runs.
 
-        Open takeovers do not suppress this reconciliation."""
+        An open takeover holding the chunk suppresses only the adopt arm — a restart-entry adopt
+        would spawn into the person's workdir, so it keeps the binding and waits; the release,
+        reclaim, and requeue-resume arms still run."""
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
         # One read before the loop, not one `active_lease_for_chunk` per chunk
         # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.
@@ -275,7 +281,20 @@ class InterruptedClaims:
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
-        move = interrupted_claim_move(view, runner_id=self.ctx.config.runner_id, requeued=requeued, braked=braked)
+        # Read only where the adopt arm can be reached.
+        takeover = (
+            self.ctx.stores.takeover.open_takeover_for_chunk(chunk_id) if view.status == ChunkStatus.RUNNING else None
+        )
+        move = interrupted_claim_move(
+            view, runner_id=self.ctx.config.runner_id, requeued=requeued, braked=braked, takeover=takeover
+        )
+        if move is InterruptedClaimMove.HOLD_TAKEN_OVER and takeover is not None:
+            _log.info(
+                "holding interrupted claim — an open takeover holds the workdir",
+                chunk_id=chunk_id,
+                takeover_id=takeover.takeover_id,
+            )
+            return
         if move is InterruptedClaimMove.RESUME_REQUEUED:
             self._resume_requeued(chunk_id, view.latest_epoch)
         elif move is InterruptedClaimMove.ADOPT:

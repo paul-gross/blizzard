@@ -657,9 +657,8 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
 
 
 def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A restart against a lease an escalation already closed reaches this reconcile arm
-    and adopts undeferred, deliberately, even while an already-fenced takeover still
-    stands open over the chunk."""
+    """A restart against a lease an escalation already closed reaches this reconcile arm;
+    the adopt holds while the takeover stands open over the chunk and proceeds once it ends."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -684,7 +683,13 @@ def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp
 
     Fill(ctx).run()
 
-    assert len(harness.spawns) == 1  # adopted rather than skipped
+    assert harness.spawns == []  # the person's workdir is not spawned into
+    assert store.active_lease_for_chunk("ch_1") is None
+
+    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
+    Fill(ctx).run()
+
+    assert len(harness.spawns) == 1  # adopted once the takeover ended
     assert store.active_lease_for_chunk("ch_1") is not None
 
 

@@ -297,14 +297,24 @@ class InterruptedClaimMove(StrEnum):
     RELEASE_NO_ROUTE = "release-no-route"
     #: Keep the binding and look again next tick.
     HOLD = "hold"
+    #: Keep the binding — an adopt a person's open takeover holds the workdir against.
+    HOLD_TAKEN_OVER = "hold-taken-over"
 
 
-def interrupted_claim_move(view: ChunkState, *, runner_id: str, requeued: bool, braked: bool) -> InterruptedClaimMove:
+def interrupted_claim_move(
+    view: ChunkState,
+    *,
+    runner_id: str,
+    requeued: bool,
+    braked: bool,
+    takeover: OpenTakeover | None = None,
+) -> InterruptedClaimMove:
     """A pending requeue outranks everything; it resumes only once the chunk is neither paused nor
     ended, the mark left pending meanwhile. A resolved gate keeps its route live and is left to
     ADVANCE. A running chunk routed here is adopted — when FILL owns its node entry, a check
     against local epochs made only for this arm; a ready one is claimed again unless a brake
-    holds new claims."""
+    holds new claims. An adopt holds while ``takeover`` holds the chunk at the hub's latest epoch —
+    it would spawn into the person's workdir; no other arm reads the takeover."""
     ours = view.route_runner_id == runner_id
     if requeued:
         if not ours:
@@ -315,6 +325,8 @@ def interrupted_claim_move(view: ChunkState, *, runner_id: str, requeued: bool, 
     if view.decision is not None:
         return InterruptedClaimMove.HOLD
     if view.status == ChunkStatus.RUNNING and ours:
+        if takeover is not None and takeover.holds(view.chunk_id, view.latest_epoch):
+            return InterruptedClaimMove.HOLD_TAKEN_OVER
         return InterruptedClaimMove.ADOPT
     if view.status == ChunkStatus.READY:
         return InterruptedClaimMove.HOLD if braked else InterruptedClaimMove.RECLAIM

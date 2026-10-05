@@ -288,6 +288,22 @@ def test_interrupted_claim_move_table() -> None:
     assert move(_view(ChunkStatus.NEEDS_HUMAN)) is InterruptedClaimMove.HOLD
 
 
+def test_open_holding_takeover_yields_no_adopt() -> None:
+    def takeover(*, hold_epoch: int | None) -> OpenTakeover:
+        return replace(_takeover(), hold_epoch=hold_epoch)
+
+    def move(view: ChunkState, taken: OpenTakeover | None) -> InterruptedClaimMove:
+        return interrupted_claim_move(view, runner_id=_ME, requeued=False, braked=False, takeover=taken)
+
+    assert move(_view(epoch=1), takeover(hold_epoch=1)) is InterruptedClaimMove.HOLD_TAKEN_OVER
+    assert move(_view(epoch=2), takeover(hold_epoch=1)) is InterruptedClaimMove.ADOPT  # a re-claim above the ceiling
+    assert move(_view(epoch=1), None) is InterruptedClaimMove.ADOPT
+    # only the adopt arm reads the takeover
+    held = takeover(hold_epoch=1)
+    assert move(_view(ChunkStatus.READY, route=None), held) is InterruptedClaimMove.RECLAIM
+    assert move(_view(route="r2"), held) is InterruptedClaimMove.RELEASE_OTHER_RUNNER
+
+
 def test_requeued_resume_waits_out_pause_and_terminal() -> None:
     def move(view: ChunkState) -> InterruptedClaimMove:
         return interrupted_claim_move(view, runner_id=_ME, requeued=True, braked=False)
