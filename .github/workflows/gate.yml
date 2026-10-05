@@ -35,9 +35,19 @@ jobs:
       - name: structural gate (blizzard:structural-gate)
         run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
 
+  # The tier is the gate's longest job, so it runs as parallel shards — each a disjoint,
+  # stable slice of the collected suite (`BLIZZARD_TEST_SHARD`, tests/conftest.py) — and
+  # `python-tests-result` reports them under the single check name a required-check list
+  # names.
   python-tests:
-    name: pytest (unit + component)
+    name: pytest (unit + component) — shard ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-latest
+    strategy:
+      # Every shard runs to the end, so one CI cycle reports every failure, not the first.
+      fail-fast: false
+      matrix:
+        shards: [4]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -50,7 +60,20 @@ jobs:
       # BLIZZARD_E2E!=1) is excluded here — it is the local `mise run e2e` smoke test
       # that self-manages the live stack over a blizzard-mock fixture.
       - name: pytest
+        env:
+          BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
         run: uv run pytest -n auto
+
+  python-tests-result:
+    name: pytest (unit + component)
+    needs: [python-tests]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: every shard passed
+        env:
+          RESULT: ${{ needs.python-tests.result }}
+        run: test "$RESULT" = success || { echo "::error::a pytest shard finished '$RESULT'"; exit 1; }
 
   openapi-drift:
     name: OpenAPI spec drift

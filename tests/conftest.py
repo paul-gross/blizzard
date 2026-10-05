@@ -8,6 +8,7 @@ identity vars — see ``_strip_worker_identity_env``.
 from __future__ import annotations
 
 import os
+import zlib
 from collections.abc import Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -48,15 +49,44 @@ _TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep",
 UNMARKED_TEST_NODEIDS: list[str] = []
 
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Record every collected test that carries none of the six tier markers.
+#: ``<index>/<count>`` (1-based) keeps only that shard of the collected suite, so CI splits
+#: one tier across parallel jobs; unset keeps everything.
+SHARD_ENV = "BLIZZARD_TEST_SHARD"
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Record every collected test that carries none of the six tier markers, then keep only
+    this run's shard.
 
     An unmarked test still runs in the default suite but is invisible to both ``-m
-    unit`` and ``-m component`` -- a gap neither tier's total would catch.
+    unit`` and ``-m component`` -- a gap neither tier's total would catch. The record is
+    taken before sharding, so whichever shard runs the marker check sees the whole suite.
     """
     UNMARKED_TEST_NODEIDS[:] = [
         item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
     ]
+    spec = os.environ.get(SHARD_ENV)
+    if not spec:
+        return
+    index, count = parse_shard(spec)
+    deselected = [item for item in items if shard_of(item.nodeid, count) != index]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = [item for item in items if shard_of(item.nodeid, count) == index]
+
+
+def parse_shard(spec: str) -> tuple[int, int]:
+    """``"2/4"`` -> ``(2, 4)``; anything but ``1 <= index <= count`` is a usage error."""
+    index, sep, count = spec.partition("/")
+    if sep and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count):
+        return int(index), int(count)
+    raise pytest.UsageError(f"{SHARD_ENV}={spec!r}: expected <index>/<count> with 1 <= index <= count")
+
+
+def shard_of(nodeid: str, count: int) -> int:
+    """The 1-based shard a test belongs to — a stable hash of its nodeid, identical in every
+    process, so xdist workers agree on the collection and every test lands in exactly one shard."""
+    return zlib.crc32(nodeid.encode()) % count + 1
 
 
 # Identity vars a runner injects into worker spawn (``ClaudeCodeAdapter._spawn_env``);

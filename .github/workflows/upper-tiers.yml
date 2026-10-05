@@ -39,9 +39,16 @@ on:
         default: "1"
 
 jobs:
+  # Sharded like gate.yml's pytest tier: disjoint `BLIZZARD_TEST_SHARD` slices in parallel,
+  # reported under the single check name by `service-tier-result`.
   service-tier:
-    name: service tier (blizzard:service-test)
+    name: service tier (blizzard:service-test) — shard ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shards: [3]
+        shard: [1, 2, 3]
     steps:
       - name: checkout blizzard
         uses: actions/checkout@v4
@@ -106,7 +113,19 @@ jobs:
         env:
           BLIZZARD_SERVICE: "1"
           BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+          BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
         run: cd blizzard && uv run pytest -n auto tests/service/ -v
+
+  service-tier-result:
+    name: service tier (blizzard:service-test)
+    needs: [service-tier]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: every shard passed
+        env:
+          RESULT: ${{ needs.service-tier.result }}
+        run: test "$RESULT" = success || { echo "::error::a service-tier shard finished '$RESULT'"; exit 1; }
 
   crash-sweep:
     name: kill-9 crash sweep — CI profile (blizzard:crash-sweep)

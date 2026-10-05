@@ -18,6 +18,13 @@ generated API clients are excluded and `.html` templates are outside Vale's conf
 rule flags crisp provenance phrases in prose; regression fixture explanations using “used to” are not flagged. Every
 gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs.
 
+The pytest tier runs as four parallel shard jobs, and the service tier below as three.
+`BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/conftest.py`) keeps one disjoint slice of the collected suite, chosen by a
+stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job reports each
+sharded tier under its single check name — `gate / pytest (unit + component)`,
+`upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
+Unset, the variable keeps the whole suite; the local commands below run unsharded.
+
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
 
