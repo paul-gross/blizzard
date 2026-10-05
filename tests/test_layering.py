@@ -2195,16 +2195,6 @@ _WIRE_ADAPTERS = tuple(
         "runner/transcripts/internal/segment_projection.py",
     )
 )
-#: The modules outside the app boundary still importing a ``wire/`` model — a closed list that only
-#: shrinks, as each concept maps the wire to its own domain models at its edge.
-_WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY = frozenset(
-    {
-        "hub/domain/garden/delivery/materialize.py",
-        "hub/domain/garden/delivery/validation.py",
-        "hub/domain/garden/review/validation.py",
-        "hub/domain/garden/runs/history.py",
-    }
-)
 
 
 def _terminal(expr: ast.AST | None) -> str | None:
@@ -2643,20 +2633,17 @@ def _adapter_model_violations(src_root: Path, paths: Iterable[Path] | None = Non
     return violations
 
 
-def _wire_import_violations(src_root: Path, *, listed: frozenset[str], exempt: frozenset[Path]) -> list[str]:
+def _wire_import_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[str]:
     """Every module under ``src_root`` — outside the app boundary, the wire adapters, and
-    ``exempt`` — importing ``blizzard.wire`` that ``listed`` does not name, and every ``listed``
-    module (relative to ``src_root``) that imports none."""
-    importers: set[str] = set()
+    ``exempt`` — importing ``blizzard.wire``."""
+    violations: list[str] = []
     for path in sorted(src_root.rglob("*.py")):
         rel = path.relative_to(src_root)
         if _in_app_boundary(rel) or any(rel.is_relative_to(a) for a in _WIRE_ADAPTERS) or path in exempt:
             continue
         if any(m == "blizzard.wire" or m.startswith("blizzard.wire.") for m in _imported_modules(path)):
-            importers.add(rel.as_posix())
-    unlisted = [f"{rel} imports a wire/ model outside the app boundary" for rel in sorted(importers - listed)]
-    stale = [f"{rel} is listed as a wire/ importer yet imports none" for rel in sorted(listed - importers)]
-    return unlisted + stale
+            violations.append(f"{rel.as_posix()} imports a wire/ model outside the app boundary")
+    return violations
 
 
 def _domain_model_collaborator_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
@@ -2792,13 +2779,10 @@ def test_a_dto_lives_at_the_app_boundary() -> None:
 
 
 def test_only_the_boundary_names_a_wire_model() -> None:
-    """A ``wire/`` model is named only at the app boundary, by the runner's hub client, and by a
-    composition root; every other importer is on a closed list that only shrinks
-    (``bzh:data-roles``)."""
-    violations = _wire_import_violations(
-        _SRC_DIR, listed=_WIRE_IMPORTERS_OUTSIDE_THE_BOUNDARY, exempt=_COMPOSITION_ROOTS
-    )
-    assert not violations, f"data roles — {len(violations)} wire/ import(s) off the list: {violations}"
+    """A ``wire/`` model is named only at the app boundary, by an adapter that sends or receives
+    the wire itself, and by a composition root (``bzh:data-roles``)."""
+    violations = _wire_import_violations(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
+    assert not violations, f"data roles — {len(violations)} wire/ import(s) outside the boundary: {violations}"
 
 
 def test_an_adapter_model_crosses_no_protocol() -> None:
@@ -3033,28 +3017,31 @@ _WIRE_IMPORT = "from blizzard.wire.chunk import ChunkView\n"
 
 
 @pytest.mark.parametrize(
-    ("files", "listed", "fragment"),
+    ("rel", "source"),
     [
-        ({"hub/domain/mod.py": _WIRE_IMPORT}, frozenset(), "hub/domain/mod.py imports a wire/ model"),
-        ({"runner/leases/mod.py": "import blizzard.wire.chunk\n"}, frozenset(), "runner/leases/mod.py imports"),
-        ({"hub/domain/mod.py": ""}, frozenset({"hub/domain/mod.py"}), "hub/domain/mod.py is listed"),
+        ("hub/domain/mod.py", _WIRE_IMPORT),
+        ("runner/leases/mod.py", "import blizzard.wire.chunk\n"),
+        ("hub/store/internal/mod_store.py", _WIRE_IMPORT),
+        ("runner/transcripts/internal/other.py", _WIRE_IMPORT),
     ],
 )
-def test_wire_import_check_catches_an_unlisted_or_stale_importer(
-    tmp_path: Path, files: dict[str, str], listed: frozenset[str], fragment: str
-) -> None:
-    violations = _wire_import_violations(_plant_roles(tmp_path, files), listed=listed, exempt=frozenset())
-    assert len(violations) == 1, violations
-    assert fragment in violations[0]
+def test_wire_import_check_catches_an_importer_outside_the_boundary(tmp_path: Path, rel: str, source: str) -> None:
+    violations = _wire_import_violations(_plant_roles(tmp_path, {rel: source}), exempt=frozenset())
+    assert violations == [f"{rel} imports a wire/ model outside the app boundary"]
 
 
-def test_wire_import_check_admits_the_boundary_the_hub_client_a_root_and_a_listed_module(tmp_path: Path) -> None:
-    importers = ("hub/api/mod.py", "wire/view.py", "runner/hub/client.py", "hub/app.py", "hub/domain/listed.py")
-    src = _plant_roles(tmp_path, dict.fromkeys(importers, _WIRE_IMPORT))
-    violations = _wire_import_violations(
-        src, listed=frozenset({"hub/domain/listed.py"}), exempt=frozenset({src / "hub/app.py"})
+def test_wire_import_check_admits_the_boundary_the_wire_adapters_and_a_root(tmp_path: Path) -> None:
+    importers = (
+        "hub/api/mod.py",
+        "wire/view.py",
+        "runner/hub/client.py",
+        "hub/events/broker.py",
+        "runner/events/broker.py",
+        "runner/transcripts/internal/segment_projection.py",
+        "hub/app.py",
     )
-    assert violations == []
+    src = _plant_roles(tmp_path, dict.fromkeys(importers, _WIRE_IMPORT))
+    assert _wire_import_violations(src, exempt=frozenset({src / "hub/app.py"})) == []
 
 
 @pytest.mark.parametrize(

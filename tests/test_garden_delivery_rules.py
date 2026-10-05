@@ -28,10 +28,10 @@ from blizzard.hub.domain.garden.delivery.validation import (
     select_delta_artifacts,
     select_proposal_artifacts,
 )
+from blizzard.hub.domain.garden.formats import DeliveredDelta, ProposalCandidate
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.finding import FindingDelta
-from blizzard.wire.garden_proposal import GardenProposalCandidate
+from tests.garden_artifacts import candidate, delivered_delta
 
 pytestmark = pytest.mark.unit
 
@@ -68,14 +68,14 @@ def _artifact(name: str, data: str) -> StoredArtifact:
     )
 
 
-def _candidate(**overrides: object) -> GardenProposalCandidate:
+def _candidate(**overrides: object) -> ProposalCandidate:
     payload: dict[str, object] = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
     payload.update(overrides)
-    return GardenProposalCandidate.model_validate(payload)
+    return candidate(payload)
 
 
-def _delta(findings: Sequence[Mapping[str, object]]) -> FindingDelta:
-    return FindingDelta.model_validate({"scope": "blizzard", "revisions": {"blizzard": "abc"}, "findings": findings})
+def _delta(findings: Sequence[Mapping[str, object]]) -> DeliveredDelta:
+    return delivered_delta({"scope": "blizzard", "revisions": {"blizzard": "abc"}, "findings": findings})
 
 
 # -- which artifacts a delivery reads ------------------------------------------------
@@ -242,9 +242,7 @@ def test_an_introduced_instant_is_looked_up_only_for_a_single_repo_delta() -> No
     introduced = datetime(2026, 7, 1, tzinfo=UTC)
     add = {"op": "add", "class": "c", "locus": "a.py:1", "summary": "s", "introduced": "abc1234"}
     single = _delta([add])
-    multi = FindingDelta.model_validate(
-        {"scope": "blizzard", "revisions": {"blizzard": "abc", "other": "def"}, "findings": [add]}
-    )
+    multi = delivered_delta({"scope": "blizzard", "revisions": {"blizzard": "abc", "other": "def"}, "findings": [add]})
     lookups: dict[tuple[str, str], datetime | None] = {
         ("blizzard", "abc1234"): introduced,
         ("other", "abc1234"): introduced,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsMaterialize,
     ReviewFindingsOutcome,
@@ -14,7 +15,6 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.domain.garden.review.validation import (
     REVIEW_FINDING_DELTA_ARTIFACT,
-    parse_review_finding_delta,
     require_review_delta,
     validate_review_findings,
 )
@@ -26,9 +26,16 @@ class ReviewFindingsRecorder:
     :class:`~blizzard.hub.domain.garden.review.validation.ReviewFindingsRejected` when the
     chunk carries no review-finding delta or it fails validation, nothing written."""
 
-    def __init__(self, *, artifacts: IReadChunkArtifactsRepository, materialize: ReviewFindingsMaterialize) -> None:
+    def __init__(
+        self,
+        *,
+        artifacts: IReadChunkArtifactsRepository,
+        materialize: ReviewFindingsMaterialize,
+        formats: IGardenFormats,
+    ) -> None:
         self._artifacts = artifacts
         self._materialize = materialize
+        self._formats = formats
 
     def record(self, *, chunk: Chunk, node: Node, epoch: int) -> ReviewFindingsOutcome:
         """Deliver `chunk`'s newest review-finding delta from `(node, epoch)`. The replay
@@ -40,5 +47,5 @@ class ReviewFindingsRecorder:
         artifact = require_review_delta(
             self._artifacts.latest_artifact(chunk.chunk_id, REVIEW_FINDING_DELTA_ARTIFACT), chunk_id=chunk.chunk_id
         )
-        validated = validate_review_findings(parse_review_finding_delta(REVIEW_FINDING_DELTA_ARTIFACT, artifact.data))
+        validated = validate_review_findings(self._formats.review_delta(REVIEW_FINDING_DELTA_ARTIFACT, artifact.data))
         return self._materialize.deliver(validated, chunk=chunk, node=node, epoch=epoch)

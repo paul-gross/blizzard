@@ -17,6 +17,7 @@ from blizzard.hub.domain.garden.delivery.validation import (
     validate_delivery,
 )
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
 
@@ -32,11 +33,13 @@ class GardenDeliveryRecorder:
         artifacts: IReadChunkArtifactsRepository,
         buckets: FindingBucketReader,
         materialize: GardenDelivery,
+        formats: IGardenFormats,
         resolve_commit: CommitResolver | None,
     ) -> None:
         self._artifacts = artifacts
         self._buckets = buckets
         self._materialize = materialize
+        self._formats = formats
         self._resolve_commit = resolve_commit
 
     def record(
@@ -67,6 +70,7 @@ class GardenDeliveryRecorder:
             delta_artifacts=deltas.contents,
             proposal_artifacts=proposals.contents,
             bucket=self._buckets.for_run(run),
+            formats=self._formats,
             resolve_commit=self._resolve_commit,
         )
         return self._materialize.deliver(

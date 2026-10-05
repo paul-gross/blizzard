@@ -26,6 +26,7 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
@@ -733,6 +734,7 @@ def build_services(
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_run_store = GardenRunStore(store_connections)
     finding_bucket = FindingBucketReader(finding_store)
+    garden_formats = GardenFormats()
     # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
@@ -947,11 +949,13 @@ def build_services(
             artifacts=chunk_artifacts,
             buckets=finding_bucket,
             materialize=GardenDelivery(delivery=garden_delivery_store, clock=clock),
+            formats=garden_formats,
             resolve_commit=commit_resolver,
         ),
         review_findings=ReviewFindingsRecorder(
             artifacts=chunk_artifacts,
             materialize=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
+            formats=garden_formats,
         ),
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
@@ -963,6 +967,7 @@ def build_services(
             chunk_records=chunk_record,
             chunk_facts=chunk_facts,
             findings=finding_store,
+            formats=garden_formats,
             clock=clock,
         ),
         annotation=AnnotationReconciler(

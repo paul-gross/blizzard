@@ -16,6 +16,7 @@ from blizzard.foundation.ids import FINDING_PREFIX
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.garden.formats import DeferredReviewEntry
 from blizzard.hub.domain.garden.review.materialize import (
     IWriteReviewFindingsRepository,
     ReviewFindingsMaterialize,
@@ -24,7 +25,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.finding import DeferredReviewFindingEntry
+from tests.garden_artifacts import deferred_entry
 
 pytestmark = pytest.mark.unit
 
@@ -63,8 +64,8 @@ def _as_write_repo(repo: _FakeReviewFindingsRepo) -> IWriteReviewFindingsReposit
     return cast(IWriteReviewFindingsRepository, repo)
 
 
-def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> DeferredReviewFindingEntry:
-    return DeferredReviewFindingEntry.model_validate(
+def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> DeferredReviewEntry:
+    return deferred_entry(
         {
             "ref": ref,
             "disposition": "deferred",
