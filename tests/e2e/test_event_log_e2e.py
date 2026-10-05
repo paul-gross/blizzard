@@ -512,7 +512,7 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
             # ring is not — the next `_hub()` call starts a fresh, empty one over the same store.
-            with _hub(hub_dir, forge_port, hub_port):
+            with _hub(hub_dir, forge_port, hub_port, rehost=True):
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # The fresh broker's replay tail is empty — only `GET /api/activity`

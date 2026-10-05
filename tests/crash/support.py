@@ -403,7 +403,7 @@ _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-de
 LAND_STEP = """python3 - <<'PYEOF'
 import json, os, sys, urllib.error, urllib.request
 
-forge = os.environ["BZ_FORGE_URL"]
+forge = os.environ.get("BZ_FORGE_URL", "")
 base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
 commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
 

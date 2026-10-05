@@ -68,7 +68,7 @@ from tests.crash.support import (
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import free_port
+from tests.support import create_repositories, fixture_repository, free_port
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -2688,6 +2688,11 @@ def _merged_markers(hub: httpx.Client, chunk_id: str) -> list[str]:
     return sorted(a["name"] for a in detail.json()["artifacts"] if a["name"].startswith("merged/"))
 
 
+def _create_web_repository(hub: httpx.Client, forge_port: int) -> None:
+    """The second repository the two-repo land resolves its ``toy-web`` commit against."""
+    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, f"http://127.0.0.1:{forge_port}", owner=OWNER)])
+
+
 def _repo_pull_count(forge: httpx.Client, repo: str) -> int:
     resp = forge.get(f"/repos/{OWNER}/{repo}/pulls", params={"state": "all"})
     resp.raise_for_status()
@@ -2718,6 +2723,7 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
+        _create_web_repository(hub, crash_env.forge_port)
         api_pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
         web_pulls_before = _repo_pull_count(crash_env.forge, _WEB_REPO_NAME)
 
@@ -2766,7 +2772,9 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill", after_recovery=True)
 
         # Both markers are now durable, and no live exec slot leaked.
-        assert _merged_markers(hub, chunk_id) == sorted([f"merged/{REPO_NAME}", f"merged/{_WEB_REPO_NAME}"])
+        assert _merged_markers(hub, chunk_id) == sorted(
+            [f"merged/{OWNER}/{REPO_NAME}", f"merged/{OWNER}/{_WEB_REPO_NAME}"]
+        )
         assert _live_exec_slots(hub_dir) == 0, "a hub_exec_slot leaked live after the mid-script recovery"
 
         # Exactly-once: each repo's change is reachable from its bare main exactly once.
@@ -2861,6 +2869,7 @@ def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Pa
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
+        _create_web_repository(hub, crash_env.forge_port)
         api_pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
         web_pulls_before = _repo_pull_count(crash_env.forge, _WEB_REPO_NAME)
 
@@ -2913,7 +2922,9 @@ def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Pa
         )
 
         # Both markers are now durable, and no live exec slot leaked.
-        assert _merged_markers(hub, chunk_id) == sorted([f"merged/{REPO_NAME}", f"merged/{_WEB_REPO_NAME}"])
+        assert _merged_markers(hub, chunk_id) == sorted(
+            [f"merged/{OWNER}/{REPO_NAME}", f"merged/{OWNER}/{_WEB_REPO_NAME}"]
+        )
         assert _live_exec_slots(hub_dir) == 0, "a hub_exec_slot leaked live after the mid-script recovery (land_pr_ci)"
 
         # Exactly-once: each repo's change is reachable from its bare main exactly once.
