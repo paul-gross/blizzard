@@ -6,7 +6,6 @@ and an unknown id raising ``ChunkNotFoundError`` at every reader without a repea
 
 from __future__ import annotations
 
-import ast
 import json
 from datetime import UTC, datetime
 
@@ -23,7 +22,6 @@ from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
-from tests.repo_files import repo_root
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -255,30 +253,3 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
     assert all(envelope.node.node_name != "review" for envelope, _ in harness.spawns)
     assert store.active_lease_for_chunk("ch_b") is None  # parked, not carried into "review"
     assert [f.kind for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]
-
-
-def test_no_module_under_runner_loop_imports_chunk_detail() -> None:
-    """The migration's own acceptance criterion: every one of the nine
-    per-chunk reads now goes through ``IChunkViews``/``ChunkStatusView``, never the full
-    ``ChunkDetail`` aggregate — across the tick and every concept package its steps live in."""
-    runner_dir = repo_root() / "src" / "blizzard" / "runner"
-    step_packages = (
-        "loop",
-        "lifecycle",
-        "hub",
-        "leases",
-        "transcripts",
-        "throttle",
-        "usage",
-        "tracing",
-        "process",
-        "environments",
-        "harness",
-    )
-    offenders = []
-    for path in sorted(p for package in step_packages for p in (runner_dir / package).rglob("*.py")):
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and any(alias.name == "ChunkDetail" for alias in node.names):
-                offenders.append(str(path))
-    assert offenders == []

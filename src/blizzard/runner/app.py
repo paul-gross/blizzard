@@ -72,8 +72,8 @@ from blizzard.runner.api.transcript_segments import router as transcript_segment
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
+from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
