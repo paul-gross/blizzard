@@ -26,10 +26,10 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     MigrationFact,
 )
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.chunk.proposals import ItemProposal, StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.execution.submissions import Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, FollowLatest, Graph, GraphStanding, Node
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, WorkItemProposal
 
 
 class CompletionRefused(Exception):
@@ -145,7 +145,7 @@ class CompletionPlan:
         cls,
         graph: Graph,
         from_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         *,
         open_gate: GateDecision | None,
         produces_mode: str,
@@ -183,7 +183,7 @@ class CompletionPlan:
         cls,
         graph: Graph,
         gate_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         decision: GateDecision | None,
         *,
         chunk: Chunk,
@@ -266,7 +266,7 @@ class MigrationTargets:
     follow_latest: Graph | None
 
     @staticmethod
-    def cross_graph_name(graph: Graph, submission: CompletionSubmission) -> str | None:
+    def cross_graph_name(graph: Graph, submission: Completion) -> str | None:
         """The graph name the submitted choice's edge crosses into, or ``None`` when it stays."""
         return graph.cross_graph_target_name(submission.from_node_id, submission.choice)
 
@@ -398,7 +398,7 @@ class NextStep:
 
 
 def stored_artifacts(
-    chunk_id: str, node: Node, epoch: int, artifacts: Sequence[SubmittedArtifact], *, artifact_ids: Sequence[str]
+    chunk_id: str, node: Node, epoch: int, artifacts: Sequence[CompletionArtifact], *, artifact_ids: Sequence[str]
 ) -> list[StoredArtifact]:
     """The artifact rows a submission lands, one minted id each. A ``git_commit`` encodes
     ``branch:hash`` and alone carries its repo and forge — the envelope's projection decodes it."""
@@ -426,7 +426,7 @@ def stamped_proposals(
     chunk_id: str,
     node: Node,
     epoch: int,
-    proposals: Sequence[WorkItemProposal],
+    proposals: Sequence[ItemProposal],
     *,
     proposal_ids: Sequence[str],
     runner_id: str,

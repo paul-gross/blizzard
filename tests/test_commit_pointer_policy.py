@@ -7,7 +7,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
 
 pytestmark = pytest.mark.unit
 
@@ -15,9 +15,9 @@ _SHA1 = "a" * 40
 _SHA256 = "b" * 64
 
 
-def _commit(**overrides: str | None) -> SubmittedArtifact:
+def _commit(**overrides: str | None) -> CompletionArtifact:
     fields = {"repo": "acme/widget", "branch_name": "feat/x", "commit_hash": _SHA1, **overrides}
-    return SubmittedArtifact.model_validate({"name": "w", "kind": ArtifactKind.GIT_COMMIT, **fields})
+    return CompletionArtifact(name="w", kind=ArtifactKind.GIT_COMMIT, **fields)
 
 
 def test_a_complete_pointer_is_accepted() -> None:
@@ -51,5 +51,5 @@ def test_each_missing_or_malformed_field_is_refused_by_name(overrides: dict[str,
 
 
 def test_an_asset_artifact_is_ignored() -> None:
-    asset = SubmittedArtifact(name="notes", kind=ArtifactKind.ASSET, content="diff --git a/x b/x")
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="diff --git a/x b/x")
     assert CommitPointerPolicy([asset]).rejection() is None

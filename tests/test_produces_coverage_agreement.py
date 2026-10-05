@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
 from blizzard.hub.domain.graph.model import Node, ProducesSpec
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.wire.completion import SubmittedArtifact
@@ -128,7 +129,8 @@ def test_hub_and_runner_agree_on_coverage(
 ) -> None:
     """One scenario, both predicates, same verdict — and the verdict is the expected one:
     two sides re-forked into the same wrong answer would still agree with each other."""
-    hub_rejects = Produces(_node(produces=produces), artifacts).rejection(mode=PRODUCES_ENFORCE) is not None
+    hub_artifacts = [CompletionArtifact(**a.model_dump()) for a in artifacts]
+    hub_rejects = Produces(_node(produces=produces), hub_artifacts).rejection(mode=PRODUCES_ENFORCE) is not None
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=_envelope_produces(produces)
     )

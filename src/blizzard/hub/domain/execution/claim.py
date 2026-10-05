@@ -33,7 +33,6 @@ from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard, RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
-from blizzard.wire.envelope import NodeEnvelope
 
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
 _ROUTE_TOKEN_BYTES = 32
@@ -218,7 +217,7 @@ class ClaimResult:
     id, which :class:`~blizzard.hub.domain.runners.route.Route` itself does not carry."""
 
     route: Route
-    envelope: NodeEnvelope
+    envelope: Envelope
     route_token: str
     route_id: str
 
@@ -328,7 +327,7 @@ class ClaimService:
             ChunkFacts.or_default(facts),
             self._artifacts.load_artifacts(chunk.chunk_id),
             label=self._label,
-        ).wire
+        )
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
     def rekey(self, route: Route, facts: ChunkFacts) -> str:

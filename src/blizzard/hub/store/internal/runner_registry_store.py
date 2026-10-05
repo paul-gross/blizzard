@@ -11,7 +11,6 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 
-from pydantic import ValidationError
 from sqlalchemy import Select, insert, select
 
 from blizzard.foundation.store.batching import id_batches
@@ -30,7 +29,6 @@ from blizzard.hub.domain.runners.registration import (
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
-from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 
 def locked_token_hash(runner_id: str) -> Select[tuple[str | None]]:
@@ -627,21 +625,8 @@ class RunnerRegistryStore:
             return ()
         if not isinstance(entries, list):
             return ()
-        windows = []
-        for entry in entries:
-            try:
-                window = ExternalSubscriptionUsageWindowFact.model_validate(entry)
-            except ValidationError:
-                continue
-            windows.append(
-                ExternalSubscriptionUsageWindow(
-                    window=window.window,
-                    utilization_pct=window.utilization_pct,
-                    resets_at=as_utc(window.resets_at),
-                    window_seconds=window.window_seconds,
-                )
-            )
-        return tuple(windows)
+        admitted = (ExternalSubscriptionUsageWindow.admitted(entry) for entry in entries)
+        return tuple(window for window in admitted if not isinstance(window, str))
 
 
 def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:

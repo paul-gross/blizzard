@@ -7,6 +7,7 @@ only as the resolving transition."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -32,7 +33,7 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
+from blizzard.hub.domain.chunk.proposals import ItemProposal, StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import RouteToken
@@ -53,10 +54,9 @@ from blizzard.hub.domain.execution.completion import (
     stored_artifacts,
 )
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
+from blizzard.hub.domain.execution.submissions import Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, WorkItemProposal
-from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (``bzh:crash-point-registry``): the whole
 # migration is committed but its response is not; the replayed completion re-derives it.
@@ -70,11 +70,14 @@ _CP_MIGRATE_AFTER_RECORD = crashpoint(
 @domain_model
 @dataclass(frozen=True)
 class ApplyResult:
-    """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus the
-    identity of the durable fact this call itself just wrote. At most one of
-    the two is ever set, and only on a genuinely fresh write. Not a wire type."""
+    """:meth:`ApplyService.apply`'s own return — what the apply produced, the envelope the runner
+    continues with on ``NEXT`` or the detail of any other outcome, and the identity of the durable
+    fact this call itself just wrote. At most one of the two ids is ever set, and only on a
+    genuinely fresh write."""
 
-    response: ApplyResponse
+    outcome: ApplyOutcome
+    detail: str | None = None
+    envelope: Envelope | None = None
     transition_id: str | None = None
     migration_id: str | None = None
 
@@ -84,11 +87,11 @@ class ApplyResult:
         return self._migrated_freshly()
 
     def _migrated_freshly(self) -> bool:
-        return self.response.outcome is ApplyOutcome.MIGRATED and self.migration_id is not None
+        return self.outcome is ApplyOutcome.MIGRATED and self.migration_id is not None
 
     @classmethod
     def failure(cls, detail: str) -> ApplyResult:
-        return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
+        return cls(outcome=ApplyOutcome.FAILURE, detail=detail)
 
     @classmethod
     def replayed(cls, replay: ReplayedMigration, *, epoch: int) -> ApplyResult:
@@ -101,21 +104,17 @@ class ApplyResult:
 
     @classmethod
     def done(cls, transition_id: str | None) -> ApplyResult:
-        return cls(
-            response=ApplyResponse(outcome=ApplyOutcome.DONE, detail="chunk reached the terminal"),
-            transition_id=transition_id,
-        )
+        return cls(outcome=ApplyOutcome.DONE, detail="chunk reached the terminal", transition_id=transition_id)
 
     @classmethod
-    def advance(cls, envelope: NodeEnvelope, transition_id: str | None) -> ApplyResult:
-        return cls(
-            response=ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=envelope), transition_id=transition_id
-        )
+    def advance(cls, envelope: Envelope, transition_id: str | None) -> ApplyResult:
+        return cls(outcome=ApplyOutcome.NEXT, envelope=envelope, transition_id=transition_id)
 
     @classmethod
     def parked(cls, gate_node: Node, transition_id: str | None) -> ApplyResult:
         return cls(
-            response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{gate_node.name}`"),
+            outcome=ApplyOutcome.PARKED_AT_GATE,
+            detail=f"parked at gate `{gate_node.name}`",
             transition_id=transition_id,
         )
 
@@ -124,39 +123,31 @@ class ApplyResult:
         """An unresolved cross-graph target's park — ``FAILURE`` would requeue and supersede the
         escalation this answers."""
         return cls(
-            response=ApplyResponse(
-                outcome=ApplyOutcome.PARKED_AT_GATE,
-                detail=f"cross-graph target `{target_graph_name}` did not resolve; chunk escalated for a human",
-            )
+            outcome=ApplyOutcome.PARKED_AT_GATE,
+            detail=f"cross-graph target `{target_graph_name}` did not resolve; chunk escalated for a human",
         )
 
     @classmethod
     def taken_over(cls, to_node: Node, transition_id: str | None) -> ApplyResult:
         return cls(
-            response=ApplyResponse(
-                outcome=ApplyOutcome.HUB_NODE_TAKEN,
-                detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
-            ),
+            outcome=ApplyOutcome.HUB_NODE_TAKEN,
+            detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
             transition_id=transition_id,
         )
 
     @classmethod
     def landed_on_hub(cls, landed_node: Node, migration_id: str | None) -> ApplyResult:
         return cls(
-            response=ApplyResponse(
-                outcome=ApplyOutcome.HUB_NODE_TAKEN,
-                detail=f"migration landed on hub node `{landed_node.name}`; poll the chunk for the outcome",
-            ),
+            outcome=ApplyOutcome.HUB_NODE_TAKEN,
+            detail=f"migration landed on hub node `{landed_node.name}`; poll the chunk for the outcome",
             migration_id=migration_id,
         )
 
     @classmethod
     def migrated(cls, from_node: Node, target_graph: Graph, migration_id: str | None) -> ApplyResult:
         return cls(
-            response=ApplyResponse(
-                outcome=ApplyOutcome.MIGRATED,
-                detail=f"node `{from_node.name}` migrated the chunk to graph `{target_graph.name}`; re-queued",
-            ),
+            outcome=ApplyOutcome.MIGRATED,
+            detail=f"node `{from_node.name}` migrated the chunk to graph `{target_graph.name}`; re-queued",
             migration_id=migration_id,
         )
 
@@ -165,18 +156,14 @@ class ApplyResult:
         """A lost-ack re-flush of a **runner-landing** migration that already landed.
         Carries no node/graph detail: the migration re-pinned the graph, so the natural-key probe
         alone (not a graph lookup) resolves the replay. No fresh fact, so no ``migration_id``."""
-        return cls(response=ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)"))
+        return cls(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)")
 
     @classmethod
     def hub_node_taken_replay(cls) -> ApplyResult:
         """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node.
         Distinct from :meth:`migrated_replay` because a hub landing **retained** the
         route, which a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
-        return cls(
-            response=ApplyResponse(
-                outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)"
-            )
-        )
+        return cls(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
 
 
 class ApplyService:
@@ -212,7 +199,7 @@ class ApplyService:
         self,
         chunk: Chunk,
         graph: Graph,
-        submission: CompletionSubmission,
+        submission: Completion,
         *,
         route_token_mode: str = ROUTE_TOKEN_WARN,
         produces_mode: str = PRODUCES_WARN,
@@ -283,8 +270,8 @@ class ApplyService:
         # A gate's resolving transition carries no artifacts or proposals: they landed with
         # the decision, and threading `decision_id` through keeps the gate from staying live.
         resolving = submission.decision_id is not None
-        artifacts = [] if resolving else submission.artifacts
-        proposals = [] if resolving else submission.proposals
+        artifacts = () if resolving else submission.artifacts
+        proposals = () if resolving else submission.proposals
         if plan.migrates:
             return self._migrate_across(chunk, facts, from_node, submission, plan.edge, targets, artifacts, proposals)
         assert plan.to_node_id is not None
@@ -300,10 +287,10 @@ class ApplyService:
         chunk: Chunk,
         graph: Graph,
         from_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         plan: CompletionPlan,
-        artifacts: list[SubmittedArtifact],
-        proposals: list[WorkItemProposal],
+        artifacts: Sequence[CompletionArtifact],
+        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         assert plan.to_node_id is not None
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
@@ -340,11 +327,11 @@ class ApplyService:
         chunk: Chunk,
         facts: ChunkFacts,
         from_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         edge: Edge,
         targets: MigrationTargets,
-        artifacts: list[SubmittedArtifact],
-        proposals: list[WorkItemProposal],
+        artifacts: Sequence[CompletionArtifact],
+        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch. An
         unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
@@ -373,10 +360,10 @@ class ApplyService:
         self,
         chunk: Chunk,
         from_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         landing: Landing,
-        artifacts: list[SubmittedArtifact],
-        proposals: list[WorkItemProposal],
+        artifacts: Sequence[CompletionArtifact],
+        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         """Record the migration atomically (fact + re-pin + artifacts + proposals + route
         release/retain + intent clear), then govern by the landed node's executor."""
@@ -415,7 +402,7 @@ class ApplyService:
         chunk: Chunk,
         graph: Graph,
         from_node: Node,
-        submission: CompletionSubmission,
+        submission: Completion,
         *,
         to_node_id: str,
         is_fresh_apply: bool,
@@ -454,7 +441,7 @@ class ApplyService:
             arrival_addendum=arrival.addendum,
             label=self._label,
         )
-        return ApplyResult.advance(envelope.wire, transition_id)
+        return ApplyResult.advance(envelope, transition_id)
 
     def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int, claimant: Claimant) -> None:
         """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch) by the
@@ -479,7 +466,7 @@ class ApplyService:
         )
 
     def _check_route_token(
-        self, chunk: Chunk, facts: ChunkFacts, submission: CompletionSubmission, *, route_token_mode: str
+        self, chunk: Chunk, facts: ChunkFacts, submission: Completion, *, route_token_mode: str
     ) -> ApplyResult | None:
         route = self._route.route_of(chunk.chunk_id)
         detail = RouteToken(
@@ -491,13 +478,13 @@ class ApplyService:
         return ApplyResult.failure(detail) if detail is not None else None
 
     def _artifact_rows(
-        self, chunk: Chunk, node: Node, epoch: int, artifacts: list[SubmittedArtifact]
+        self, chunk: Chunk, node: Node, epoch: int, artifacts: Sequence[CompletionArtifact]
     ) -> list[StoredArtifact]:
         ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in artifacts]
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
     def _proposal_rows(
-        self, chunk: Chunk, node: Node, submission: CompletionSubmission, proposals: list[WorkItemProposal]
+        self, chunk: Chunk, node: Node, submission: Completion, proposals: Sequence[ItemProposal]
     ) -> list[StampedWorkItemProposal]:
         ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in proposals]
         return stamped_proposals(

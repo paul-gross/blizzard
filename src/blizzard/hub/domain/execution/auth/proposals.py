@@ -3,11 +3,12 @@ declares ``proposes_work_items``."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.proposals import ItemProposal
 from blizzard.hub.domain.graph.model import Node
-from blizzard.wire.completion import WorkItemProposal
 
 
 @domain_model
@@ -17,7 +18,7 @@ class ProposalPolicy:
     already-loaded values only (``bzh:domain-takes-objects``)."""
 
     node: Node
-    proposals: list[WorkItemProposal]
+    proposals: Sequence[ItemProposal]
 
     def rejection(self) -> str | None:
         """A failure detail naming the node, or ``None`` when no proposal is refused."""
