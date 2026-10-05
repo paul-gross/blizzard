@@ -1,11 +1,9 @@
 """The exported ``events`` dataset, end to end — the `test_egress_events_e2e` scenario of the standing e2e smoke.
 
-One forge, one hub and one runner carry two chunks whose workers read files, invoke a skill and spawn an agent whose
-child session reads a file, across both mock harnesses. One chunk's transcript is extended by a resumed session. The hub
-derives the events and exports them as NDJSON; the dictionary's ``events_current`` view over the files alone is then
-judged against the hub's own ``analytics summary`` counts. A forced re-derivation and a real ``transcript reship`` follow,
-which leave the counts where they were. Zero-token, no-network. Skipped unless ``BLIZZARD_E2E=1`` and the fixture
-workspace layout is discoverable."""
+Two chunks across both mock harnesses read files, invoke a skill and spawn an agent whose child session reads a file; one
+transcript is extended by a resumed session. The dictionary's ``events_current`` view over the exported files is judged
+against the hub's own ``analytics summary`` counts, through a forced re-derivation and a real ``transcript reship``.
+Skipped unless ``BLIZZARD_E2E=1`` and the fixture workspace layout is discoverable."""
 
 from __future__ import annotations
 
