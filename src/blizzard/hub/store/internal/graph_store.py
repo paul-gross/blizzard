@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import insert, select
+from sqlalchemy import Connection, insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -27,6 +28,7 @@ from blizzard.hub.domain.graph.model import (
     Graph,
     GraphArtifact,
     GraphSummary,
+    ILockedGraphNameRead,
     IWriteGraphRepository,
     Node,
     ProducesSpec,
@@ -35,6 +37,7 @@ from blizzard.hub.domain.graph.model import (
     SessionDecl,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.schema import (
     graph_artifacts,
@@ -269,34 +272,64 @@ EDGES = EdgeRow()
 NODES = NodeRow()
 
 
+_GRAPH_NAME_LOCK_NAMESPACE = "graph_name"
+
+
+@dataclass(frozen=True)
+class LockedGraphName:
+    """The concrete name-lock handle — :class:`ILockedGraphNameRead`'s adapter, every read
+    resolving on :attr:`conn`, the connection the name's lock row was taken on."""
+
+    conn: Connection
+    _graphs: GraphStore
+
+    def get_enabled_by_name(self, name: str) -> Graph | None:
+        return self._graphs.enabled_by_name_conn(self.conn, name)
+
+    def any_minted(self, name: str) -> bool:
+        return self._graphs.any_minted_conn(self.conn, name)
+
+
 class GraphStore:
     """Read-write graph adapter over the hub store engine."""
 
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
+    @contextmanager
+    def locked_name(self, name: str) -> Iterator[ILockedGraphNameRead]:
+        with self._store.write("locked_graph_name") as conn:
+            lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
+            yield LockedGraphName(conn, self)
+
+    def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
+        self._mint_conn(cast(LockedGraphName, handle).conn, graph, definition_yaml=definition_yaml, at=at)
+
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         with self._store.write("mint") as conn:
-            conn.execute(
-                insert(graphs).values(
-                    graph_id=graph.graph_id,
-                    name=graph.name,
-                    entry_node_id=graph.entry_node_id,
-                    definition_yaml=definition_yaml,
-                    created_at=at,
-                )
+            self._mint_conn(conn, graph, definition_yaml=definition_yaml, at=at)
+
+    def _mint_conn(self, conn: Connection, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
+        conn.execute(
+            insert(graphs).values(
+                graph_id=graph.graph_id,
+                name=graph.name,
+                entry_node_id=graph.entry_node_id,
+                definition_yaml=definition_yaml,
+                created_at=at,
             )
-            for ordinal, decl in enumerate(graph.sessions):
-                values = SESSIONS.values(decl, graph_id=graph.graph_id, ordinal=ordinal)
-                conn.execute(insert(graph_sessions).values(values))
-            for artifact in graph.artifacts:
-                conn.execute(insert(graph_artifacts).values(GRAPH_ARTIFACTS.values(artifact, graph_id=graph.graph_id)))
-            for node in graph.nodes:
-                conn.execute(insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
-                for choice in node.choices:
-                    conn.execute(insert(graph_choices).values(CHOICES.values(choice, node_id=node.node_id)))
-            for edge in graph.edges:
-                conn.execute(insert(graph_edges).values(EDGES.values(edge)))
+        )
+        for ordinal, decl in enumerate(graph.sessions):
+            values = SESSIONS.values(decl, graph_id=graph.graph_id, ordinal=ordinal)
+            conn.execute(insert(graph_sessions).values(values))
+        for artifact in graph.artifacts:
+            conn.execute(insert(graph_artifacts).values(GRAPH_ARTIFACTS.values(artifact, graph_id=graph.graph_id)))
+        for node in graph.nodes:
+            conn.execute(insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
+            for choice in node.choices:
+                conn.execute(insert(graph_choices).values(CHOICES.values(choice, node_id=node.node_id)))
+        for edge in graph.edges:
+            conn.execute(insert(graph_edges).values(EDGES.values(edge)))
 
     def get(self, graph_id: str) -> Graph | None:
         with self._store.read("get") as conn:
@@ -307,18 +340,20 @@ class GraphStore:
 
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._store.read("get_enabled_by_name") as conn:
-            # Tie-break on graph_id descending — ULIDs sort lexically by creation —
-            # then walked newest-first, skipping every retired graph_id.
-            rows = conn.execute(
-                select(graphs)
-                .where(graphs.c.name == name)
-                .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
-            ).all()
-            retired = self._retired_among(conn, [row.graph_id for row in rows])
-            for row in rows:
-                if row.graph_id not in retired:
-                    return self._reify(conn, row)
-            return None
+            return self.enabled_by_name_conn(conn, name)
+
+    def enabled_by_name_conn(self, conn: Connection, name: str) -> Graph | None:
+        """`get_enabled_by_name`, resolved on the caller's connection."""
+        # Tie-break on graph_id descending — ULIDs sort lexically by creation —
+        # then walked newest-first, skipping every retired graph_id.
+        rows = conn.execute(
+            select(graphs).where(graphs.c.name == name).order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+        ).all()
+        retired = self._retired_among(conn, [row.graph_id for row in rows])
+        for row in rows:
+            if row.graph_id not in retired:
+                return self._reify(conn, row)
+        return None
 
     def graph_id_of_enabled_name(self, name: str) -> str | None:
         """``get_enabled_by_name``'s narrow sibling — the same tie-break and
@@ -490,7 +525,11 @@ class GraphStore:
 
     def any_minted(self, name: str) -> bool:
         with self._store.read("any_minted") as conn:
-            return conn.execute(select(graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first() is not None
+            return self.any_minted_conn(conn, name)
+
+    def any_minted_conn(self, conn: Connection, name: str) -> bool:
+        """`any_minted`, resolved on the caller's connection."""
+        return conn.execute(select(graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first() is not None
 
     def is_retired(self, graph_id: str) -> bool:
         with self._store.read("is_retired") as conn:

@@ -269,6 +269,7 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
         with pytest.raises(DefaultGraphRetired):
             hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
 
-    # get_enabled_by_name's row fetch (1) + its one retired-graph's own is_retired check
-    # (1) + any_minted (1) — flat, never a query per other graph the hub holds.
-    assert count_queries(hub.engine, _retry) == 3
+    # The pre-lock get_enabled_by_name, the cross-graph warning reads, the name lock's own
+    # statements, and the locked get_enabled_by_name + any_minted — flat, never a query per
+    # other graph the hub holds.
+    assert count_queries(hub.engine, _retry) == 10

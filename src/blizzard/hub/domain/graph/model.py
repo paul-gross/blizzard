@@ -8,6 +8,7 @@ compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -956,11 +957,36 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         ...
 
 
+class ILockedGraphNameRead(Protocol):
+    """The guard reads a name-keyed graph decision consults, resolved on the one connection its
+    name lock was taken on (``bzh:store-exclusive-write``) — so neither can race the mint it
+    precedes."""
+
+    def get_enabled_by_name(self, name: str) -> Graph | None:
+        """:meth:`IReadGraphRepository.get_enabled_by_name`, read under the lock."""
+        ...
+
+    def any_minted(self, name: str) -> bool:
+        """:meth:`IReadGraphRepository.any_minted`, read under the lock."""
+        ...
+
+
 class IWriteGraphRepository(IReadGraphRepository, Protocol):
     """Read-write graph access. Only the domain layer depends on this variant."""
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         """Persist a reified, immutable graph and its source YAML."""
+        ...
+
+    def locked_name(self, name: str) -> AbstractContextManager[ILockedGraphNameRead]:
+        """Lock graph ``name``'s key, first, then yield the read handle bound to that one
+        connection — for a decision whose race has no graph row yet to lock
+        (``bzh:store-exclusive-write``). A write under the lock goes through
+        :meth:`mint_locked`, taking this same handle."""
+        ...
+
+    def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
+        """:meth:`mint`, on ``handle``'s already-locked connection."""
         ...
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:

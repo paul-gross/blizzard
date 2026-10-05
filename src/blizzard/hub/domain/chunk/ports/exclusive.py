@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 
@@ -43,6 +43,17 @@ class ILockedChunkRead(Protocol):
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
 
 
+class ILockedWorkRefRead(Protocol):
+    """The guard read an ingest consults, resolved on the one connection its pointer locks
+    were taken on. Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds
+    no chunk-row lock, so it cannot satisfy a chunk-row ``*_locked`` write."""
+
+    def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
+        """:meth:`~blizzard.hub.domain.chunk.ports.work_refs.IReadChunkWorkRefsRepository.live_holders`,
+        read under the lock."""
+        ...
+
+
 class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
     writers share."""
@@ -52,4 +63,12 @@ class IChunkExclusiveWrites(Protocol):
         deadlock on Postgres — ``bzh:store-exclusive-write``), then yield the read handle
         bound to that one connection. A write against a locked chunk id goes through a
         write repository's own ``*_locked`` method, taking this same handle."""
+        ...
+
+    def locked_work_refs(self, pointers: Sequence[WorkRef]) -> AbstractContextManager[ILockedWorkRefRead]:
+        """Lock every named pointer, first, in sorted order, then yield the read handle bound
+        to that one connection — for a decision whose race has no chunk row yet to lock. Each
+        pointer locks only its own key, so ingests of different pointers never contend. A write
+        under the lock goes through a write repository's own ``*_locked`` method, taking this
+        same handle."""
         ...

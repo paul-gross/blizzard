@@ -25,6 +25,7 @@ from tests.support import (
     count_queries,
     count_rows_read,
     offending_index_scans,
+    seed_chunk_record,
     seed_graph,
 )
 from tests.test_fleet_auth import _bearer, _enroll, _register
@@ -41,7 +42,9 @@ def _at(seconds: int) -> datetime:
 
 def _mint(hub: HubHarness, chunk_id: str, *, index: int, promote: bool = True) -> None:
     stores = chunk_stores(hub.engine, hub.clock)
-    stores.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_at(index), default_model=[]))
+    seed_chunk_record(
+        stores, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_at(index), default_model=[])
+    )
     if promote:
         stores.queue.record_promote(chunk_id, at=_at(index))
 
@@ -88,14 +91,15 @@ def _done_by_transition(hub: HubHarness, chunk_id: str) -> None:
 def _held(hub: HubHarness, chunk_id: str, ref: str) -> None:
     """Mint ``chunk_id`` holding the hub-source pointer ``ref``."""
     stores = chunk_stores(hub.engine, hub.clock)
-    stores.record.mint(
+    seed_chunk_record(
+        stores,
         Chunk(
             chunk_id=chunk_id,
             graph_id="gr_1",
             work_refs=[WorkRef(source="hub", ref=ref)],
             minted_at=_at(200),
             default_model=[],
-        )
+        ),
     )
 
 

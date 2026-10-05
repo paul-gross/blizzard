@@ -33,6 +33,7 @@ from tests.support import (
     hub_store_connections,
     migrate_to,
     pointer_token,
+    seed_chunk_record,
     seed_graph,
     seed_work_item,
 )
@@ -60,7 +61,7 @@ def _stores(tmp_path: Path) -> tuple[ChunkStores, WorkItemStore, DeleteService, 
 
 def _mint(chunks: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> Chunk:
     chunk = Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0)
-    chunks.record.mint(chunk)
+    seed_chunk_record(chunks, chunk)
     return chunk
 
 

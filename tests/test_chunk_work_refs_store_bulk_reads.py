@@ -18,7 +18,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
-from tests.support import chunk_stores, migrate_to, seed_graph
+from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +33,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
 
 
 def _mint(store: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef]) -> None:
-    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs, minted_at=_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs, minted_at=_T0))
 
 
 def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_and_absent_pointers(

@@ -1051,13 +1051,19 @@ def assert_all_timestamps_utc(payload: object) -> None:
             assert_all_timestamps_utc(item)
 
 
+def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
+    """Insert ``chunk``'s rows the way ingest does — under its pointers' locks — for a fixture
+    that needs a chunk without going through an ingest's guard."""
+    with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
+        stores.record.mint_locked(handle, chunk)
+
+
 def make_ready(hub: HubHarness, chunk_id: str) -> None:
     """Promote ``chunk_id`` through the promote service — a replay once promoted — so a claim
     finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None, f"unknown chunk {chunk_id}"
-    facts = ChunkFacts.or_default(hub.services.chunks.facts.load_facts(chunk_id))
-    hub.services.promote.promote(chunk, facts=facts, statuses=hub.services.chunks.facts.load_live_statuses())
+    hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())
 
 
 def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict:

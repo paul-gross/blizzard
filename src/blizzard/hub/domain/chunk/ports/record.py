@@ -11,7 +11,7 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 
 
 @domain_model
@@ -64,7 +64,11 @@ class IReadChunkRecordRepository(Protocol):
 class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
     """Read-write chunk-record access."""
 
-    def mint(self, chunk: Chunk) -> None: ...
+    def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
+        """Insert a freshly minted chunk's rows, on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``)."""
+        ...
+
     def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``).

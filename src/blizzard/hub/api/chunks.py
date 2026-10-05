@@ -647,7 +647,9 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        promoted_id = services.promote.promote(chunk, facts=ChunkFacts.or_default(change.facts), statuses=statuses)
+        promoted_id = services.promote.promote(chunk, statuses=statuses)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotPromotable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None

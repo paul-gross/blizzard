@@ -12,6 +12,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
@@ -74,16 +75,21 @@ def require_no_live_holder(work_refs: IReadChunkWorkRefsRepository, pointer: Wor
 class IngestService:
     """Mint a chunk from work refs, pinned to the default graph."""
 
-    def __init__(
-        self, *, record: IWriteChunkRecordRepository, work_refs: IReadChunkWorkRefsRepository, clock: IClock
-    ) -> None:
+    def __init__(self, *, record: IWriteChunkRecordRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
         self._record = record
-        self._work_refs = work_refs
+        # The locked-transaction seam (``bzh:store-exclusive-write``): whether a pointer is held
+        # is read under the pointer's lock, on the connection the mint then writes on.
+        self._exclusive = exclusive
         self._clock = clock
 
     def ingest(self, pointers: Sequence[WorkRef], *, graph: Graph) -> str:
-        chunk = decide_ingest(
-            pointers, live_holders=self._work_refs.live_holders(pointers), graph=graph, at=self._clock.now()
-        )
-        self._record.mint(chunk)
+        """Mint a chunk wrapping ``pointers``; raises :class:`EmptyIngest` for none and
+        :class:`IngestConflict` for one a live chunk holds. Of two overlapping ingests of one
+        pointer, exactly one mints."""
+        work_refs = ingest_work_refs(pointers)
+        with self._exclusive.locked_work_refs(work_refs) as handle:
+            chunk = decide_ingest(
+                work_refs, live_holders=handle.live_holders(work_refs), graph=graph, at=self._clock.now()
+            )
+            self._record.mint_locked(handle, chunk)
         return chunk.chunk_id

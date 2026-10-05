@@ -165,12 +165,17 @@ class GraphMintService:
         self._clock = clock
 
     def mint(self, doc: GraphDoc, *, definition_yaml: str) -> tuple[Graph, list[str]]:
+        graph, warnings = self._prepared(doc)
+        self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
+        return graph, warnings
+
+    def _prepared(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
+        """``doc`` validated and reified, with its warnings. The cross-graph reads resolve other
+        graphs' names — a different aggregate — so they never run under a name lock."""
         result = Validator.of(doc).require_valid()
         graph = Reification.of(doc, self._clock).graph
         enabled = {t for t in graph.cross_graph_targets() if self._graphs.get_enabled_by_name(t) is not None}
-        warnings = [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
-        self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
-        return graph, warnings
+        return graph, [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
 
     def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:
         """Mint ``doc`` only if it differs from ``minted``, the store's newest of its name.
@@ -195,15 +200,22 @@ class GraphMintService:
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no graph of its name has ever existed.
 
-        Idempotent by name. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
+        Idempotent by name, and once under concurrency: the name is re-read under its lock
+        (``bzh:store-exclusive-write``), so of two overlapping first calls one mints and the
+        other returns that graph. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
         :meth:`~blizzard.hub.domain.graph.model.IReadGraphRepository.any_minted` disambiguates
         — a cheap existence probe, not a full listing, to check membership
         by name — pinned by
         tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
-        any_minted = existing is None and self._graphs.any_minted(doc.name)
-        resolved = resolve_default(doc.name, enabled=existing, any_minted=any_minted)
-        if resolved is not None:
-            return resolved
-        graph, _ = self.mint(doc, definition_yaml=definition_yaml)
+        if existing is not None:
+            return existing  # an enabled graph of the name stands; nothing to decide under the lock
+        graph, _ = self._prepared(doc)
+        with self._graphs.locked_name(doc.name) as handle:
+            existing = handle.get_enabled_by_name(doc.name)
+            any_minted = existing is None and handle.any_minted(doc.name)
+            resolved = resolve_default(doc.name, enabled=existing, any_minted=any_minted)
+            if resolved is not None:
+                return resolved
+            self._graphs.mint_locked(handle, graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph

@@ -142,7 +142,7 @@ from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.repository import IReadUsageRepository
 from tests.runner_fakes import record_usage
-from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk_record, seed_work_item
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 
@@ -1018,10 +1018,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     def _mint(chunk_id: str, ref: str, *, at: datetime) -> None:
         assert graph is not None
-        write.record.mint(
+        seed_chunk_record(
+            write,
             Chunk(
                 chunk_id=chunk_id, graph_id=graph.graph_id, work_refs=[WorkRef(source="default", ref=ref)], minted_at=at
-            )
+            ),
         )
 
     # --- graphs -------------------------------------------------------------------------
@@ -1324,8 +1325,10 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_ready_2 = "ch_hub_ready_2"
     _mint(chunk_ready_1, "1001", at=_ht(30))
     _mint(chunk_ready_2, "1002", at=_ht(31))
-    write.queue.record_promote_with_tail_position(chunk_ready_1, position=1.0, at=_ht(32))
-    write.queue.record_promote_with_tail_position(chunk_ready_2, position=2.0, at=_ht(33))
+    with write.exclusive.locked([chunk_ready_1]) as handle:
+        write.queue.record_promote_with_tail_position_locked(handle, chunk_ready_1, position=1.0, at=_ht(32))
+    with write.exclusive.locked([chunk_ready_2]) as handle:
+        write.queue.record_promote_with_tail_position_locked(handle, chunk_ready_2, position=2.0, at=_ht(33))
     chunk_not_ready = "ch_hub_not_ready"
     _mint(chunk_not_ready, "1003", at=_ht(34))
 

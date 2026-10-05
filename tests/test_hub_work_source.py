@@ -43,7 +43,7 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_graph, seed_work_item
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk_record, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -485,7 +485,7 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
     # The holder is left unacquired (no route recorded) — the cascade reaches
     # `DeleteService.delete`, not the live-holder refusal.
     dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
-    chunks.record.mint(dependent)
+    seed_chunk_record(chunks, dependent)
     with chunks.exclusive.locked([dependent.chunk_id, created.chunk_id]) as handle:
         chunks.dependencies.declare_locked(
             handle, dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant

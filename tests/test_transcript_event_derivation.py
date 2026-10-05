@@ -34,7 +34,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import chunk_stores, count_queries, hub_store_connections
+from tests.support import chunk_stores, count_queries, hub_store_connections, seed_chunk_record
 
 pytestmark = pytest.mark.component
 
@@ -95,7 +95,7 @@ class _Fixture:
         self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
         self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
-        self.chunks.record.mint(Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
+        seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
@@ -115,7 +115,7 @@ class _Fixture:
         self.reconciler = EventDerivationReconciler(service=self.service, events=self.events, clock=self.clock)
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
-        self.chunks.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
+        seed_chunk_record(self.chunks, Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id=f"tr_{chunk_id}",
             chunk_id=chunk_id,
@@ -193,7 +193,7 @@ def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching
     """A chunk with no transition matching the segment's ``(node_id, epoch)`` resolves
     its graph via the mint-pin fallback — proven here through a chunk minted with
     no transition recorded at all."""
-    fixture.chunks.record.mint(Chunk(chunk_id="ch_unmoved", graph_id="gr_unmoved", work_refs=[], minted_at=_NOW))
+    seed_chunk_record(fixture.chunks, Chunk(chunk_id="ch_unmoved", graph_id="gr_unmoved", work_refs=[], minted_at=_NOW))
     fixture.segments.insert_accepted(
         _segment_record(segment_id="sg_unmoved", chunk_id="ch_unmoved"), byte_count=10, codec="zlib", at=_NOW
     )
