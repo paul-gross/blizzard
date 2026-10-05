@@ -417,8 +417,9 @@ class ApplyService:
         if step.node is None:
             return ApplyResult.failure(f"transition target {to_node_id} is not a node")
         if step.kind is NextStepKind.HUB_TAKES:
-            # Run on BOTH the fresh apply and the replay: the executor is idempotent and
-            # resumable, so a re-flush resumes an interrupted run.
+            # Run on BOTH the fresh apply and the replay: a re-flush resumes an interrupted run
+            # (a crashed one's slot is released at boot), while the executor defers a replay whose
+            # run is live or already left the node, so it never starts a second one.
             self._hub_node_executor.run(chunk, graph, step.node, epoch=submission.epoch)
             return ApplyResult.taken_over(step.node, transition_id)
         if step.kind is NextStepKind.GATE:

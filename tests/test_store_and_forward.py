@@ -7,11 +7,12 @@ it, and a re-submitted completion returns its original outcome without a second 
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -206,3 +207,47 @@ def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Pat
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["escalation"]["takeover_command"] == takeover
     assert detail["escalation"]["wrapped_takeover_command"] == ""
+
+
+def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_path: Path) -> None:
+    """The first completion's answer is withheld while its hub node runs: the runner's re-submit
+    answers ``hub_node_taken`` and ``hub-advance`` answers ``ran=false`` — neither starts a command —
+    and the node's exit lands exactly once."""
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def before_run(_command: str) -> None:
+        entered.set()
+        release.wait(timeout=5)
+
+    runner.before_run = before_run
+    first: dict = {}
+    thread = threading.Thread(
+        target=lambda: first.update(
+            r=hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+        )
+    )
+    thread.start()
+    assert entered.wait(timeout=5), "the hub node never started"
+
+    replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    assert replay.json()["outcome"] == "hub_node_taken"
+    advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    assert advance.json()["ran"] is False
+    assert len(runner.calls) == 1
+
+    release.set()
+    thread.join(timeout=5)
+    assert first["r"].json()["outcome"] == "hub_node_taken"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "done"
+    assert len([t for t in detail["history"] if t["from_node_name"] == "deliver"]) == 1
+    assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1
+
+    late = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    assert late.json()["outcome"] == "hub_node_taken"
+    assert len(runner.calls) == 1

@@ -1560,9 +1560,10 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
     # Released first: the slot is fleet-wide-single, so the still-held one below must be
     # acquired last to stay the sole live holder `count_live_hub_exec_slots` counts.
-    write.hub_exec.acquire_hub_exec_slot(
+    released_slot = write.hub_exec.acquire_hub_exec_slot(
         chunk_hub_exec_released, node_id=deliver_node.node_id, at=_ht(63), stale_after=timedelta(minutes=5)
     )
+    assert released_slot is not None
     write.hub_exec.record_hub_node_poll(chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64))
     write.hub_exec.record_hub_step_transition(
         chunk_hub_exec_released,
@@ -1577,7 +1578,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         release_route=True,
         admission=EpochAdmission.ABOVE,
     )
-    write.hub_exec.release_hub_exec_slot(chunk_hub_exec_released, at=_ht(66))
+    write.hub_exec.release_hub_exec_slot(released_slot, at=_ht(66))
     write.hub_exec.acquire_hub_exec_slot(
         chunk_hub_exec_live, node_id=deliver_node.node_id, at=_ht(67), stale_after=timedelta(minutes=5)
     )

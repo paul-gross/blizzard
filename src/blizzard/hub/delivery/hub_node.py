@@ -371,9 +371,10 @@ class HubNodeExecutor:
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult | None:
         """Execute ``node``'s ``run:`` list once, to completion; ``None`` if deferred.
 
-        Deferred — the slot is held elsewhere, or this visit is pending and not yet due
-        (#66) — is neither an error nor a retry-consuming failure. The due check runs
-        BEFORE the slot is acquired, so a pending chunk never contends for it."""
+        Deferred — the slot is held (by this chunk's own run too), ``node``'s visit at ``epoch`` already
+        recorded its exit or was superseded, or this visit is pending and not yet due (#66) — is neither an error
+        nor a retry-consuming failure. The due check runs BEFORE the slot is acquired,
+        so a pending chunk never contends for it."""
         now = self._clock.now()
         facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
@@ -384,13 +385,37 @@ class HubNodeExecutor:
         )
         if slot_id is None:
             return None
+        try:
+            # After the acquire: a run that finished between a caller's read and the acquire
+            # has recorded its exit by now, so a replay cannot re-run a node it already left.
+            facts = self._facts.load_facts(chunk.chunk_id)
+            if facts is None or not facts.awaits_exit_from(node, epoch=epoch):
+                return None
+            return self._run_acquired(chunk, graph, node, epoch=epoch, poll_history=poll_history, slot_id=slot_id)
+        finally:
+            self._hub_exec.release_hub_exec_slot(slot_id, at=self._clock.now())
+
+    def release_orphaned_slots(self) -> int:
+        """Release every live hub-execution slot — a boot step, not a per-request one: a live row
+        when the hub starts belongs to a run the previous process died in, so the chunk resumes on
+        its next request rather than after ``slot_stale_after``. Sound while one hub process serves
+        the store; only the daemon's startup calls it."""
+        return self._hub_exec.release_live_hub_exec_slots(at=self._clock.now())
+
+    def _run_acquired(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        node: Node,
+        *,
+        epoch: int,
+        poll_history: list[HubNodePollFact],
+        slot_id: str,
+    ) -> HubRunResult:
         # The same inputs the sweep derives its `hub exec` span from, so `run:` steps nest under it.
         hub_exec = DerivedContext.of(StepKey.attempt(chunk.chunk_id, epoch + 1), SpanRole.HUB_EXEC, slot_id)
         self._tracer.link(hub_exec)
-        try:
-            return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history, hub_exec=hub_exec)
-        finally:
-            self._hub_exec.release_hub_exec_slot(chunk.chunk_id, at=self._clock.now())
+        return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history, hub_exec=hub_exec)
 
     def _run_locked(
         self,

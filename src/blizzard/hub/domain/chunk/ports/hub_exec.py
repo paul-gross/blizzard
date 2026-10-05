@@ -25,12 +25,17 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
         """Acquire the fleet-wide hub-execution serialization slot, or ``None`` if busy.
         A FACT-based lease (``bzh:facts-not-status``), not an in-process lock: insert-if-
-        none-live in one transaction. Reentrant for the chunk that already holds it; a slot
-        held by another defers unless older than ``stale_after``, when it is reclaimed."""
+        none-live in one transaction. Not reentrant: a live slot defers every request, the
+        holder chunk's own included, unless older than ``stale_after``, when it is reclaimed."""
         ...
 
-    def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
-        """Release ``chunk_id``'s live hub-execution slot, if any — idempotent."""
+    def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
+        """Release the hub-execution slot ``slot_id`` — idempotent, and never another run's."""
+        ...
+
+    def release_live_hub_exec_slots(self, *, at: datetime) -> int:
+        """Release every live hub-execution slot and return how many — the boot-time sweep of
+        a dead process's runs, sound only while one hub process serves the store."""
         ...
 
     def record_hub_step_transition(
