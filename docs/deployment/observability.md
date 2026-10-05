@@ -14,6 +14,11 @@ routes and the chunk re-polls it forever; announced once per node visit, not per
 missing edge then requeuing, not retrying. The work-item closure events are also the hub's —
 [work-sources.md](./work-sources.md) owns them.
 
+`repository-unresolved` and `repositories-disagree` (both critical): a `deliver` step's chunk commits resolve to no
+single [repository](./repositories.md) record — none stands for one of them or several match it, or the records they
+resolve to differ on forge, owner, base branch or secret. The step is refused before any command runs and routes its
+failure choice; the remedy is creating or editing the repository records, then requeuing.
+
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
 right now. The runner binds every enabled declared harness ([worker-spawn.md](./worker-spawn.md) owns that binding).
 **Unknown** means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to
@@ -32,8 +37,9 @@ health — a missing binary, an incompatible or unknown observed version, failed
 ambient setting that defeats the runner's own wiring), an unmapped configured tier, or a recorded selftest failure, all
 visible with their cause in this runner's own `GET /api/harness-health` diagnostics. The escalation's cause is
 `no-acceptable-harness`, and its detail names each attempted harness and why it was skipped; `blizzard runner status`
-prints each harness's id, availability, and health cause beneath such an escalation. The chunk escalates in place rather than minting under the runner's default harness; with no session ever spawned, the escalation
-carries no takeover command either.
+prints each harness's id, availability, and health cause beneath such an escalation. The chunk escalates in place rather
+than minting under the runner's default harness; with no session ever spawned, the escalation carries no takeover
+command either.
 
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`

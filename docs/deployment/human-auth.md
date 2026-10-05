@@ -13,7 +13,7 @@ requires at least one `[[auth.oauth.provider]]` entry; a provider's `type` selec
 block is the field-by-field reference.
 
 A provider's `client_secret_env` names an environment variable, never the secret itself; the secret is a deployment
-credential in the hub's runtime env file, like `BZ_FORGE_TOKEN`.
+credential in the hub's runtime env file.
 
 `blizzard hub rotate-signing-key` mints a fresh current IdP signing key, demoting the old to previous; runners re-fetch
 JWKS on an unknown `kid`, no restart needed; under oauth the verb is gated on `user:manage` and needs a logged-in
@@ -72,11 +72,11 @@ declared origins per request by the arriving Host. A browser whose Host matches 
 `127.0.0.1` — is first redirected to the same login on the first declared origin, the canonical one the hub records as
 the runner's URL, so the bounce cookies are set where the callback will land. Selection is membership in the declared
 set, never construction from the request: a forged or unrecognized Host resolves only to a declared origin, never
-reflected into a redirect URI. That redirect is a single hop — a Host still matching nothing after it, as behind a
-proxy that rewrites Host, falls back to presenting the canonical callback, which completes only if that proxy fronts
-the canonical origin, and sends the browser to its own machine for a loopback canonical. The runner logs a warning
-naming the arriving Host and the declared set both when it redirects and when it falls back — the signal to check the
-origin the browser used, or the proxy.
+reflected into a redirect URI. That redirect is a single hop — a Host still matching nothing after it, as behind a proxy
+that rewrites Host, falls back to presenting the canonical callback, which completes only if that proxy fronts the
+canonical origin, and sends the browser to its own machine for a loopback canonical. The runner logs a warning naming
+the arriving Host and the declared set both when it redirects and when it falls back — the signal to check the origin
+the browser used, or the proxy.
 
 Each `public_url` entry must equal the origin the browser shows exactly — scheme, host, and port — because selection
 compares it against the request's Host; a proxy terminating TLS on 443 makes the visible origin
@@ -85,8 +85,8 @@ off the proxy to `https://runner.example:8431` — reachable or not — and the 
 warning names the mismatch. `localhost` and `127.0.0.1` are distinct origins to browser and guard alike, so the
 undeclared one signs in only by being redirected to the canonical origin. Two entries a browser cannot distinguish —
 differing only in scheme or in an explicit-versus-default port — are refused at config load. A non-URL `public_url`
-value, an entry carrying a path, userinfo, or a non-numeric port, and two entries naming one browser origin all fail
-at config load rather than surfacing later as an opaque unregistered-redirect_uri refusal.
+value, an entry carrying a path, userinfo, or a non-numeric port, and two entries naming one browser origin all fail at
+config load rather than surfacing later as an opaque unregistered-redirect_uri refusal.
 
 Registration happens on the runner's reconciliation tick: a widened set reaches the hub on the first tick after a
 restart, and a login attempted before that tick is refused as an unregistered redirect URI.
@@ -107,8 +107,8 @@ The runner's session cookie is signed with a secret read from the environment va
 `blizzard-runner.toml` (default `BZ_RUNNER_SESSION_SECRET`); the toml holds only the name. Generate a value with
 `openssl rand -base64 48` and set it in the runner's runtime env file. It must be base64 decoding to at least 32 bytes,
 or config load fails with a `ConfigError` naming the variable. With the secret set, a session minted before a restart
-still verifies after it, until its 8-hour TTL expires; unset or empty, the runner draws a fresh secret each start,
-logs that sessions will not survive a restart, and every board logs in again.
+still verifies after it, until its 8-hour TTL expires; unset or empty, the runner draws a fresh secret each start, logs
+that sessions will not survive a restart, and every board logs in again.
 
 Each runner needs its own secret. A secret shared across runners lets a session minted on one verify on another and
 carry a role resolved under the first runner's config.
