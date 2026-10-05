@@ -51,13 +51,25 @@ class OpenCodeDescendantUsage:
     def __init__(self, exporter: IOpenCodeExporter) -> None:
         self._exporter = exporter
 
+    def root_tasks(self, session_id: str) -> list[OpenCodePart]:
+        """Task parts, including running ones in messages with no completed step."""
+        export = self._export_of(session_id, {})
+        if export is None or export.info.id != session_id:
+            return []
+        return [
+            part
+            for message in export.messages
+            for part in message.parts
+            if part.type == "tool" and part.tool == "task" and part.session_id == session_id
+        ]
+
     def collect(
         self, *, root_session_id: str, task_parts: Sequence[OpenCodePart], horizon_ms: int | None
     ) -> list[DescendantStep]:
         """Every descendant step in the windows of ``task_parts`` (the invocation's own ``task``
         tool parts on the root session), deduplicated by step-finish part id. ``horizon_ms`` is the
-        latest instant the invocation's input shows; it closes the window of a task part that never
-        ended (a killed run). Each distinct session is exported at most once per call. A child whose
+        invocation's end; it caps every task window, including a part later completed by another
+        invocation. Each distinct session is exported at most once per call. A child whose
         export fails or does not parse is logged and contributes nothing, subtree included."""
         exports: dict[str, OpenCodeSessionExport | None] = {}
         steps: dict[str, DescendantStep] = {}
@@ -106,7 +118,11 @@ class OpenCodeDescendantUsage:
         state = task_part.state
         assert state is not None
         start = state.time_start_ms if state.time_start_ms is not None else 0
-        end = state.time_end_ms if state.time_end_ms is not None else horizon_ms
+        end = (
+            min(state.time_end_ms, horizon_ms)
+            if state.time_end_ms is not None and horizon_ms is not None
+            else (state.time_end_ms if state.time_end_ms is not None else horizon_ms)
+        )
         if end is None:
             return None
         return _Window(start, end)

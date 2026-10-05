@@ -745,7 +745,14 @@ class OpenCodeAdapter:
         return model is None and not self._model
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
         del transcript_lines  # OpenCode's invocation stream carries its own step usage.
         events = self._parse_events(output)
@@ -759,7 +766,13 @@ class OpenCodeAdapter:
         steps = [_UsageStep(part, None, None) for part in by_id.values()]
         root = self._root_session_id(events)
         assert root is not None  # a root step finish implies a first event
-        steps.extend(self._descendant_steps(root, self._task_parts_of_events(events, root), self._horizon_of(events)))
+        tasks = {part.id: part for part in self._task_parts_of_events(events, root)}
+        if invocation_start is not None and invocation_end is not None and self._descendant_usage is not None:
+            for part in self._descendant_usage.root_tasks(root):
+                tasks.setdefault(part.id, part)
+        start_ms = int(invocation_start.timestamp() * 1000) if invocation_start is not None else None
+        end_ms = int(invocation_end.timestamp() * 1000) if invocation_end is not None else self._horizon_of(events)
+        steps.extend(self._descendant_steps(root, self._bounded_tasks(tasks.values(), start_ms, end_ms), end_ms))
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(s.part for s in steps)
         return UsageSample(
             kind=kind,
@@ -792,6 +805,18 @@ class OpenCodeAdapter:
             and event.part.tool == "task"
             and event.part.session_id == root
         ]
+
+    @staticmethod
+    def _bounded_tasks(parts: Iterable[OpenCodePart], start_ms: int | None, end_ms: int | None) -> list[OpenCodePart]:
+        bounded = []
+        for part in parts:
+            started = part.started_at_ms()
+            if start_ms is not None and (started is None or started < start_ms):
+                continue
+            if end_ms is not None and (started is None or started > end_ms):
+                continue
+            bounded.append(part)
+        return bounded
 
     @staticmethod
     def _horizon_of(events: Sequence[OpenCodeRunEvent]) -> int | None:
@@ -869,7 +894,15 @@ class OpenCodeAdapter:
         )
         return parts, observed
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
         by_id: dict[str, _UsageStep] = {}
         task_parts: dict[str, OpenCodePart] = {}
         root_session: str | None = None
@@ -898,7 +931,13 @@ class OpenCodeAdapter:
                 root_session = root_session or task_part.session_id
         steps = list(by_id.values())
         if root_session is not None:
-            steps.extend(self._descendant_steps(root_session, list(task_parts.values()), self._horizon_of_lines(lines)))
+            start_ms = int(invocation_start.timestamp() * 1000) if invocation_start is not None else None
+            end_ms = (
+                int(invocation_end.timestamp() * 1000) if invocation_end is not None else self._horizon_of_lines(lines)
+            )
+            steps.extend(
+                self._descendant_steps(root_session, self._bounded_tasks(task_parts.values(), start_ms, end_ms), end_ms)
+            )
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(s.part for s in steps)
         # A non-zero cost here is a billed figure this fallback drops; no estimate
         # may then mask it.

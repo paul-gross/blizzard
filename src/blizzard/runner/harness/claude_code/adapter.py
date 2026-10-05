@@ -497,8 +497,16 @@ class ClaudeCodeAdapter:
         return not isinstance(breakdown, dict) or len(breakdown) != 1
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
+        del invocation_start, invocation_end
         envelope = ResultEnvelope.of(output)
         if envelope is None or envelope.usage is None:
             return None
@@ -545,7 +553,16 @@ class ClaudeCodeAdapter:
             cost_scope_tokens=envelope.cost_scope_tokens,
         )
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
+        del invocation_start, invocation_end
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
         # A reply carrying several content blocks is written as several records that each
         # repeat their message's ONE usage, so summing per record overcounts (measured 1.7x

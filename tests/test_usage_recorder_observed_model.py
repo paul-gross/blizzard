@@ -40,7 +40,9 @@ def _usage_payloads(store):  # type: ignore[no-untyped-def]
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
-def _seed_lease(store, *, harness_id: str, resolved_model: str | None, judge_boundary: bool = False) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(
+    store, *, harness_id: str, resolved_model: str | None, judge_boundary: bool = False, started_at: datetime = _NOW
+) -> None:  # type: ignore[no-untyped-def]
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -60,7 +62,7 @@ def _seed_lease(store, *, harness_id: str, resolved_model: str | None, judge_bou
         pid=100,
         process_start_time="start-100",
         session=SessionReference(harness_id, _SESSION_ID),
-        spawned_at=_NOW,
+        spawned_at=started_at,
     )
     kinds = ["spawn", "judge"] if judge_boundary else ["spawn"]
     for kind in kinds:
@@ -72,7 +74,7 @@ def _seed_lease(store, *, harness_id: str, resolved_model: str | None, judge_bou
             generation=1,
             kind=kind,
             start_position=None,
-            opened_at=_NOW,
+            opened_at=started_at,
         )
 
 
@@ -292,13 +294,23 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 ) -> None:  # type: ignore[no-untyped-def]
     capture = repo_root() / "src/blizzard/runner/harness/contracts/opencode/1.18.32"
     child = "ses_f6070f70bffeyvhNqEiKNcjN1F"
-    exporter = FakeExporter({child: (capture / f"child_{child}.json").read_text()})
+    exporter = FakeExporter(
+        {
+            "ses_f607309eaffeslYGcw3HSov58q": (capture / "root_export.json").read_text(),
+            child: (capture / f"child_{child}.json").read_text(),
+        }
+    )
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     generation = (capture / "run_generation_1.jsonl").read_text()
     (stdout_dir / "lease_1.1.stdout").write_text(generation)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model="openai/gpt-5.6-sol")
+    _seed_lease(
+        store,
+        harness_id=OPENCODE_HARNESS_ID,
+        resolved_model="openai/gpt-5.6-sol",
+        started_at=datetime.fromtimestamp(1789383200, UTC),
+    )
     probe = FakeProbe()
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
@@ -311,7 +323,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     recorder = UsageRecorder(
         leases=store,
         usage=store,
-        clock=FixedClock(_NOW),
+        clock=FixedClock(datetime.fromtimestamp(1789384700, UTC)),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
         workspace_root="/ws",
         harnesses=registry,
@@ -330,4 +342,126 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     root_steps = solo.parse_usage(generation, "spawn")
     assert root_steps is not None
     assert payload["input_tokens"] > root_steps.input_tokens
-    assert exporter.calls == [child]
+    assert exporter.calls == ["ses_f607309eaffeslYGcw3HSov58q", child]
+
+
+def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
+    tmp_path, spawn_executor: Executor
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.test_runner_harness_opencode_subagents import _events, _session, _step, _task
+
+    def at(ms: int) -> datetime:
+        return datetime.fromtimestamp(ms / 1000, UTC)
+
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=at(900),
+            resolved_model="openai/root",
+        )
+    )
+    root = _session("root", None, [("m1", 1_100, "root", [_task("t1", "root", "m1", "child", 1_200, None)])])
+    child = _session(
+        "child",
+        "root",
+        [
+            ("c1", 1_300, "child", [_step("cs1", "child", "c1", 20)]),
+            ("during-judge", 1_475, "child", [_step("cs-judge", "child", "during-judge", 99)]),
+            ("c2", 1_700, "child", [_step("cs2", "child", "c2", 30)]),
+            ("c3", 2_300, "child", [_step("cs3", "child", "c3", 700)]),
+        ],
+    )
+    exporter = FakeExporter({"root": root, "child": child})
+    probe = FakeProbe()
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        descendant_usage=OpenCodeDescendantUsage(exporter),
+    )
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    (stdout_dir / "lease_1.1.stdout").write_text(_events([_step("rs1", "root", "m0", 3)], root="root", stamp=1_000))
+    (stdout_dir / "lease_1.2.stdout").write_text(
+        _events(
+            [
+                _task("t2", "root", "m2", "child", 1_600, 2_000),
+                _step("rs2", "root", "m2", 4),
+            ],
+            root="root",
+            stamp=1_900,
+        )
+    )
+
+    def record(now_ms: int) -> None:
+        recorder = UsageRecorder(
+            leases=store,
+            usage=store,
+            clock=FixedClock(at(now_ms)),
+            worker_files=WorkerStdoutFiles(str(stdout_dir), store),
+            workspace_root="/ws",
+            harnesses=registry,
+            invocation_boundaries=store,
+        )
+        lease = store.active_lease("lease_1")
+        assert lease is not None
+        recorder.record_worker(lease, bindings=[])
+
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="p1",
+        session=SessionReference(OPENCODE_HARNESS_ID, "root"),
+        spawned_at=at(900),
+    )
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=at(900),
+    )
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="after-worker",
+        opened_at=at(1_450),
+    )
+    record(1_500)
+    record(1_500)  # recorder reconstruction/restart replays the identical fact
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="p2",
+        session=SessionReference(OPENCODE_HARNESS_ID, "root"),
+        spawned_at=at(1_550),
+    )
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        kind="resume",
+        start_position="after-first",
+        opened_at=at(1_550),
+    )
+    record(2_050)
+    payloads = _usage_payloads(store)
+    assert [row["input_tokens"] for row in payloads] == [23, 34]

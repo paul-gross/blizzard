@@ -1046,8 +1046,16 @@ class FakeHarness:
         return model is None
 
     def parse_usage(
-        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+        self,
+        output: str,
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        transcript_lines: Sequence[str] = (),
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
     ) -> UsageSample | None:
+        del invocation_start, invocation_end
         self.usage_models.append(model)
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]
@@ -1057,7 +1065,16 @@ class FakeHarness:
         self.observed_model_calls.append(tuple(lines))
         return self._observed_model
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+    def sum_transcript_usage(
+        self,
+        lines: Sequence[str],
+        kind: UsageKind,
+        *,
+        model: str | None = None,
+        invocation_start: datetime | None = None,
+        invocation_end: datetime | None = None,
+    ) -> UsageSample:
+        del invocation_start, invocation_end
         self.usage_models.append(model)
         return self.transcript_usage or UsageSample(
             kind=kind,

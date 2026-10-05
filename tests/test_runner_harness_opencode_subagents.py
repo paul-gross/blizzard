@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import Executor
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -450,6 +450,87 @@ def test_a_task_that_never_ended_is_closed_at_the_latest_event_instant(spawn_exe
     assert sample.input_tokens == 3 + 20
 
 
+def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_executor: Executor) -> None:
+    root = _session(
+        "root",
+        None,
+        [
+            (
+                "m0",
+                1_100,
+                "root-model",
+                [_task("t1", "root", "m0", "child", 1_200, None)],
+            )
+        ],
+    )
+    child = _session(
+        "child",
+        "root",
+        [
+            ("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)]),
+            ("c2", 1_700, "child-model", [_step("cs2", "child", "c2", 30)]),
+            ("c3", 2_300, "child-model", [_step("cs3", "child", "c3", 700)]),
+        ],
+    )
+    exporter = FakeExporter({"root": root, "child": child})
+    adapter = _adapter(spawn_executor, exporter)
+
+    def at(ms: int) -> datetime:
+        return datetime.fromtimestamp(ms / 1000, UTC)
+
+    first = adapter.parse_usage(
+        _events([_step("rs1", "root", "m0", 3)], stamp=1_000),
+        "spawn",
+        invocation_start=at(900),
+        invocation_end=at(1_500),
+    )
+    assert first is not None
+    assert first.input_tokens == 23
+    # The same root export remains available when the next generation continues the child.
+    second = adapter.parse_usage(
+        _events([_task("t2", "root", "m1", "child", 1_600, 2_000), _step("rs2", "root", "m1", 4)], stamp=1_900),
+        "resume",
+        invocation_start=at(1_550),
+        invocation_end=at(2_050),
+    )
+    assert second is not None
+    assert second.input_tokens == 34
+    assert exporter.calls == ["root", "child", "root", "child"]
+
+
+def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_executor: Executor) -> None:
+    root = _session("root", None, [("m0", 1_100, "root-model", [_task("t1", "root", "m0", "child", 1_200, None)])])
+    child = _session("child", "root", [("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)])])
+
+    class Catalog:
+        def __init__(self, child_priced: bool) -> None:
+            self.child_priced = child_priced
+
+        def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
+            if provider != "openai" or (model == "child-model" and not self.child_priced):
+                return None
+            rate = OpenCodeRate(input=10 if model == "child-model" else 1, output=0, cache_read=0, cache_write=0)
+            return OpenCodeModelPrice(base=rate)
+
+    output = _events([_step("rs1", "root", "m0", 3)], stamp=1_000)
+    for priced in (True, False):
+        adapter = _adapter(spawn_executor, FakeExporter({"root": root, "child": child}), price_catalog=Catalog(priced))
+        sample = adapter.parse_usage(
+            output,
+            "spawn",
+            model="openai/root-model",
+            invocation_start=datetime.fromtimestamp(0.9, UTC),
+            invocation_end=datetime.fromtimestamp(1.5, UTC),
+        )
+        assert sample is not None
+        assert sample.input_tokens == 23
+        assert sample.cost_usd is None
+        if priced:
+            assert sample.estimated_cost_usd == pytest.approx(203 / 1e6)
+        else:
+            assert sample.estimated_cost_usd is None
+
+
 def test_a_cycle_between_sessions_terminates(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
@@ -524,6 +605,30 @@ def test_the_transcript_fallback_folds_descendants_from_root_export_lines(spawn_
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage([root_message], "spawn")
     assert sample.input_tokens == 3 + 20 + 5
     assert sample.cost_usd is None
+
+
+def test_transcript_fallback_caps_running_task_at_invocation_end(spawn_executor: Executor) -> None:
+    exporter = FakeExporter(
+        {
+            "child": _session(
+                "child",
+                "root",
+                [
+                    ("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)]),
+                    ("c2", 1_700, "m", [_step("cs2", "child", "c2", 700)]),
+                ],
+            )
+        }
+    )
+    line = _session("root", None, [("m0", 1_100, "m", [_task("t1", "root", "m0", "child", 1_200, None)])])
+    [message] = json.loads(line)["messages"]
+    sample = _adapter(spawn_executor, exporter).sum_transcript_usage(
+        [json.dumps(message)],
+        "spawn",
+        invocation_start=datetime.fromtimestamp(0.9, UTC),
+        invocation_end=datetime.fromtimestamp(1.5, UTC),
+    )
+    assert sample.input_tokens == 20
 
 
 def test_the_transcript_fallback_reads_a_capture_export_message(spawn_executor: Executor) -> None:
