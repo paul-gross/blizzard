@@ -302,7 +302,6 @@ def create_app(
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     app.state.selftests = selftests or SelfTestService(
-        harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
         process=process,
         clock=clock,

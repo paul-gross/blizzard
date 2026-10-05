@@ -284,6 +284,9 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
     assert record is not None
     assert record.lease_id == "lease_1"
     assert record.session_id == "sess-old"
+    # The session-less mint sits above the reference lease; the takeover still holds its epoch.
+    assert (record.reference_epoch, record.hold_epoch) == (1, 2)
+    assert record.holds("ch_1", 2)
 
 
 def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]

@@ -74,31 +74,25 @@ class SessionResolver:
         """The prior session this spawn resumes, or ``None`` to mint fresh (#115, #144), paired
         with the owner a rotated named pool's replacement must mint under. **Only the
         resume-vs-mint decision** — the configuration a spawn runs under resolves in
-        ``session_stamps``. No match anywhere falls back to fresh: a resume target is
-        best-effort."""
+        ``session_stamps``. Loads the facts :func:`resume_target` decides over."""
         if node.session is SessionMode.FRESH:
-            return ResumeTarget(session=None)
+            return resume_target(node)
         if node.session_name is not None:
             return self._pool_resume(chunk_id, node, spawn_cwd)
         return self._plain_resume(chunk_id, node)
 
     def _plain_resume(self, chunk_id: str, node: NodeConfig) -> ResumeTarget:
-        """A bare, un-pooled resume's latest session, or ``None`` to mint fresh — its own
-        owner checked here too, exactly as a named pool's head is: an unresolvable owner
-        returns alongside the session as ``ResumeTarget.owner_unresolvable``, rather than
-        silently falling back to a fresh mint."""
+        """A bare, un-pooled resume's latest session, with its owner checked exactly as a named
+        pool's head is."""
         session = self.leases.latest_session(chunk_id, node.session_source)
-        if session is None:
-            return ResumeTarget(session=None)
-        exc = self._unresolvable_owner(session.harness_id)
-        if exc is not None:
+        exc = self._unresolvable_owner(session.harness_id) if session is not None else None
+        if session is not None and exc is not None:
             _log.error(
                 "plain resume blocked by unavailable harness owner",
                 harness_id=session.harness_id,
                 detail=str(exc),
             )
-            return ResumeTarget(session=None, owner_unresolvable=(session, exc))
-        return ResumeTarget(session=session)
+        return resume_target(node, candidate=session, owner_exc=exc)
 
     def resumption(self, resume_from: SessionReference | None) -> ResumedSession | None:
         """The session this spawn resumes with its newest recorded lease, or ``None`` for a
@@ -127,29 +121,21 @@ class SessionResolver:
         )
 
     def _pool_resume(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> ResumeTarget:
-        """The named pool's head if it is still resumable, else a fresh mint paired with the
-        breached head's own owner (``None`` session to mint a new one) — or, when the breach
-        IS that owner failing to resolve, ``owner_unresolvable`` set instead of a mint
-        target."""
+        """The named pool's head and, when there is one, why it must not be resumed."""
         pool = node.session_name or ""
         head = self.leases.pool_head(chunk_id, pool)
         if head is None:
-            return ResumeTarget(session=None)  # an empty pool — this member mints the head
+            return resume_target(node)  # an empty pool — this member mints the head
         breach, owner_exc = self._rotation_breach(head, node, spawn_cwd)
-        if breach is None:
-            return ResumeTarget(session=head.session)
-        _log.info(
-            "rotating session pool",
-            chunk_id=chunk_id,
-            session_pool=pool,
-            breached=breach,
-            old_session_id=head.session_id,
-        )
-        return ResumeTarget(
-            session=None,
-            pool_owner=head.session.harness_id,
-            owner_unresolvable=(head.session, owner_exc) if owner_exc is not None else None,
-        )
+        if breach is not None:
+            _log.info(
+                "rotating session pool",
+                chunk_id=chunk_id,
+                session_pool=pool,
+                breached=breach,
+                old_session_id=head.session_id,
+            )
+        return resume_target(node, candidate=head.session, breach=breach, owner_exc=owner_exc)
 
     def _rotation_breach(
         self, head: PoolHead, node: NodeConfig, spawn_cwd: str | None
@@ -301,6 +287,33 @@ def member_skip_reason(*, healthy: bool, maps_authored_tier: bool) -> str | None
     if not maps_authored_tier:
         return "no-authored-tier"
     return None
+
+
+def resume_target(
+    node: NodeConfig,
+    *,
+    candidate: SessionReference | None = None,
+    breach: str | None = None,
+    owner_exc: UnknownHarnessError | UnavailableHarnessError | None = None,
+) -> ResumeTarget:
+    """A node-entry spawn's resume target over its loaded facts: ``candidate`` is the plain
+    resume's latest session or the named pool's head, ``breach`` why a pool head must not be
+    resumed, and ``owner_exc`` why the candidate's recorded owner will not resolve.
+
+    A fresh node, or no candidate, mints fresh — a resume target is best-effort. A plain resume
+    resumes its candidate unless the owner is unresolvable, which escalates in place rather than
+    falling back to a mint. A pool head resumes while unbreached; a breached one mints its
+    replacement under the head's own owner, or escalates when the breach is that owner."""
+    if node.session is SessionMode.FRESH or candidate is None:
+        return ResumeTarget(session=None)
+    unresolvable = (candidate, owner_exc) if owner_exc is not None else None
+    if node.session_name is None:
+        if unresolvable is not None:
+            return ResumeTarget(session=None, owner_unresolvable=unresolvable)
+        return ResumeTarget(session=candidate)
+    if breach is None:
+        return ResumeTarget(session=candidate)
+    return ResumeTarget(session=None, pool_owner=candidate.harness_id, owner_unresolvable=unresolvable)
 
 
 def model_drifted(head_model: str | None, resolved: str | None) -> bool:

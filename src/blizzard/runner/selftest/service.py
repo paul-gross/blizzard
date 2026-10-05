@@ -12,7 +12,6 @@ import threading
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
-from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessError
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
@@ -23,26 +22,24 @@ from blizzard.runner.selftest.scratch_git import IScratchGit
 # rather than wedge it silently.
 _DEFAULT_RUN_BUDGET_SECONDS = 300.0
 
-__all__ = ["SelfTestService", "UnknownHarnessError"]
+__all__ = ["SelfTestService"]
 
 
 class SelfTestService:
     """Mint selftest runs and execute them off the request thread.
 
-    A ``harness`` outside the injected ``harnesses`` registry raises :class:`UnknownHarnessError`, a
-    client error. Concurrent runs for one harness are legal; the last to finish records the result."""
+    The caller resolves the harness id to its seam and hands both in. Concurrent runs for one
+    harness are legal; the last to finish records the result."""
 
     def __init__(
         self,
         *,
-        harnesses: IHarnessRegistry,
         scratch_git: IScratchGit,
         process: IProcessProbe,
         clock: IClock,
         run_budget_seconds: float = _DEFAULT_RUN_BUDGET_SECONDS,
         results: IWriteSelfTestResultRepository | None = None,
     ) -> None:
-        self._harnesses = harnesses
         self._scratch_git = scratch_git
         self._process = process
         self._clock = clock
@@ -51,9 +48,9 @@ class SelfTestService:
         self._lock = threading.Lock()
         self._runs: dict[str, SelfTestRun] = {}
 
-    def start(self, harness: str) -> SelfTestRun:
-        """Mint a run and begin it in a background thread; returns immediately."""
-        adapter = self._harnesses.self_test(harness)
+    def start(self, harness: str, adapter: IHarnessSelfTestSeam) -> SelfTestRun:
+        """Mint a run against ``harness``, whose resolved seam is ``adapter``, and begin it in a
+        background thread; returns immediately."""
         run = SelfTestRun(id=Id.mint(SELFTEST_PREFIX, self._clock).value, harness=harness)
         with self._lock:
             self._runs[run.id] = run

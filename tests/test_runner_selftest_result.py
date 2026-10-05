@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
     LatestSelfTestResult,
@@ -86,14 +85,13 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
     adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
     service = SelfTestService(
-        harnesses=HarnessRegistry({"claude_code": HarnessBinding(adapter=adapter)}),
         scratch_git=SubprocessScratchGit(),
         process=_RecordingProcessProbe(),
         clock=clock,
         results=_SlowWriter(store),
     )
 
-    run = service.start("claude_code")
+    run = service.start("claude_code", adapter)
     deadline = time.monotonic() + 10.0
     finished = service.get(run.id)
     while finished is not None and finished.status == "running":

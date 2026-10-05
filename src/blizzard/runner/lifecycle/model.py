@@ -68,49 +68,18 @@ class LeaseMove(StrEnum):
     START_PROCESS = "start-process"
 
 
-#: Which lease moves are legal from each lease state; an unspawned lease belongs to Reap's orphan arm.
+#: The lease-state legality the code enforces, and only that: a pause parks a spawned lease, an
+#: ask-parked one included (an unspawned lease has no worker to park and belongs to Reap's orphan
+#: arm). Every other move's legality is decided by its own move function's inputs — the reap,
+#: failure, advance, and completion moves — so no cell here claims it.
 LEASE_MOVES: Mapping[LeaseState, frozenset[LeaseMove]] = MappingProxyType(
     {
-        # A reap fails the attempt, so a retry or an escalation follows it from these three.
-        "spawning": frozenset(
-            {LeaseMove.REAP_UNSPAWNED, LeaseMove.RETRY, LeaseMove.ESCALATE, LeaseMove.ABANDON, LeaseMove.PREEMPT}
-        ),
-        "running": frozenset(
-            {
-                LeaseMove.REAP_STALLED,
-                LeaseMove.RETRY,
-                LeaseMove.ESCALATE,
-                LeaseMove.ABANDON,
-                LeaseMove.PARK_PAUSED,
-                LeaseMove.PREEMPT,
-            }
-        ),
-        "stale": frozenset(
-            {
-                LeaseMove.REAP_STALLED,
-                LeaseMove.RETRY,
-                LeaseMove.ESCALATE,
-                LeaseMove.ABANDON,
-                LeaseMove.PARK_PAUSED,
-                LeaseMove.PREEMPT,
-            }
-        ),
-        "exited": frozenset(
-            {
-                LeaseMove.RETRY,
-                LeaseMove.ESCALATE,
-                LeaseMove.ABANDON,
-                LeaseMove.PARK_PAUSED,
-                LeaseMove.PARK_USAGE_LIMITED,
-                LeaseMove.PREEMPT,
-                LeaseMove.CLOSE_APPLIED,
-                LeaseMove.START_PROCESS,
-            }
-        ),
-        "parked": frozenset({LeaseMove.ABANDON, LeaseMove.PREEMPT, LeaseMove.START_PROCESS}),
-        "backing-off": frozenset(
-            {LeaseMove.ABANDON, LeaseMove.PARK_PAUSED, LeaseMove.PREEMPT, LeaseMove.START_PROCESS}
-        ),
+        "spawning": frozenset(),
+        "running": frozenset({LeaseMove.PARK_PAUSED}),
+        "stale": frozenset({LeaseMove.PARK_PAUSED}),
+        "exited": frozenset({LeaseMove.PARK_PAUSED}),
+        "parked": frozenset({LeaseMove.PARK_PAUSED}),
+        "backing-off": frozenset({LeaseMove.PARK_PAUSED}),
         "closed": frozenset(),
     }
 )

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.leases.overload import OverloadExit
 from tests.runner_fakes import make_store
 
 pytestmark = pytest.mark.unit
@@ -34,8 +35,8 @@ def _record(
     streak_ordinal: int = 1,
     observed_at: datetime = _NOW,
     resume_after: datetime | None = None,
-) -> None:
-    store.record_overload(
+) -> OverloadExit | None:
+    return store.record_overload(
         lease_id=lease_id,
         chunk_id=chunk_id,
         epoch=epoch,
@@ -58,6 +59,20 @@ def test_record_overload_is_idempotent_for_the_same_invocation(tmp_path) -> None
     facts = store.open_overload_facts()
     assert len(facts) == 1
     assert facts[0].resume_after == _NOW + timedelta(seconds=60)
+
+
+def test_record_overload_answers_none_on_insert_and_the_standing_exit_on_a_re_record(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The port's return: nothing on the first write; on a re-record, the exit already standing
+    — its own ordinal and resume instant, not the re-record's."""
+    store = _store(tmp_path)
+    first_resume = _NOW + timedelta(seconds=60)
+
+    assert _record(store, streak_ordinal=4, resume_after=first_resume) is None
+    standing = _record(store, streak_ordinal=5, resume_after=_NOW + timedelta(seconds=999))
+
+    assert standing is not None
+    assert (standing.streak_ordinal, standing.resume_after) == (4, first_resume)
+    assert (standing.lease_id, standing.epoch, standing.invocation_identity) == ("lease_1", 1, "1")
 
 
 def test_a_different_invocation_identity_records_its_own_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]

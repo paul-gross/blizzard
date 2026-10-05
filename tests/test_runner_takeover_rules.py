@@ -54,7 +54,13 @@ def _lease(*, lease_id: str = "lease_1", epoch: int = 3, session: bool = True) -
     )
 
 
-def _takeover(*, takeover_id: str = "tko_1", reference_epoch: int | None = 3, fence_epoch: int | None = None):  # type: ignore[no-untyped-def]
+def _takeover(  # type: ignore[no-untyped-def]
+    *,
+    takeover_id: str = "tko_1",
+    reference_epoch: int | None = 3,
+    fence_epoch: int | None = None,
+    hold_epoch: int | None = None,
+):
     return OpenTakeover(
         takeover_id=takeover_id,
         chunk_id="ch_1",
@@ -65,6 +71,7 @@ def _takeover(*, takeover_id: str = "tko_1", reference_epoch: int | None = 3, fe
         opened_at=_NOW,
         harness_id="cc",
         reference_epoch=reference_epoch,
+        hold_epoch=hold_epoch,
     )
 
 
@@ -112,6 +119,17 @@ def test_admitted_takeover_references_the_session_and_fences_a_live_worker() -> 
     assert (forced.reference.lease_id, forced.live, forced.fence_epoch) == ("lease_2", True, 5)
     parked = _admit(_scope(active_lease=_lease(lease_id="lease_2")), parked=True, pending=True)
     assert (parked.reference.lease_id, parked.live, parked.fence_epoch) == ("lease_2", False, None)
+
+
+def test_a_takeover_holds_the_chunks_latest_epoch_above_a_sessionless_mint() -> None:
+    """A sessionless escalation mint at epoch 4 follows the session-bearing lease at 3: the
+    takeover references 3 yet still holds the chunk's own epoch 4, and only a later re-claim
+    is the loop's again."""
+    admitted = _admit(_scope(latest_lease_with_session=_lease(epoch=3), latest_epoch=4))
+    assert (admitted.reference.epoch, admitted.fence_epoch, admitted.hold_epoch) == (3, None, 4)
+    takeover = _takeover(reference_epoch=admitted.reference.epoch, hold_epoch=admitted.hold_epoch)
+    assert takeover.holds("ch_1", 4)
+    assert not takeover.holds("ch_1", 5)
 
 
 def test_live_counts_exited_eliciting_backing_off() -> None:

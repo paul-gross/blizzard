@@ -45,6 +45,7 @@ from blizzard.runner.lifecycle.model import (
     resumable,
 )
 from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
 from blizzard.runner.process.probe import IProcessProbe
@@ -443,9 +444,9 @@ class Pull(Step):
             if not takeover.ended_by(view):
                 _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=view.status.value)
                 continue
-            ctx.stores.takeover.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
-            if ctx.events is not None:
-                ctx.events.publish_takeover_changed(takeover.chunk_id, takeover.takeover_id, cause="closed")
+            TakeoverCloser(ctx.stores.takeover, ctx.clock, ctx.events).close(
+                TakeoverCloseScope(chunk_id=takeover.chunk_id, open_takeover=takeover), takeover.takeover_id
+            )
 
 
 class Fill(Step):
