@@ -474,17 +474,37 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
-def test_resolve_deployed_baseline_reads_gh_run_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    captured = {}
+def _gh_stub(listing: list[dict], rest: list[dict] | dict | None = None, calls: list | None = None):
+    """A stubbed ``gh``: ``run list`` answers ``listing``, ``api`` answers the REST payload
+    (defaulting to the same runs in REST field names)."""
+    if rest is None:
+        rest = [
+            {"head_sha": r["headSha"], "conclusion": r["conclusion"], "created_at": r["createdAt"]} for r in listing
+        ]
+    payload = rest if isinstance(rest, dict) else {"workflow_runs": rest}
 
     def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return _FakeCompleted(stdout=json.dumps([{"headSha": "deadbeef", "conclusion": "success"}]))
+        if calls is not None:
+            calls.append(cmd)
+        if cmd[:3] == ["gh", "run", "list"]:
+            return _FakeCompleted(stdout=json.dumps(listing))
+        assert cmd[:2] == ["gh", "api"]
+        return _FakeCompleted(stdout=json.dumps(payload))
 
-    monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
+    return fake_run
+
+
+def _run(sha: str, conclusion: str, created: str) -> dict:
+    return {"headSha": sha, "conclusion": conclusion, "createdAt": created}
+
+
+def test_resolve_deployed_baseline_reads_gh_run_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list = []
+    stub = _gh_stub([_run("deadbeef", "success", "2026-10-05T10:00:00Z")], calls=calls)
+    monkeypatch.setattr(wire_compat.subprocess, "run", stub)
     assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "deadbeef"
-    assert captured["cmd"][:3] == ["gh", "run", "list"]
-    assert "push.yml" in captured["cmd"]
+    assert calls[0][:3] == ["gh", "run", "list"]
+    assert "push.yml" in calls[0]
 
 
 def test_resolve_deployed_baseline_skips_unsuccessful_runs_without_a_status_filter(
@@ -492,30 +512,63 @@ def test_resolve_deployed_baseline_skips_unsuccessful_runs_without_a_status_filt
 ) -> None:
     """GitHub answers ``--branch`` with ``--status`` from a stale index, so success is picked
     from the newest runs here: an in-progress and a failed run are passed over."""
-    captured = {}
+    calls: list = []
     runs = [
-        {"headSha": "inflight", "conclusion": ""},
-        {"headSha": "broken", "conclusion": "failure"},
-        {"headSha": "deployed", "conclusion": "success"},
-        {"headSha": "older", "conclusion": "success"},
+        _run("inflight", "", "2026-10-05T13:00:00Z"),
+        _run("broken", "failure", "2026-10-05T12:00:00Z"),
+        _run("deployed", "success", "2026-10-05T11:00:00Z"),
+        _run("older", "success", "2026-10-05T10:00:00Z"),
     ]
+    monkeypatch.setattr(wire_compat.subprocess, "run", _gh_stub(runs, calls=calls))
+    assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "deployed"
+    assert all("--status" not in c for c in calls)
+
+
+def test_resolve_deployed_baseline_picks_newest_success_by_creation_time(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runs = [_run("older", "success", "2026-10-04T10:00:00Z"), _run("newest", "success", "2026-10-05T10:00:00Z")]
+    monkeypatch.setattr(wire_compat.subprocess, "run", _gh_stub(runs))
+    assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "newest"
+
+
+def test_resolve_deployed_baseline_retries_a_stale_listing_until_it_agrees(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stale = [_run("september", "success", "2026-09-08T10:00:00Z")]
+    fresh = [_run("current", "success", "2026-10-05T10:00:00Z")]
+    rest = [{"head_sha": "current", "conclusion": "success", "created_at": "2026-10-05T10:00:00Z"}]
+    answers = iter([stale, fresh])
+    current = {}
 
     def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return _FakeCompleted(stdout=json.dumps(runs))
+        if cmd[:3] == ["gh", "run", "list"]:
+            current["listing"] = next(answers)
+            return _FakeCompleted(stdout=json.dumps(current["listing"]))
+        return _FakeCompleted(stdout=json.dumps({"workflow_runs": rest}))
 
+    sleeps: list[float] = []
     monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
-    assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path) == "deployed"
-    assert "--status" not in captured["cmd"]
+    assert wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path, sleep=sleeps.append) == "current"
+    assert len(sleeps) == 1
+
+
+def test_resolve_deployed_baseline_fails_naming_a_listing_that_stays_stale(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stale = [_run("september", "success", "2026-09-08T10:00:00Z")]
+    rest = [{"head_sha": "current", "conclusion": "success", "created_at": "2026-10-05T10:00:00Z"}]
+    sleeps: list[float] = []
+    monkeypatch.setattr(wire_compat.subprocess, "run", _gh_stub(stale, rest))
+    with pytest.raises(WireCompatError, match=r"stale push\.yml run listing"):
+        wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path, sleep=sleeps.append)
+    assert len(sleeps) == wire_compat._DEPLOYED_ATTEMPTS - 1
 
 
 def test_resolve_deployed_baseline_fails_when_no_successful_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def fake_run(cmd, **kwargs):
-        return _FakeCompleted(stdout=json.dumps([{"headSha": "broken", "conclusion": "failure"}]))
-
-    monkeypatch.setattr(wire_compat.subprocess, "run", fake_run)
+    monkeypatch.setattr(wire_compat.subprocess, "run", _gh_stub([_run("broken", "failure", "2026-10-05T10:00:00Z")]))
     with pytest.raises(WireCompatError):
         wire_compat.resolve_deployed_baseline("paul-gross/blizzard", tmp_path)
 

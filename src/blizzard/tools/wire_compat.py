@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -342,14 +343,27 @@ def resolve_merge_base_baseline(against: str, cwd: Path) -> str:
 #: How many of the newest ``push.yml`` runs on ``master`` are searched for a successful one.
 _DEPLOYED_SEARCH_DEPTH = 100
 
+#: Resolution attempts before a disagreeing listing is declared stale, and the first backoff.
+_DEPLOYED_ATTEMPTS = 4
+_DEPLOYED_BACKOFF_SECONDS = 5.0
 
-def resolve_deployed_baseline(repo: str, cwd: Path) -> str:
-    """The head commit of the newest successful ``push.yml`` run on ``master`` — what the
-    hosted hub's ``edge`` currently runs. Success is filtered here, not by ``--status``:
-    GitHub answers ``branch`` and ``status`` together from a stale index."""
-    result = subprocess.run(
+
+def _gh(args: list[str], cwd: Path) -> str:
+    result = subprocess.run(["gh", *args], capture_output=True, text=True, cwd=cwd, timeout=30)
+    if result.returncode != 0:
+        raise WireCompatError(f"gh {' '.join(args[:2])} failed: {result.stderr.strip()}")
+    return result.stdout or "[]"
+
+
+def _newest_success(runs: list[tuple[str, str, str]]) -> str | None:
+    """The head sha of the successful ``(sha, conclusion, created_at)`` run created last."""
+    successes = [(created, sha) for sha, conclusion, created in runs if conclusion == "success"]
+    return max(successes)[1] if successes else None
+
+
+def _listed_baseline(repo: str, cwd: Path) -> str | None:
+    out = _gh(
         [
-            "gh",
             "run",
             "list",
             "--repo",
@@ -361,20 +375,49 @@ def resolve_deployed_baseline(repo: str, cwd: Path) -> str:
             "--limit",
             str(_DEPLOYED_SEARCH_DEPTH),
             "--json",
-            "headSha,conclusion",
+            "headSha,conclusion,createdAt",
         ],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        timeout=30,
+        cwd,
     )
-    if result.returncode != 0:
-        raise WireCompatError(f"gh run list failed: {result.stderr.strip()}")
-    runs = json.loads(result.stdout or "[]")
-    for run in runs:
-        if run.get("conclusion") == "success":
-            return run["headSha"]
-    raise WireCompatError(f"no successful push.yml run among the newest {_DEPLOYED_SEARCH_DEPTH} on {repo}@master")
+    runs = [(r["headSha"], r.get("conclusion") or "", r.get("createdAt") or "") for r in json.loads(out)]
+    return _newest_success(runs)
+
+
+def _rest_baseline(repo: str, cwd: Path) -> str | None:
+    out = _gh(
+        ["api", f"repos/{repo}/actions/workflows/push.yml/runs?branch=master&per_page={_DEPLOYED_SEARCH_DEPTH}"],
+        cwd,
+    )
+    payload = json.loads(out)
+    runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+    return _newest_success([(r["head_sha"], r.get("conclusion") or "", r.get("created_at") or "") for r in runs])
+
+
+def resolve_deployed_baseline(repo: str, cwd: Path, *, sleep=time.sleep) -> str:
+    """The head commit of the newest successful ``push.yml`` run on ``master`` — what the
+    hosted hub's ``edge`` currently runs. Success is filtered here, not by ``--status``:
+    GitHub answers ``branch`` and ``status`` together from a stale index.
+
+    The run listing is itself sometimes answered from a stale index, weeks behind. The
+    newest successful run by creation time is therefore cross-checked against the REST
+    runs endpoint; a disagreement is retried with backoff and, if it never settles, fails
+    rather than walking from a baseline that may be long deployed."""
+    listed = rest = None
+    for attempt in range(_DEPLOYED_ATTEMPTS):
+        if attempt:
+            sleep(_DEPLOYED_BACKOFF_SECONDS * 2 ** (attempt - 1))
+        listed = _listed_baseline(repo, cwd)
+        rest = _rest_baseline(repo, cwd)
+        if listed is None and rest is None:
+            raise WireCompatError(
+                f"no successful push.yml run among the newest {_DEPLOYED_SEARCH_DEPTH} on {repo}@master"
+            )
+        if listed == rest:
+            return listed  # type: ignore[return-value]
+    raise WireCompatError(
+        f"stale push.yml run listing for {repo}@master: `gh run list` resolved {listed} but the REST runs "
+        f"endpoint resolved {rest} after {_DEPLOYED_ATTEMPTS} attempts; refusing to walk from either baseline"
+    )
 
 
 def _first_parent_steps(baseline: str, cwd: Path) -> list[str]:
