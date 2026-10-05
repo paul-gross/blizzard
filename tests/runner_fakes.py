@@ -660,6 +660,7 @@ class FakeTranscriptSource:
         self._context_tokens = context_tokens_by_session or {}
         self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
         self.read_raw_lines_calls: list[tuple[str, TranscriptPosition | None, TranscriptPosition | None]] = []
+        self.read_raw_lines_cwds: list[str | None] = []
         self.size_bytes_calls: list[str] = []
         self.context_tokens_calls: list[str] = []
 
@@ -692,6 +693,7 @@ class FakeTranscriptSource:
         end: TranscriptPosition | None = None,
     ) -> list[str]:
         self.read_raw_lines_calls.append((session_id, start, end))
+        self.read_raw_lines_cwds.append(spawn_cwd)
         return list(self._lines.get(session_id, []))
 
     def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
@@ -820,6 +822,11 @@ class FakeHarness:
         # test that doesn't care about the observation seam reads exactly as before.
         self._observed_model = observed_model
         self.observed_model_calls: list[tuple[str, ...]] = []
+        # Each `sum_transcript_usage` call's passed-through observation, in call order.
+        self.sum_observed: list[str | None] = []
+        self.needs_usage_transcript_calls: list[tuple[str, str | None]] = []
+        # Each `parse_usage` call's `transcript_lines`, in call order.
+        self.parse_transcript_lines: list[tuple[str, ...]] = []
         self.spawns: list[tuple[Envelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn
         self.judged: list[tuple[str, str, str]] = []
@@ -1042,7 +1049,7 @@ class FakeHarness:
     def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         # Mirrors a binding with no configured default of its own: an
         # unresolved `model` always needs the observation; a resolved one never does.
-        del output
+        self.needs_usage_transcript_calls.append((output, model))
         return model is None
 
     def parse_usage(
@@ -1057,6 +1064,7 @@ class FakeHarness:
     ) -> UsageSample | None:
         del invocation_start, invocation_end
         self.usage_models.append(model)
+        self.parse_transcript_lines.append(tuple(transcript_lines))
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]
         return self.usage
@@ -1071,11 +1079,13 @@ class FakeHarness:
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
         del invocation_start, invocation_end
         self.usage_models.append(model)
+        self.sum_observed.append(observed)
         return self.transcript_usage or UsageSample(
             kind=kind,
             model="fake-model",

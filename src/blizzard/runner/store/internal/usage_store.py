@@ -185,7 +185,7 @@ class UsageStore:
     def _newest_rows_by_slug(self, slugs: Sequence[str], where: object | None) -> dict[str, Row]:
         """Each slug's newest ``external_usage_samples`` row among those matching ``where`` — the
         singulars' ``(sampled_at, id)`` order, kept portable by joining each slug's ``max(sampled_at)``
-        back and breaking a same-instant tie on ``id`` here."""
+        back and breaking a same-instant tie on ``id`` in the statement's own order."""
         if not slugs:
             return {}
         samples = external_usage_samples
@@ -211,11 +211,11 @@ class UsageStore:
                     )
                     .join(latest, and_(samples.c.slug == latest.c.slug, samples.c.sampled_at == latest.c.sampled_at))
                     .where(*conditions)
+                    .order_by(samples.c.id.desc())
                 )
                 for row in conn.execute(stmt):
-                    held = newest.get(str(row.slug))
-                    if held is None or row.id > held.id:
-                        newest[str(row.slug)] = row
+                    # Highest id first, so a slug's first row is its same-instant tie's winner.
+                    newest.setdefault(str(row.slug), row)
         return newest
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:

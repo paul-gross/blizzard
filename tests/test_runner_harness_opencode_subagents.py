@@ -631,6 +631,28 @@ def test_transcript_fallback_caps_running_task_at_invocation_end(spawn_executor:
     assert sample.input_tokens == 20
 
 
+def test_the_transcript_fallback_closes_a_never_ended_tasks_window_at_its_lines_latest_instant(
+    spawn_executor: Executor,
+) -> None:
+    exporter, _ = _synthetic()
+    root_message = json.dumps(
+        {
+            "info": {
+                "id": "m0",
+                "sessionID": "root",
+                "role": "assistant",
+                "providerID": "openai",
+                "modelID": "gpt-5.6-sol",
+                "time": {"created": 90, "completed": 210},
+            },
+            # A killed run: the task part never recorded an end.
+            "parts": [_task("t1", "root", "m0", "child", 100, None), _step("rs1", "root", "m0", 3)],
+        }
+    )
+    sample = _adapter(spawn_executor, exporter).sum_transcript_usage([root_message], "spawn")
+    assert sample.input_tokens == 3 + 20 + 5
+
+
 def test_the_transcript_fallback_reads_a_capture_export_message(spawn_executor: Executor) -> None:
     root = json.loads(_load("root_export.json"))
     lines = [json.dumps(m) for m in root["messages"] if m["info"]["time"]["created"] <= 1789384646158]

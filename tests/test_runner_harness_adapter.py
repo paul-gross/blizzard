@@ -1256,17 +1256,35 @@ def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines(spawn_ex
     lines = [
         "",
         "not json",
+        "{truncated json",
         json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
         json.dumps([1, 2, 3]),  # valid JSON, not a dict record
         json.dumps({"type": "assistant", "message": "not-a-dict"}),
         json.dumps({"type": "assistant", "message": {"usage": "not-a-dict"}}),
+        # A non-assistant record carrying usage is still never summed.
+        json.dumps({"type": "user", "message": {"id": "u1", "usage": {"input_tokens": 1000}}}),
+        transcript_fixtures.assistant_usage(input_tokens=2, output_tokens=3, message_id="m1"),
+        transcript_fixtures.assistant_usage(input_tokens=2, output_tokens=3, message_id="m1"),
+        # A record naming only some fields counts the rest as zero.
+        json.dumps({"type": "assistant", "message": {"id": "m2", "usage": {"cache_read_input_tokens": 7}}}),
+        json.dumps({"type": "assistant", "message": {"id": "m3", "usage": {"cache_creation_input_tokens": 11}}}),
     ]
 
     sample = _adapter(spawn_executor).sum_transcript_usage(lines, "spawn")
 
+    # Every skipped line passes over to the records after it, which alone are summed.
     counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
-    assert counts == (0, 0, 0, 0)
+    assert counts == (2, 3, 7, 11)
     assert sample.cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_counts_each_empty_id_record_rather_than_collapsing_them(
+    spawn_executor: Executor,
+) -> None:
+    lines = [transcript_fixtures.assistant_usage(input_tokens=4, message_id="") for _ in range(2)]
+
+    assert _adapter(spawn_executor).sum_transcript_usage(lines, "spawn").input_tokens == 8
 
 
 @pytest.mark.unit
@@ -1910,10 +1928,58 @@ def test_sum_transcript_usage_keeps_model_unknown_when_no_line_names_one(spawn_e
     adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
     lines = [json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 3}}})]
 
-    sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet")
+    with capture_logs() as logs:
+        sample = adapter.sum_transcript_usage(lines, "judge", model="sonnet")
 
     assert sample.model == "unknown"
     assert sample.input_tokens == 3
+    unavailable = [e for e in logs if e["event"] == "harness usage model unavailable"]
+    assert [(e["log_level"], e["expected_model"], e["kind"]) for e in unavailable] == [("warning", "sonnet", "judge")]
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_takes_a_supplied_observation_without_re_deriving_it(
+    spawn_executor: Executor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adapter = _adapter(spawn_executor, binary="claude")
+    lines = [transcript_fixtures.assistant_usage(model="claude-sonnet-5", message_id="m1")]
+    monkeypatch.setattr(adapter, "observed_model", lambda _lines: pytest.fail("re-derived a supplied observation"))
+
+    sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet", observed="claude-fable-5-1")
+
+    # The supplied observation wins over what the lines would derive, and the pinned alias never stands in.
+    assert sample.model == "claude-fable-5-1"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_derives_the_observation_from_its_lines_when_none_is_supplied(
+    spawn_executor: Executor,
+) -> None:
+    adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
+    lines = [transcript_fixtures.assistant_usage(model="claude-sonnet-5", message_id="m1")]
+
+    with capture_logs() as logs:
+        sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet")
+
+    # A lease pinned to the `sonnet` alias still records the model the transcript shows ran.
+    assert sample.model == "claude-sonnet-5"
+    assert sample.kind == "spawn"
+    # The alias names what ran, so nothing differs and nothing is unavailable.
+    assert [e["event"] for e in logs if e["log_level"] == "warning"] == []
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_compares_a_supplied_observation_against_the_expected_model(
+    spawn_executor: Executor,
+) -> None:
+    adapter = _adapter(spawn_executor, binary="claude")
+    lines = [transcript_fixtures.assistant_usage(model="claude-sonnet-5", message_id="m1")]
+
+    with capture_logs() as logs:
+        adapter.sum_transcript_usage(lines, "spawn", model="claude-sonnet-5", observed="claude-fable-5-1")
+
+    differs = [e for e in logs if e["event"] == "harness usage model differs from session model"]
+    assert [(e["expected_model"], e["observed_model"]) for e in differs] == [("claude-sonnet-5", "claude-fable-5-1")]
 
 
 @pytest.mark.unit
