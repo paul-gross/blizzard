@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import QUESTIONS, chunk_has_ended, fence, lock_chunk_row
 
 
 class ChunkQuestionsStore:
@@ -34,10 +34,13 @@ class ChunkQuestionsStore:
             return QUESTIONS.of(row) if row is not None else None
 
     def list_open_questions(self) -> list[NodeQuestion]:
+        """The unanswered questions whose chunk has not ended — the SQL mirror of
+        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``."""
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select.where(
                     s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
+                    & ~chunk_has_ended(s.questions.c.chunk_id)
                 ).order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
