@@ -18,6 +18,9 @@ Over HTTP the same log is `GET /api/config/changes?record_kind=&record_key=&befo
 rows a page. Pass the response's `next_before` as `before` to read the next page; it is `null` on the last. Reading
 needs the `fleet:view` permission.
 
+The board's Admin page has a Changes tab that reads the same log, newest first, with each entry's actor, door, and
+fields. An older page loads on request.
+
 ## Operations
 
 | Operation | Written when                  | Fields listed                                      |
