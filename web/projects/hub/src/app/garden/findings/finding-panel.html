@@ -98,29 +98,30 @@
 
       @if (canControl()) {
         <div class="fp-actions" data-testid="gardening-finding-panel-actions">
-          <fleet-kit-button size="cta" testid="gardening-finding-panel-resolve" (click)="triage.emit('resolve')">
-            Resolve
-          </fleet-kit-button>
-          <fleet-kit-button
-            size="cta"
-            testid="gardening-finding-panel-confirm-gone"
-            (click)="triage.emit('confirm-gone')"
-          >
-            Confirm gone
-          </fleet-kit-button>
-          <fleet-kit-button size="cta" testid="gardening-finding-panel-wont-fix" (click)="triage.emit('wont-fix')">
-            Won't fix
-          </fleet-kit-button>
-          <fleet-kit-button
-            size="cta"
-            testid="gardening-finding-panel-not-a-finding"
-            (click)="triage.emit('not-a-finding')"
-          >
-            Not a finding
-          </fleet-kit-button>
           @if (exited()) {
             <fleet-kit-button size="cta" testid="gardening-finding-panel-reopen" (click)="triage.emit('reopen')">
               Reopen
+            </fleet-kit-button>
+          } @else {
+            <fleet-kit-button size="cta" testid="gardening-finding-panel-resolve" (click)="triage.emit('resolve')">
+              Resolve
+            </fleet-kit-button>
+            <fleet-kit-button
+              size="cta"
+              testid="gardening-finding-panel-confirm-gone"
+              (click)="triage.emit('confirm-gone')"
+            >
+              Confirm gone
+            </fleet-kit-button>
+            <fleet-kit-button size="cta" testid="gardening-finding-panel-wont-fix" (click)="triage.emit('wont-fix')">
+              Won't fix
+            </fleet-kit-button>
+            <fleet-kit-button
+              size="cta"
+              testid="gardening-finding-panel-not-a-finding"
+              (click)="triage.emit('not-a-finding')"
+            >
+              Not a finding
             </fleet-kit-button>
           }
         </div>
