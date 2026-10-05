@@ -1119,6 +1119,16 @@ class ChunkFacts:
             return None
         return node if verb_legal_from(ChunkVerb.HUB_ADVANCE, self.status()) else None
 
+    def awaits_exit_from(self, node: Node, *, epoch: int) -> bool:
+        """``node``'s visit at ``epoch`` has recorded no exit yet and no newer epoch has superseded
+        it — the replay key ``(from_node, epoch)`` the exit transition and the migration are
+        recorded under, so a replay after the node's exit matches nothing. Status stays with each
+        caller."""
+        left = any(t.from_node_id == node.node_id and t.epoch == epoch for t in self.transitions) or any(
+            m.from_node_id == node.node_id and m.epoch == epoch for m in self.migrations
+        )
+        return not left and (self.latest_epoch() or 0) <= epoch
+
     def epoch_floor(self) -> int:
         """The epoch a fresh node-step envelope carries — the latest fencing epoch, ``0`` before any."""
         return self.latest_epoch() or 0

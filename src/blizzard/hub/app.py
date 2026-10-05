@@ -468,6 +468,8 @@ def build_hosted_app(
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
         KeyCoverage.of(core.secrets, secret_keys).check()
+        # Before the hub serves: a live slot now belongs to a run the previous process died in.
+        services.hub_node.release_orphaned_slots()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)

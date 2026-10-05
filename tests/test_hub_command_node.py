@@ -1321,6 +1321,84 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
     assert len(runner.calls) == 2
 
 
+@pytest.mark.component
+def test_a_chunks_own_live_run_is_never_reentered_and_a_finished_one_never_replays(tmp_path: Path) -> None:
+    """The slot is not reentrant: while a chunk's hub node runs, a second ``run`` of that same
+    chunk starts no command; once it finished, a replay finds the chunk past the node and starts none."""
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def before_run(_command: str) -> None:
+        entered.set()
+        release.wait(timeout=5)
+
+    runner.before_run = before_run
+    applied: dict = {}
+    thread = threading.Thread(target=lambda: applied.update(r=_submit_build_pass(hub, chunk_id, build_node_id, 1)))
+    thread.start()
+    assert entered.wait(timeout=5), "the hub node never started"
+
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+    assert len(runner.calls) == 1
+    # The deferred attempt freed no slot but its own: the first run's is still live.
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 1
+
+    release.set()
+    thread.join(timeout=5)
+    assert applied["r"].json()["outcome"] == "hub_node_taken"
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
+
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+    assert len(runner.calls) == 1
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len([t for t in detail["history"] if t["from_node_name"] == "merge"]) == 1
+
+
+@pytest.mark.component
+def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
+    # A run the previous process died in left its slot live; park the chunk at the node.
+    assert hub_exec.acquire_hub_exec_slot(
+        chunk_id, node_id=merge_node.node_id, at=hub.clock.now(), stale_after=timedelta(hours=1)
+    )
+    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        transition_id="tr_test_boot",
+        chunk_id=chunk_id,
+        from_node_id=build_node_id,
+        to_node_id=merge_node.node_id,
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=hub.clock.now(),
+        artifacts=[],
+        proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+
+    assert hub.services.hub_node.release_orphaned_slots() == 1
+
+    assert hub_exec.count_live_hub_exec_slots() == 0
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is not None
+    assert len(runner.calls) == 1
+
+
 # Component — pending outcome (#66): polls without blocking the queue
 
 _POLL_GRAPH_YAML = """

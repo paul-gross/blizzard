@@ -61,10 +61,8 @@ class ChunkHubExecStore:
             conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
             live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()
             for row in live_rows:
-                if row.holder_chunk_id == chunk_id:
-                    return row.slot_id  # reentrant — this chunk already holds it
                 if at - row.acquired_at < stale_after:
-                    return None  # a different chunk genuinely holds it — defer
+                    return None  # held, by this chunk's own run or another's — defer
                 # Stale — a prior holder's run never released it (a kill -9); reclaim.
                 conn.execute(
                     update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
@@ -77,13 +75,19 @@ class ChunkHubExecStore:
             )
             return slot_id
 
-    def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
+    def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
         with self._store.write("release_hub_exec_slot") as conn:
             conn.execute(
                 update(s.hub_exec_slot)
-                .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
+                .where((s.hub_exec_slot.c.slot_id == slot_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
+
+    def release_live_hub_exec_slots(self, *, at: datetime) -> int:
+        with self._store.write("release_live_hub_exec_slots") as conn:
+            return conn.execute(
+                update(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None)).values(released_at=at)
+            ).rowcount
 
     def record_hub_step_transition(
         self,
