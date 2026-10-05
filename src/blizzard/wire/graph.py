@@ -20,12 +20,6 @@ class GraphMintRequest(BaseModel):
     definition_yaml: str
 
 
-class GraphLifecycleRequest(BaseModel):
-    """Retire or re-enable a graph — records who flipped it."""
-
-    by: str = "operator"
-
-
 class GraphPolicyRequest(BaseModel):
     """Set a graph's follow-latest policy — the tri-state.
 
@@ -33,7 +27,6 @@ class GraphPolicyRequest(BaseModel):
     hub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it."""
 
     follow_latest: bool | None
-    by: str = "operator"
 
 
 class GraphValidationReport(BaseModel):

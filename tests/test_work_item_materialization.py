@@ -248,7 +248,7 @@ def test_a_retired_default_graph_leaves_the_create_proposal_unjudged_until_re_en
     chunk_id, node_id = _ingest(hub, ref="12")
     graphs = hub.client.get("/api/graphs").json()
     default_graph = next(g for g in graphs if g["name"] == PACKAGED.default.doc.name)
-    retired = hub.client.post(f"/api/graphs/{default_graph['graph_id']}/retire", json={"by": "operator"})
+    retired = hub.client.post(f"/api/graphs/{default_graph['graph_id']}/retire")
     assert retired.status_code == 202, retired.text
 
     _deliver(hub, chunk_id, node_id, proposals=[_create_proposal(title="blocked on a retired graph")])
@@ -258,7 +258,7 @@ def test_a_retired_default_graph_leaves_the_create_proposal_unjudged_until_re_en
     titles = {item["title"] for item in _hub_items(hub)}
     assert "blocked on a retired graph" not in titles
 
-    enabled = hub.client.post(f"/api/graphs/{default_graph['graph_id']}/enable", json={"by": "operator"})
+    enabled = hub.client.post(f"/api/graphs/{default_graph['graph_id']}/enable")
     assert enabled.status_code == 202, enabled.text
 
     hub.services.work_item_materialization.sweep()

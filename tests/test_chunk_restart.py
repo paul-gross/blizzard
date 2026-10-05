@@ -722,7 +722,7 @@ def test_the_move_refuses_a_retired_target_graph(tmp_path) -> None:  # type: ign
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     target = _target_graph(hub)
-    assert hub.client.post(f"/api/graphs/{target}/retire", json={"by": "ada"}).status_code == 202
+    assert hub.client.post(f"/api/graphs/{target}/retire").status_code == 202
 
     resp = _restart(hub, chunk_id, node="audit", to_graph=target)
 

@@ -3001,18 +3001,6 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling (recorded on the fact).",
-              "hidden": false,
-              "kind": "option",
-              "name": "by",
-              "opts": [
-                "--by"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -3064,18 +3052,6 @@
               "required": true,
               "secondary_opts": [],
               "type": "choice"
-            },
-            {
-              "help": "Who is setting the policy (recorded on the fact).",
-              "hidden": false,
-              "kind": "option",
-              "name": "by",
-              "opts": [
-                "--by"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -3189,18 +3165,6 @@
                 "graph_id"
               ],
               "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Who is retiring (recorded on the fact).",
-              "hidden": false,
-              "kind": "option",
-              "name": "by",
-              "opts": [
-                "--by"
-              ],
-              "required": false,
               "secondary_opts": [],
               "type": "text"
             },

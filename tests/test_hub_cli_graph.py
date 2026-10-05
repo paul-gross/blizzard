@@ -77,12 +77,10 @@ def test_graph_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPat
         return _FakeResponse(202, {"graph_id": "gr_1", "retired": True})
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
-        hub_group, ["graph", "retire", "gr_1", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+    result = CliRunner().invoke(hub_group, ["graph", "retire", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
-    assert calls == [("http://hub.local:8421/api/graphs/gr_1/retire", {"by": "paul"})]
+    assert calls == [("http://hub.local:8421/api/graphs/gr_1/retire", {})]
     assert "retired" in result.output
 
 
@@ -98,7 +96,7 @@ def test_graph_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPat
     result = CliRunner().invoke(hub_group, ["graph", "enable", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
-    assert calls == [("http://hub.local:8421/api/graphs/gr_1/enable", {"by": "operator"})]
+    assert calls == [("http://hub.local:8421/api/graphs/gr_1/enable", {})]
     assert "enabled" in result.output
 
 

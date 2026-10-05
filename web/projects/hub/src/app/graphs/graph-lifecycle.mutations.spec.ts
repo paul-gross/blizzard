@@ -21,14 +21,14 @@ describe('injectGraphLifecycleMutation (issue #101)', () => {
 
   afterEach(() => stub.restore());
 
-  it('routes to the retire verb when retired=true, with `by: operator`', async () => {
+  it('routes to the retire verb when retired=true', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectGraphLifecycleMutation());
 
     await mutation.mutateAsync({ graphId: 'gr_1', retired: true });
 
     const calls = stub.forRoute('/api/graphs/gr_1/retire', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toBeUndefined();
     expect(stub.forRoute('/api/graphs/gr_1/enable', 'POST')).toHaveLength(0);
   });
 
@@ -39,7 +39,7 @@ describe('injectGraphLifecycleMutation (issue #101)', () => {
 
     const calls = stub.forRoute('/api/graphs/gr_1/enable', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
+    expect(calls[0].body).toBeUndefined();
     expect(stub.forRoute('/api/graphs/gr_1/retire', 'POST')).toHaveLength(0);
   });
 

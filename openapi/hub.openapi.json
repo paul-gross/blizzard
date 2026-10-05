@@ -5753,18 +5753,6 @@
         "title": "GraphEdgeView",
         "type": "object"
       },
-      "GraphLifecycleRequest": {
-        "description": "Retire or re-enable a graph \u2014 records who flipped it.",
-        "properties": {
-          "by": {
-            "default": "operator",
-            "title": "By",
-            "type": "string"
-          }
-        },
-        "title": "GraphLifecycleRequest",
-        "type": "object"
-      },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
@@ -5919,11 +5907,6 @@
       "GraphPolicyRequest": {
         "description": "Set a graph's follow-latest policy \u2014 the tri-state.\n\n``follow_latest`` is required and carries no default: ``true``/``false`` override the\nhub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it.",
         "properties": {
-          "by": {
-            "default": "operator",
-            "title": "By",
-            "type": "string"
-          },
           "follow_latest": {
             "anyOf": [
               {
@@ -18971,16 +18954,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GraphLifecycleRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "202": {
             "content": {
@@ -19077,16 +19050,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GraphLifecycleRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "202": {
             "content": {

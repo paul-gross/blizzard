@@ -3,7 +3,8 @@
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
 YAML body or a ``graph_id`` into an object before delegating to the domain
 (``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
-token to the fleet router."""
+token to the fleet router. The actor recorded on a lifecycle or policy fact is the
+authenticated identity, never a request field."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
 from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
@@ -25,7 +27,6 @@ from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
     GraphChoiceView,
     GraphEdgeView,
-    GraphLifecycleRequest,
     GraphMintRequest,
     GraphNodeView,
     GraphPolicyRequest,
@@ -189,17 +190,18 @@ def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_servic
     "/graphs/{graph_id}/retire",
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
 )
 def retire_graph(
-    graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+    graph_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
 ) -> GraphView:
     """Retire a graph — excludes it from name resolution; the claim on any chunk
     already pinned to it runs on untouched. 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
-    services.graph_lifecycle.retire(graph, by=request.by)
+    services.graph_lifecycle.retire(graph, by=identity.user_id)
     return _graph_view(graph, retired=True, follow_latest=services.graphs.follow_latest(graph_id))
 
 
@@ -207,17 +209,18 @@ def retire_graph(
     "/graphs/{graph_id}/enable",
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
 )
 def enable_graph(
-    graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+    graph_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
 ) -> GraphView:
     """Re-enable a retired graph — restores normal newest-per-name derivation.
     Idempotent on an already-enabled graph; 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
-    services.graph_lifecycle.enable(graph, by=request.by)
+    services.graph_lifecycle.enable(graph, by=identity.user_id)
     return _graph_view(graph, retired=False, follow_latest=services.graphs.follow_latest(graph_id))
 
 
@@ -225,10 +228,12 @@ def enable_graph(
     "/graphs/{graph_id}/follow-latest",
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(GRAPH_EDIT))],
 )
 def set_graph_follow_latest(
-    graph_id: str, request: GraphPolicyRequest, services: Annotated[HubServices, Depends(get_services)]
+    graph_id: str,
+    request: GraphPolicyRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
 ) -> GraphView:
     """Set this graph's follow-latest policy — ``true``/``false``/``null``.
 
@@ -238,7 +243,7 @@ def set_graph_follow_latest(
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
-    services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=request.by)
+    services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
         graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
     )

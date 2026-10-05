@@ -17,7 +17,7 @@ export interface GraphLifecycleVars {
  * (mirrors `injectChunkPauseMutation`), through the generated client
  * (bzh:generated-client). On success it re-reads the graph list and this graph's own
  * detail, since retiring/enabling can flip which version of its name is `effective`.
- * `by` defaults to `operator` server-side.
+ * The hub records the authenticated caller; the request carries no actor.
  */
 export function injectGraphLifecycleMutation() {
   const queryClient = inject(QueryClient);
@@ -27,7 +27,6 @@ export function injectGraphLifecycleMutation() {
       const call = vars.retired ? retireGraphApiGraphsGraphIdRetirePost : enableGraphApiGraphsGraphIdEnablePost;
       const { error } = await call({
         path: { graph_id: vars.graphId },
-        body: { by: 'operator' },
         throwOnError: false,
       });
       if (error) throw error;
