@@ -296,14 +296,11 @@ def resume_target(
     breach: str | None = None,
     owner_exc: UnknownHarnessError | UnavailableHarnessError | None = None,
 ) -> ResumeTarget:
-    """A node-entry spawn's resume target over its loaded facts: ``candidate`` is the plain
-    resume's latest session or the named pool's head, ``breach`` why a pool head must not be
-    resumed, and ``owner_exc`` why the candidate's recorded owner will not resolve.
-
-    A fresh node, or no candidate, mints fresh — a resume target is best-effort. A plain resume
-    resumes its candidate unless the owner is unresolvable, which escalates in place rather than
-    falling back to a mint. A pool head resumes while unbreached; a breached one mints its
-    replacement under the head's own owner, or escalates when the breach is that owner."""
+    """A node-entry spawn's resume target: ``candidate`` is the plain resume's latest session or the
+    pool's head, ``breach`` why a pool head must not resume, ``owner_exc`` why its owner will not resolve.
+    A fresh node or no candidate mints fresh (best-effort). A plain resume resumes its candidate, escalating
+    in place rather than minting when the owner is unresolvable. A pool head resumes while unbreached; a
+    breached one mints its replacement under the head's owner, or escalates when the breach is that owner."""
     if node.session is SessionMode.FRESH or candidate is None:
         return ResumeTarget(session=None)
     unresolvable = (candidate, owner_exc) if owner_exc is not None else None

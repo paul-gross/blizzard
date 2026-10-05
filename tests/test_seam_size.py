@@ -24,9 +24,7 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 
 _SEAM_SIZE_LIMIT = 12
 
-#: ``SpawnContext`` (14): ``Spawner`` builds an ``Attempt`` and ``Attempt`` builds a ``Spawner``,
-#: each handing the other its own ``ctx``, so the two consumers share one context — the union of
-#: what either reads. Splitting it follows no consumer line until that cycle is broken.
+#: ``SpawnContext`` (14): ``Spawner`` and ``Attempt`` build each other and share one ``ctx``; no split until that breaks.
 _ACCEPTED_VIOLATIONS: set[str] = {"SpawnContext"}
 
 

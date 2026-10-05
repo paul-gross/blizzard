@@ -1481,8 +1481,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     ),
 }
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
-#: The top-level runner modules that assemble or serve the graph rather than sit in it: the composition roots,
-#: the config loader, and the process runtime.
+#: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
 _RUNNER_EDGE_MODULES = frozenset({"app", "composition", "config", "listeners", "loop_wiring", "runtime"})
 _RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 
@@ -2143,8 +2142,7 @@ _EXCEPTION_NAMES = frozenset(
 _ENUM_BASES = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "ReprEnum"})
 _PYDANTIC_BASES = frozenset({"BaseModel", "RootModel", "BaseSettings"})
 _FUNCTIONAL_DATA_CLASSES = frozenset({"NamedTuple", "namedtuple", "make_dataclass"})
-#: The packages whose types are concrete infrastructure handles: the framework and driver
-#: imports ``bzh:domain-core`` keeps out of a domain core.
+#: Concrete infrastructure-handle packages: the framework and driver imports ``bzh:domain-core`` bars.
 _DRIVER_PACKAGES = frozenset(_DOMAIN_CORE_FORBIDDEN)
 _DIRECT_WRAPPERS = frozenset({"Optional", "Union", "Annotated", "InitVar", "Final"})
 _PROPERTY_DECORATORS = frozenset({"property", "cached_property"})

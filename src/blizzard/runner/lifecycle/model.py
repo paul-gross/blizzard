@@ -68,10 +68,7 @@ class LeaseMove(StrEnum):
     START_PROCESS = "start-process"
 
 
-#: The lease-state legality the code enforces, and only that: a pause parks a spawned lease, an
-#: ask-parked one included (an unspawned lease has no worker to park and belongs to Reap's orphan
-#: arm). Every other move's legality is decided by its own move function's inputs — the reap,
-#: failure, advance, and completion moves — so no cell here claims it.
+#: Only enforced legality: a pause parks a spawned lease (:func:`lease_reconcile_move`); other moves decide their own.
 LEASE_MOVES: Mapping[LeaseState, frozenset[LeaseMove]] = MappingProxyType(
     {
         "spawning": frozenset(),
@@ -666,8 +663,7 @@ class CompletionClosure:
     escalation_cause: EscalationCause | None = None
 
 
-#: The spend-cap arm closes escalated under its own cause, so the escalation reads open locally; an applied
-#: completion closes transitioned.
+#: Spend-cap closes escalated under its own cause (open locally); an applied completion closes transitioned.
 COMPLETION_CLOSURES: Mapping[CompletionMove, CompletionClosure] = MappingProxyType(
     {
         CompletionMove.ESCALATE_SPEND_CAP: CompletionClosure(LeaseClosureReason.ESCALATED, EscalationCause.SPEND_CAP),
