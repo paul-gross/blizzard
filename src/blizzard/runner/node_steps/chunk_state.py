@@ -23,9 +23,8 @@ class ChunkPause:
 @domain_model
 @dataclass(frozen=True)
 class ChunkSpend:
-    """The chunk's usage and cost, summed over every recorded invocation. ``cost_partial`` is set
-    when some invocation carries neither a billed nor an estimated amount; ``billed_partial`` when
-    some carries no billed amount, so ``cost_usd`` is a lower bound of billed spend."""
+    """The chunk's usage and cost, summed over recorded invocations. For the partial-cost
+    readings, see `src/blizzard/hub/domain/chunk/model.py`'s `UsageTotal`."""
 
     input_tokens: int
     output_tokens: int

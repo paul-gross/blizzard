@@ -53,10 +53,7 @@ export class ChunkEscalation {
    * primary form once present. */
   protected readonly hasWrapped = computed<boolean>(() => !!this.escalation()?.wrapped_takeover_command);
 
-  /** Whether the escalation carries the raw field — evaluated once `hasWrapped`
-   * above is false, distinguishing a raw-only escalation (render it as the primary
-   * copyable command) from a genuinely empty one (render neither). See the class doc
-   * for what each shape means. */
+  /** Whether the escalation carries the raw field. See the class doc for rendering rules. */
   protected readonly hasCommand = computed<boolean>(() => !!this.escalation()?.takeover_command);
 
   /** The command the copy button and primary `<code>` carry: the wrapped
