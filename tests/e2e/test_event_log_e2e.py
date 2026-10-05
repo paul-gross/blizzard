@@ -385,9 +385,9 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 expect(page.get_by_test_id("activity-row")).to_have_count(4)
                 node_id = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
                 facts = [
-                    {"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
+                    {"seq": 3, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
                     {
-                        "seq": 2,
+                        "seq": 4,
                         "kind": "usage.recorded",
                         "payload": {
                             "chunk_id": chunk_id,
@@ -405,7 +405,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 ]
                 pushed = hub.post("/api/fleet/events", json={"runner_id": "activity-pusher", "facts": facts})
                 assert pushed.status_code == 200, pushed.text
-                assert pushed.json()["applied"] == [1, 2], pushed.text
+                assert pushed.json()["applied"] == [3, 4], pushed.text
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.03")
                 expect(page.get_by_test_id("activity-row")).to_have_count(4)
 
@@ -415,7 +415,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                         "runner_id": "activity-pusher",
                         "facts": [
                             {
-                                "seq": 3,
+                                "seq": 5,
                                 "kind": "question.asked",
                                 "payload": {
                                     "question_id": "qn_activity",
@@ -433,7 +433,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                     },
                 )
                 assert asked.status_code == 200, asked.text
-                assert asked.json()["applied"] == [3], asked.text
+                assert asked.json()["applied"] == [5], asked.text
                 expect(page.get_by_test_id("activity-row")).to_have_count(5)
 
                 read = hub.get("/api/activity").json()["activity"]

@@ -62,6 +62,10 @@ def test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub(tmp_pa
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics operational datasets over a real hub")
         node_id = _entry_node_id(hub, chunk_id)
+        # Ingest rests not-ready, and the hub grants a claim only to a registered runner.
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        registered = hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"})
+        assert registered.status_code == 201, registered.text
         # The claim reserves epoch 1 for r1 — the epoch its mint and completion land at.
         claim = hub.post(
             "/api/fleet/routes",
