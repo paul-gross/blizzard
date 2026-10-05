@@ -28,9 +28,7 @@ CHOICE_CLOSE = "</Choice>"
 # Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
 VERSION_PROBE_TIMEOUT_SECONDS = 5
 
-# The semver grammar — `X.Y.Z` plus an optional pre-release or build suffix — as the named
-# `version` capture group both bindings' `--version` patterns embed between their own
-# prefix and suffix.
+# The named `version` semver capture group both bindings' `--version` patterns embed.
 SEMVER_VERSION_GROUP = (
     r"(?P<version>\d+\.\d+\.\d+"
     r"(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
