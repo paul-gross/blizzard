@@ -8,6 +8,7 @@ from typing import Any, overload
 
 import click
 
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.store.utc import iso_utc
 
 
@@ -43,14 +44,10 @@ def until_option(*, required: bool = False) -> Any:
     )
 
 
-def utc_now() -> datetime:
-    """The caller's clock — the seam tests move."""
-    return datetime.now(UTC)
-
-
-def refuse_future_until(until: datetime) -> None:
-    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told."""
-    if until.astimezone(UTC) > utc_now():
+def refuse_future_until(until: datetime, clock: IClock | None = None) -> None:
+    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told.
+    A short-lived CLI process wires its own clock here; tests hand one in."""
+    if until.astimezone(UTC) > (clock or SystemClock()).now():
         raise click.ClickException("--until must not be in the future")
 
 
