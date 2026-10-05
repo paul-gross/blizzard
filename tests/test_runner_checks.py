@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
@@ -21,7 +22,7 @@ from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from tests.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,

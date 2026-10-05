@@ -8,6 +8,15 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.fact_kinds import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
+    LEASE_MINTED,
+    QUESTION_ASKED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
+    USAGE_RECORDED,
+)
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -28,15 +37,6 @@ from blizzard.hub.domain.execution.facts import (
 )
 from blizzard.hub.domain.execution.questions import parse_instant
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Node
-from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
-    LEASE_MINTED,
-    QUESTION_ASKED,
-    RUNNER_LOCALLY_PAUSED,
-    RUNNER_LOCALLY_RESUMED,
-    USAGE_RECORDED,
-)
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit

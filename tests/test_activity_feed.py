@@ -10,9 +10,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
 from blizzard.hub.domain.runners.registration import RecordedPause
-from blizzard.wire.sse import ActivityChunkChangeCause
 
 pytestmark = pytest.mark.unit
 

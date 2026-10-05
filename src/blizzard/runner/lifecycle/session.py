@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.node_steps import TIER_PREFIX, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
@@ -17,7 +17,7 @@ from blizzard.runner.leases import (
     Lease,
     PoolHead,
 )
-from blizzard.wire.envelope import TIER_PREFIX, NodeConfig, RotatePolicyView
+from blizzard.wire.envelope import NodeConfig, RotatePolicyView
 
 _log = get_logger("blizzard.runner.loop")
 

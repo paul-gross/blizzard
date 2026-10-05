@@ -5,40 +5,17 @@ reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful ser
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import ClassVar
 
-from blizzard.foundation.leases import LeaseClosureReason
-from blizzard.foundation.runner_event_types import RunnerEventType
+from blizzard.foundation.runner_event_types import (
+    AskChangeCause,
+    EnvironmentChangeCause,
+    EscalationChangeCause,
+    LeaseChangeCause,
+    RunnerEventType,
+    TakeoverChangeCause,
+)
 from blizzard.wire.sse import SseFramePayload
-
-#: What caused a ``lease-changed`` frame: ``created``/``spawned`` are not closures, ``dormant`` is
-#: an open-lease park; the other seven are :class:`~blizzard.foundation.leases.LeaseClosureReason`'s members.
-LeaseChangeCause = Literal[
-    "created",
-    "spawned",
-    "dormant",
-    LeaseClosureReason.TRANSITIONED,
-    LeaseClosureReason.REAPED,
-    LeaseClosureReason.FAILED,
-    LeaseClosureReason.ESCALATED,
-    LeaseClosureReason.PARKED,
-    LeaseClosureReason.RELEASED,
-    LeaseClosureReason.PREEMPTED,
-]
-
-#: What caused an ``ask-changed`` frame — a worker's question recorded, or its answer
-#: landing (the park resume the answer drives).
-AskChangeCause = Literal["asked", "answered"]
-
-#: What caused an ``escalation-changed`` frame — opened at an exhausted retry budget, or
-#: closed by supersession (a fresh lease minted, or the hub resolving it terminally).
-EscalationChangeCause = Literal["opened", "closed"]
-
-#: What caused a ``takeover-changed`` frame.
-TakeoverChangeCause = Literal["opened", "closed"]
-
-#: What caused an ``environment-changed`` frame.
-EnvironmentChangeCause = Literal["bound", "released"]
 
 
 class LeaseChangedPayload(SseFramePayload):

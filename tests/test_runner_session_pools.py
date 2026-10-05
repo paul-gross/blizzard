@@ -16,9 +16,10 @@ from sqlalchemy import update
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.node_steps import SessionMode
+from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
@@ -33,8 +34,7 @@ from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.schema import leases
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.graph import RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,

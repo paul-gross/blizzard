@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
@@ -41,7 +42,6 @@ from blizzard.runner.lifecycle.takeover import (
 )
 from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.facts import LEASE_MINTED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, Row, and_, case, func, select
 
+from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
@@ -29,7 +30,6 @@ from blizzard.runner.usage.repository import (
     IWriteUsageRepository,
     UsageTotals,
 )
-from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
 

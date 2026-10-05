@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.runner.leases.overload import BACKOFF_LIMIT, OverloadExit, OverloadStreak
 from blizzard.runner.throttle.pause import (
     BRAKE_TRANSITIONS,
@@ -20,7 +21,6 @@ from blizzard.runner.throttle.pause import (
     spend_ceiling_reason,
     usage_limit_reason,
 )
-from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 
 pytestmark = pytest.mark.unit
 

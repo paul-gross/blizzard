@@ -15,6 +15,18 @@ from pydantic import ValidationError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, narrow_event_log_kind
+from blizzard.foundation.fact_kinds import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
+    EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+    LEASE_MINTED,
+    QUESTION_ASKED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
+    USAGE_RECORDED,
+)
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
@@ -32,21 +44,7 @@ from blizzard.hub.domain.execution.auth.route import RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import parse_instant
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
-    EVENT_RECORDED,
-    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    LEASE_MINTED,
-    QUESTION_ASKED,
-    RUNNER_LOCALLY_PAUSED,
-    RUNNER_LOCALLY_RESUMED,
-    USAGE_RECORDED,
-    ExternalSubscriptionUsageWindowFact,
-    RunnerFactAck,
-    RunnerFactBatch,
-)
+from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact, RunnerFactAck, RunnerFactBatch
 
 _log = get_logger("blizzard.hub.facts")
 

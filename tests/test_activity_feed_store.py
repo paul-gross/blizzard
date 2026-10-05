@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
@@ -26,7 +27,6 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.wire.sse import ActivityChunkChangeCause, ChunkChangeCause
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component

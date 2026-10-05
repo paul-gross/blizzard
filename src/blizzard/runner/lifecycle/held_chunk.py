@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
@@ -22,7 +23,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
 from blizzard.wire.chunk import ChunkDecisionStatusView
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
+from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
 

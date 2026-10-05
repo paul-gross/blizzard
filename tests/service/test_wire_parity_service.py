@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.wire.facts import ESCALATION_RECORDED, QUESTION_ASKED, RunnerFact, RunnerFactBatch
+from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 from blizzard.wire.route import RouteClaim
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors

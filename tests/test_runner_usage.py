@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -33,7 +34,6 @@ from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

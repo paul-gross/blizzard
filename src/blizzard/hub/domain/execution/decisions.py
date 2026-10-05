@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -39,7 +40,7 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 
 
 @domain_model

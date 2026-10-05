@@ -11,6 +11,13 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.fact_kinds import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
+    EVENT_RECORDED,
+    LEASE_MINTED,
+    QUESTION_ASKED,
+)
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.hub.outbound_buffer import (
@@ -31,13 +38,6 @@ from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
-    EVENT_RECORDED,
-    LEASE_MINTED,
-    QUESTION_ASKED,
-)
 
 __all__ = ["COMPLETION_KIND", "DECISION_KIND", "OutboundContext", "OutboundFacts", "OutboundStores"]
 

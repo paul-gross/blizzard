@@ -11,8 +11,10 @@ from typing import Protocol
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_event_types import LeaseChangeCause
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
@@ -37,8 +39,6 @@ from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.transcripts.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
-from blizzard.wire.facts import EVENT_RECORDED
-from blizzard.wire.sse_runner import LeaseChangeCause
 
 _log = get_logger("blizzard.runner.loop")
 

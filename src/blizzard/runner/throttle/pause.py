@@ -15,10 +15,10 @@ from types import MappingProxyType
 from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 
 __all__ = [
     "BRAKE_TRANSITIONS",

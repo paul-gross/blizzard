@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -17,7 +18,6 @@ from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKe
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from blizzard.wire.facts import EVENT_RECORDED
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease

@@ -19,6 +19,7 @@ from blizzard.foundation.ids import (
     WORK_ITEM_PROPOSAL_PREFIX,
     Id,
 )
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -55,7 +56,7 @@ from blizzard.hub.domain.execution.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, WorkItemProposal
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
+from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (``bzh:crash-point-registry``): the whole
 # migration is committed but its response is not; the replayed completion re-derives it.

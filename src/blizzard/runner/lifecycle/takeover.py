@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
@@ -34,7 +35,6 @@ from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
     from blizzard.runner.environments.repository import EnvBinding

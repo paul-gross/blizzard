@@ -16,6 +16,13 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import (
+    EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+    RUNNER_LOCALLY_PAUSED,
+    USAGE_RECORDED,
+)
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -38,13 +45,6 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMissReason,
 )
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.facts import (
-    EVENT_RECORDED,
-    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    RUNNER_LOCALLY_PAUSED,
-    USAGE_RECORDED,
-)
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (

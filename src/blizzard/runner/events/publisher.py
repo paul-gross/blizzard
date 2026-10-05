@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from blizzard.wire.sse_runner import (
+from blizzard.foundation.runner_event_types import (
     AskChangeCause,
     EnvironmentChangeCause,
     EscalationChangeCause,

@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
@@ -26,7 +27,7 @@ from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeCheckRunner,

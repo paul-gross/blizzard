@@ -1,9 +1,10 @@
-"""The hub's SSE frame-kind vocabulary — one definition, shared by the broker that publishes a
-frame and the wire that describes it."""
+"""The hub's SSE frame vocabulary — the frame kinds and the causes a frame names, one definition
+shared by the broker that publishes a frame and the wire that describes it."""
 
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 
 class HubEventType(StrEnum):
@@ -17,3 +18,69 @@ class HubEventType(StrEnum):
     QUEUE_CHANGED = "queue-changed"
     RUNNER_CHANGED = "runner-changed"
     EVENT_LOGGED = "event-logged"
+
+
+#: What fact family drove a ``chunk-changed`` frame — each emit site names
+#: its own cause statically.
+ChunkChangeCause = Literal[
+    "minted",
+    "promoted",
+    "edited",
+    "grouped",
+    "claimed",
+    "node-completed",
+    "migrated",
+    "decision-submitted",
+    "decision-resolved",
+    "question-asked",
+    "question-answered",
+    "escalated",
+    "requeued",
+    "restarted",
+    "detached",
+    "paused",
+    "resumed",
+    "stopped",
+    "completed",
+    "hub-advanced",
+    "deleted",
+]
+
+#: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
+ActivityChunkChangeCause = Literal[
+    "minted",
+    "promoted",
+    "grouped",
+    "claimed",
+    "node-completed",
+    "migrated",
+    "decision-submitted",
+    "decision-resolved",
+    "question-asked",
+    "question-answered",
+    "escalated",
+    "requeued",
+    "restarted",
+    "detached",
+    "paused",
+    "resumed",
+    "stopped",
+    "completed",
+    "hub-advanced",
+    "deleted",
+]
+
+#: What a ``runner-changed`` frame reports — see
+#: the hub event broker's ``publish_runner_changed``.
+RunnerChangeKind = Literal[
+    "registered",
+    "heartbeat",
+    "paused",
+    "resumed",
+    "locally-paused",
+    "locally-resumed",
+    "external-usage",
+    "retired",
+    "reinstated",
+    "token-revoked",
+]

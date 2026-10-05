@@ -7,16 +7,11 @@ completion's reply — the next envelope, a hub-node takeover signal, or a failu
 
 from __future__ import annotations
 
-from enum import StrEnum
-
 from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
-from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.node_steps import ApplyOutcome, Executor, JudgedBy, SessionMode
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
-
-# The authored-tier prefix — unprefixed is a harness-native name, never guessed.
-TIER_PREFIX = "blizzard:"
 
 
 class EnvelopeArtifact(BaseModel):
@@ -124,17 +119,6 @@ class NodeEnvelope(BaseModel):
     # The pinned mint's graph-scoped `artifacts:` declarations, empty for a graph that
     # declares none.
     graph_artifacts: list[GraphArtifact] = []
-
-
-class ApplyOutcome(StrEnum):
-    """What a completion's apply produced."""
-
-    NEXT = "next"  # the runner continues in place; `next_envelope` is set
-    HUB_NODE_TAKEN = "hub_node_taken"  # a hub node (deliver) took over; runner holds envs, waits
-    PARKED_AT_GATE = "parked_at_gate"  # a human gate: waiting_on_human (shaped, P7)
-    MIGRATED = "migrated"  # a cross-graph migration re-pinned + re-queued the chunk (#90); runner tears down
-    DONE = "done"  # the chunk reached the terminal
-    FAILURE = "failure"  # stale epoch, terminal chunk, or a rejected submission
 
 
 class ApplyResponse(BaseModel):

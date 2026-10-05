@@ -14,6 +14,7 @@ from typing import Annotated, ClassVar
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import FLEET_VIEW, RUNNER_PAUSE, RUNNER_RETIRE
+from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events
@@ -47,7 +48,6 @@ from blizzard.wire.runner import (
 from blizzard.wire.runner import (
     SubscriptionUsageView as SubscriptionUsageViewWire,
 )
-from blizzard.wire.sse import RunnerChangeKind
 
 router = APIRouter(prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal)])
 

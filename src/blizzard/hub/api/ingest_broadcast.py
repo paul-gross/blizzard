@@ -5,11 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
-from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.execution.facts import FactIngestResult
-from blizzard.hub.events.broker import ChunkChangeCause
-from blizzard.wire.facts import (
+from blizzard.foundation.fact_kinds import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
@@ -20,9 +16,12 @@ from blizzard.wire.facts import (
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
     USAGE_RECORDED,
-    RunnerFact,
-    RunnerFactBatch,
 )
+from blizzard.foundation.hub_event_types import ChunkChangeCause
+from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
+from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.execution.facts import FactIngestResult
+from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 #: The ``chunk-changed`` cause for each chunk-scoped fact kind an ingest lands.
 _CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {

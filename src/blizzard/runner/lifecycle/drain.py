@@ -12,6 +12,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound_buffer import BufferedFact
@@ -32,7 +33,7 @@ from blizzard.runner.lifecycle.spawn import SpawnConfig
 from blizzard.wire.chunk import ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 _log = get_logger("blizzard.runner.loop")

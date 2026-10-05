@@ -17,15 +17,16 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.leases import LeaseClosureReason, LeaseState
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_event_types import LeaseChangeCause
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.throttle.pause import PausePark, needs_pause_park
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView
-from blizzard.wire.envelope import ApplyOutcome, NodeConfig, NodeEnvelope
+from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.sse_runner import LeaseChangeCause
 
 if TYPE_CHECKING:
     from blizzard.runner.harness.identity import SessionReference

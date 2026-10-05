@@ -17,12 +17,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import ContextSample
-from blizzard.wire.facts import EVENT_RECORDED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

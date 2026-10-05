@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -62,10 +63,7 @@ from blizzard.runner.throttle.overload import (
 )
 from blizzard.runner.throttle.pause import PauseService, spend_ceiling_reason
 from blizzard.runner.usage.repository import ContextSampleState, external_usage_attempt
-from blizzard.wire.facts import (
-    EVENT_RECORDED,
-    ExternalSubscriptionUsageWindowFact,
-)
+from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 from blizzard.wire.runner import RunnerSubscriptionDeclaration
 
 #: This module's public API — the loop steps it owns, in tick order.

@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -23,7 +24,6 @@ from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.wire.chunk import ChunkStatusView
-from blizzard.wire.facts import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -25,7 +26,6 @@ from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository, event_
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
-from blizzard.wire.facts import EVENT_RECORDED
 
 _log = get_logger("blizzard.runner.trace_export")
 
