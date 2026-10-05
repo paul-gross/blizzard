@@ -25,8 +25,8 @@ ADMITTED_CLAUDE_CODE_RANGE: SpecifierSet = SpecifierSet(ADMITTED_CLAUDE_CODE_RAN
 # Strips Claude Code's `--version` prefix/suffix off one line, keeping any pre-release suffix.
 _CLAUDE_CODE_VERSION_PATTERN = re.compile(
     r"^\s*(?:claude(?:\s+code)?(?:\s+version)?\s+)?(?:v)?"
-    r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
-    r"\s*(?:\(claude\s+code\))?\s*$",
+    + harness_shared.SEMVER_VERSION_GROUP
+    + r"\s*(?:\(claude\s+code\))?\s*$",
     re.IGNORECASE,
 )
 
