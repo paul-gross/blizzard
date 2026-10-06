@@ -21,18 +21,14 @@ import { MachineDetailHeader } from './machine-detail-header';
  * the discovery mock's "machine detail" panel for the selected chunk: execution
  * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), and
  * the escalation resume command when one is open. Per-attempt selection and the
- * transcript moved to the runner-local chunk detail route — the
- * chunk name in the header links there now that one exists, a deliberate
- * replacement rather than a regression: it restores the design this dock's own
- * docstring used to describe as deferred ("no cross-view navigation yet").
+ * transcript belong to the runner-local chunk detail route, which the chunk name in
+ * the header links to.
  *
  * The summary facts, status, and escalation all render off the chunk's newest
  * lease (the last entry of the `leases` list the shell hands in, oldest →
  * newest) — this dock owns no list read of its own.
  *
- * The header ({@link MachineDetailHeader}, a presentational sibling) matches the
- * hub board's own chunk-detail header shape (the model at
- * the hub's `board/chunk-dock/chunk-detail-header.ts`). Unlike the rest of this dock's
+ * The header ({@link MachineDetailHeader}) is a presentational sibling. Unlike the rest of this dock's
  * facts (container-folded, "one owner"), the work-item links and the pause fact
  * are this dock's own severable enrichment — the same self-fetching shape
  * `injectChunkTitleQuery` already established for the chunks list — read through
@@ -48,9 +44,7 @@ import { MachineDetailHeader } from './machine-detail-header';
  * container keeps only what `fleet-kit-panel`'s header-slot projection requires
  * of the template that mounts the panel, plus the query and the ticking clock.
  *
- * The dock paints its own panel chrome via {@link KitPanel} — the
- * same bezel/background every sibling region in `app-panel-layout.ts` wears —
- * rather than mounting bare. `KitPanel`'s header slot can only be filled
+ * The dock paints its own panel chrome via {@link KitPanel}. `KitPanel`'s header slot can only be filled
  * from the template that mounts the panel, so this container is the one place
  * that projection can happen; `MachineDetailHeader` is projected in with
  * `KitPanel`'s own `label` left unset, so exactly one header bar renders —

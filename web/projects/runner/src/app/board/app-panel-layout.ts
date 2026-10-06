@@ -23,13 +23,10 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  *   freshness bar, over the held-environments rail, split 60/40.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
- *   detail dock for the selected chunk's execution facts — the transcript and
- *   per-attempt selection moved to the runner-local chunk detail route.
+ *   detail dock for the selected chunk's execution facts —.
  * - **Right (330px)** — the machine's account of itself: the hub link
  *   (endpoint, reachability, last flush, buffer), the open local asks, and
  *   each declared subscription's own newest sampling attempt.
- *   The local fact log moved to its own `/events` route — full
- *   width there rather than a rail-sized panel.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
  * handed and emits `selectLease`/`selectChunk`; the derived-status fold and
@@ -37,13 +34,8 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *
- * Owns no titlebar: the shared `BoardHeader` chrome, the pause
- * control/identity/profile-menu trailing cluster, and their narrow-tier
- * collapse all moved up to the app root's own `AppHeader`
- * (`../../runner/src/app/shell/nav/app-header.ts`), the same shelf the hub board's
- * header sits on — mounted once, above the routed tab strip, rather than
- * nested inside this routed layout where it used to render under the tabs on
- * `/board` and not at all on `/events`.
+ * Owns no titlebar: the shared `BoardHeader` chrome and its trailing cluster
+ * are mounted once by the app root's `AppHeader` (`../shell/nav/app-header.ts`).
  */
 @Component({
   selector: 'app-panel-layout',

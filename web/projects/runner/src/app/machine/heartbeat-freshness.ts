@@ -17,7 +17,7 @@ import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal
  * actually lives is where the bar visibly moves, and the long tail to reap
  * drains out the rest.
  *
- * `record_heartbeat` is deliberately silent (no SSE event announces it), so
+ * No SSE event announces a heartbeat, so
  * on a healthy, actively-beating lease this bar's anchor only advances on
  * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS} (`polling.ts`) or an unrelated
  * lease-changed frame — real cadence is tighter, but the bar cannot resolve an

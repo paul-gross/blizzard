@@ -5,10 +5,8 @@ import { runnerApi } from 'fleet';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
 import { runnerChunkDetailKey, runnerLeasesKey } from '../../core/query-keys';
 
-/** Toggle a chunk's operator pause brake from the machine panel: pausing
- * holds the claim, interrupts the active worker (force-stopping it only if it hasn't wound
- * down within its grace period), and takes it off the ready queue; resuming clears the
- * brake — mirrors the hub board's `injectChunkPauseMutation`. */
+/** Toggle a chunk's operator pause brake from the machine panel: `paused` is the
+ * state to set — `true` pauses the chunk, `false` resumes it. */
 export interface ChunkPauseVars {
   readonly chunkId: string;
   readonly paused: boolean;

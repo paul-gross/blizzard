@@ -16,11 +16,9 @@ import { pendingLocalPause } from './app-pause-control.model';
  * Reads `GET /api/runner`'s `pause` triad off the same
  * {@link injectRunnerDashboardQuery} every other rail on this panel already
  * polls — no second read. A flip from another session or the spend ceiling
- * still reaches this control live: `PATCH /api/runner` publishes
- * `fact-changed`, which `RUNNER_EVENT_INVALIDATION_REGISTRY` maps to the same
- * dashboard key. This control's own mutation additionally invalidates that
- * key itself, an optimistic same-client shortcut past even the one-frame
- * coalesce window the stream path waits on.
+ * reaches this control through `RUNNER_EVENT_INVALIDATION_REGISTRY`'s dashboard
+ * invalidation; this control's own mutation additionally invalidates that key itself,
+ * a same-client shortcut past the stream path's coalesce window.
  *
  * The toggle button flips only the **local** brake (`PATCH /api/runner`,
  * through the generated client — `bzh:generated-client`). The hub's own

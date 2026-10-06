@@ -55,13 +55,9 @@ export class LocalPanel {
    * "adaptive shells over shared guts") — desktop renders the existing
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
    * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
-   * doesn't carry it. The persistent mobile bottom tab bar lives at the app
-   * root now (`../../runner/src/app/shell/nav/mobile-tab-bar.ts`), not
-   * here, so it survives navigating to `/events` where this component isn't
-   * mounted at all. The viewport override itself lives behind each shell's
-   * own header menu (`KitMenu`, mobile polish feedback item 5) — the app
-   * root's `AppHeader` and `MobileTitlebar`, not this component
-   * — rather than an always-visible strip above both. */
+   * doesn't carry it. The mobile bottom tab bar and the viewport override are
+   * the app root's (`../shell/nav/mobile-tab-bar.ts`, `AppHeader`, `MobileTitlebar`),
+   * not this component's. */
   protected readonly viewport = inject(ViewportService);
 
   protected readonly mode = this.viewport.mode;
@@ -70,9 +66,7 @@ export class LocalPanel {
 
   /** The panel's whole machine-local status read — `GET
    * /api/dashboard`, the same 5s-polled query every other rail on this panel
-   * injects; TanStack dedupes the N injections into one request. Replaces
-   * what were five separate query injections here (asks, escalations,
-   * takeovers, status, environments). */
+   * injects; TanStack dedupes the N injections into one request. */
   protected readonly dashboardQuery = injectRunnerDashboardQuery();
 
   /** The active + recently-closed leases, server-ordered; empty until the first read resolves. */
@@ -136,9 +130,7 @@ export class LocalPanel {
     visibleChunkRows(this.machineChunks(), this.showAllChunks()),
   );
 
-  /** The open-ask count for the asks panel's header note — also read by the
-   * app root's own mobile tab bar off the same shared dashboard
-   * query, folded independently there rather than through this component. */
+  /** The open-ask count for the asks panel's header note. */
   protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
 
   /** What is open in the panel, held in the URL's `?chunk=` via the shared

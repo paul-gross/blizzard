@@ -59,7 +59,7 @@ export type RecoveryOutcome = 'skipped' | 'not-applicable' | 'read-failed' | 'bo
  * its own region exactly as it does today (`chunk-title.query.ts` et al.).
  *
  * Two guards keep a session drop from looping: an in-memory single-flight flag
- * coalesces the burst of `401`s the panel's concurrent polls — and now the stream's
+ * coalesces the burst of `401`s the panel's concurrent polls — and the stream's
  * own terminal auth failure — produce into one classification, and the
  * `sessionStorage` mark above survives the navigation itself — a further no-session
  * `401` arriving while it is still set sets {@link recovering} instead of firing a
@@ -98,11 +98,9 @@ export class SessionRecovery {
    * Classify a `401` — from the interceptor's `handle` above, or from
    * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream on `SseService`'s `authFailed` — by
    * re-reading `GET /api/auth/session`, and drive the federation bounce for the one
-   * case it can fix: a no-session `401` while the surface is gated. Lifted out of
-   * `handle`'s body so a caller with no `Response`/`Request` of its own — the
-   * stream's transport never produces either — can still drive the same
-   * classify-and-bounce logic and land in the same {@link recovering} state on a
-   * repeat. Guarded exactly as `handle` always was: a logout in flight suspends the
+   * case it can fix: a no-session `401` while the surface is gated. Callable without
+   * a `Response`/`Request` of its own — the stream's transport produces neither — and
+   * lands in the same {@link recovering} state on a repeat. A logout in flight suspends the
    * seam, and the in-memory flag coalesces overlapping callers (a burst of `401`s,
    * or one racing the stream's own auth failure) into one classification.
    *

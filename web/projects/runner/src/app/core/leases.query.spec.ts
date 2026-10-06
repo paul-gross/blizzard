@@ -81,9 +81,8 @@ describe('injectRunnerLeasesQuery', () => {
   });
 
   it('re-reads GET /api/leases on the backstop interval — insurance under lease-changed, not the primary signal', async () => {
-    // Unlike the polling-only shape this replaced, the runner now has an event stream:
-    // `lease-changed` (`runner-live-updates.ts`) is the primary freshness path, and
-    // this interval is what closes the one gap no event marks — a lease gone quiet
+    // `lease-changed` is the primary freshness path; this interval is what closes
+    // the one gap no event marks — a lease gone quiet
     // without a further transition, whose `stale` flip depends on elapsed time, not
     // a frame. This pins the refresh as behavior (a second request actually fires
     // on RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS), not as a bare constant equality.

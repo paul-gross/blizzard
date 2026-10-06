@@ -13,8 +13,7 @@ export const appConfig: ApplicationConfig = {
     provideTanStackQuery(new QueryClient()),
     // Panel selection (which chunk is open) lives in the URL's `?chunk=` query
     // param so it is shareable and refresh-safe; `LocalPanel` reads
-    // and writes it through the router. See `app.routes.ts` for the route table
-    // this now resolves against.
+    // and writes it through the router. See `app.routes.ts` for the route table.
     provideRouter(routes),
     // Session reacquisition on a 401 — the runner client's own
     // interceptor, mirroring the hub app's `provideAuthInterceptor()`.

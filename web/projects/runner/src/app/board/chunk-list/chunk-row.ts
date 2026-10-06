@@ -12,9 +12,8 @@ import type { MachineChunkStatus } from './chunk-status';
  * {@link ChunkRowView}, which owns the actual card markup
  * (`bzh:frontend-container-presentational`).
  *
- * The work-item enrichment is the same severable, volatile layering the old lease row
- * carried: one {@link injectChunkTitleQuery} per row,
- * read optimistically — every degraded case (hub down, no source, per-pointer
+ * The work-item enrichment is severable, volatile layering: one
+ * {@link injectChunkTitleQuery} per row, read optimistically — every degraded case (hub down, no source, per-pointer
  * forge failure) collapses to "render nothing extra".
  */
 @Component({

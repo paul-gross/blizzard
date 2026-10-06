@@ -31,8 +31,8 @@ class PollingHost {
 /**
  * The poll backstop's floors, proven together: over an idle multi-minute
  * window with no SSE events at all, only the two reads the backstop leaves on a timer
- * (dashboard, leases) re-fire — session carries no `refetchInterval` at all
- * (removed), and chunk-detail's backstop is gated on a selection this host never
+ * (dashboard, leases) re-fire — session carries no `refetchInterval` at all,
+ * and chunk-detail's backstop is gated on a selection this host never
  * makes, so it never even issues its one initial read.
  */
 describe('the panel\'s D7 poll floors, idle and unselected', () => {
@@ -74,7 +74,7 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
     // Dashboard and leases: the backstop kept firing.
     expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThanOrEqual(3);
     expect(stub.forRoute('/api/leases', 'GET').length).toBeGreaterThanOrEqual(3);
-    // Session: removed — still just the one mount-time read.
+    // Session: no refetch interval — just the one mount-time read.
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
     // Chunk-detail: disabled the whole time — never issued even its first read.
     expect(stub.requests.filter((r) => /^\/api\/chunks\//.test(r.path))).toHaveLength(0);

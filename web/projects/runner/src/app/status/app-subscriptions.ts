@@ -13,9 +13,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * `subscriptions` section, the resolved async-state triad, and the ticking clock
  * {@link SubscriptionRow.sampledAgo} is derived from; the presentational
  * {@link LocalSubscriptionsView} owns the row template (`bzh:frontend-container-presentational`).
- * Read-only, like every other rail on this panel — renewal is driven by
- * the runner's own renewal pass, never by an operator action here; this rail only shows
- * the newest renewal and its outcome.
+ * Read-only, like every other rail on this panel — it only shows the newest
+ * renewal and its outcome, and offers no operator action.
  */
 @Component({
   selector: 'app-subscriptions',

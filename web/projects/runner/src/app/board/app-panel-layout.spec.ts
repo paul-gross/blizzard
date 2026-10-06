@@ -41,7 +41,7 @@ async function render(overrides: Record<string, unknown> = {}) {
       // so a TanStack Query context has to exist for the fixture to construct
       // at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The detail dock's header links the chunk name to its route now.
+      // The chunk name in the header is a `routerLink`.
       provideRouter([]),
     ],
   }).compileComponents();

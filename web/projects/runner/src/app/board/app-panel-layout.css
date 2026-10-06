@@ -48,9 +48,7 @@
   text-transform: uppercase;
   cursor: pointer;
 }
-/* Sizing only — app-machine-detail paints its own panel chrome via
-   KitPanel now, so this no longer hand-copies a
-   background/border of its own. */
+/* Sizing only — app-machine-detail paints its own panel chrome via KitPanel. */
 .detail-frame {
   min-height: 0;
   flex: 1.15;

@@ -34,8 +34,7 @@ const LEASE = (overrides: Record<string, unknown> = {}) => ({
 
 /**
  * A minimal-but-complete `DashboardView` — every rail below
- * `LocalPanel` now reads one shared `GET /api/dashboard` poll rather than one
- * endpoint each, so a test overrides just the section(s) it cares about via
+ * `LocalPanel` reads one shared `GET /api/dashboard` poll, so a test overrides just the section(s) it cares about via
  * `overrides` rather than stubbing a path of its own.
  */
 function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
@@ -87,8 +86,8 @@ function routes(
 let navigateSpy: MockInstance<Router['navigate']>;
 
 /**
- * A real router (needs one anyway — `MachineDetailHeader`'s chunk
- * name is now a `routerLink`), seeded with `initialQuery` before the panel
+ * A real router (`MachineDetailHeader`'s chunk name is a
+ * `routerLink`), seeded with `initialQuery` before the panel
  * mounts so its first render already reflects a deep-linked URL. The catch-all
  * route is a no-op destination: `LocalPanel` is created directly rather than
  * through an outlet, so only the router's shared query-param state (what
