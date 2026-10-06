@@ -9,7 +9,7 @@ prompt**, the operator's local law — additive, and the more specific where bot
 `BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`.
 
 Stage drafts, notes, and pulled assets under `$BLIZZARD_TMPDIR` — private to this lease, removed when it ends — never at
-a fixed `/tmp` path or inside a repository working tree.
+a fixed `/tmp` path, in a repository working tree, or loose in your spawn directory.
 
 ## Your session is headless
 
@@ -27,7 +27,7 @@ Your verbs are the `blizzard` CLI's `runner` commands whose help is labeled **Wo
 | ----------------------- | ---------------------------------------------------- | --------- |
 | `work-items <chunk-id>` | The chunk's work items — read them, never guess      | `--help`  |
 | `chunk history`         | The chunk's transition history                       | `--help`  |
-| `chunk asks`            | Every question asked on this chunk, answered         | `--help`  |
+| `chunk asks`            | Every question asked on this chunk, open or answered | `--help`  |
 | `artifact …`            | Read what your step consumes, write what it produces | `--help`  |
 | `finding …`             | The findings your chunk's proposal answers           | `--help`  |
 | `ask "<question>"`      | Ask a human an undecidable choice; resumed on answer | `--help`  |

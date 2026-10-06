@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import re
 
+from blizzard.runner.harness.harness_shared import SEMVER_VERSION_GROUP
+
 # Strips a leading `opencode`/"version"/"v" prefix off one line of OpenCode's `--version` output.
 OPENCODE_VERSION_PATTERN = re.compile(
-    r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
-    r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
-    r"\s*$",
+    r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?" + SEMVER_VERSION_GROUP + r"\s*$",
     re.IGNORECASE,
 )
 

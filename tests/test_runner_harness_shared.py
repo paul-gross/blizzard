@@ -10,6 +10,7 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.runner.harness.admission import version_admitted
+from blizzard.runner.harness.claude_code.health import normalize_claude_code_version
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
 
 pytestmark = pytest.mark.unit
@@ -87,3 +88,11 @@ def test_a_semver_prerelease_suffix_is_not_admitted(version: str) -> None:
 def test_an_unparsable_version_is_not_admitted_rather_than_raising() -> None:
     assert version_admitted("not-a-version", _RANGE) is False
     assert version_admitted("1.18.25 extra", _RANGE) is False
+
+
+@pytest.mark.parametrize(
+    "bare",
+    ["1.18.25", "2.1.0", "2.1.0-rc.1", "2.1.0+build.5", "2.1.0.beta", "1.2", "1.2.3.", "-1.2.3", "a.b.c", ""],
+)
+def test_both_bindings_share_one_semver_grammar_for_a_bare_version(bare: str) -> None:
+    assert normalize_claude_code_version(bare) == normalize_opencode_version(bare)

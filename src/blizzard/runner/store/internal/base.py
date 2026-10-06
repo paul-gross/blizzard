@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, and_, select
+from sqlalchemy import ColumnElement, Connection, and_, select
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases import Lease, WorkRefStamp
@@ -98,19 +98,12 @@ _UNRESUMED_PAUSE_PARK = Unsuperseded(
 _PAUSE_PARK_LEASE_UNCLOSED = Unclosed(pause_parks.c.lease_id, lease_closures.c.lease_id)
 
 
-class _OpenPausePark:
-    """A pause park stands until its own resume, or until its lease closes."""
-
-    @property
-    def clause(self):  # type: ignore[no-untyped-def]
-        return and_(_UNRESUMED_PAUSE_PARK.clause, _PAUSE_PARK_LEASE_UNCLOSED.clause)
-
-
-OPEN_PAUSE_PARK = _OpenPausePark()
+# A pause park stands until its own resume, or until its lease closes.
+OPEN_PAUSE_PARK: ColumnElement[bool] = and_(_UNRESUMED_PAUSE_PARK.clause, _PAUSE_PARK_LEASE_UNCLOSED.clause)
 
 #: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
 #: adapter never reaches into a sibling adapter for it.
-PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
+PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK).distinct()
 
 # Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
 _LATER_LEASE = leases.alias("later_escalation_leases")

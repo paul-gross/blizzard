@@ -69,7 +69,7 @@ class PauseStore:
                 pause_parks.c.parked_at,
                 pause_parks.c.interrupted_elicitation_id,
             )
-            .where(OPEN_PAUSE_PARK.clause)
+            .where(OPEN_PAUSE_PARK)
             .order_by(pause_parks.c.id)
         )
         parks: dict[str, PausePark] = {}

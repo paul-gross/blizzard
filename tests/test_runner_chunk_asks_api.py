@@ -118,6 +118,69 @@ def test_a_question_without_a_node_has_no_label() -> None:
     assert _rows(ChunkAsksSource.model_validate(detail))[0].node is None
 
 
+@pytest.mark.unit
+def test_an_answered_row_carries_when_it_was_answered() -> None:
+    rows = _rows(ChunkAsksSource.model_validate(_DETAIL))
+    assert [r.answered_at for r in rows] == ["2026-07-21T10:30:00+00:00", "2026-07-21T11:30:00+00:00", None]
+
+
+@pytest.mark.unit
+def test_a_question_without_a_node_has_no_label_even_when_the_payload_names_nodes() -> None:
+    detail = {**_DETAIL, "questions": [_question("q1", None, "2026-07-21T10:00:00+00:00")]}
+    assert _rows(ChunkAsksSource.model_validate(detail))[0].node is None
+
+
+def _transition(
+    from_id: str | None, from_name: str | None, to_id: str | None, to_name: str | None
+) -> dict[str, object]:
+    return {
+        "from_node_id": from_id,
+        "from_node_name": from_name,
+        "to_node_id": to_id,
+        "to_node_name": to_name,
+        "choice_name": "ready",
+        "epoch": 1,
+        "recorded_at": "2026-07-21T10:00:00+00:00",
+    }
+
+
+def _migration(
+    from_id: str | None, from_name: str | None, landed_id: str | None, landed_name: str | None
+) -> dict[str, object]:
+    return {
+        "from_node_id": from_id,
+        "from_node_name": from_name,
+        "from_graph_id": "gr_old",
+        "to_graph_id": "gr_new",
+        "landed_node_id": landed_id,
+        "landed_node_name": landed_name,
+        "epoch": 1,
+        "recorded_at": "2026-07-21T10:00:00+00:00",
+    }
+
+
+@pytest.mark.unit
+def test_node_names_resolve_from_history_and_migrations_mixed_and_drop_half_pairs() -> None:
+    detail = {
+        "current_node_id": None,
+        "current_node_name": None,
+        "history": [_transition("nd_plan", "plan", "nd_review", None)],
+        "migrations": [
+            _migration("nd_old", "old", "nd_landed", "landed"),
+            _migration(None, "orphan", "nd_nameless", None),
+        ],
+        "questions": [
+            _question("q1", "nd_plan", "2026-07-21T10:00:00+00:00"),
+            _question("q2", "nd_old", "2026-07-21T10:01:00+00:00"),
+            _question("q3", "nd_landed", "2026-07-21T10:02:00+00:00"),
+            _question("q4", "nd_review", "2026-07-21T10:03:00+00:00"),
+            _question("q5", "nd_nameless", "2026-07-21T10:04:00+00:00"),
+        ],
+    }
+    rows = _rows(ChunkAsksSource.model_validate(detail))
+    assert [r.node for r in rows] == ["plan", "old", "landed", "nd_review", "nd_nameless"]
+
+
 # Component — the lease-scoped, hub-proxying route
 # --------------------------------------------------------------------------- #
 

@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
+from blizzard.runner.environments.internal import basic_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
 from tests.runner_fakes import FakeProvider
 
@@ -96,3 +97,42 @@ def test_binding_answers_its_capacity(name: str, tmp_path: Path) -> None:
 def test_binding_answers_its_pool(name: str, tmp_path: Path) -> None:
     case = _CASES[name]
     assert case.build(tmp_path).pool() == case.pool
+
+
+@pytest.mark.unit
+def test_a_basic_binding_built_by_the_factory_honors_the_passed_held_ids_and_configured_base_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The factory hands the basic binding the caller's held-ids authority and the configured
+    base branch: an environment the authority does not hold has no repos, and acquisition
+    fetches the configured branch."""
+    fetches: list[tuple[str, ...]] = []
+
+    class _FetchRecordingGit:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def capture(self, cwd: Path, *args: str) -> str:
+            if args[:1] == ("fetch",):
+                fetches.append(args)
+            if args[:2] == ("worktree", "add"):
+                Path(args[-2]).mkdir(parents=True)
+            return ""
+
+    monkeypatch.setattr(basic_provider, "SubprocessEnvGit", _FetchRecordingGit)
+    settings = _settings(
+        tmp_path,
+        workspace_provider="basic",
+        workspace_root="scratch",
+        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        base_branch="trunk",
+    )
+    held: list[str] = []
+    provider = build_workspace_provider(settings, held_ids=lambda: held)
+
+    (acquired,) = provider.acquire("01JCHUNK", 1, [])
+
+    assert fetches == [("fetch", "origin", "trunk")]
+    assert provider.repos(acquired.environment_id) == []
+    held.append(acquired.environment_id)
+    assert [repo.relpath for repo in provider.repos(acquired.environment_id)] == ["toy"]

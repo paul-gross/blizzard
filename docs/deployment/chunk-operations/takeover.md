@@ -28,13 +28,13 @@ unchanged in id, node, and epoch.
 The daemon supplies a bounded environment — the lease's `BLIZZARD_*` identity vars plus its own `PATH` and `HOME` —
 layered over your terminal's; nothing more leaves the daemon, and the terminal environment underneath carries an
 operator caveat owned by [worker-spawn.md](../worker-spawn.md). That `PATH` already carries the operator's
-`[worker]
-path_prepend`, the same worker-spawn setting owns, so a takeover resolves the same version-manager tools the
+`[worker] path_prepend`, the same worker-spawn setting owns, so a takeover resolves the same version-manager tools the
 taken-over session did. Under it, the session's `blizzard runner` verbs (`attach`, `ask`, `artifact`) reach the runner,
 and the bare `blizzard` binary resolves to the deployment's venv. The exec on Claude Code reasserts the
 `--permission-mode` that `[harness] autonomy` maps to (or the legacy `harness_permission_mode` override), but never
-`--permission-prompts none`: you are present to answer prompts. On OpenCode the exec carries no `--auto` under any
-value and none of the `deny` overrides `normal` composes for unattended launches: you are present to answer asks. The mapping is owned by [worker-spawn.md](../worker-spawn.md#harness-autonomy).
+`--permission-prompts none`: you are present to answer prompts. On OpenCode the exec carries no `--auto` under any value
+and none of the `deny` overrides `normal` composes for unattended launches: you are present to answer asks. The mapping
+is owned by [worker-spawn.md](../worker-spawn.md#harness-autonomy).
 
 A taken-over session loads neither the runner's settings nor the operator's harness-config bundle, and installs no
 heartbeat or session-end hooks: quitting records no done-signal against the lease, and liveness stays a
