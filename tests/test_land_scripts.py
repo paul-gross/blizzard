@@ -2030,3 +2030,191 @@ def test_a_behind_head_that_is_a_verified_base_merge_updates_on_that_head(
     update = [body for m, url, body in calls if m == "PUT" and url.endswith("/update-branch")]
     assert update == [{"expected_head_sha": "merge1"}], "update-branch guards on the head the gate verified"
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT"))
+
+
+# --- the head gate and the base-tip read, driven directly -------------------------------
+
+
+def _land_run(responses: dict[tuple[str, str], tuple[int, Any]]) -> land_common.LandRun:
+    def request(method: str, url: str, *, token: str | None, body: dict[str, Any] | None) -> tuple[int, Any]:
+        return responses[(method, url)]
+
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_MARKER_TOKEN, request=request)
+    return land_common.LandRun(
+        forge_url="http://forge", base_branch="main", commits=[], already=set(), markers=markers, request=request
+    )
+
+
+def _gate_offenders(responses: dict[tuple[str, str], tuple[int, Any]], head: str = "merge1") -> list[str]:
+    return land_pr_ci.gate_head(_land_run(responses), _REPO, "sha1", head).offenders
+
+
+def _unreadable_compare(base: str, head: str) -> dict[tuple[str, str], tuple[int, Any]]:
+    return {("GET", f"http://forge/repos/{_REPO}/compare/{base}...{head}"): (404, {"message": "Not Found"})}
+
+
+def test_a_non_merge_commit_on_the_chain_is_named_as_an_offender() -> None:
+    responses = _compare("sha1", "merge1", commits=[_commit("merge1", "sha1")])
+
+    assert _gate_offenders(responses) == ["merge1 (not a merge of the base branch)"]
+
+
+@pytest.mark.parametrize(
+    "parents",
+    [
+        [{"sha": "sha1"}, {"sha": "b1"}, {"sha": "b2"}],
+        [{"sha": "sha1"}, {"sha": "b1"}, "junk"],
+        [{"sha": "sha1"}, {"sha": 7}],
+    ],
+    ids=["octopus", "two-valid-plus-malformed", "malformed-second-parent"],
+)
+def test_a_commit_without_exactly_two_readable_parents_is_not_a_base_merge(parents: list[Any]) -> None:
+    responses = _compare("sha1", "merge1", commits=[{"sha": "merge1", "parents": parents}])
+
+    assert _gate_offenders(responses) == ["merge1 (not a merge of the base branch)"]
+
+
+def test_every_merge_whose_second_parent_the_base_lacks_is_listed() -> None:
+    responses = {
+        **_compare(
+            "sha1",
+            "merge2",
+            commits=[_commit("merge1", "sha1", "b1"), _commit("merge2", "merge1", "b2")],
+        ),
+        **_compare("main", "b1", status="diverged"),
+        **_compare("main", "b2", status="ahead"),
+    }
+
+    assert _gate_offenders(responses, head="merge2") == [
+        "merge2 (merges b2, which the base branch does not hold)",
+        "merge1 (merges b1, which the base branch does not hold)",
+    ]
+
+
+@pytest.mark.parametrize("unreadable", ["merged", "base-side"])
+def test_a_one_sided_unreadable_compare_refuses_instead_of_crashing(unreadable: str) -> None:
+    files = [_file("a.txt", "blob1")]
+    responses = {
+        **_compare("sha1", "merge2", commits=[_commit("merge1", "sha1", "b1"), _commit("merge2", "merge1", "b2")]),
+        **_compare("main", "b1", status="behind"),
+        **_compare("main", "b2", status="behind"),
+        **_compare("sha1", "merge1", files=files),
+        **_compare("sha1", "b1", files=files),
+    }
+    if unreadable == "merged":
+        responses |= _unreadable_compare("merge1", "merge2") | _compare("merge1", "b2", files=files)
+    else:
+        responses |= _compare("merge1", "merge2", files=files) | _unreadable_compare("merge1", "b2")
+
+    assert _gate_offenders(responses, head="merge2") == [
+        "merge2 (its content could not be compared with the base branch's change)"
+    ]
+
+
+def test_a_merge_adding_exactly_the_base_change_is_admitted() -> None:
+    files = [_file("a.txt", "blob1")]
+
+    assert _gate_offenders(_base_merge(merged_files=files, base_files=files)) == []
+
+
+def _matches(merged: list[dict[str, Any]], base_side: list[dict[str, Any]]) -> bool:
+    return land_pr_ci._contribution_matches({"files": merged}, {"files": base_side})
+
+
+def test_the_same_blob_matches_even_when_the_patches_differ() -> None:
+    merged = [_file("a.txt", "blob1", "@@ -1 +1 @@\n-a\n+b")]
+    base_side = [_file("a.txt", "blob1", "@@ -1 +1 @@\n-x\n+y")]
+
+    assert _matches(merged, base_side)
+
+
+def test_a_missing_blob_sha_never_counts_as_the_same_blob() -> None:
+    merged = [_file("a.txt", "blob1", "@@ -1 +1 @@\n-a\n+b")]
+    base_side = [_file("a.txt", "blob2", "@@ -1 +1 @@\n-x\n+y")]
+    for file in (*merged, *base_side):
+        file["sha"] = None
+
+    assert not _matches(merged, base_side)
+
+
+def test_an_unmade_rename_is_a_different_contribution() -> None:
+    merged = [{**_file("b.txt", "blob1"), "previous_filename": "a.txt"}]
+    base_side = [_file("b.txt", "blob1")]
+
+    assert not _matches(merged, base_side)
+    assert not _matches(base_side, merged)
+
+
+def test_the_same_rename_on_both_sides_matches() -> None:
+    renamed = [{**_file("b.txt", "blob1"), "previous_filename": "a.txt"}]
+
+    assert _matches(renamed, renamed)
+
+
+def test_context_lines_are_ignored_but_the_added_and_removed_multiset_must_agree() -> None:
+    merged = [_file("a.txt", "m", "@@ -1,2 +1,2 @@\n ctx-feature\n-a\n+b")]
+    assert _matches(merged, [_file("a.txt", "n", "@@ -1,2 +1,2 @@\n ctx-base\n-a\n+b")])
+    assert not _matches(merged, [_file("a.txt", "n", "@@ -1,2 +1,2 @@\n ctx-base\n-a\n+c")])
+    # a line appearing twice on one side and once on the other is a different change
+    twice = [_file("a.txt", "m", "@@ -1 +1,2 @@\n+b\n+b")]
+    assert not _matches(twice, [_file("a.txt", "n", "@@ -1 +1 @@\n+b")])
+    assert not _matches([_file("a.txt", "n", "@@ -1 +1 @@\n+b")], twice)
+
+
+def test_a_file_set_difference_is_a_different_contribution() -> None:
+    assert not _matches([_file("a.txt", "b1")], [_file("b.txt", "b1")])
+
+
+def _chain(commits: list[Any], head: str = "c1") -> tuple[list[dict[str, Any]], str | None]:
+    return land_pr_ci._first_parent_chain(commits, head, "sub")
+
+
+def test_a_chain_as_long_as_the_listed_commits_is_walked() -> None:
+    chain, why = _chain([_commit("c2", "c1"), _commit("c1", "sub")], head="c2")
+
+    assert why is None
+    assert [c["sha"] for c in chain] == ["c2", "c1"]
+
+
+def test_a_looping_first_parent_walk_stops_with_a_reason() -> None:
+    _, why = _chain([_commit("c1", "c2"), _commit("c2", "c1")])
+
+    assert why is not None and why.endswith("has no readable first parent")
+
+
+@pytest.mark.parametrize(
+    "commit",
+    [
+        {"sha": "c1", "parents": []},
+        {"sha": "c1"},
+        {"sha": "c1", "parents": "sub"},
+    ],
+    ids=["parentless", "no-parents-key", "parents-not-a-list"],
+)
+def test_a_commit_without_a_parent_list_is_unreachable(commit: dict[str, Any]) -> None:
+    _, why = _chain([commit])
+
+    assert why == "c1 is not reachable from sub within the listed commits"
+
+
+@pytest.mark.parametrize("parents", [["sub"], [{"sha": 3}], [{}]], ids=["not-a-dict", "non-string-sha", "no-sha"])
+def test_a_malformed_first_parent_is_unreadable(parents: list[Any]) -> None:
+    _, why = _chain([{"sha": "c1", "parents": parents}])
+
+    assert why == "c1 has no readable first parent"
+
+
+@pytest.mark.parametrize(
+    "payload", [{}, {"object": None}, {"object": {}}, {"object": {"sha": ""}}, {"object": {"sha": 7}}]
+)
+def test_a_base_tip_answered_without_a_usable_sha_is_unknown(payload: dict[str, Any]) -> None:
+    run = _land_run({("GET", f"http://forge/repos/{_REPO}/git/ref/heads/main"): (200, payload)})
+
+    with pytest.raises(land_common.LandedRevisionUnknown):
+        run.base_tip(_REPO)
+
+
+def test_a_base_tip_with_a_sha_is_returned() -> None:
+    run = _land_run({("GET", f"http://forge/repos/{_REPO}/git/ref/heads/main"): (200, {"object": {"sha": "tip1"}})})
+
+    assert run.base_tip(_REPO) == "tip1"
