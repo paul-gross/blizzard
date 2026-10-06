@@ -42,6 +42,16 @@ def hub_key_provider(environ: Mapping[str, str], *, data_dir: Path) -> IHubKeyPr
     return DirectoryKeyProvider(secret_keys_dir(data_dir))
 
 
+def require_hub_key(environ: Mapping[str, str], *, data_dir: Path) -> None:
+    """Refuse unless a hub key already exists — ``BZ_HUB_SECRET_KEY`` set or a generation on disk —
+    without minting one, as :func:`hub_key_provider` would."""
+    if environ.get(ENV_SECRET_KEY) or DirectoryKeyProvider.initialized(secret_keys_dir(data_dir)):
+        return
+    raise ConfigError(
+        f"no hub key exists to seal secrets under — run `blizzard hub init` on this runtime or set {ENV_SECRET_KEY}"
+    )
+
+
 def secret_cipher(keys: IHubKeyProvider) -> ISecretCipher:
     return AesGcmSecretCipher(keys)
 
@@ -93,6 +103,7 @@ __all__ = [
     "KeyCoverage",
     "StoreSecretReader",
     "hub_key_provider",
+    "require_hub_key",
     "secret_cipher",
     "secret_keys_dir",
 ]

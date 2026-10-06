@@ -1,7 +1,9 @@
-"""``blizzard hub config`` — operator verbs over configuration: the change log, and declarative documents."""
+"""``blizzard hub config`` — operator verbs over configuration: the change log, declarative documents, and the
+one-shot import of a file-configured hub."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +62,7 @@ def _refusal(cli: CliContext, resp: httpx.Response) -> str:
 
 @click.group("config")
 def config_group() -> None:
-    """Operator verbs over configuration: changes, apply, export."""
+    """Operator verbs over configuration: changes, apply, export, import-legacy."""
 
 
 @config_group.command("changes", cls=FleetCommand)
@@ -126,3 +128,35 @@ def config_export(cli: CliContext, fmt: str) -> None:
     assert codec is not None
     document = cli.get("/api/config/export", "GET /config/export").json()
     click.echo(codec.encode(document).decode("utf-8"), nl=False)
+
+
+@config_group.command("import-legacy")
+@click.option(
+    "--dir",
+    "directory",
+    default=".",
+    envvar="BZ_HUB_DIR",
+    help="Hub runtime directory (overrides $BZ_HUB_DIR).",
+)
+def config_import_legacy(directory: str) -> None:
+    """Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records — offline, on the hub host.
+
+    Runs once, in one transaction, against a migrated store and an existing hub key. A record the store
+    already holds is skipped, never overwritten; any refusal writes nothing. A second run writes nothing."""
+    from blizzard.hub.app import import_legacy_config
+    from blizzard.hub.config import ConfigError, HubConfig
+    from blizzard.hub.domain.config.carry_over import ImportStatus, LegacyImportRefused
+
+    try:
+        result = import_legacy_config(HubConfig.load(Path(directory)), os.environ)
+    except (ConfigError, LegacyImportRefused) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if result.status is ImportStatus.ALREADY_IMPORTED:
+        click.echo("the legacy configuration was already imported; nothing written")
+        return
+    if result.status is ImportStatus.NOTHING_TO_IMPORT:
+        click.echo("no legacy configuration keys present; nothing written")
+        return
+    for outcome in result.outcomes:
+        click.echo(f"{'created' if outcome.created else 'skipped':<8}  {outcome.kind.value} {outcome.key}")
+    click.echo("imported the legacy configuration; remove its keys, then restart the hub")

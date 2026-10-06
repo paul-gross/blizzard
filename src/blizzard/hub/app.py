@@ -72,8 +72,15 @@ from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
-from blizzard.hub.composition import HubServices, build_live_config, build_process_core, build_services
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
+from blizzard.hub.composition import (
+    HubServices,
+    build_config_authoring,
+    build_live_config,
+    build_process_core,
+    build_services,
+)
+from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig, LegacyKeys
+from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
@@ -86,7 +93,7 @@ from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.secrets import KeyCoverage, hub_key_provider
+from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
@@ -251,6 +258,31 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
         engine.dispose()
 
 
+def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> ImportResult:
+    """The offline ``import-legacy`` wiring: the hub key's existence checked before a provider is
+    built, then the store and key source opened directly, no app."""
+    require_hub_key(environ, data_dir=config.data_dir)
+    legacy = LegacyKeys.read(config.config_path, environ)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        core = build_process_core(engine)
+        authoring = build_config_authoring(core, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
+        existing = ExistingConfig(
+            secrets=frozenset(secret.name for secret in core.secrets.list_all()),
+            work_sources=tuple(core.work_source_records.list_all(include_retired=True)),
+            repositories=tuple(core.repository_records.list_all(include_retired=True)),
+        )
+        return authoring.import_legacy(
+            legacy,
+            {name: environ[name] for name in legacy.variables},
+            core.config_import.commit_coordinates(),
+            existing,
+            recorded=core.config_import.recorded(),
+        )
+    finally:
+        engine.dispose()
+
+
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     """The framework's 422, except on the secret routes, which never echo request input."""
     assert isinstance(exc, RequestValidationError)
@@ -407,7 +439,6 @@ def build_hosted_app(
         close_forge_writes_enabled=config.close_forge_writes_enabled,
         instrument_client=platform_tracing.instrument_client,
     )
-    _announce_ignored_work_source_blocks(config)
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -483,17 +514,6 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
     )
-
-
-def _announce_ignored_work_source_blocks(config: HubConfig) -> None:
-    """Work sources are records; the file's ``[[work_source]]`` blocks are parsed and never read.
-    One warning per start names them, so an operator sees which blocks to carry over and drop."""
-    if config.work_sources:
-        get_logger("blizzard.hub").warning(
-            "ignoring [[work_source]] blocks: work sources are records, configured through `blizzard hub source`",
-            config=str(config.config_path),
-            sources=[source.name for source in config.work_sources],
-        )
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:

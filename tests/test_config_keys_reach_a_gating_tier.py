@@ -23,11 +23,12 @@ _ROOT = repo_root()
 _NON_GATING = {"e2e", "journey", "crash", "service"}
 
 #: Every operator-written config dataclass, not just the two roots: a key on a nested
-#: block (a `[[work_source]]`, an `[[auth.oauth.provider]]`) is as droppable as a root one.
+#: block (a legacy `[[work_source]]` the import reads, an `[[auth.oauth.provider]]`) is as droppable as a root one.
 _CONFIGS = (
     ("runner", "RunnerConfig"),
     ("runner", "SubscriptionDeclaration"),
     ("hub", "HubConfig"),
+    ("hub", "LegacyKeys"),
     ("hub", "WorkSourceConfig"),
     ("hub", "OAuthProviderConfig"),
     ("hub", "AuthConfig"),

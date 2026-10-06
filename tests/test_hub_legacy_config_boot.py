@@ -22,7 +22,7 @@ token_env = "BZ_WORK_SOURCE_TOKEN"
 
 
 def test_legacy_work_source_blocks_and_forge_variables_are_ignored(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = hub_runtime.init_environment(tmp_path / "hub")
     config.config_path.write_text(config.config_path.read_text() + _LEGACY_BLOCK)
@@ -34,7 +34,5 @@ def test_legacy_work_source_blocks_and_forge_variables_are_ignored(
 
     app = hub_app.build_hosted_app(hub_app.HubConfig.load(config.root))
 
-    captured = capsys.readouterr()
-    assert "ignoring [[work_source]] blocks" in captured.out + captured.err
     services = app.state.services
     assert services.work_sources.names() == [RESERVED_HUB_SOURCE_NAME]

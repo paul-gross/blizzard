@@ -97,6 +97,7 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -132,6 +133,7 @@ def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) ->
         secrets=SecretStore(store),
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
+        import_writer=ConfigImportStore(store),
         clock=clock,
     )
 

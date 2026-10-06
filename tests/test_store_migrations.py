@@ -1683,3 +1683,28 @@ def test_repository_record_tables_survive_migration_roundtrip(tmp_path: Path) ->
 
     runner.upgrade("head")
     assert tables <= _table_names()
+
+
+_CONFIG_IMPORT_FACTS_PARENT = "20261005_1000_scope_routine_revisions"
+
+
+def test_config_import_facts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """``config_import_facts`` — downgraded to the revision's parent."""
+    config = hub_runtime.init_environment(tmp_path)
+    runner = hub_runtime.migration_runner(config)
+
+    def _table_names() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return set(sa.inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+    assert "config_import_facts" in _table_names()
+
+    runner.downgrade(_CONFIG_IMPORT_FACTS_PARENT)
+    assert "config_import_facts" not in _table_names()
+    assert "config_changes" in _table_names()
+
+    runner.upgrade("head")
+    assert "config_import_facts" in _table_names()
