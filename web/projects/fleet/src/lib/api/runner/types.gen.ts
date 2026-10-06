@@ -2370,6 +2370,53 @@ export type ReceiverStatus = {
 };
 
 /**
+ * RenewalFailureReason
+ *
+ * The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
+ * the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
+ * timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
+ * ``PROTOCOL_ERROR``, a response this binding could not make sense of at all.
+ */
+export const RenewalFailureReason = {
+    RENEWER_UNAVAILABLE: 'renewer_unavailable',
+    TIMED_OUT: 'timed_out',
+    VENDOR_REFUSED: 'vendor_refused',
+    PROTOCOL_ERROR: 'protocol_error'
+} as const;
+
+/**
+ * RenewalFailureReason
+ *
+ * The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
+ * the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
+ * timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
+ * ``PROTOCOL_ERROR``, a response this binding could not make sense of at all.
+ */
+export type RenewalFailureReason = typeof RenewalFailureReason[keyof typeof RenewalFailureReason];
+
+/**
+ * RenewalResult
+ *
+ * What one renewal attempt is known to have come to. ``RENEWED`` and ``FAILED`` are a
+ * recorded outcome; ``UNRECORDED`` is an attempt with no outcome on record — still in flight,
+ * or its outcome lost to a crash or a failed write.
+ */
+export const RenewalResult = {
+    RENEWED: 'renewed',
+    FAILED: 'failed',
+    UNRECORDED: 'unrecorded'
+} as const;
+
+/**
+ * RenewalResult
+ *
+ * What one renewal attempt is known to have come to. ``RENEWED`` and ``FAILED`` are a
+ * recorded outcome; ``UNRECORDED`` is an attempt with no outcome on record — still in flight,
+ * or its outcome lost to a crash or a failed write.
+ */
+export type RenewalResult = typeof RenewalResult[keyof typeof RenewalResult];
+
+/**
  * RequeueResponse
  *
  * ``POST /chunks/{id}/requeues`` — the local hold is cleared.
@@ -2869,9 +2916,8 @@ export type SubscriptionListResponse = {
  * SubscriptionView
  *
  * One declared subscription's runner-local diagnostics, served by
- * ``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first
- * attempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is
- * that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``.
+ * ``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the
+ * ``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure.
  */
 export type SubscriptionView = {
     miss_reason?: SampleMissReason | null;
@@ -2888,9 +2934,11 @@ export type SubscriptionView = {
      */
     provider: string;
     /**
-     * Renewal
+     * Renewal Attempted At
      */
-    renewal?: string | null;
+    renewal_attempted_at?: string | null;
+    renewal_failure_reason?: RenewalFailureReason | null;
+    renewal_result?: RenewalResult | null;
     /**
      * Sampled At
      */

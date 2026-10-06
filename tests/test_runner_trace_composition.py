@@ -4,8 +4,6 @@ variables decide whether a sweep is built, and ``runner tick`` never drives one.
 from __future__ import annotations
 
 import json
-import threading
-import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -18,7 +16,6 @@ from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from blizzard.runner.tracing.trace_driver import TraceSweepDriver
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
@@ -120,43 +117,3 @@ def test_runner_tick_never_drives_the_sweep(tmp_path: Path, monkeypatch: pytest.
     assert exporter.attempts == 0
     assert _cursor_rows(store) == 0
     assert _events(store) == []
-
-
-class _Counting:
-    def __init__(self, *, raises: bool = False) -> None:
-        self.passes = 0
-        self.raises = raises
-
-    def sweep(self) -> None:
-        self.passes += 1
-        if self.raises:
-            raise RuntimeError("bad pass")
-
-
-def test_the_driver_sweeps_after_its_jitter_and_survives_a_raising_pass() -> None:
-    sweep = _Counting(raises=True)
-    driver = TraceSweepDriver(sweep, interval_seconds=0.01, jitter_seconds=0)
-    driver.start()
-    try:
-        deadline = time.monotonic() + 5
-        while sweep.passes < 3 and time.monotonic() < deadline:
-            time.sleep(0.01)
-    finally:
-        driver.stop()
-    assert sweep.passes >= 3
-
-
-def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
-    release = threading.Event()
-
-    class _Hung:
-        def sweep(self) -> None:
-            release.wait(10)
-
-    driver = TraceSweepDriver(_Hung(), interval_seconds=60, jitter_seconds=0, stop_timeout_seconds=0.2)
-    driver.start()
-    time.sleep(0.05)
-    started = time.monotonic()
-    driver.stop()
-    assert time.monotonic() - started < 2
-    release.set()

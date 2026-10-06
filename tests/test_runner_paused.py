@@ -1654,7 +1654,6 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
                 provider="anthropic",
                 sample_interval_seconds=60,
                 sampler=None,
-                renewer=None,
             ),
         ),
     )
@@ -1716,7 +1715,6 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
                 provider="anthropic",
                 sample_interval_seconds=60,
                 sampler=None,
-                renewer=None,
             ),
         ),
     )

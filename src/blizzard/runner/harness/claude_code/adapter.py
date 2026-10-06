@@ -559,6 +559,7 @@ class ClaudeCodeAdapter:
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
@@ -595,7 +596,7 @@ class ClaudeCodeAdapter:
             output_tokens += int(usage.get("output_tokens") or 0)
             cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
             cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
-        resolved = self.observed_model(lines)
+        resolved = observed if observed is not None else self.observed_model(lines)
         if model and resolved and not _matches_model(model, resolved):
             _log.warning(
                 "harness usage model differs from session model", expected_model=model, observed_model=resolved

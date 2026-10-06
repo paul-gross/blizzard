@@ -4,8 +4,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * for display (including {@link sampledAgo}'s clock-driven text), so the view itself
  * injects nothing. `ok` drives the row's tone (`null` = never sampled, `false` = miss),
  * carried alongside the already-composed {@link conditionLabel} rather than re-derived from it.
- * `renewalLabel` is `null` whenever this attempt carries no renewal outcome — no renewer
- * for this slug's provider (e.g. Anthropic), or its renewal was not due. */
+ * `renewalLabel` is `null` while the subscription has never been renewed — no renewer for
+ * this slug's provider (e.g. Anthropic), or no renewal has come due yet. */
 export interface SubscriptionRow {
   readonly slug: string;
   readonly name: string;

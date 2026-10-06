@@ -1089,15 +1089,20 @@ def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_
 
 @pytest.mark.unit
 def test_sum_transcript_usage_ignores_unparseable_lines(spawn_executor: Executor) -> None:
+    counted = {"input": 5, "output": 2, "reasoning": 1, "cache": {"read": 3, "write": 4}}
+    event_line = json.dumps(
+        _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=counted)
+    )
     sample = _adapter(spawn_executor).sum_transcript_usage(
-        ["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn"
+        ["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}', event_line], "spawn"
     )
 
+    # Each unparseable line is passed over, never ending the read before the step after it.
     assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
-        0,
-        0,
-        0,
-        0,
+        5,
+        2 + 1,
+        3,
+        4,
     )
     assert sample.cost_usd is None
 
@@ -1465,6 +1470,88 @@ def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_conf
 
     assert adapter.sum_transcript_usage([line], "spawn", model="anthropic/claude-passed").model == "openai/gpt-5.6-luna"
     assert adapter.sum_transcript_usage([line], "spawn").model == "openai/gpt-5.6-luna"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_takes_a_supplied_observation_over_the_exports_model(spawn_executor: Executor) -> None:
+    line = json.dumps(
+        _export_message(
+            session_id="ses_obs",
+            message_id="msg_obs",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_obs",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(spawn_executor, model="anthropic/claude-configured")
+
+    sample = adapter.sum_transcript_usage([line], "judge", model="anthropic/alias", observed="openai/gpt-5.6-sol")
+
+    assert sample.model == "openai/gpt-5.6-sol"
+    assert sample.kind == "judge"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_prices_a_model_less_step_at_the_passed_model(spawn_executor: Executor) -> None:
+    event_line = json.dumps(
+        _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
+    )
+    adapter = _adapter(spawn_executor, price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([event_line], "spawn", model="openai/gpt-5.6-luna")
+
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_keeps_a_known_steps_model_when_a_later_copy_names_only_its_provider(
+    spawn_executor: Executor,
+) -> None:
+    named = _export_message(
+        session_id="ses_obs",
+        message_id="msg_obs",
+        provider_id="openai",
+        model_id="gpt-5.6-luna",
+        part_id="prt_obs",
+        cost=0.0,
+        tokens=_ZERO_TOKENS,
+    )
+    provider_only = json.loads(json.dumps(named))
+    del provider_only["info"]["modelID"]
+    adapter = _adapter(spawn_executor, price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([json.dumps(named), json.dumps(provider_only)], "spawn")
+
+    # A half-named copy is a copy with no model: the step keeps the one its export named.
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_derives_the_observation_when_none_is_supplied_even_for_a_pinned_model(
+    spawn_executor: Executor,
+) -> None:
+    line = json.dumps(
+        _export_message(
+            session_id="ses_obs",
+            message_id="msg_obs",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_obs",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    event_line = json.dumps(
+        _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
+    )
+    adapter = _adapter(spawn_executor, model="anthropic/claude-configured")
+
+    # The export's own model, never the pinned alias, and a later model-less event never erases it.
+    assert adapter.sum_transcript_usage([line, event_line], "spawn", model="anthropic/alias").model == (
+        "openai/gpt-5.6-luna"
+    )
 
 
 @pytest.mark.unit

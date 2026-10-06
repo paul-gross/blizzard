@@ -40,8 +40,6 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
-from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
-from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
@@ -127,9 +125,6 @@ class LoopWiring:
         # sampler shares one lazily-built HTTP client, owned by this context,
         # rather than opening its own.
         usage_http_client = _LazyUsageHttpClient()
-        # The renewal seam's own one-shot subprocess — shared across every
-        # declared subscription's renewer binding, same as the sampler's shared HTTP client.
-        one_shot_subprocess = SubprocessOneShotProcess()
         resolved_subscriptions = tuple(
             ResolvedSubscription(
                 slug=declaration.slug,
@@ -137,7 +132,6 @@ class LoopWiring:
                 provider=declaration.provider,
                 sample_interval_seconds=declaration.sample_interval_seconds,
                 sampler=select_sampler(declaration, clock=clock, http_client=usage_http_client),
-                renewer=select_renewer(declaration, clock=clock, subprocess=one_shot_subprocess),
             )
             for declaration in config.resolved_subscriptions()
         )

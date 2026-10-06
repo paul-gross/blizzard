@@ -439,6 +439,7 @@ class _HangingAdapter:
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
@@ -627,6 +628,7 @@ class _FixedPidAdapter:
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:

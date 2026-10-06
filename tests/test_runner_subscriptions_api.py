@@ -1,6 +1,6 @@
 """``GET /api/subscriptions`` (component tier) — every declared
-subscription's own newest sampling attempt, reading the store directly with no fresh
-sample of its own."""
+subscription's own newest sampling attempt and credential renewal, reading the store directly
+with no fresh sample or renewal of its own."""
 
 from __future__ import annotations
 
@@ -12,6 +12,11 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.subscriptions.credential_renewer import (
+    RenewalFailureReason,
+    RenewalOutcome,
+    RenewalOutcomeKind,
+)
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, make_stores
 
@@ -47,7 +52,9 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "sampled_at": None,
                 "ok": None,
                 "miss_reason": None,
-                "renewal": None,
+                "renewal_attempted_at": None,
+                "renewal_result": None,
+                "renewal_failure_reason": None,
             }
         ]
     }
@@ -73,7 +80,7 @@ def test_a_successful_attempt_reports_ok_true_and_no_miss_reason(tmp_path: Path)
     assert item["sampled_at"] == "2026-09-22T12:00:00+00:00"
     assert item["ok"] is True
     assert item["miss_reason"] is None
-    assert item["renewal"] is None
+    assert item["renewal_result"] is None
 
 
 def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
@@ -98,24 +105,57 @@ def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
     assert item["miss_reason"] == "credential_lapsed"
 
 
-def test_a_recorded_renewal_outcome_reports_alongside_the_attempt(tmp_path: Path) -> None:
+def _renewal_fields(item: dict[str, object]) -> tuple[object, object, object]:
+    return item["renewal_attempted_at"], item["renewal_result"], item["renewal_failure_reason"]
+
+
+def test_a_renewed_outcome_reports_typed_beside_the_attempt(tmp_path: Path) -> None:
     client, store = _client(
         tmp_path,
         subscriptions=(SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),),
     )
-    store.record_external_usage_attempt(
-        slug="codex",
-        sampled_at=_NOW,
-        payload="{}",
-        report_kind="external_subscription_usage.sampled",
-        report_payload="{}",
-        renewal="renewed",
+    claim_id = store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
+    store.record_credential_renewal_outcome(
+        claim_id=claim_id, outcome=RenewalOutcome(RenewalOutcomeKind.RENEWED), recorded_at=_NOW
     )
 
     resp = client.get("/api/subscriptions")
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["items"][0]["renewal"] == "renewed"
+    item = resp.json()["items"][0]
+    assert _renewal_fields(item) == ("2026-09-22T12:00:00+00:00", "renewed", None)
+    assert item["sampled_at"] is None  # renewal is its own fact, independent of sampling
+
+
+def test_a_failed_outcome_reports_its_typed_reason(tmp_path: Path) -> None:
+    client, store = _client(
+        tmp_path,
+        subscriptions=(SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),),
+    )
+    claim_id = store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
+    store.record_credential_renewal_outcome(
+        claim_id=claim_id,
+        outcome=RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+        recorded_at=_NOW,
+    )
+
+    resp = client.get("/api/subscriptions")
+
+    assert resp.status_code == 200, resp.text
+    assert _renewal_fields(resp.json()["items"][0]) == ("2026-09-22T12:00:00+00:00", "failed", "timed_out")
+
+
+def test_a_claim_with_no_outcome_reports_unrecorded(tmp_path: Path) -> None:
+    client, store = _client(
+        tmp_path,
+        subscriptions=(SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),),
+    )
+    store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
+
+    resp = client.get("/api/subscriptions")
+
+    assert resp.status_code == 200, resp.text
+    assert _renewal_fields(resp.json()["items"][0]) == ("2026-09-22T12:00:00+00:00", "unrecorded", None)
 
 
 def test_several_declared_subscriptions_each_report_their_own_slugs_newest_attempt(tmp_path: Path) -> None:

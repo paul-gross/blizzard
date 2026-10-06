@@ -1,9 +1,8 @@
 """Service-tier proof for the OpenAI credential renewer against a real ``mock-codex app-server``
-process (``bzh:external-cli-fake-is-service-tier``): the renewer, on the
-real :class:`SubprocessOneShotProcess` seam, races a second independent ``mock-codex
-app-server`` invocation — the vendor's own CLI refreshing the same login by hand — for one
-``auth.json``. Neither writer leaves the file unparseable and the final file holds a rotated
-refresh token; that blizzard never writes the file is ``bzh:subscriptions-no-write``'s proof."""
+(``bzh:external-cli-fake-is-service-tier``): on the real :class:`SubprocessOneShotProcess` seam it
+races a second ``mock-codex app-server`` refreshing the same ``auth.json`` by hand; neither leaves
+it unparseable and the rotated refresh token survives (``bzh:subscriptions-no-write``'s proof), and
+the renewal pass over the same process lands a claim and a ``renewed`` outcome."""
 
 from __future__ import annotations
 
@@ -18,9 +17,12 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
+from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
+from tests.runner_fakes import make_store
 from tests.service.support import require_codex_app_server_surface, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -64,7 +66,7 @@ def test_a_due_renewal_against_the_real_mock_codex_process_rotates_the_credentia
         clock=FixedClock(_NOW),
     )
 
-    outcome = renewer.renew_if_due()
+    outcome = renewer.renew()
 
     assert outcome.kind is RenewalOutcomeKind.RENEWED
     rotated = json.loads(auth_path.read_text())
@@ -99,7 +101,7 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
 
     def _drive_renewer() -> None:
         try:
-            outcomes.append(renewer.renew_if_due().kind)
+            outcomes.append(renewer.renew().kind)
         except BaseException as exc:  # surfaced to the main thread below
             errors.append(exc)
 
@@ -145,3 +147,32 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
     assert all("pid" in entry for entry in entries)
     last_logged = max(entries, key=lambda entry: entry["at"])
     assert last_logged["content_digest"] == hashlib.sha256(final_bytes).hexdigest()[:16]
+
+
+def test_a_renewal_pass_against_the_real_mock_codex_process_lands_a_claim_and_a_renewed_outcome(
+    tmp_path: Path,
+) -> None:
+    mock_codex = _mock_codex()
+    auth_path = tmp_path / "auth.json"
+    _write_auth(auth_path, expires_at=_NOW + timedelta(minutes=1))
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    clock = FixedClock(_NOW)
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(auth_path),
+        codex_binary=str(mock_codex),
+        subprocess=SubprocessOneShotProcess(),
+        clock=clock,
+    )
+    renewal_pass = CredentialRenewalPass(
+        subscriptions=(RenewableSubscription(slug="codex", sample_interval_seconds=300, renewer=renewer),),
+        renewals=store,
+        clock=clock,
+    )
+
+    renewal_pass.run()
+
+    assert store.last_credential_renewal_claim_at("codex") == _NOW
+    summary = store.latest_credential_renewals_by_slug(["codex"])["codex"]
+    assert summary.result is RenewalResult.RENEWED
+    assert summary.failure_reason is None
+    assert json.loads(auth_path.read_text())["tokens"]["refresh_token"] != "original-refresh-token"

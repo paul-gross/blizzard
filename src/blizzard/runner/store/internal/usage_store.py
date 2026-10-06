@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, Row, and_, case, func, select
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
@@ -17,14 +18,18 @@ from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
     context_samples,
+    credential_renewal_claims,
+    credential_renewal_outcomes,
     external_usage_samples,
     leases,
     outbound_buffer,
     usage_facts,
 )
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.usage.repository import (
     ContextSampleState,
+    CredentialRenewalSummary,
     ExternalUsageAttemptSummary,
     InvocationCost,
     IWriteUsageRepository,
@@ -35,6 +40,9 @@ _log = get_logger("blizzard.runner.store")
 
 # See IWriteUsageRepository.prune_external_usage_samples's own docstring for the retention contract.
 _EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW = timedelta(days=1)
+
+# See IWriteCredentialRenewalRepository.prune_credential_renewals's own docstring for the retention contract.
+_CREDENTIAL_RENEWAL_RETENTION_WINDOW = timedelta(days=1)
 
 
 def _decode_windows(payload: str | None) -> tuple[ExternalSubscriptionUsageWindow, ...]:
@@ -58,7 +66,16 @@ def _attempt_summary(slug: str, row: Row) -> ExternalUsageAttemptSummary:
         sampled_at=as_utc(row.sampled_at),
         ok=row.payload is not None,
         miss_reason=row.miss_reason,
-        renewal=row.renewal,
+    )
+
+
+def _renewal_summary(row: Row) -> CredentialRenewalSummary:
+    """A claim row outer-joined to its outcome: no outcome on record reads as unrecorded."""
+    return CredentialRenewalSummary(
+        slug=str(row.slug),
+        attempted_at=as_utc(row.claimed_at),
+        result=RenewalResult.recognized(row.kind) or RenewalResult.UNRECORDED,
+        failure_reason=RenewalFailureReason.recognized(row.failure_reason),
     )
 
 
@@ -150,7 +167,6 @@ class UsageStore:
                 external_usage_samples.c.sampled_at,
                 external_usage_samples.c.payload,
                 external_usage_samples.c.miss_reason,
-                external_usage_samples.c.renewal,
             )
             .where(external_usage_samples.c.slug == slug)
             .order_by(external_usage_samples.c.sampled_at.desc(), external_usage_samples.c.id.desc())
@@ -169,7 +185,7 @@ class UsageStore:
     def _newest_rows_by_slug(self, slugs: Sequence[str], where: object | None) -> dict[str, Row]:
         """Each slug's newest ``external_usage_samples`` row among those matching ``where`` — the
         singulars' ``(sampled_at, id)`` order, kept portable by joining each slug's ``max(sampled_at)``
-        back and breaking a same-instant tie on ``id`` here."""
+        back and breaking a same-instant tie on ``id`` in the statement's own order."""
         if not slugs:
             return {}
         samples = external_usage_samples
@@ -186,21 +202,14 @@ class UsageStore:
                     .subquery()
                 )
                 stmt = (
-                    select(
-                        samples.c.id,
-                        samples.c.slug,
-                        samples.c.sampled_at,
-                        samples.c.payload,
-                        samples.c.miss_reason,
-                        samples.c.renewal,
-                    )
+                    select(samples.c.slug, samples.c.sampled_at, samples.c.payload, samples.c.miss_reason)
                     .join(latest, and_(samples.c.slug == latest.c.slug, samples.c.sampled_at == latest.c.sampled_at))
                     .where(*conditions)
+                    .order_by(samples.c.id.desc())
                 )
                 for row in conn.execute(stmt):
-                    held = newest.get(str(row.slug))
-                    if held is None or row.id > held.id:
-                        newest[str(row.slug)] = row
+                    # Highest id first, so a slug's first row is its same-instant tie's winner.
+                    newest.setdefault(str(row.slug), row)
         return newest
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
@@ -386,7 +395,6 @@ class UsageStore:
         report_kind: str,
         report_payload: str,
         miss_reason: str | None = None,
-        renewal: str | None = None,
     ) -> int | None:
         # The attempt row and its outbound report land in ONE transaction. Runner-scoped
         # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
@@ -394,7 +402,7 @@ class UsageStore:
         with self._store.begin() as conn:
             conn.execute(
                 external_usage_samples.insert().values(
-                    slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason, renewal=renewal
+                    slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason
                 )
             )
             # A report buffers whenever the attempt carries one (`report_kind` non-empty), not
@@ -429,6 +437,80 @@ class UsageStore:
                     )
                 )
             )
+        return result.rowcount
+
+    def last_credential_renewal_claim_at(self, slug: str) -> datetime | None:
+        stmt = select(func.max(credential_renewal_claims.c.claimed_at)).where(credential_renewal_claims.c.slug == slug)
+        with self._store.connect() as conn:
+            value = conn.execute(stmt).scalar_one_or_none()
+        return as_utc(value) if value is not None else None
+
+    def latest_credential_renewals_by_slug(self, slugs: Sequence[str]) -> dict[str, CredentialRenewalSummary]:
+        """Each slug's newest claim by ``(claimed_at, id)`` — joined back to its slug's
+        ``max(claimed_at)`` for portability, a same-instant tie broken on ``id`` here."""
+        if not slugs:
+            return {}
+        claims, outcomes = credential_renewal_claims, credential_renewal_outcomes
+        newest: dict[str, Row] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(slugs):
+                latest = (
+                    select(claims.c.slug, func.max(claims.c.claimed_at).label("claimed_at"))
+                    .where(claims.c.slug.in_(batch))
+                    .group_by(claims.c.slug)
+                    .subquery()
+                )
+                stmt = (
+                    select(claims.c.id, claims.c.slug, claims.c.claimed_at, outcomes.c.kind, outcomes.c.failure_reason)
+                    .join(latest, and_(claims.c.slug == latest.c.slug, claims.c.claimed_at == latest.c.claimed_at))
+                    .outerjoin(outcomes, outcomes.c.claim_id == claims.c.id)
+                    .where(claims.c.slug.in_(batch))
+                )
+                for row in conn.execute(stmt):
+                    held = newest.get(str(row.slug))
+                    if held is None or row.id > held.id:
+                        newest[str(row.slug)] = row
+        return {slug: _renewal_summary(row) for slug, row in newest.items()}
+
+    def claim_credential_renewal(self, *, slug: str, claimed_at: datetime) -> int:
+        with self._store.begin() as conn:
+            result = conn.execute(credential_renewal_claims.insert().values(slug=slug, claimed_at=claimed_at))
+        key = result.inserted_primary_key
+        assert key is not None  # an autoincrement insert always returns its key
+        _log.info("credential renewal claimed", slug=slug)
+        return int(key[0])
+
+    def record_credential_renewal_outcome(
+        self, *, claim_id: int, outcome: RenewalOutcome, recorded_at: datetime
+    ) -> None:
+        with self._store.begin() as conn:
+            conn.execute(
+                credential_renewal_outcomes.insert().values(
+                    claim_id=claim_id,
+                    kind=outcome.kind.value,
+                    failure_reason=outcome.failure_reason.value if outcome.failure_reason is not None else None,
+                    recorded_at=recorded_at,
+                )
+            )
+        _log.info("credential renewal outcome recorded", claim_id=claim_id, kind=outcome.kind.value)
+
+    def prune_credential_renewals(self, *, now: datetime) -> int:
+        cutoff = now - _CREDENTIAL_RENEWAL_RETENTION_WINDOW
+        claims = credential_renewal_claims
+        newest_claim = claims.alias("newest_claim")
+        latest_claim = (
+            select(func.max(newest_claim.c.claimed_at)).where(newest_claim.c.slug == claims.c.slug).scalar_subquery()
+        )
+        # `< latest_claim` (never `<=`) keeps every claim tied for newest, as the attempt prune does.
+        superseded = and_(claims.c.claimed_at < cutoff, claims.c.claimed_at < latest_claim)
+        with self._store.begin() as conn:
+            # Outcomes first, while their claims still identify them.
+            conn.execute(
+                credential_renewal_outcomes.delete().where(
+                    credential_renewal_outcomes.c.claim_id.in_(select(claims.c.id).where(superseded))
+                )
+            )
+            result = conn.execute(claims.delete().where(superseded))
         return result.rowcount
 
 

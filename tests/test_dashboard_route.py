@@ -158,7 +158,9 @@ def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path
                 "sampled_at": None,
                 "ok": None,
                 "miss_reason": None,
-                "renewal": None,
+                "renewal_attempted_at": None,
+                "renewal_result": None,
+                "renewal_failure_reason": None,
             }
         ]
     }

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.wire.fleet import FleetSummaryView
 
@@ -184,9 +185,8 @@ class HarnessHealthListResponse(BaseModel):
 
 class SubscriptionView(BaseModel):
     """One declared subscription's runner-local diagnostics, served by
-    ``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first
-    attempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is
-    that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``."""
+    ``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the
+    ``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure."""
 
     slug: str
     name: str
@@ -194,7 +194,9 @@ class SubscriptionView(BaseModel):
     sampled_at: str | None = None
     ok: bool | None = None
     miss_reason: SampleMissReason | None = None
-    renewal: str | None = None
+    renewal_attempted_at: str | None = None
+    renewal_result: RenewalResult | None = None
+    renewal_failure_reason: RenewalFailureReason | None = None
 
 
 class SubscriptionListResponse(BaseModel):

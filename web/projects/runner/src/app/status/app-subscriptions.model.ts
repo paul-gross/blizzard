@@ -10,6 +10,14 @@ export const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, strin
   response_unparseable: 'response unparseable',
 };
 
+/** Operator-facing text per closed-set renewal failure reason. */
+export const RENEWAL_FAILURE_TEXT: Readonly<Record<runnerApi.RenewalFailureReason, string>> = {
+  renewer_unavailable: 'vendor CLI unavailable',
+  timed_out: 'timed out',
+  vendor_refused: 'vendor refused',
+  protocol_error: 'unreadable vendor response',
+};
+
 /** `-34s ago` since the newest sampling attempt, or `never` when there is none or it is skew-broken. */
 export function sampledAgoLabel(sampledAt: string | null, now: number): string {
   const age = ageMs(sampledAt, now);
@@ -24,6 +32,26 @@ export function conditionLabel(ok: boolean | null, missReason: runnerApi.SampleM
   return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT[missReason]}`;
 }
 
+/** The newest credential renewal in operator words, aged against `now` — `null` when the
+ * subscription was never renewed. Reads the wire's typed result and reason; parses nothing. */
+export function renewalLabel(
+  result: runnerApi.RenewalResult | null,
+  failureReason: runnerApi.RenewalFailureReason | null,
+  attemptedAt: string | null,
+  now: number,
+): string | null {
+  if (result === null) return null;
+  const ago = sampledAgoLabel(attemptedAt, now);
+  switch (result) {
+    case 'renewed':
+      return `renewed ${ago}`;
+    case 'failed':
+      return `failed (${failureReason === null ? 'unknown cause' : RENEWAL_FAILURE_TEXT[failureReason]}) ${ago}`;
+    case 'unrecorded':
+      return `attempted ${ago}, outcome not recorded`;
+  }
+}
+
 /** One {@link SubscriptionRow} per declared subscription, in wire order, aged against `now`. */
 export function subscriptionRows(
   subs: readonly runnerApi.SubscriptionView[],
@@ -35,7 +63,12 @@ export function subscriptionRows(
     provider: sub.provider,
     conditionLabel: conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
     sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
-    renewalLabel: sub.renewal ?? null,
+    renewalLabel: renewalLabel(
+      sub.renewal_result ?? null,
+      sub.renewal_failure_reason ?? null,
+      sub.renewal_attempted_at ?? null,
+      now,
+    ),
     ok: sub.ok ?? null,
   }));
 }

@@ -14,8 +14,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * {@link SubscriptionRow.sampledAgo} is derived from; the presentational
  * {@link LocalSubscriptionsView} owns the row template (`bzh:frontend-container-presentational`).
  * Read-only, like every other rail on this panel — renewal is driven by
- * the runner's own loop, never by an operator action here; this rail only shows its
- * newest recorded outcome.
+ * the runner's own renewal pass, never by an operator action here; this rail only shows
+ * the newest renewal and its outcome.
  */
 @Component({
   selector: 'app-subscriptions',

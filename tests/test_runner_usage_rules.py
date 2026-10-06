@@ -150,21 +150,50 @@ def test_soonest_exhausted_reset() -> None:
     assert soonest_exhausted_reset({}, _NOW) is None
 
 
+def test_the_soonest_reset_wins_across_slugs_whatever_their_order() -> None:
+    soon, later = _NOW + timedelta(hours=1), _NOW + timedelta(hours=4)
+    assert soonest_exhausted_reset({"a": (_window(100.0, later),), "b": (_window(100.0, soon),)}, _NOW) == soon
+    assert soonest_exhausted_reset({"b": (_window(100.0, soon),), "a": (_window(100.0, later),)}, _NOW) == soon
+
+
+def test_a_window_below_full_never_holds_a_limit_however_soon_it_resets() -> None:
+    soon, later = _NOW + timedelta(minutes=1), _NOW + timedelta(hours=2)
+    windows = {"a": (_window(99.99, soon),), "b": (_window(100.0, later),)}
+    assert soonest_exhausted_reset(windows, _NOW) == later
+    assert soonest_exhausted_reset({"a": (_window(100.0, soon),)}, _NOW) == soon
+
+
+def test_an_expired_reset_holds_no_limit() -> None:
+    passed, now_exactly, ahead = _NOW - timedelta(seconds=1), _NOW, _NOW + timedelta(seconds=1)
+    assert soonest_exhausted_reset({"a": (_window(100.0, passed),), "b": (_window(100.0, now_exactly),)}, _NOW) is None
+    assert soonest_exhausted_reset({"a": (_window(100.0, passed),), "b": (_window(100.0, ahead),)}, _NOW) == ahead
+
+
+def test_a_slug_with_no_windows_contributes_nothing() -> None:
+    soon = _NOW + timedelta(hours=1)
+    assert soonest_exhausted_reset({"a": (), "b": ()}, _NOW) is None
+    assert soonest_exhausted_reset({"a": (), "b": (_window(100.0, soon),)}, _NOW) == soon
+
+
+def test_competing_resets_within_one_slug_resolve_to_the_soonest() -> None:
+    soon, mid, later = _NOW + timedelta(hours=1), _NOW + timedelta(hours=2), _NOW + timedelta(hours=5)
+    windows = {"a": (_window(100.0, later), _window(100.0, soon), _window(100.0, mid))}
+    assert soonest_exhausted_reset(windows, _NOW) == soon
+
+
 def test_miss_records_miss_kind_and_null_payload() -> None:
-    attempt = external_usage_attempt(
-        SampleMiss(SampleMissReason.CREDENTIAL_LAPSED), slug="max", renewal="failed:timed_out", at=_NOW
-    )
+    attempt = external_usage_attempt(SampleMiss(SampleMissReason.CREDENTIAL_LAPSED), slug="max", at=_NOW)
     assert attempt.missed
     assert attempt.snapshot is None
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED
     assert attempt.miss_reason is SampleMissReason.CREDENTIAL_LAPSED
     assert attempt.result is SampleMissReason.CREDENTIAL_LAPSED
-    assert (attempt.slug, attempt.sampled_at, attempt.renewal) == ("max", _NOW, "failed:timed_out")
+    assert (attempt.slug, attempt.sampled_at) == ("max", _NOW)
 
 
 def test_snapshot_records_sampled_kind() -> None:
     snapshot = ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=(_window(40.0, _NOW + timedelta(hours=2)),))
-    attempt = external_usage_attempt(snapshot, slug="max", renewal=None, at=_NOW)
+    attempt = external_usage_attempt(snapshot, slug="max", at=_NOW)
     assert not attempt.missed
     assert attempt.snapshot == snapshot
     assert attempt.report_kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED

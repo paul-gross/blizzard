@@ -2,7 +2,8 @@
 provider-selected** external-system seam (``bzh:pluggable-seams``), selected beside each
 declared subscription's sampler binding at composition. Renewal is delegated to the
 vendor CLI: blizzard never opens a credential file for writing — a binding asks the
-vendor's own tooling to refresh it, and reports only whether that ask worked."""
+vendor's own tooling to refresh it, and reports only whether that ask worked. A read-only due
+check and the vendor call are separate, so the caller records its claim between them."""
 
 from __future__ import annotations
 
@@ -11,56 +12,45 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason
 from blizzard.foundation.roles import domain_model
 
-__all__ = ["ICredentialRenewer", "RenewalFailureReason", "RenewalOutcome", "RenewalOutcomeKind", "renewal_due"]
+__all__ = [
+    "RENEWAL_FAILURE_TEXT",
+    "ICredentialRenewer",
+    "RenewalFailureReason",
+    "RenewalOutcome",
+    "RenewalOutcomeKind",
+    "renewal_due",
+]
 
 
 class RenewalOutcomeKind(StrEnum):
-    """One renewal attempt's shape. ``RENEWED`` — the vendor CLI refreshed the credential.
-    ``NOT_DUE`` — the credential is not at or near expiry, or this binding could not tell (an
-    unreadable credential is the sampler's miss to report, not the renewer's). ``FAILED`` —
-    renewal was due and attempted but did not succeed; see :attr:`RenewalOutcome.failure_reason`."""
+    """One fired renewal's shape. ``RENEWED`` — the vendor CLI refreshed the credential.
+    ``FAILED`` — the renewal was attempted but did not succeed; see
+    :attr:`RenewalOutcome.failure_reason`."""
 
     RENEWED = "renewed"
-    NOT_DUE = "not_due"
     FAILED = "failed"
 
 
-class RenewalFailureReason(StrEnum):
-    """The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
-    the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
-    timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
-    ``PROTOCOL_ERROR``, a response this binding could not make sense of at all."""
-
-    RENEWER_UNAVAILABLE = "renewer_unavailable"
-    TIMED_OUT = "timed_out"
-    VENDOR_REFUSED = "vendor_refused"
-    PROTOCOL_ERROR = "protocol_error"
+# Operator-facing text per closed-set failure reason — what went wrong, not the machine word.
+RENEWAL_FAILURE_TEXT: dict[RenewalFailureReason, str] = {
+    RenewalFailureReason.RENEWER_UNAVAILABLE: "vendor CLI unavailable",
+    RenewalFailureReason.TIMED_OUT: "timed out",
+    RenewalFailureReason.VENDOR_REFUSED: "vendor refused",
+    RenewalFailureReason.PROTOCOL_ERROR: "unreadable vendor response",
+}
 
 
 @domain_model
 @dataclass(frozen=True)
 class RenewalOutcome:
-    """One ``renew_if_due()`` call's result. ``failure_reason`` is set only when
+    """One ``renew()`` call's result. ``failure_reason`` is set only when
     ``kind`` is :attr:`RenewalOutcomeKind.FAILED`."""
 
     kind: RenewalOutcomeKind
     failure_reason: RenewalFailureReason | None = None
-
-    @property
-    def recorded_value(self) -> str | None:
-        """The attempt row's ``renewal`` string: ``None`` when nothing renewal-worthy happened
-        (not due), the kind's own value for a success, and ``"failed:<reason>"`` for a failure,
-        so the reason travels with it."""
-        return self._recorded_value()
-
-    def _recorded_value(self) -> str | None:
-        if self.kind is RenewalOutcomeKind.NOT_DUE:
-            return None
-        if self.kind is RenewalOutcomeKind.FAILED and self.failure_reason is not None:
-            return f"failed:{self.failure_reason.value}"
-        return self.kind.value
 
 
 def renewal_due(expires_at: datetime, now: datetime, lead: timedelta) -> bool:
@@ -70,11 +60,17 @@ def renewal_due(expires_at: datetime, now: datetime, lead: timedelta) -> bool:
 
 class ICredentialRenewer(Protocol):
     """One declared subscription's credential-renewal binding. Dumb like the sampler
-    seam it stands beside: renews when due, never decides whether to sample."""
+    seam it stands beside: says whether a renewal is due and renews when asked, never
+    decides on a cadence or whether to sample."""
 
-    def renew_if_due(self) -> RenewalOutcome:
-        """Ask the vendor CLI to refresh this subscription's credential, but only when
-        it is at or near its own expiry (this binding's own lead window). Never raises,
-        never writes the credential file itself — the vendor's own lock, atomic write,
-        and refresh-token rotation stay in force."""
+    def renewal_due(self) -> bool:
+        """Whether this subscription's credential is at or near its own expiry (this
+        binding's own lead window). Read-only and never raises: an unreadable credential is
+        not due — that is the sampler's miss to report, not the renewer's."""
+        ...
+
+    def renew(self) -> RenewalOutcome:
+        """Ask the vendor CLI to refresh this subscription's credential now. Never raises,
+        never writes the credential file itself — the vendor's own lock, atomic write, and
+        refresh-token rotation stay in force."""
         ...

@@ -340,6 +340,7 @@ class IHarnessUsageAccounting(Protocol):
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
@@ -347,7 +348,11 @@ class IHarnessUsageAccounting(Protocol):
 
         The envelope-less fallback for a worker killed before its result envelope: token counts
         and ``cost_usd=None`` (a transcript carries no billed figure), maybe an estimate.
-        ``model`` is the expected session model for comparison or a binding-specific fallback."""
+        ``model`` is the expected session model for comparison or a binding-specific fallback.
+        ``observed`` is what :meth:`observed_model` already returned for these same ``lines``,
+        when the caller made that observation — used as-is, never re-derived; ``None`` makes the
+        adapter derive it from ``lines`` itself. The sample's model is the observed one, never
+        ``model`` in its place: an alias the lease requested never stands in for the model that ran."""
         ...
 
     def observed_model(self, lines: Sequence[str]) -> str | None:

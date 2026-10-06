@@ -46,9 +46,12 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.stores import RunnerReadStores
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
+from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
@@ -190,6 +193,61 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
         assert isinstance(second_sampler, OpenAISubscriptionSampler)
         assert first_sampler._http_client is ctx.usage_http_client
         assert second_sampler._http_client is ctx.usage_http_client
+
+
+@pytest.mark.unit
+def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Renewal is composed into the host's own pass, never the tick: a whole tick over an
+    ``openai`` declaration samples it but never reaches either half of the renewer seam."""
+    calls: list[str] = []
+
+    def _due(self: OpenAICredentialRenewer) -> bool:
+        calls.append("renewal_due")
+        return True
+
+    def _renew(self: OpenAICredentialRenewer) -> RenewalOutcome:
+        calls.append("renew")
+        return RenewalOutcome(RenewalOutcomeKind.RENEWED)
+
+    monkeypatch.setattr(OpenAICredentialRenewer, "renewal_due", _due)
+    monkeypatch.setattr(OpenAICredentialRenewer, "renew", _renew)
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        subscriptions=(
+            SubscriptionDeclaration(
+                slug="codex", name="Codex", provider=PROVIDER_OPENAI, credentials_path=str(tmp_path / "auth.json")
+            ),
+        ),
+    )
+    config.data_dir.mkdir(parents=True, exist_ok=True)
+    make_store(config.db_url)  # schema only; the graph opens its own engine over it
+
+    with loop_graph(config) as graph:
+        ctx = LoopWiring(config, "", "", None).context(FakeHub(), graph)
+        try:
+            tick(ctx)
+        finally:
+            ctx.usage_http_client.close()
+        assert graph.stores.usage.last_external_usage_attempt_at("codex") is not None  # the tick sampled it
+        assert graph.credential_renewal is not None  # composed for `runner host` alone
+
+    assert calls == []
+
+
+@pytest.mark.unit
+def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),),
+    )
+
+    with loop_graph(config) as graph:
+        assert graph.credential_renewal is None
 
 
 @pytest.mark.unit

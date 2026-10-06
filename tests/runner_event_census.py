@@ -268,6 +268,13 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "cadence, not this occasional fact-log row (blizzard#317 review round 4, F1 — same class as "
         "record_usage above).",
     ),
+    "claim_credential_renewal": Silent(
+        "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "
+        "in the vocabulary represents a renewal, nothing reaches the fact log, and the panel's subscriptions "
+        "rail polls the dashboard read."
+    ),
+    "record_credential_renewal_outcome": Silent("the same runner-local renewal diagnostics, closing its claim."),
+    "prune_credential_renewals": Silent(_RETENTION_PRUNE),
     # --- operator config -------------------------------------------------------------
     "set_workspace_prompt": Silent("operator-set runtime config; no kind in the vocabulary represents it."),
     "clear_workspace_prompt": Silent("the same operator-set runtime config, removed; no kind represents it either."),

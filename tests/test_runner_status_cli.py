@@ -27,6 +27,11 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases import NewLease
 from blizzard.runner.listeners import Listeners, Uds
+from blizzard.runner.subscriptions.credential_renewer import (
+    RenewalFailureReason,
+    RenewalOutcome,
+    RenewalOutcomeKind,
+)
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -264,8 +269,20 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
 
 
 @pytest.mark.component
-def test_status_renders_a_renewal_outcome_alongside_a_successful_sample(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (RenewalOutcome(RenewalOutcomeKind.RENEWED), "renewal: renewed at 2026-07-16T12:00:00+00:00"),
+        (
+            RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+            "renewal: failed (timed out) at 2026-07-16T12:00:00+00:00",
+        ),
+        (None, "renewal: attempted at 2026-07-16T12:00:00+00:00, outcome not recorded"),
+    ],
+    ids=["renewed", "failed", "unrecorded"],
+)
+def test_status_renders_the_newest_renewal_typed_beside_a_successful_sample(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: RenewalOutcome | None, expected: str
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
@@ -276,15 +293,32 @@ def test_status_renders_a_renewal_outcome_alongside_a_successful_sample(
         payload="{}",
         report_kind="external_subscription_usage.sampled",
         report_payload="{}",
-        renewal="renewed",
     )
+    claim_id = store.claim_credential_renewal(slug="anthropic", claimed_at=_NOW)
+    if outcome is not None:
+        store.record_credential_renewal_outcome(claim_id=claim_id, outcome=outcome, recorded_at=_NOW)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "anthropic (anthropic): ok, sampled at" in result.output
-    assert "renewal: renewed" in result.output
+    assert expected in result.output
+
+
+@pytest.mark.component
+def test_status_renders_no_renewal_line_for_a_slug_never_renewed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _store(root)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "renewal:" not in result.output
 
 
 @pytest.mark.component

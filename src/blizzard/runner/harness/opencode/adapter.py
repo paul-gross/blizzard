@@ -900,26 +900,24 @@ class OpenCodeAdapter:
         kind: UsageKind,
         *,
         model: str | None = None,
+        observed: str | None = None,
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
         by_id: dict[str, _UsageStep] = {}
         task_parts: dict[str, OpenCodePart] = {}
-        root_session: str | None = None
-        observed: tuple[str, str] | None = None
+        derived: tuple[str, str] | None = None
         # One pass over `lines`: the observed (provider, model) is picked up off the
         # same decode that yields each line's finish-parts, rather than a second full pass
-        # through `observed_model` re-decoding lines `_worker_sample` may have already read.
+        # through `observed_model`; a caller's own observation of these lines wins over it.
         for line in lines:
             decoded = self._decode_line(line)
             if decoded is None:
                 continue
             parts, line_observed = self._parts_and_model_from_decoded(decoded)
             if line_observed is not None:
-                observed = line_observed
+                derived = line_observed
             for part, provider, part_model in parts:
-                if part.tokens is None:
-                    continue
                 if provider is None or part_model is None:
                     # A run-event copy of a step an export line already named keeps that
                     # export's own provider/model rather than erasing it.
@@ -928,9 +926,10 @@ class OpenCodeAdapter:
                 by_id[part.id] = _UsageStep(part, provider, part_model)
             for task_part in self._task_parts_of_decoded(decoded):
                 task_parts[task_part.id] = task_part
-                root_session = root_session or task_part.session_id
         steps = list(by_id.values())
-        if root_session is not None:
+        if task_parts:
+            # The first task part seen names the root session: a dict keeps its first insertion's place.
+            root_session = next(iter(task_parts.values())).session_id
             start_ms = int(invocation_start.timestamp() * 1000) if invocation_start is not None else None
             end_ms = (
                 int(invocation_end.timestamp() * 1000) if invocation_end is not None else self._horizon_of_lines(lines)
@@ -942,7 +941,7 @@ class OpenCodeAdapter:
         # A non-zero cost here is a billed figure this fallback drops; no estimate
         # may then mask it.
         estimated_cost_usd = None if any(s.part.cost for s in steps) else self._estimate_unbilled(steps, model)
-        observed_model = f"{observed[0]}/{observed[1]}" if observed is not None else None
+        observed_model = observed or (f"{derived[0]}/{derived[1]}" if derived is not None else None)
         return UsageSample(
             kind=kind,
             # The export's own provider/model over a passed-in or configured one:

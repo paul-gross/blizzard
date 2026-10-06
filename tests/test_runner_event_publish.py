@@ -798,7 +798,6 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         provider="anthropic",
         sample_interval_seconds=300,
         sampler=FakeSubscriptionSampler(snapshot=snapshot),
-        renewer=None,
     )
     ctx = make_context(
         store,
@@ -832,7 +831,6 @@ def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
         provider="openai",
         sample_interval_seconds=300,
         sampler=FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED),
-        renewer=None,
     )
     ctx = make_context(
         store,

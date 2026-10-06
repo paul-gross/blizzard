@@ -89,12 +89,12 @@ describe('LocalSubscriptionsView', () => {
         provider: 'openai',
         conditionLabel: 'ok',
         sampledAgo: '30s ago',
-        renewalLabel: 'renewed',
+        renewalLabel: 'renewed -34s ago',
         ok: true,
       },
     ]);
 
     const row = el.querySelector('[data-testid="subscription-row"]');
-    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toBe('renewal: renewed');
+    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toBe('renewal: renewed -34s ago');
   });
 });
