@@ -1,8 +1,7 @@
 """The subprocess binding for the OpenCode compatibility proof.
 
-Only this module owns ``subprocess``.  The probe itself depends on the narrow process seam so
-fixture-backed tests can remain in-process and the child environment can be inspected without
-ever copying the runner's environment wholesale.
+Only this module owns ``subprocess``; the child environment is built explicitly, never copied
+from the runner's own.
 """
 
 from __future__ import annotations

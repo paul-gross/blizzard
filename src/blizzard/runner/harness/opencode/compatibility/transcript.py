@@ -221,8 +221,7 @@ def _cursor_history(
                     if part.type == "compaction" and part.tail_start_id is not None
                 ):
                     compaction_pruned = True
-        # The cursor's own marks are never pruned, so it can define replay away by construction.
-        # A removed identity returning to the export is the signal it cannot suppress.
+        # A removed identity reappearing in the export is replay.
         returned = removed & current_positions.keys()
         if returned:
             no_replay = False

@@ -51,10 +51,9 @@ _EXPORT_ERRORS = (OpenCodeExportError, json.JSONDecodeError, OpenCodeShapeError)
 @domain_model
 @dataclass(frozen=True)
 class _Position:
-    """This source's own opaque :class:`TranscriptPosition` token: the identity cursor plus
-    which child sessions are already linked, kept apart from the cursor's own pruning bound —
-    a linked child is cross-session bookkeeping, never a compactable identity. A token minted
-    before this field existed decodes as ``linked_children=frozenset()``, never ``unreadable``."""
+    """This source's opaque :class:`TranscriptPosition` token: the identity cursor plus which
+    child sessions are already linked, held apart from the cursor so linked children are never pruned.
+    A bare cursor token decodes with no linked children."""
 
     cursor: MessagePartCursor
     linked_children: frozenset[str]
@@ -74,7 +73,7 @@ class _Position:
         if not isinstance(decoded, dict):
             raise CursorError("cursor token must be an object")
         if "cursor" not in decoded and "seen" in decoded:
-            # A bare `MessagePartCursor` token, minted before this field existed.
+            # A bare `MessagePartCursor` token: no linked children.
             return cls(MessagePartCursor.from_token(token), frozenset())
         cursor_raw = decoded.get("cursor")
         cursor = MessagePartCursor.from_token(json.dumps(cursor_raw) if cursor_raw is not None else None)
@@ -193,8 +192,7 @@ class OpenCodeTranscriptSource:
             if index is not None:
                 turns[index] = replace(turns[index], sidechain=sidechain)
             else:
-                # No turn for the spawning call this tick (already shipped earlier) — the
-                # pump's own cross-window agent-id route attaches it instead.
+                # No turn for the spawning call in this batch, so the sidechain ships unlinked.
                 unlinked_sidechains.append(replace(sidechain, link="unlinked"))
 
         next_position = _Position(read.cursor, position.linked_children | children.newly_linked)

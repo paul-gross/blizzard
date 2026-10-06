@@ -1,8 +1,6 @@
-"""The spawn-cwd rule — one owner.
+"""The spawn-cwd rule — the one owner of "what was this worker's cwd".
 
-The one owner of "what was this worker's cwd" — one caller *sets* it, another *guesses*
-it back, and two copies would disagree. ``None`` is a legitimate answer for a closed
-lease. Stdlib-only (``bzh:domain-core``)."""
+``None`` is a legitimate answer for a closed lease. Stdlib-only (``bzh:domain-core``)."""
 
 from __future__ import annotations
 

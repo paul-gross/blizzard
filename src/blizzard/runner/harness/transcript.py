@@ -16,8 +16,7 @@ import structlog
 
 from blizzard.foundation.roles import domain_model
 
-#: The normalized turn vocabulary — :data:`~blizzard.foundation.transcripts.TurnKind`
-#: carries every one of these, plus its own ``"sidechain"``.
+#: The normalized turn vocabulary a source produces.
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain's attachment to its spawning tool call resolved — an open, harness-native label.
@@ -158,11 +157,9 @@ class TranscriptErrorFactory:
         self._log.warning(message, session_id=session_id, **fields)
 
     def not_found(self, *, session_id: str, **fields: str) -> None:
-        """Log at DEBUG: no transcript file matched ``session_id``. ``**fields`` is
-        opaque, harness-composed structured detail (Claude Code's is
-        ``projects_root``) — distinguishes "wrong root" from "the agent never wrote
-        one," the most likely symptom of a globbed root holding nothing, without this
-        shared factory naming any one harness's own storage layout in its signature."""
+        """Log at DEBUG: no transcript file matched ``session_id``. ``**fields`` is opaque,
+        harness-composed structured detail, kept out of the signature so this factory names no
+        harness's storage layout."""
         self._log.debug("transcript not found", session_id=session_id, **fields)
 
 

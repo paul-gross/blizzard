@@ -196,11 +196,7 @@ class ClaudeCodeAdapter:
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
-        """The configured executable's version, observed right now — bounded and
-        non-raising: a timeout, a missing binary, or empty output all read as ``None``,
-        logged rather than propagated, since a caller reads this BEFORE the worker
-        launches and must never let a wedged or absent binary delay that launch.
-        Uncached, so a self-updated binary is reflected on the very next call."""
+        """See ``src/blizzard/runner/harness/adapter.py``'s ``IHarnessWorkerLifecycle.observe_version``."""
         return harness_shared.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:

@@ -51,8 +51,7 @@ _EMPTY = Text("", False)
 @adapter_model
 @dataclass(frozen=True)
 class ChildCandidate:
-    """One tool part's undocumented child-session pointer, and the agent type its own input
-    named. The transcript source resolves and verifies the link; this module only finds it."""
+    """One tool part's undocumented child-session pointer, and the agent type its own input named."""
 
     session_id: str
     agent_type: str | None

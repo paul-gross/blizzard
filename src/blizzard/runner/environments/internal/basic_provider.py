@@ -28,7 +28,7 @@ _CLONE_TIMEOUT = 300
 
 
 class _CaptureGit(Protocol):
-    """The git sub-seam the provider drives (the real subprocess, or a test fake)."""
+    """The git sub-seam the provider drives."""
 
     def capture(self, cwd: Path, *args: str) -> str: ...
 
@@ -36,8 +36,7 @@ class _CaptureGit(Protocol):
 class BasicWorkspaceProvider:
     """Allocate clean worktrees, retaining released folders until capacity pressure.
 
-    The store's held IDs are the capacity and (when injected) manifest authority.
-    Direct consumers without a store use an active marker for manifest visibility."""
+    Injected held ids are the capacity and manifest authority; without them an active marker is."""
 
     def __init__(
         self,

@@ -31,7 +31,7 @@ _WORKSPACE_SCOPE = "workspace"
 
 
 class _WinterCli(Protocol):
-    """The winter-CLI sub-seam the provider drives (the real CLI, or a test fake)."""
+    """The winter-CLI sub-seam the provider drives."""
 
     def ensure_ready(self, workspace_root: Path) -> None: ...
     def run(self, workspace_root: Path, args: Sequence[str]) -> None: ...

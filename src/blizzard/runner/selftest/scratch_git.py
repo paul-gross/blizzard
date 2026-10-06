@@ -22,7 +22,7 @@ class ScratchRepo:
 
 
 class IScratchGit(Protocol):
-    """Mint and inspect a throwaway git repo for the selftest's end-to-end check."""
+    """Mint and inspect a throwaway git repo."""
 
     def new_scratch_repo(self) -> AbstractContextManager[ScratchRepo]:
         """A context manager yielding a fresh, git-initialized scratch repo, removed on exit."""

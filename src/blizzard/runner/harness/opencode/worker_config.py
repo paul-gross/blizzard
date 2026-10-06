@@ -30,9 +30,7 @@ def render_worker_config(*, plugins: tuple[str, ...] = ()) -> dict[str, object]:
 
 
 def write_worker_config(path: Path, *, plugins: tuple[str, ...] = ()) -> dict[str, object]:
-    """Render and persist the document at ``path`` — ``blizzard runner init`` scaffolds it
-    exactly as it does ``worker-settings.json``, and idempotently: a re-run overwrites it
-    with the current shape rather than leaving a stale one from an older binding."""
+    """Render and persist the document at ``path``, overwriting any existing file."""
     document = render_worker_config(plugins=plugins)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return document

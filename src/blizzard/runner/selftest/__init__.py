@@ -1,7 +1,6 @@
 """The adapter-drift canary: ``blizzard runner selftest``.
 
-Per-coding-harness mechanics are external CLI surface that drifts with every harness release.
-A run exercises them against a throwaway scratch git repo — no chunk, lease, environment
-binding, or hub call is ever on this path (``bzh:deterministic-shell``)."""
+Exercises each coding harness's external CLI surface, which drifts with every harness release.
+The checks live in ``src/blizzard/runner/selftest/checks.py``."""
 
 from __future__ import annotations

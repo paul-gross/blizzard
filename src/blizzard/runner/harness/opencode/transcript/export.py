@@ -1,9 +1,6 @@
 """The OpenCode ``export`` subprocess seam.
 
-A bare, Landlock-free ``subprocess.run`` — this reads already-written session state, not
-untrusted agent code, so it owns none of ``opencode/compatibility/process.py``'s diagnostic-only confinement
-machinery (that module's own docstring forbids production reuse). Mirrors
-``harness_shared.observe_version``'s own bounded, non-Landlocked subprocess idiom."""
+Unconfined and time-bounded: it reads already-written session state, not untrusted agent code."""
 
 from __future__ import annotations
 

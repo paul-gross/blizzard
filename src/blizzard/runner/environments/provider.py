@@ -1,8 +1,7 @@
 """The workspace-provider seam.
 
-Allocates clean environments by opaque id, each with its working directory. Held ids
-are supplied by the runner store on acquire; cleaning happens on the *next* acquire,
-not on release. A provider may retain released folders for inspection."""
+Allocates clean environments by opaque id, each with its working directory. Cleaning
+happens on the *next* acquire, not on release; a provider may retain released folders."""
 
 from __future__ import annotations
 

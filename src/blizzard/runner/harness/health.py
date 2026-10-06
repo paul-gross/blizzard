@@ -48,10 +48,7 @@ class DeclaredDegradation:
 @domain_model
 @dataclass(frozen=True)
 class HarnessHealthEvidence:
-    """The evaluator's whole input — every fact :func:`evaluate_harness_health` needs,
-    already collected by an :class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`
-    and whatever selftest/tier-resolution facts the caller already holds. Evaluation is a
-    pure function of this dataclass alone."""
+    """The whole input of :func:`evaluate_harness_health`, which is a pure function of it alone."""
 
     harness_id: str
     binary_present: bool
