@@ -32,6 +32,10 @@ class EligibilityCheck:
 
     @property
     def eligible(self) -> bool:
+        return self._satisfies_every_reachable_lineage()
+
+    def _satisfies_every_reachable_lineage(self) -> bool:
+        """An empty capability snapshot is eligible for nothing."""
         if not self.capabilities:
             return False
         return all(self._lineage_satisfied(runner_node) for runner_node in self._reachable_runner_nodes())
