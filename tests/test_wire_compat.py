@@ -588,3 +588,149 @@ def test_resolve_merge_base_baseline(tmp_path: Path) -> None:
     _git(repo, "branch", "other")
     _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "feat: add widgets")
     assert wire_compat.resolve_merge_base_baseline("other", repo) == base_commit
+
+
+# --- parameters, array items, map values ------------------------------------------------
+
+
+def _param(name: str, schema: dict, *, where: str = "query", required: bool = False) -> dict:
+    return {"name": name, "in": where, "required": required, "schema": schema}
+
+
+def _params_specs(base_params: list[dict], head_params: list[dict], schemas: dict | None = None) -> tuple[dict, dict]:
+    def build(params: list[dict]) -> dict:
+        return _spec({"/api/fleet/widgets": {"get": {**_op(), "parameters": params}}}, schemas)
+
+    return build(base_params), build(head_params)
+
+
+def test_new_required_parameter_is_breaking() -> None:
+    base, head = _params_specs([], [_param("kind", {"type": "string"}, required=True)])
+    texts = _violation_texts(classify_spec_diff(base, head))
+    assert any("GET /api/fleet/widgets parameter.query kind" in t and "became required" in t for t in texts)
+
+
+def test_optional_parameter_becoming_required_is_breaking() -> None:
+    base, head = _params_specs(
+        [_param("kind", {"type": "string"})], [_param("kind", {"type": "string"}, required=True)]
+    )
+    assert classify_spec_diff(base, head)
+
+
+def test_parameter_type_narrowed_is_breaking() -> None:
+    base, head = _params_specs([_param("limit", {"type": "string"})], [_param("limit", {"type": "integer"})])
+    assert any("type narrowed" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_parameter_inline_enum_losing_a_value_is_breaking() -> None:
+    base, head = _params_specs(
+        [_param("sort", {"type": "string", "enum": ["a", "b"]})], [_param("sort", {"type": "string", "enum": ["a"]})]
+    )
+    assert any("enum lost" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_new_optional_parameter_is_additive() -> None:
+    base, head = _params_specs([], [_param("kind", {"type": "string"})])
+    assert classify_spec_diff(base, head) == []
+
+
+def test_removed_parameter_is_additive() -> None:
+    base, head = _params_specs([_param("kind", {"type": "string"})], [])
+    assert classify_spec_diff(base, head) == []
+
+
+def test_parameter_referencing_an_enum_component_holds_the_request_rules() -> None:
+    def schemas(values: list[str]) -> dict:
+        return {"State": {"type": "string", "enum": values}}
+
+    param = [_param("state", _ref("State"))]
+    base, _ = _params_specs(param, param, schemas(["a", "b"]))
+    _, head = _params_specs(param, param, schemas(["a"]))
+    assert any("State" in t and "enum lost" in t for t in _violation_texts(classify_spec_diff(base, head)))
+    _, gained = _params_specs(param, param, schemas(["a", "b", "c"]))
+    assert classify_spec_diff(base, gained) == []
+
+
+def _widget_property_specs(base_prop: dict, head_prop: dict, *, request: bool) -> tuple[dict, dict]:
+    def build(prop: dict) -> dict:
+        schemas = {"Widget": {"type": "object", "properties": {"p": prop}}}
+        op = _op(request_schema=_ref("Widget")) if request else _op(response_schema=_ref("Widget"))
+        return _spec({"/api/fleet/widgets": {"post": op}}, schemas)
+
+    return build(base_prop), build(head_prop)
+
+
+@pytest.mark.parametrize("wrap", [False, True])
+def test_array_item_type_change_is_breaking(wrap: bool) -> None:
+    def arr(item: str) -> dict:
+        body = {"type": "array", "items": {"type": item}}
+        return {"anyOf": [body, {"type": "null"}]} if wrap else body
+
+    for request in (False, True):
+        base, head = _widget_property_specs(arr("string"), arr("integer"), request=request)
+        assert any("Widget.p[]" in t for t in _violation_texts(classify_spec_diff(base, head)))
+    base, head = _widget_property_specs(arr("string"), arr("string"), request=False)
+    assert classify_spec_diff(base, head) == []
+
+
+@pytest.mark.parametrize("wrap", [False, True])
+def test_map_value_type_change_is_breaking(wrap: bool) -> None:
+    def mapping(value: str) -> dict:
+        body = {"type": "object", "additionalProperties": {"type": value}}
+        return {"anyOf": [body, {"type": "null"}]} if wrap else body
+
+    base, head = _widget_property_specs(mapping("string"), mapping("integer"), request=False)
+    assert any("Widget.p{}" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_response_array_item_newly_nullable_is_breaking() -> None:
+    base, head = _widget_property_specs(
+        {"type": "array", "items": {"type": "string"}},
+        {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+        request=False,
+    )
+    assert any("Widget.p[]" in t and "nullable" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_request_array_item_enum_losing_a_value_is_breaking() -> None:
+    base, head = _widget_property_specs(
+        {"type": "array", "items": {"type": "string", "enum": ["a", "b"]}},
+        {"type": "array", "items": {"type": "string", "enum": ["a"]}},
+        request=True,
+    )
+    assert any("Widget.p[]" in t and "enum lost" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_component_reached_only_through_a_map_value_is_checked() -> None:
+    def build(props: dict) -> dict:
+        schemas = {
+            "Holder": {"type": "object", "additionalProperties": _ref("Leaf")},
+            "Leaf": {"type": "object", "properties": props},
+        }
+        return _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Holder"))}}, schemas)
+
+    violations = classify_spec_diff(build({"a": {"type": "string"}}), build({}))
+    assert any("Leaf.a" in t for t in _violation_texts(violations))
+
+
+# --- acknowledgement across a merge landing ---------------------------------------------
+
+
+def test_check_history_acknowledges_a_break_landed_by_a_merge_of_a_marked_commit(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    base_commit = _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "chore: base")
+    _git(repo, "checkout", "-b", "side")
+    _commit_spec(repo, _spec({}), "feat!: drop the widgets route")
+    _git(repo, "checkout", "main")
+    _git(repo, "merge", "--no-ff", "side", "-m", "Merge pull request #1 from side")
+    assert check_history(base_commit, repo, echo=lambda *_: None) is True
+
+
+def test_check_history_fails_a_merge_landing_with_no_marked_commit(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    base_commit = _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "chore: base")
+    _git(repo, "checkout", "-b", "side")
+    _commit_spec(repo, _spec({}), "feat: drop the widgets route")
+    _git(repo, "checkout", "main")
+    _git(repo, "merge", "--no-ff", "side", "-m", "Merge pull request #1 from side")
+    assert check_history(base_commit, repo, echo=lambda *_: None) is False

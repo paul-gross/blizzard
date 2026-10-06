@@ -109,6 +109,8 @@ def _collect_reachable(
         _collect_reachable(doc, sub, role, roles, seen)
     if "items" in node:
         _collect_reachable(doc, node["items"], role, roles, seen)
+    if isinstance(node.get("additionalProperties"), dict):
+        _collect_reachable(doc, node["additionalProperties"], role, roles, seen)
     for key in ("anyOf", "oneOf", "allOf"):
         for sub in node.get(key, []):
             _collect_reachable(doc, sub, role, roles, seen)
@@ -124,6 +126,8 @@ def _reachable_schemas(doc: dict) -> dict[str, set[str]]:
     seen: set[tuple[str, str]] = set()
     for _path, _method, op in _surface_operations(doc):
         _collect_reachable(doc, _request_schema(op), "request", roles, seen)
+        for param in op.get("parameters", []):
+            _collect_reachable(doc, param.get("schema"), "request", roles, seen)
         _collect_reachable(doc, _response_schema(op), "response", roles, seen)
     return roles
 
@@ -208,6 +212,64 @@ def _diff_enum_and_union(
             violations.append(Violation(label, f"response union gained member(s) {sorted(gained_members)}"))
 
 
+def _nested_schema(schema: dict, key: str) -> dict | None:
+    """The ``items`` or ``additionalProperties`` schema a property carries itself or on its
+    non-null ``anyOf``/``oneOf`` member (``list[X] | None`` compiles to the latter)."""
+    nested = schema.get(key)
+    if isinstance(nested, dict):
+        return nested
+    for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])):
+        nested = member.get("type") != "null" and member.get(key)
+        if isinstance(nested, dict):
+            return nested
+    return None
+
+
+def _diff_property(
+    label: str,
+    bp: dict,
+    hp: dict,
+    is_request: bool,
+    is_response: bool,
+    violations: list[Violation],
+    head_schemas: dict | None,
+) -> None:
+    """The property rules over one property, then over its array items and map values."""
+    target = None if is_request else _string_enum_target(bp, hp, head_schemas or {})
+    if target is not None:
+        # A response-only narrowing: an older `str` parse accepts every value sent, but an older
+        # closed-`Literal` parse only its own, so an inline-enum base still holds the enum-gain rule.
+        if not _is_nullable(bp) and _is_nullable(hp):
+            violations.append(Violation(label, "response property newly became nullable"))
+        base_enum = _inline_enum(bp)
+        if base_enum is not None:
+            _diff_enum_and_union(label, {"enum": base_enum}, target, is_request, is_response, violations)
+        return
+
+    b_sig, h_sig = _type_signature(bp), _type_signature(hp)
+    if b_sig is not None and h_sig is not None and b_sig != h_sig:
+        if is_response:
+            violations.append(Violation(label, "response property type changed"))
+        if is_request:
+            violations.append(Violation(label, "request property type narrowed"))
+
+    # Response: newly nullable breaks an old runner's non-Optional parse; losing
+    # nullability is safe — a `None`-tolerant runner still parses a never-null value.
+    if is_response and not _is_nullable(bp) and _is_nullable(hp):
+        violations.append(Violation(label, "response property newly became nullable"))
+    # Request direction: a property that used to accept null and no longer does breaks a
+    # runner still sending `None` for it.
+    if is_request and _is_nullable(bp) and not _is_nullable(hp):
+        violations.append(Violation(label, "request property dropped nullability"))
+
+    _diff_enum_and_union(label, bp, hp, is_request, is_response, violations)
+
+    for key, suffix in (("items", "[]"), ("additionalProperties", "{}")):
+        b_nested, h_nested = _nested_schema(bp, key), _nested_schema(hp, key)
+        if b_nested is not None and h_nested is not None:
+            _diff_property(label + suffix, b_nested, h_nested, is_request, is_response, violations, head_schemas)
+
+
 def _diff_schema(
     name: str,
     base: dict,
@@ -238,37 +300,9 @@ def _diff_schema(
             violations.append(Violation(f"{name}.{prop}", "property added to a forbid schema a response reaches"))
 
     for prop in sorted(set(base_props) & set(head_props)):
-        bp, hp = base_props[prop], head_props[prop]
-        label = f"{name}.{prop}"
-
-        target = None if is_request else _string_enum_target(bp, hp, head_schemas or {})
-        if target is not None:
-            # A response-only narrowing: an older `str` parse accepts every value sent, but an older
-            # closed-`Literal` parse only its own, so an inline-enum base still holds the enum-gain rule.
-            if not _is_nullable(bp) and _is_nullable(hp):
-                violations.append(Violation(label, "response property newly became nullable"))
-            base_enum = _inline_enum(bp)
-            if base_enum is not None:
-                _diff_enum_and_union(label, {"enum": base_enum}, target, is_request, is_response, violations)
-            continue
-
-        b_sig, h_sig = _type_signature(bp), _type_signature(hp)
-        if b_sig is not None and h_sig is not None and b_sig != h_sig:
-            if is_response:
-                violations.append(Violation(label, "response property type changed"))
-            if is_request:
-                violations.append(Violation(label, "request property type narrowed"))
-
-        # Response: newly nullable breaks an old runner's non-Optional parse; losing
-        # nullability is safe — a `None`-tolerant runner still parses a never-null value.
-        if is_response and not _is_nullable(bp) and _is_nullable(hp):
-            violations.append(Violation(label, "response property newly became nullable"))
-        # Request direction: a property that used to accept null and no longer does breaks a
-        # runner still sending `None` for it.
-        if is_request and _is_nullable(bp) and not _is_nullable(hp):
-            violations.append(Violation(label, "request property dropped nullability"))
-
-        _diff_enum_and_union(label, bp, hp, is_request, is_response, violations)
+        _diff_property(
+            f"{name}.{prop}", base_props[prop], head_props[prop], is_request, is_response, violations, head_schemas
+        )
 
     for prop in sorted(head_required - base_required):
         if is_request:
@@ -290,6 +324,35 @@ def _diff_paths_and_methods(base: dict, head: dict, violations: list[Violation])
                 violations.append(Violation(f"{method.upper()} {path}", "surface method removed"))
 
 
+def _parameter_schema(op: dict) -> dict:
+    """An operation's parameters as one synthetic request object schema, one property per
+    ``(in, name)`` — so the request rules apply to them unchanged."""
+    properties, required = {}, []
+    for param in op.get("parameters", []):
+        key = f"{param.get('in')} {param.get('name')}"
+        properties[key] = param.get("schema", {})
+        if param.get("required"):
+            required.append(key)
+    return {"properties": properties, "required": required}
+
+
+def _diff_parameters(base: dict, head: dict, violations: list[Violation], head_schemas: dict) -> None:
+    head_ops = {(path, method): op for path, method, op in _surface_operations(head)}
+    for path, method, base_op in _surface_operations(base):
+        head_op = head_ops.get((path, method))
+        if head_op is None:
+            continue
+        _diff_schema(
+            f"{method.upper()} {path} parameter",
+            _parameter_schema(base_op),
+            _parameter_schema(head_op),
+            is_request=True,
+            is_response=False,
+            violations=violations,
+            head_schemas=head_schemas,
+        )
+
+
 def classify_spec_diff(base: dict, head: dict) -> list[Violation]:
     """Every breaking change (bzh:fleet-wire-additive's declared classes) from ``base`` to
     ``head`` on the declared hub↔runner surface. An empty list means the change is
@@ -301,6 +364,7 @@ def classify_spec_diff(base: dict, head: dict) -> list[Violation]:
     head_roles = _reachable_schemas(head)
     base_schemas = _schema_components(base)
     head_schemas = _schema_components(head)
+    _diff_parameters(base, head, violations, head_schemas)
 
     for name in sorted(base_roles):
         if name not in head_schemas:
@@ -462,7 +526,7 @@ def check_history(baseline_commit: str, cwd: Path, *, echo=click.echo) -> bool:
             for v in violations:
                 echo(f"  - {v}")
             if not acknowledged:
-                echo("  Mark the landing commit's subject with '!' (e.g. 'feat!: ...') to acknowledge.")
+                echo("  Mark a commit subject the step lands with '!' (e.g. 'feat!: ...') to acknowledge.")
         prev = curr
     return ok
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
 import fnmatch
 import json
 import os
@@ -597,10 +598,9 @@ def _run_scope_process(slug: str, since: str, timeout_seconds: float) -> ScopeRu
     try:
         output, _ = proc.communicate(timeout=max(timeout_seconds, 0.0))
     except subprocess.TimeoutExpired:
-        try:
+        # The group may have exited between the timeout and the kill; its output is still collected.
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass  # the group exited between the timeout and the kill; its output is still collected
         output, _ = proc.communicate()
         return ScopeRun(None, _tail(output))
     return ScopeRun(proc.returncode, _tail(output))

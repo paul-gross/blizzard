@@ -65,8 +65,8 @@ with runners at `0.4.x` or `0.5.x`, but not `0.3.x`.
 There is still no version negotiation and no minimum-runner rejection to catch a runner that has fallen outside the
 window at runtime. What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
 (`bzh:fleet-wire-additive`) diffs the declared hub↔runner surface — every `/api/fleet/...` route plus the auth
-federation routes the runner calls — between consecutive commits, and fails on a breaking change unless the landing
-commit's subject carries a Conventional Commits `!` marker, in which case it reports the break rather than failing. A
+federation routes the runner calls — between consecutive commits, and fails on a breaking change unless a
+commit the step lands carries a Conventional Commits `!` marker, in which case it reports the break rather than failing. A
 merge-base-mode run gates every pull request against its own merge-base; a deployed-mode run gates every push to
 `master` against the last commit `edge` was published from, so a hand-redeployed runner from any earlier commit keeps
 working until the next acknowledged break. [`docs/ci.md`](./ci.md) owns where each mode runs.
