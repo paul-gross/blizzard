@@ -50,7 +50,9 @@ def _sweep(hub: HubHarness) -> TraceExportSweep:
 
 
 def _store(hub: HubHarness) -> TraceStore:
-    return TraceStore(hub_store_connections(hub.engine), graphs=hub.services.graphs, label=label)
+    return TraceStore(
+        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+    )
 
 
 def _row_count(hub: HubHarness) -> int:

@@ -14,6 +14,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IReadLeaseTraces
@@ -54,7 +55,8 @@ class ReplayWindow:
 
 
 class ReplayUnavailable(Exception):
-    """A wet replay with no exporter wired — tracing is off."""
+    """A replay that cannot tell: a wet one with no exporter wired, as tracing is off, or any before the
+    runner's first registration, when no span has a runner id to carry."""
 
 
 @domain_model
@@ -71,9 +73,17 @@ class ReplayResult:
 
 
 class LeaseTraceReplay:
-    def __init__(self, *, leases: IReadLeaseTraces, exporter: ITraceExporter | None, config: TracingConfig) -> None:
+    def __init__(
+        self,
+        *,
+        leases: IReadLeaseTraces,
+        exporter: ITraceExporter | None,
+        identity: ICurrentRunnerIdentity,
+        config: TracingConfig,
+    ) -> None:
         self._leases = leases
         self._exporter = exporter
+        self._identity = identity
         self._batch_limit = config.batch_limit
         self._max_window_seconds = config.replay_max_window
 
@@ -81,6 +91,8 @@ class LeaseTraceReplay:
         window = ReplayWindow.of(since, until, max_window_seconds=self._max_window_seconds)
         if not dry_run and self._exporter is None:
             raise ReplayUnavailable("runner tracing is off; a replay without --dry-run has nowhere to send spans")
+        if self._identity.current() is None:
+            raise ReplayUnavailable("this runner has not registered with its hub yet, so its spans have no runner id")
         leases = spans = batches = 0
         position = window.opening
         last = window.last_inclusive

@@ -40,7 +40,6 @@ def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: in
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

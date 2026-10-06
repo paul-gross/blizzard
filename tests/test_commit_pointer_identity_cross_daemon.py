@@ -42,7 +42,6 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

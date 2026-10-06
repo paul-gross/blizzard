@@ -314,6 +314,19 @@ describe('FleetLiveUpdates', () => {
     expect(live.log().map((e) => e.data.kind)).toEqual(['paused', undefined]);
   });
 
+  it('keeps an added runner in the event feed with the name its frame carries', () => {
+    // Adding a runner is an operator action with a registry row behind it: feed news,
+    // unlike the registration and heartbeat kinds muted above.
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', runner_name: 'r-claude', kind: 'added', by: 'alice' }));
+
+    expect(live.log().map((e) => [e.data.kind, e.data.runner_name])).toEqual([['added', 'r-claude']]);
+  });
+
   it('accumulates the event feed into the log, oldest first, without touching dispatch', () => {
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);

@@ -58,7 +58,6 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
             node_id="nd_review",
             node_name="review",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

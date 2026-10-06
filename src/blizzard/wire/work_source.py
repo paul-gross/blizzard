@@ -72,12 +72,14 @@ class WorkSourcesListView(BaseModel):
 class WorkItemAuthorView(BaseModel):
     """Who filed a hub-owned work item, legible for display — ``user_id``
     and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
-    — the proposing runner, chunk, and node — set only for ``kind == "fleet"``."""
+    — the proposing runner, chunk, and node — set only for ``kind == "fleet"``, with
+    ``runner_name`` the proposing runner's latest registered name when the registry holds it."""
 
     kind: str
     user_id: str | None = None
     login: str | None = None
     runner_id: str | None = None
+    runner_name: str | None = None
     chunk_id: str | None = None
     node_name: str | None = None
 

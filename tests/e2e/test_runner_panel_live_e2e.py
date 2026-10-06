@@ -29,6 +29,7 @@ from tests.e2e.test_acceptance_loop import (
     _terminate,
     _winter_source,
 )
+from tests.runner_join import runner_spawn_env
 from tests.support import daemon_log_sink
 
 pytestmark = [
@@ -99,12 +100,14 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         config.config_path.write_text(config.to_toml())
 
         log = runner_dir / "daemon.log"
-        env = {
-            **os.environ,
-            MOCK_HARNESS_FENCE_VAR: "1",
-            # A fast tick keeps this scenario's own observation window short.
-            "BZ_RUNNER_TICK_SECONDS": "1",
-        }
+        env = runner_spawn_env(
+            config.hub_url,
+            {
+                MOCK_HARNESS_FENCE_VAR: "1",
+                # A fast tick keeps this scenario's own observation window short.
+                "BZ_RUNNER_TICK_SECONDS": "1",
+            },
+        )
         proc = subprocess.Popen(
             [_runner_bin(), "host", "--dir", str(runner_dir), "--host", config.host, "--port", str(config.port)],
             env=env,

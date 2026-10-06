@@ -9,6 +9,9 @@ const NOW = new Date().toISOString();
 
 const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   runner_id: id,
+  runner_name: `${id}-name`,
+  added_at: NOW,
+  connection: over.online === false ? 'offline' : 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -379,6 +382,35 @@ describe('RunnersView (mobile Fleet screen)', () => {
     expect(badge?.textContent).toContain('op');
     expect(badge?.getAttribute('title')).toBe('Retired 2026-09-28T00:00:00Z by op');
     expect(el.querySelector('[data-runner="rn_live"] [data-testid="mobile-fleet-runner-retired"]')).toBeNull();
+  });
+
+  it('names each runner beside its full id, and marks one that never connected', async () => {
+    const fixture = TestBed.createComponent(RunnersView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_a', { runner_name: 'r-claude' }),
+      row('rn_b', {
+        runner_name: 'r-claude',
+        connection: 'never_connected',
+        online: false,
+        workspace_id: null,
+        registered_at: null,
+        last_seen_at: null,
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const id of ['rn_a', 'rn_b']) {
+      expect(el.querySelector(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-name"]`)?.textContent).toBe('r-claude');
+      expect(el.querySelector(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-id"]`)?.textContent).toBe(id);
+    }
+    const fresh = el.querySelector('[data-runner="rn_b"]') as HTMLElement;
+    expect(fresh.classList.contains('offline')).toBe(false);
+    expect(fresh.querySelector('[data-testid="mobile-fleet-runner-never-connected"]')?.textContent).toContain('NEVER CONNECTED');
+    expect(fresh.querySelector('[data-testid="mobile-fleet-runner-seen"]')?.textContent).toBe('never connected');
+    expect(fresh.querySelector('[data-testid="mobile-fleet-runner-workspace"]')?.textContent).toBe('—');
+    expect(el.querySelector('[data-runner="rn_a"] [data-testid="mobile-fleet-runner-never-connected"]')).toBeNull();
   });
 
   it('renders the show-retired chip reflecting the flag and emits its toggle', async () => {

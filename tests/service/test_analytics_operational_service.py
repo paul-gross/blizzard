@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.runner_join import fleet_headers
 from tests.service.support import mint_fixture, require_mock_fleet, require_winter_source, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -52,7 +53,8 @@ def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int) -> No
     }
     resp = hub.post(
         "/api/fleet/events",
-        json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        headers=fleet_headers(hub),
     )
     assert resp.status_code == 200, resp.text
 
@@ -66,22 +68,24 @@ def test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub(tmp_pa
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         registered = hub.post(
             "/api/fleet/runners",
-            json={"runner_id": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+            json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+            headers=fleet_headers(hub),
         )
         assert registered.status_code == 201, registered.text
         # The claim reserves epoch 1 for r1 — the epoch its mint and completion land at.
         claim = hub.post(
             "/api/fleet/routes",
-            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": []},
+            json={"chunk_id": chunk_id, "workspace_id": "w1", "environment_ids": []},
+            headers=fleet_headers(hub),
         )
         assert claim.status_code == 201, claim.text
 
         lease = hub.post(
             "/api/fleet/events",
             json={
-                "runner_id": "r1",
                 "facts": [{"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
             },
+            headers=fleet_headers(hub),
         )
         assert lease.status_code == 200, lease.text
         _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2)
@@ -89,7 +93,8 @@ def test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub(tmp_pa
             f"/api/fleet/chunks/{chunk_id}/completions",
             # `already-done` closes the packaged default graph's `triage` entry node
             # without entering a lane — no worktree needed for this shape assertion.
-            json={"choice": "already-done", "epoch": 1, "runner_id": "r1", "from_node_id": node_id},
+            json={"choice": "already-done", "epoch": 1, "from_node_id": node_id},
+            headers=fleet_headers(hub),
         )
         assert completion.status_code == 200, completion.text
 

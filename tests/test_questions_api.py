@@ -206,14 +206,13 @@ def test_equal_raw_session_ids_are_isolated_across_harnesses(tmp_path: Path) -> 
 
 
 def test_runner_bearer_token_is_rejected_on_answers(tmp_path: Path) -> None:
-    from blizzard.hub.config import RUNNER_AUTH_ENFORCE
     from tests.test_fleet_auth import _bearer, _seed_enrolled
 
     token = _seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
     _asked(warn_hub)
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     assert (
         hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}, headers=_bearer(token)).status_code
         == 403

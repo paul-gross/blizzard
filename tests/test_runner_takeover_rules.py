@@ -45,7 +45,6 @@ def _lease(*, lease_id: str = "lease_1", epoch: int = 3, session: bool = True) -
         node_id="nd_build",
         node_name="build",
         epoch=epoch,
-        runner_id="r1",
         retries_max=2,
         created_at=_NOW,
         pid=100,

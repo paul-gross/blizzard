@@ -15,6 +15,7 @@ from blizzard.auth_core import (
     QUESTION_ANSWER,
     QUEUE_REORDER,
     ROLE_PERMISSIONS,
+    RUNNER_ADD,
     RUNNER_PAUSE,
     RUNNER_RETIRE,
     TRANSCRIPT_READ,
@@ -40,6 +41,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         QUEUE_REORDER,
         RUNNER_PAUSE,
         RUNNER_RETIRE,
+        RUNNER_ADD,
         GRAPH_EDIT,
         USER_MANAGE,
         TRANSCRIPT_READ,
@@ -93,6 +95,14 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
         assert RUNNER_PAUSE not in expand(role)
         assert GRAPH_EDIT not in expand(role)
+
+
+def test_runner_add_is_admin_and_above() -> None:
+    """``runner:add`` mints a runner credential, so a contributor never holds it."""
+    for role in (Role.ADMIN, Role.SUPERUSER):
+        assert RUNNER_ADD in expand(role)
+    for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
+        assert RUNNER_ADD not in expand(role)
 
 
 def test_runner_retire_is_admin_and_above() -> None:

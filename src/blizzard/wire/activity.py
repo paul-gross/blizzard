@@ -28,6 +28,8 @@ class ActivityView(BaseModel):
     node: str | None = None
     prev_node: str | None = None
     runner_id: str | None = None
+    # The runner's latest registered name beside its id, on any row carrying one.
+    runner_name: str | None = None
     cause: str | None = None
     graph_id: str | None = None
     # event-logged

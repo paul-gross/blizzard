@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import (
     StepFacts,
@@ -22,14 +24,23 @@ from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, count_queries, hub_store_connections
+from tests.support import (
+    SEEDED_CAPABILITIES,
+    HubHarness,
+    added_runner,
+    count_queries,
+    hub_store_connections,
+    seed_runner,
+)
 from tests.trace_hub import label, stop, trace_hub, transitioned_and_stopped
 
 pytestmark = pytest.mark.component
 
 
 def _store(hub: HubHarness) -> TraceStore:
-    return TraceStore(hub_store_connections(hub.engine), graphs=hub.services.graphs, label=label)
+    return TraceStore(
+        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+    )
 
 
 def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path: Path) -> None:
@@ -76,6 +87,31 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
     assert hydrated[moved].work_refs == ("default#1",)
     assert hydrated[moved].work_sources == ("default",)
     assert set(hydrated[moved].graphs) == {graph.graph_id}
+
+
+_RN = "rn_01JZ8Q4V6XK3M2N5P7R9T1W3Y5"
+
+
+def test_a_step_names_its_runner_by_id_and_latest_registered_name_and_a_rename_by_restart_retells_it(
+    tmp_path: Path,
+) -> None:
+    hub, graph = trace_hub(tmp_path)
+    seed_runner(hub, _RN, name="r-claude")
+    moved, _ = transitioned_and_stopped(hub, graph, 1, runner_id=_RN)
+    store = _store(hub)
+
+    def first_step_root() -> tuple[object, object]:
+        facts = store.step_facts_for([moved])[moved]
+        steps = identify_steps(facts)
+        root = assemble_step(facts, steps[0], steps)[0]
+        return root.attributes[RUNNER_ID], root.attributes[RUNNER_NAME]
+
+    told = first_step_root()
+    hub.services.fleet.register(added_runner(hub, _RN), "w1", name="r-claude-2", capabilities=SEEDED_CAPABILITIES)
+    retold = first_step_root()
+
+    assert told == (_RN, "r-claude")
+    assert retold == (_RN, "r-claude-2")
 
 
 def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[CursorKey]:  # type: ignore[no-untyped-def]

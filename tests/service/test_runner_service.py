@@ -48,6 +48,7 @@ from tests.e2e.test_acceptance_loop import (
     _terminate,
 )
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     SseTap,
@@ -59,6 +60,7 @@ from tests.service.support import (
     poll_until,
     require_mock_fleet,
     require_winter_source,
+    runner_fleet_view,
     service_gate,
     sse_tap,
     transcript_segment_record,
@@ -92,7 +94,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
     """The mock hub's own status read."""
-    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
+    return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
 def _pending_outbound(config: RunnerConfig) -> int:
@@ -167,7 +169,7 @@ def _local_pause_reason(config: RunnerConfig) -> str | None:
     """The runner's own store, read directly — no local API server is up in this tier."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason(config.runner_id)
+        return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason()
     finally:
         engine.dispose()
 
@@ -203,7 +205,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
             lambda: _tick_then(
                 config,
                 fenced,
-                lambda: hub.get(f"/api/fleet/runners/{config.runner_id}").json().get("locally_paused_reason") == reason,
+                lambda: runner_fleet_view(hub, config).get("locally_paused_reason") == reason,
             ),
             timeout=30.0,
         )
@@ -211,7 +213,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
 
         # Parked in place, not failed: the lease kept its claim — no escalation, no epoch
         # bump, so no attempt-failure fact was ever sent for it.
-        detail = hub.get(f"/api/fleet/chunks/{chunk_id}").json()
+        detail = hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()
         assert detail["status"] == "running", detail
         assert detail["escalation"] is None, detail
         assert detail["latest_epoch"] == 1, detail
@@ -455,7 +457,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
 
         _drive(config, fenced, ticks=1)
 
-        view = hub.get(f"/api/fleet/runners/{config.runner_id}").json()["subscriptions"]
+        view = runner_fleet_view(hub, config)["subscriptions"]
         assert [s["slug"] for s in view] == ["probe"]
 
 
@@ -473,7 +475,7 @@ def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path
 
         _drive(config, fenced, ticks=1)
 
-        assert hub.get(f"/api/fleet/runners/{config.runner_id}").json()["gates"] == ["build", "review"]
+        assert runner_fleet_view(hub, config)["gates"] == ["build", "review"]
 
 
 def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
@@ -794,7 +796,9 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = _free_port()
-    config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+    # The hub comes up only after the runner daemon, so the runner's id and token are pinned up front.
+    runner = pin_runner(tmp_path / "runner", runner_id="rn_transcript_test", name="runner-transcript")
+    config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
     config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root))
 
     # The runner daemon deliberately outlives the mock hub: the last leg reads the panel
@@ -803,6 +807,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
         panel = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
         try:
             with mock_hub(bin_dir, hub_port) as hub:
+                seed_pinned_runner(hub, runner)
                 seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
                 assert seeded.status_code == 201, seeded.text
                 chunk_id = seeded.json()["chunk_id"]
@@ -831,8 +836,8 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
                 # at-or-under-mark seq, so a colliding seed would seed no turns at all.
                 shipped = hub.post(
                     "/api/fleet/transcripts",
+                    headers=config.auth_headers(),
                     json={
-                        "runner_id": config.runner_id,
                         "records": [
                             transcript_segment_record(
                                 chunk_id,
@@ -1043,10 +1048,14 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
     runner_dir = tmp_path / "runner"
     runner_port = _free_port()
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    subprocess.run([runner_bin, "init", str(runner_dir)], check=True, capture_output=True, text=True)
+    # Scaffolded offline and never joined: shutdown is the subject, so the hub its config names
+    # (`runner host` reads it from there) is an address nothing listens on.
+    unreachable_hub = f"http://127.0.0.1:{_free_port()}"
+    init_runner_environment(runner_dir, hub_url=unreachable_hub)
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(runner_port)],
+        env=runner_spawn_env(unreachable_hub),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
@@ -1116,7 +1125,7 @@ def _host(config: RunnerConfig, env: dict[str, str]) -> subprocess.Popen[str]:
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(config.root)],
-        env=env,
+        env=runner_spawn_env(config.hub_url, base=env),
         stdout=daemon_log_sink(config.root / "daemon.log"),
         stderr=subprocess.STDOUT,
         text=True,

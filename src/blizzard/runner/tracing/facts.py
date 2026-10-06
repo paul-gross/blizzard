@@ -21,8 +21,17 @@ class LeaseGrantFact:
     lease_id: str
     chunk_id: str
     epoch: int
-    runner_id: str
     created_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerFact:
+    """The ``runner_identity`` row: the id and name of the runner's latest registration, which every lease's
+    spans carry — a lease minted before that registration included."""
+
+    runner_id: str
+    runner_name: str
 
 
 @domain_model
@@ -209,6 +218,7 @@ class LeaseTraceFacts:
     lease: LeaseGrantFact
     context: LeaseContextFact
     closure: LeaseClosureFact
+    runner: RunnerFact
     spawns: tuple[SpawnFact, ...] = ()
     boundaries: tuple[BoundaryFact, ...] = ()
     usage: tuple[TokenUsageFact, ...] = ()

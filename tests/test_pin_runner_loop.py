@@ -28,6 +28,7 @@ from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from tests.runner_fakes import (
     FakeCheckRunner,
@@ -61,7 +62,6 @@ def _seed_running_lease(store, *, lease="lease_1", chunk="ch_1", node_id="nd_bui
             node_id=node_id,
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -143,7 +143,6 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
             node_id="nd_build",
             node_name="build",
             epoch=2,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -268,11 +267,12 @@ def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_pat
     instead of from ``host``'s own startup call."""
     config = RunnerConfig(
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         workspace_root=str(tmp_path / "workspace"),
         runner_prompt_file="does-not-exist.md",
         workspace_prompt_file="also-missing.md",
     )
+    migration_runner(config).upgrade("head")  # the graph reads the identity row at boot, as `host` does once current
 
     try:
         with loop_context(config, workspace_prompt="ws prose", runner_prompt="runner prose") as ctx:
@@ -325,7 +325,7 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         harness=harness,
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
         subscriptions=(resolved,),
     )
 

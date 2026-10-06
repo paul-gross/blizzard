@@ -162,6 +162,17 @@
             ],
             "title": "Runner Id"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
+          },
           "severity": {
             "anyOf": [
               {
@@ -1377,6 +1388,18 @@
             "default": null,
             "title": "Runner Id"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runner Name"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -2526,6 +2549,17 @@
             ],
             "title": "Runner Id"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
+          },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
           },
@@ -2855,16 +2889,11 @@
               }
             ],
             "title": "Route Token"
-          },
-          "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
           }
         },
         "required": [
           "choice",
           "epoch",
-          "runner_id",
           "from_node_id"
         ],
         "title": "CompletionSubmission",
@@ -3316,16 +3345,11 @@
               }
             ],
             "title": "Route Token"
-          },
-          "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
           }
         },
         "required": [
           "from_node_id",
-          "epoch",
-          "runner_id"
+          "epoch"
         ],
         "title": "DecisionSubmission",
         "type": "object"
@@ -3371,6 +3395,17 @@
               }
             ],
             "title": "Imposed By Runner Id"
+          },
+          "imposed_by_runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imposed By Runner Name"
           },
           "node_id": {
             "title": "Node Id",
@@ -4147,6 +4182,18 @@
             ],
             "title": "Runner Id"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runner Name"
+          },
           "severity": {
             "enum": [
               "critical",
@@ -4167,7 +4214,7 @@
         "type": "object"
       },
       "EventView": {
-        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
+        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -4240,6 +4287,17 @@
               }
             ],
             "title": "Runner Id"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "severity": {
             "enum": [
@@ -6460,7 +6518,8 @@
           "fins",
           "gprop",
           "dep",
-          "apl"
+          "apl",
+          "rn"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -7208,6 +7267,7 @@
           "queue:reorder",
           "runner:pause",
           "runner:retire",
+          "runner:add",
           "graph:edit",
           "user:manage",
           "transcript:read",
@@ -7546,6 +7606,17 @@
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "session_id": {
             "anyOf": [
@@ -8257,7 +8328,7 @@
         "type": "object"
       },
       "RouteClaim": {
-        "description": "A complete route fact posted by the claiming runner.",
+        "description": "A complete route fact posted by the claiming runner. The claimant is the runner its bearer\ntoken names; the body carries no runner id.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -8270,10 +8341,6 @@
             "title": "Environment Ids",
             "type": "array"
           },
-          "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
-          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -8281,7 +8348,6 @@
         },
         "required": [
           "chunk_id",
-          "runner_id",
           "workspace_id",
           "environment_ids"
         ],
@@ -8362,6 +8428,17 @@
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -8976,6 +9053,45 @@
         "title": "RunRowView",
         "type": "object"
       },
+      "RunnerAddRequest": {
+        "description": "Add a runner under an initial display name. The hub mints the runner's id and bearer\ntoken together; the runner's own registrations set its name from then on.",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RunnerAddRequest",
+        "type": "object"
+      },
+      "RunnerAddResponse": {
+        "description": "The added runner \u2014 its hub-minted id, its initial name, and its plaintext bearer token.\n\n``token`` is visible only here, once \u2014 only its sha256 hash is kept. The runner is added but\nnever connected until it first registers with this token.",
+        "properties": {
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "runner_name": {
+            "title": "Runner Name",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "runner_name",
+          "token"
+        ],
+        "title": "RunnerAddResponse",
+        "type": "object"
+      },
       "RunnerCapability": {
         "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is\neligible for nothing.",
         "properties": {
@@ -9021,6 +9137,7 @@
       },
       "RunnerChangeKind": {
         "enum": [
+          "added",
           "registered",
           "heartbeat",
           "paused",
@@ -9063,6 +9180,7 @@
           },
           "kind": {
             "enum": [
+              "added",
               "registered",
               "heartbeat",
               "paused",
@@ -9092,6 +9210,18 @@
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runner Name"
           }
         },
         "required": [
@@ -9101,8 +9231,18 @@
         "title": "RunnerChangedPayload",
         "type": "object"
       },
+      "RunnerConnection": {
+        "description": "An added runner's connection condition, derived at read time: ``NEVER_CONNECTED``, added\nat the hub but never registered, so it has no workspace, capabilities, or liveness yet;\n``ONLINE``, registered and heard from within the liveness threshold; ``OFFLINE``, registered\nbut not heard from within it.",
+        "enum": [
+          "never_connected",
+          "online",
+          "offline"
+        ],
+        "title": "RunnerConnection",
+        "type": "string"
+      },
       "RunnerEnrollmentResponse": {
-        "description": "A freshly minted (or rotated) bearer token.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
+        "description": "A rotated bearer token for an existing runner id.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. The old\ntoken stops resolving the moment this response lands.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -9197,7 +9337,7 @@
         "type": "object"
       },
       "RunnerFactBatch": {
-        "description": "A runner's push of one-or-more buffered facts, ordered by seq.",
+        "description": "A runner's push of one-or-more buffered facts, ordered by seq \u2014 attributed to the runner\nits bearer token names; the body carries no runner id.",
         "properties": {
           "facts": {
             "items": {
@@ -9205,17 +9345,55 @@
             },
             "title": "Facts",
             "type": "array"
+          }
+        },
+        "required": [
+          "facts"
+        ],
+        "title": "RunnerFactBatch",
+        "type": "object"
+      },
+      "RunnerIdentityRefusal": {
+        "description": "Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names\nthe runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``\nor ``unknown`` one.",
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/RunnerTokenRefusalReason"
           },
           "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RunnerIdentityRefusal",
+        "type": "object"
+      },
+      "RunnerIdentityView": {
+        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name.\nAnswering records nothing: no registration, no liveness.",
+        "properties": {
+          "runner_id": {
             "title": "Runner Id",
+            "type": "string"
+          },
+          "runner_name": {
+            "title": "Runner Name",
             "type": "string"
           }
         },
         "required": [
           "runner_id",
-          "facts"
+          "runner_name"
         ],
-        "title": "RunnerFactBatch",
+        "title": "RunnerIdentityView",
         "type": "object"
       },
       "RunnerLifecycleRequest": {
@@ -9228,21 +9406,6 @@
           }
         },
         "title": "RunnerLifecycleRequest",
-        "type": "object"
-      },
-      "RunnerListResponse": {
-        "description": "The fleet registry \u2014 every registered runner with its liveness.",
-        "properties": {
-          "runners": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/RunnerView"
-            },
-            "title": "Runners",
-            "type": "array"
-          }
-        },
-        "title": "RunnerListResponse",
         "type": "object"
       },
       "RunnerPauseRequest": {
@@ -9258,7 +9421,7 @@
         "type": "object"
       },
       "RunnerRegistrationRequest": {
-        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size; ``None`` when the\nclient reports none, never a guessed total. Re-registration overwrites it.",
+        "description": "Register the calling runner \u2014 the one its bearer token was issued to; a stray ``runner_id``\nin the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,\n``None`` when the client reports none, never a guessed total.",
         "properties": {
           "capabilities": {
             "default": [],
@@ -9287,6 +9450,17 @@
             "title": "Gates",
             "type": "array"
           },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "redirect_uris": {
             "default": [],
             "items": {
@@ -9294,10 +9468,6 @@
             },
             "title": "Redirect Uris",
             "type": "array"
-          },
-          "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
           },
           "subscriptions": {
             "anyOf": [
@@ -9330,14 +9500,13 @@
           }
         },
         "required": [
-          "runner_id",
           "workspace_id"
         ],
         "title": "RunnerRegistrationRequest",
         "type": "object"
       },
       "RunnerRegistrationResponse": {
-        "description": "The registered runner's id, and whether this call first created its row.",
+        "description": "The registered runner's hub-minted id and current name, and whether this call was its\nfirst registration since it was added.",
         "properties": {
           "first_registration": {
             "title": "First Registration",
@@ -9346,6 +9515,17 @@
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           }
         },
         "required": [
@@ -9353,6 +9533,192 @@
           "first_registration"
         ],
         "title": "RunnerRegistrationResponse",
+        "type": "object"
+      },
+      "RunnerRegistryListResponse": {
+        "description": "The fleet registry as operators list it \u2014 every added runner, oldest first, each with its\nconnection condition. Two runners may share a name; each is listed under its own id.",
+        "properties": {
+          "runners": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerRegistryView"
+            },
+            "title": "Runners",
+            "type": "array"
+          }
+        },
+        "title": "RunnerRegistryListResponse",
+        "type": "object"
+      },
+      "RunnerRegistryView": {
+        "description": "One runner as an operator sees the registry \u2014 including one that has never connected.\n\nA ``never_connected`` runner has no ``workspace_id``, ``registered_at`` or ``last_seen_at``, no\ncapabilities, and is not ``online``.",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By"
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/RunnerConnection"
+          },
+          "env_capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Capacity"
+          },
+          "gates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "hub_paused": {
+            "title": "Hub Paused",
+            "type": "boolean"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "locally_paused": {
+            "default": false,
+            "title": "Locally Paused",
+            "type": "boolean"
+          },
+          "locally_paused_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locally Paused By"
+          },
+          "locally_paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locally Paused Reason"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "retired_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired By"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "runner_name": {
+            "title": "Runner Name",
+            "type": "string"
+          },
+          "subscriptions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionUsageView"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "runner_id",
+          "runner_name",
+          "connection",
+          "online",
+          "added_at",
+          "hub_paused"
+        ],
+        "title": "RunnerRegistryView",
         "type": "object"
       },
       "RunnerRetireRequest": {
@@ -9384,7 +9750,7 @@
             "type": "array"
           },
           "runner": {
-            "$ref": "#/components/schemas/RunnerView"
+            "$ref": "#/components/schemas/RunnerRegistryView"
           }
         },
         "required": [
@@ -9417,11 +9783,22 @@
         "title": "RunnerSubscriptionDeclaration",
         "type": "object"
       },
+      "RunnerTokenRefusalReason": {
+        "description": "Why a presented runner bearer token names no runner the hub admits. ``UNKNOWN``: a token the\nhub never issued, as after its data is reset; ``REVOKED``: a revoked token whose runner is not\nretired; ``RETIRED``: a token issued to a runner retired now \u2014 retiring revokes the token, so\nthis outranks ``REVOKED``.",
+        "enum": [
+          "missing",
+          "unknown",
+          "revoked",
+          "retired"
+        ],
+        "title": "RunnerTokenRefusalReason",
+        "type": "string"
+      },
       "RunnerTokenRevocationResponse": {
-        "description": "The runner after its token was revoked \u2014 still registered, now unenrolled.",
+        "description": "The runner after its token was revoked \u2014 still added, now unenrolled.",
         "properties": {
           "runner": {
-            "$ref": "#/components/schemas/RunnerView"
+            "$ref": "#/components/schemas/RunnerRegistryView"
           }
         },
         "required": [
@@ -9431,7 +9808,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate: ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
+        "description": "A registered runner's own view of its registration.\n\nThe two brakes stay separate: ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
         "properties": {
           "capabilities": {
             "default": [],
@@ -9533,6 +9910,17 @@
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "subscriptions": {
             "default": [],
@@ -10473,7 +10861,7 @@
         "type": "object"
       },
       "TranscriptSegmentBatch": {
-        "description": "A runner's push of one-or-more buffered transcript records, ordered by ``seq`` \u2014\nthe transcript lane's own store-and-forward batch, distinct from the fact lane's\n``RunnerFactBatch``.",
+        "description": "A runner's push of one-or-more buffered transcript records, ordered by ``seq`` \u2014\nthe transcript lane's own store-and-forward batch, distinct from the fact lane's\n``RunnerFactBatch``. Attributed to the runner its bearer token names; the body carries no\nrunner id.",
         "properties": {
           "records": {
             "items": {
@@ -10481,14 +10869,9 @@
             },
             "title": "Records",
             "type": "array"
-          },
-          "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
           }
         },
         "required": [
-          "runner_id",
           "records"
         ],
         "title": "TranscriptSegmentBatch",
@@ -11282,7 +11665,7 @@
         "type": "object"
       },
       "WorkItemAuthorView": {
-        "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``.",
+        "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``, with\n``runner_name`` the proposing runner's latest registered name when the registry holds it.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -11331,6 +11714,17 @@
               }
             ],
             "title": "Runner Id"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "user_id": {
             "anyOf": [
@@ -18186,7 +18580,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/transcript-segments": {
       "get": {
-        "description": "A runner's read-back of its own shipped segments \u2014 every\naccepted record across every spawn generation under a lease's ``(chunk_id, node_id,\nepoch)``, confined against the ``runner_id`` already on those rows regardless of\n``runner_auth_mode`` \u2014 this route's own always-raising ownership check, not the\nrouter's mode-gated one.",
+        "description": "A runner's read-back of its own shipped segments \u2014 every\naccepted record across every spawn generation under a lease's ``(chunk_id, node_id,\nepoch)``, confined against the ``runner_id`` already on those rows.",
         "operationId": "get_lease_transcript_segments_api_fleet_chunks__chunk_id__transcript_segments_get",
         "parameters": [
           {
@@ -18330,6 +18724,38 @@
         ]
       }
     },
+    "/api/fleet/identity": {
+      "get": {
+        "description": "The id and name of the runner the presented bearer token names, or a 401 saying why the hub\nrefuses it: ``missing``, ``unknown``, ``revoked`` or ``retired``, the last two naming the runner\nthe token was issued to. Registers nothing and records no liveness.",
+        "operationId": "get_runner_identity_api_fleet_identity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerIdentityView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerIdentityRefusal"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Runner Identity",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/questions/{question_id}": {
       "get": {
         "description": "The runner's answer poll before it resumes the dormant session.",
@@ -18395,7 +18821,7 @@
         ]
       },
       "post": {
-        "description": "The matched fleet peek \u2014 at most one ready entry the calling principal can both\nwork (declared capabilities against ``EligibilityCheck``) and claim (not\ndependency-blocked), with ``request.policy`` applied to both. Demands a resolvable\nprincipal in every auth mode, so an unenrolled runner never reads a permanently\nempty queue as an idle fleet.",
+        "description": "The matched fleet peek \u2014 at most one ready entry the calling principal can both\nwork (declared capabilities against ``EligibilityCheck``) and claim (not\ndependency-blocked), with ``request.policy`` applied to both.",
         "operationId": "peek_matched_queue_api_fleet_queue_peek_post",
         "requestBody": {
           "content": {
@@ -18479,7 +18905,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level. The hub never rejects a registration over\nits roster \u2014 it doubles as the heartbeat every tick. A retired runner is refused 403.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick.\nA body ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -18521,7 +18947,7 @@
     },
     "/api/fleet/runners/{runner_id}": {
       "get": {
-        "description": "One runner's declarative state \u2014 the runner's own pull read; 403 when retired.",
+        "description": "The calling runner's own declarative state \u2014 its pull read; 403 when retired or when the path\nnames another runner, 409 before its first registration.",
         "operationId": "get_runner_api_fleet_runners__runner_id__get",
         "parameters": [
           {
@@ -18564,7 +18990,7 @@
     },
     "/api/fleet/runners/{runner_id}/heartbeats": {
       "post": {
-        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204; 403 when retired.",
+        "description": "Refresh the calling runner's liveness \u2014 the slow runner-level heartbeat. Returns 204; 403 when\nretired or when the path names another runner; 404 before its first registration.",
         "operationId": "heartbeat_runner_api_fleet_runners__runner_id__heartbeats_post",
         "parameters": [
           {
@@ -21144,7 +21570,7 @@
     },
     "/api/runners": {
       "get": {
-        "description": "The fleet registry \u2014 every runner with derived liveness + paused state; a retired\nrunner excluded by default, included and marked when ``include_retired``.",
+        "description": "The fleet registry \u2014 every added runner, oldest first, with its connection condition and\npaused state; a retired runner excluded by default, included and marked when ``include_retired``.",
         "operationId": "list_runners_api_runners_get",
         "parameters": [
           {
@@ -21163,7 +21589,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerListResponse"
+                  "$ref": "#/components/schemas/RunnerRegistryListResponse"
                 }
               }
             },
@@ -21184,11 +21610,51 @@
         "tags": [
           "runners"
         ]
+      },
+      "post": {
+        "description": "Add a runner under the initial ``name`` \u2014 the hub mints its id and bearer token together,\nand the plaintext token is returned once. The runner is never connected until it first\nregisters with that token. Names are not unique: adding a held name adds another runner.",
+        "operationId": "add_runner_api_runners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerAddResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Runner",
+        "tags": [
+          "runners"
+        ]
       }
     },
     "/api/runners/{runner_id}": {
       "get": {
-        "description": "One runner's derived liveness + paused state \u2014 the operator's detail read,\nsymmetric with the list. 404 on unknown.",
+        "description": "One runner's connection condition and paused state \u2014 the operator's detail read,\nsymmetric with the list. 404 on unknown.",
         "operationId": "get_runner_api_runners__runner_id__get",
         "parameters": [
           {
@@ -21206,7 +21672,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerView"
+                  "$ref": "#/components/schemas/RunnerRegistryView"
                 }
               }
             },
@@ -21231,7 +21697,7 @@
     },
     "/api/runners/{runner_id}/enrollments": {
       "post": {
-        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once.\n\nRequires an existing registration (404 otherwise), never a trust-on-first-use grant.\nA retired runner is refused 409: ``reinstate`` is the one reinstatement lever.",
+        "description": "Rotate ``runner_id``'s bearer token \u2014 the plaintext is returned once, and the token it\nreplaces stops resolving, the one ``add`` minted included.\n\nRequires an added runner (404 otherwise), connected or not. A retired runner is refused\n409: ``reinstate`` is the one reinstatement lever.",
         "operationId": "enroll_runner_api_runners__runner_id__enrollments_post",
         "parameters": [
           {
@@ -21302,7 +21768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerView"
+                  "$ref": "#/components/schemas/RunnerRegistryView"
                 }
               }
             },
@@ -21355,7 +21821,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerView"
+                  "$ref": "#/components/schemas/RunnerRegistryView"
                 }
               }
             },
@@ -21408,7 +21874,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerView"
+                  "$ref": "#/components/schemas/RunnerRegistryView"
                 }
               }
             },
@@ -21486,7 +21952,7 @@
     },
     "/api/runners/{runner_id}/token-revocations": {
       "post": {
-        "description": "Revoke a runner's token \u2014 it stays registered and must be re-enrolled; 409 when unenrolled.",
+        "description": "Revoke a runner's token \u2014 it stays added and must be re-enrolled; 409 when unenrolled.",
         "operationId": "revoke_runner_token_api_runners__runner_id__token_revocations_post",
         "parameters": [
           {

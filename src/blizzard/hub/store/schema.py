@@ -1152,16 +1152,24 @@ chunk_grouped = Table(
 # rowid as a tie-break).
 Index("ix_chunk_grouped_grouped_at_id", chunk_grouped.c.grouped_at, chunk_grouped.c.id)
 
-# --- The fleet registry (runner.registered / paused / resumed) ----------------
-# The registration row is an upsert; liveness derives from ``last_seen_at``.
+# --- The fleet registry (runner.added / registered / paused / resumed) --------
+# A row is inserted when a runner is added and refreshed in place by each registration.
 
 runner_registrations = Table(
     "runner_registrations",
     metadata,
+    # The hub-minted id — the runner's one identity, and every runner-id column's value.
     Column("runner_id", String, primary_key=True),
-    Column("workspace_id", String, nullable=False),  # the per-runner workspace binding
-    Column("registered_at", UtcDateTime, nullable=False),
-    Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this
+    # The display name the runner last registered with (or was added under) — not unique,
+    # so deliberately unindexed: nothing looks a runner up by it.
+    Column("name", String, nullable=False),
+    Column("added_at", UtcDateTime, nullable=False),
+    Column("added_by", String, nullable=True),  # who added it — null when the hub recorded no one
+    # The workspace binding, first registration, and latest contact — all null for a runner
+    # that was added but has never registered.
+    Column("workspace_id", String, nullable=True),
+    Column("registered_at", UtcDateTime, nullable=True),
+    Column("last_seen_at", UtcDateTime, nullable=True),  # liveness derives from this
     # The hub-minted bearer token's sha256 hex digest — nullable (an
     # unenrolled runner has none), indexed for the reverse token lookup.
     Column("token_hash", Text, nullable=True, index=True),

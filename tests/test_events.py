@@ -289,22 +289,30 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
     assert resp.status_code == 200, resp.text
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == "runner-changed"]
+    # Every frame names the runner — the name of the registration (or principal) its publisher holds.
     assert frames == [
         # `registered`/`heartbeat` carry no `key` — no fact table backs them.
-        {"runner_id": "r1", "kind": "registered"},
-        {"runner_id": "r1", "kind": "heartbeat"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "registered"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "heartbeat"},
         # The pause family each names its own fact's identity.
-        {"runner_id": "r1", "kind": "paused", "by": "alice", "key": "runner_pause_facts:1"},
-        {"runner_id": "r1", "kind": "resumed", "by": "alice", "key": "runner_pause_facts:2"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "paused", "by": "alice", "key": "runner_pause_facts:1"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "resumed", "by": "alice", "key": "runner_pause_facts:2"},
         {
             "runner_id": "r1",
+            "runner_name": "r1",
             "kind": "locally-paused",
             "by": "runner-ceiling",
             "reason": "cap hit",
             "key": "runner_local_pause_facts:1",
         },
         # No `reason` on the fact — the frame omits it rather than carrying an empty note.
-        {"runner_id": "r1", "kind": "locally-resumed", "by": "bob", "key": "runner_local_pause_facts:2"},
+        {
+            "runner_id": "r1",
+            "runner_name": "r1",
+            "kind": "locally-resumed",
+            "by": "bob",
+            "key": "runner_local_pause_facts:2",
+        },
         # No `by`/`reason`/`key` — no fact-table row identity worth naming.
-        {"runner_id": "r1", "kind": "external-usage"},
+        {"runner_id": "r1", "runner_name": "r1", "kind": "external-usage"},
     ]

@@ -40,7 +40,6 @@ def _lease_record(**overrides: object) -> Lease:
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 1,
-        "runner_id": "r1",
         "retries_max": 2,
         "created_at": _NOW,
         "pid": 100,
@@ -166,7 +165,6 @@ def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> Non
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=created_at,
         )

@@ -69,7 +69,6 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -134,12 +133,11 @@ def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
     test modules.
     """
     store.record_local_pause(
-        "r1",
         paused=paused,
         at=ctx.clock.now(),
         by="operator",
         report_kind=RUNNER_LOCALLY_PAUSED if paused else RUNNER_LOCALLY_RESUMED,
-        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+        report_payload=json.dumps({"by": "operator"}),
     )
 
 
@@ -635,7 +633,7 @@ def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": _sample("spawn", cost_usd=0.42)})
-    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
+    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
     ctx = _make_ctx(store, hub, harness, probe, config=config)
 
     tick(ctx)

@@ -32,7 +32,6 @@ def _lease() -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=1,
-        runner_id="r1",
         retries_max=2,
         created_at=_AT,
     )

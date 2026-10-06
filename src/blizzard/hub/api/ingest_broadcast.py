@@ -69,16 +69,22 @@ class IngestBroadcast:
     published after, once the ack names which facts were freshly applied."""
 
     services: HubServices
+    #: The pushing runner — the bearer token's, never a body field.
+    runner_id: str
     batch: RunnerFactBatch
     changes: dict[str, ChunkChanged]
+    #: The pushing runner's registered name, as its principal carries it — no registry read.
+    runner_name: str | None = None
 
     @classmethod
-    def before_ingest(cls, services: HubServices, batch: RunnerFactBatch) -> IngestBroadcast:
+    def before_ingest(
+        cls, services: HubServices, runner_id: str, batch: RunnerFactBatch, *, runner_name: str | None = None
+    ) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path."""
         chunk_ids = [chunk_id for fact in batch.facts if isinstance(chunk_id := fact.payload.get("chunk_id"), str)]
         changes = ChunkChanged.before_many(services, chunk_ids)
-        return cls(services=services, batch=batch, changes=changes)
+        return cls(services=services, runner_id=runner_id, batch=batch, changes=changes, runner_name=runner_name)
 
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.applied)
@@ -103,7 +109,9 @@ class IngestBroadcast:
         if arm is _RunnerArm.PAUSE:
             self._runner_pause(fact, row_id)
         elif arm is _RunnerArm.EXTERNAL_USAGE:
-            self.services.events.publish_runner_changed(self.batch.runner_id, kind="external-usage")
+            self.services.events.publish_runner_changed(
+                self.runner_id, kind="external-usage", runner_name=self.runner_name
+            )
         elif arm is _RunnerArm.LOGGED:
             pass  # already published by EventLogService.record
         else:
@@ -117,8 +125,9 @@ class IngestBroadcast:
         by = fact.payload.get("by")
         reason = fact.payload.get("reason")
         self.services.events.publish_runner_changed(
-            self.batch.runner_id,
+            self.runner_id,
             kind="locally-paused" if fact.kind == RUNNER_LOCALLY_PAUSED else "locally-resumed",
+            runner_name=self.runner_name,
             by=by if isinstance(by, str) else "operator",
             reason=reason if isinstance(reason, str) else None,
             key=f"runner_local_pause_facts:{row_id}" if row_id is not None else None,

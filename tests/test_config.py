@@ -951,43 +951,20 @@ def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_pa
 
 
 # --------------------------------------------------------------------------- #
-# `runner_auth_mode` — the runner-authentication rollout brake.
+# `runner_auth_mode` — a key the hub does not read; a toml that still sets it loads as if it did not.
 
 
 @pytest.mark.unit
-def test_runner_auth_mode_defaults_to_warn(tmp_path: Path) -> None:
-    config = _hub_config(tmp_path)
-    assert config.runner_auth_mode == "warn"
-
-
-@pytest.mark.unit
-def test_runner_auth_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
-    config = _hub_config(tmp_path)
-    config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
-    assert loaded.runner_auth_mode == "warn"
-
-    edited = dataclasses.replace(loaded, runner_auth_mode="enforce")
-    edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
-    assert reloaded.runner_auth_mode == "enforce"
-
-
-@pytest.mark.unit
-def test_runner_auth_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> None:
+@pytest.mark.parametrize("value", ["enforce", "warn", "block"])
+def test_a_toml_still_setting_runner_auth_mode_loads_with_the_key_ignored(tmp_path: Path, value: str) -> None:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).runner_auth_mode == "warn"
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nrunner_auth_mode = "{value}"\n')
 
+    loaded = HubConfig.load(root)
 
-@pytest.mark.unit
-def test_runner_auth_mode_unknown_value_raises(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nrunner_auth_mode = "block"\n')
-    with pytest.raises(HubConfigError, match="runner_auth_mode"):
-        HubConfig.load(root)
+    assert not hasattr(loaded, "runner_auth_mode")
+    assert "runner_auth_mode" not in loaded.to_toml()
 
 
 # --------------------------------------------------------------------------- #
@@ -1028,17 +1005,6 @@ def test_route_token_mode_unknown_value_raises(tmp_path: Path) -> None:
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nroute_token_mode = "block"\n')
     with pytest.raises(HubConfigError, match="route_token_mode"):
         HubConfig.load(root)
-
-
-@pytest.mark.unit
-def test_route_token_mode_enforces_independently_of_runner_auth_mode(tmp_path: Path) -> None:
-    """The two flags are separate — setting one leaves the other at its own default."""
-    config = _hub_config(tmp_path)
-    edited = dataclasses.replace(config, runner_auth_mode="enforce")
-    edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
-    assert reloaded.runner_auth_mode == "enforce"
-    assert reloaded.route_token_mode == "warn"
 
 
 # --------------------------------------------------------------------------- #
@@ -1083,13 +1049,12 @@ def test_produces_mode_unknown_value_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path) -> None:
-    """All three flags are separate — setting one leaves the others at their own default."""
+    """The two flags are separate — setting one leaves the other at its own default."""
     config = _hub_config(tmp_path)
     edited = dataclasses.replace(config, produces_mode=PRODUCES_ENFORCE)
     edited.config_path.write_text(edited.to_toml())
     reloaded = HubConfig.load(edited.root)
     assert reloaded.produces_mode == "enforce"
-    assert reloaded.runner_auth_mode == "warn"
     assert reloaded.route_token_mode == "warn"
 
 

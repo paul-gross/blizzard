@@ -62,6 +62,8 @@ class QuestionView(BaseModel):
     session_id: str | None = None
     harness_id: str | None = None
     runner_id: str
+    #: The asking runner's name — not unique, never a key; ``None`` when the registry holds no such runner.
+    runner_name: str | None = None
     epoch: int
     question: str
     options: list[str] = []

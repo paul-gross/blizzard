@@ -70,7 +70,7 @@
           <fleet-kit-button
             testid="resume-chunk"
             [ariaLabel]="'Resume chunk ' + detail().chunk_id"
-            [fleetTooltip]="resumeCopy(route()?.runner_id ?? null).text"
+            [fleetTooltip]="resumeCopy(claimant()).text"
             [disabled]="pausePending()"
             (click)="onResume()"
           >
@@ -80,7 +80,7 @@
           <fleet-kit-button
             testid="pause-chunk"
             [ariaLabel]="'Pause chunk ' + detail().chunk_id"
-            [fleetTooltip]="pauseCopy(route()?.runner_id ?? null).text"
+            [fleetTooltip]="pauseCopy(claimant()).text"
             [disabled]="pausePending()"
             (click)="onPause()"
           >
@@ -94,8 +94,8 @@
     </div>
     <!-- A non-interactive fact — Detach, in the ⋯ menu, names its own runner in its
          own label/copy. -->
-    @if (route(); as r) {
-      <span class="claimed" data-testid="route-info" [attr.title]="r.runner_id">Claimed by {{ r.runner_id }}</span>
+    @if (route()) {
+      <span class="claimed" data-testid="route-info" [attr.title]="claimantTitle()">Claimed by {{ claimant() }}</span>
     }
     <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
     <button type="button" class="close" data-testid="detail-close" aria-label="Close" (click)="dismiss.emit()">
@@ -108,8 +108,8 @@
      `KitMenu` needs the panel as a `TemplateRef` in this view (`kit-menu.ts` owns why). -->
 <ng-template #actionsMenu>
   <fleet-kit-menu-panel testid="chunk-actions-panel">
-    @if (route(); as r) {
-      @let detach = detachCopy(r.runner_id, currentNodeName());
+    @if (claimant(); as runner) {
+      @let detach = detachCopy(runner, currentNodeName());
       <fleet-kit-menu-item
         testid="detach-chunk"
         [disabled]="detachPending()"

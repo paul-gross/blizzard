@@ -14,9 +14,8 @@ describe('compactRef', () => {
   });
 
   it('passes a non-prefixed name through unchanged', () => {
-    // Env pool names and runner ids are already human-scale, not prefixed ULIDs.
+    // Env pool names are already human-scale, not prefixed ULIDs.
     expect(compactRef('e1')).toBe('e1');
-    expect(compactRef('runner-local')).toBe('runner-local');
   });
 
   it('keeps prefixes with colliding first letters apart via the registry', () => {
@@ -28,7 +27,13 @@ describe('compactRef', () => {
     expect(compactRef('fin_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('F-3YJ9');
     expect(compactRef('fins_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('FS-3YJ9');
     expect(compactRef('gprop_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('GP-3YJ9');
-    expect(compactRef('rtn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('R-3YJ9');
+    expect(compactRef('rtn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('RTN-3YJ9');
+  });
+
+  it('keeps a runner and a routine with the same tail apart via the registry', () => {
+    // Both would default to `R`; the runner keeps it and the routine reads `RTN`.
+    expect(compactRef('rn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('R-3YJ9');
+    expect(compactRef('rtn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('RTN-3YJ9');
   });
 
   it('keeps a finding and a finding set with the same tail apart via the registry', () => {

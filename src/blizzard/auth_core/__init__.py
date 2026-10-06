@@ -37,10 +37,12 @@ class Permission(StrEnum):
     GATE_RESOLVE = "gate:resolve"
     #: Reorder or group the ready queue.
     QUEUE_REORDER = "queue:reorder"
-    #: Pause/resume/enroll a runner.
+    #: Pause/resume a runner.
     RUNNER_PAUSE = "runner:pause"
     #: Retire/reinstate a runner, or revoke its token.
     RUNNER_RETIRE = "runner:retire"
+    #: Add a runner, or rotate its token (enroll) — both mint a credential. Held by ``admin``+.
+    RUNNER_ADD = "runner:add"
     #: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
     #: routine authoring, the same authoring tier.
     GRAPH_EDIT = "graph:edit"
@@ -65,6 +67,7 @@ GATE_RESOLVE = Permission.GATE_RESOLVE
 QUEUE_REORDER = Permission.QUEUE_REORDER
 RUNNER_PAUSE = Permission.RUNNER_PAUSE
 RUNNER_RETIRE = Permission.RUNNER_RETIRE
+RUNNER_ADD = Permission.RUNNER_ADD
 GRAPH_EDIT = Permission.GRAPH_EDIT
 USER_MANAGE = Permission.USER_MANAGE
 TRANSCRIPT_READ = Permission.TRANSCRIPT_READ
@@ -89,7 +92,7 @@ _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset
 #: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
 #: administration (the admin page, ``user:manage``) on top of ``contributor``.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
-    {RUNNER_PAUSE, RUNNER_RETIRE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN, CONFIG_EDIT}
+    {RUNNER_PAUSE, RUNNER_RETIRE, RUNNER_ADD, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN, CONFIG_EDIT}
 )
 
 #: ``superuser`` holds every permission that exists — in #91 that is exactly the

@@ -56,7 +56,7 @@ _PUMP_BUDGET_FRACTION = 0.5
 
 class TranscriptDrainConfig(TranscriptPumpConfig, Protocol):
     @property
-    def runner_id(self) -> str: ...
+    def runner_name(self) -> str: ...
 
 
 class TranscriptDrainContext(TranscriptPumpContext, Protocol):
@@ -80,7 +80,7 @@ class TranscriptDrain:
         try:
             self._run_unsafe()
         except Exception:
-            _log.exception("transcript drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
+            _log.exception("transcript drain failed — continuing the tick", runner_name=self.ctx.config.runner_name)
 
     def _run_unsafe(self) -> None:
         started = self.ctx.clock.now()
@@ -92,7 +92,7 @@ class TranscriptDrain:
             TranscriptPump(self.ctx).run(deadline=pump_deadline)
         except Exception:
             _log.exception(
-                "transcript pump failed — the buffered flush below still runs", runner_id=self.ctx.config.runner_id
+                "transcript pump failed — the buffered flush below still runs", runner_name=self.ctx.config.runner_name
             )
         if self.ctx.clock.now() >= deadline:
             return  # the pump alone exhausted the shared bound; the flush catches up next tick
@@ -156,7 +156,7 @@ class TranscriptDrain:
         records = [self._render(delta, final_segments) for delta in deltas]
         _CP_BEFORE_SUBMIT.reached()
         try:
-            ack = self.ctx.hub.push_transcripts(self.ctx.config.runner_id, records)
+            ack = self.ctx.hub.push_transcripts(records)
         except HubClientError:
             return False  # hub unreachable — the batch stays buffered, retried next tick; the fact lane is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay

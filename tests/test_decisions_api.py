@@ -144,14 +144,13 @@ def test_resolutions_unknown_choice_is_400(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
-    from blizzard.hub.config import RUNNER_AUTH_ENFORCE
     from tests.test_fleet_auth import _bearer, _seed_enrolled
 
     token = _seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
     decision_id = _open_decision(warn_hub)
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     assert (
         hub.client.post(
             f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}, headers=_bearer(token)

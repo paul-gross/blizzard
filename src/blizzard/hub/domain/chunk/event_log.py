@@ -28,14 +28,18 @@ class EventLogService:
         message: str,
         detail: dict | None,
         at: datetime,
+        runner_name: str | None = None,
     ) -> int:
         """Append the row, then publish an ``event-logged`` frame keyed off the row it
         just wrote. Returns the freshly-written ``event_log.id``. Severity is
-        derived from ``kind`` (a function of it, never paired independently)."""
+        derived from ``kind`` (a function of it, never paired independently). The frame
+        carries ``runner_name`` only when the caller hands it the runner's name; the row
+        never stores it."""
         return self._record(
             severity=EVENT_LOG_SEVERITY[kind],
             kind=kind,
             runner_id=runner_id,
+            runner_name=runner_name,
             chunk_id=chunk_id,
             lease_id=lease_id,
             node_name=node_name,
@@ -50,6 +54,7 @@ class EventLogService:
         severity: EventLogSeverity,
         kind: str,
         runner_id: str | None,
+        runner_name: str | None,
         chunk_id: str | None,
         lease_id: str | None,
         node_name: str | None,
@@ -69,6 +74,11 @@ class EventLogService:
             at=at,
         )
         self._publisher.publish_event_logged(
-            severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=f"event_log:{row_id}"
+            severity=severity,
+            kind=kind,
+            chunk_id=chunk_id,
+            runner_id=runner_id,
+            runner_name=runner_name,
+            key=f"event_log:{row_id}",
         )
         return row_id

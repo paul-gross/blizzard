@@ -45,6 +45,8 @@ class ChunkChangedPayload(SseFramePayload):
     prev_node: str | None = None
     node: str | None = None
     runner_id: str | None = None
+    #: The routed runner's registered name at publish time; omitted whenever ``runner_id`` is.
+    runner_name: str | None = None
     cause: ChunkChangeCause | None = None
     graph_id: str | None = None
     #: Who deleted the chunk — rides the ``deleted`` cause, mirroring
@@ -83,6 +85,8 @@ class QueueChangedPayload(SseFramePayload):
 
 class RunnerChangedPayload(SseFramePayload):
     runner_id: str
+    #: The runner's registered name at publish time; omitted when the registry holds none.
+    runner_name: str | None = None
     kind: RunnerChangeKind
     by: str | None = None
     reason: str | None = None
@@ -94,6 +98,8 @@ class EventLoggedPayload(SseFramePayload):
     kind: str
     chunk_id: str | None
     runner_id: str | None
+    #: The runner's registered name at publish time; omitted whenever ``runner_id`` is ``null``.
+    runner_name: str | None = None
     key: str | None = None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})

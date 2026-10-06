@@ -21,6 +21,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     mint_fixture,
     mock_hub,
@@ -98,7 +99,7 @@ def _pending_total(config: RunnerConfig) -> int:
 def _status(hub: httpx.Client, chunk_id: str) -> str:
     """The mock hub's own status read — distinct from the live-hub reads further down
     this file, which stay at the real hub's anonymous ``GET /api/chunks/{id}``."""
-    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
+    return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
 def _tick_then_usage_buffered(config: RunnerConfig, fenced: dict[str, str]) -> bool:
@@ -228,10 +229,11 @@ def _usage_payload(
     return payload
 
 
-def _push_usage(hub: httpx.Client, *, runner_id: str, seq: int, payload: dict) -> dict:
+def _push_usage(hub: httpx.Client, *, seq: int, payload: dict) -> dict:
     resp = hub.post(
         "/api/fleet/events",
-        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        headers=fleet_headers(hub),
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -249,7 +251,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "usage totals over the wire")
 
-        with mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-usage") as runner:
+        with mock_runner(bin_dir, _free_port(), hub_port, name="runner-usage") as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True, claim
@@ -263,15 +265,14 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         # cost, one with cost absent (the envelope-less transcript-summation fallback), and
         # one from a runner predating harness provenance (A10) — no
         # provenance keys at all, never rejected and never defaulted.
-        assert _push_usage(
-            hub, runner_id="usage-pusher", seq=1, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=0.10)
-        )["applied"] == [1]
-        assert _push_usage(
-            hub, runner_id="usage-pusher", seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None)
-        )["applied"] == [2]
+        assert _push_usage(hub, seq=1, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=0.10))[
+            "applied"
+        ] == [1]
+        assert _push_usage(hub, seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None))[
+            "applied"
+        ] == [2]
         assert _push_usage(
             hub,
-            runner_id="usage-pusher",
             seq=3,
             payload=_usage_payload(
                 chunk_id, node_id, epoch=epoch, cost_usd=0.05, harness_id=None, harness_version=None
@@ -307,9 +308,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         assert row["cost"]["cost_partial"] is True
 
         # Idempotent replay: a re-pushed seq lands nothing twice — the total is unchanged.
-        replay = _push_usage(
-            hub, runner_id="usage-pusher", seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None)
-        )
+        replay = _push_usage(hub, seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None))
         assert replay["applied"] == [] and replay["already_applied"] == [2], replay
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert len(detail["usage"]) == 3, "the replayed usage fact was applied twice"
@@ -328,7 +327,7 @@ def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_pa
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "usage estimate over the wire")
 
-        with mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-usage-estimate") as runner:
+        with mock_runner(bin_dir, _free_port(), hub_port, name="runner-usage-estimate") as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True, claim
@@ -339,7 +338,6 @@ def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_pa
 
         assert _push_usage(
             hub,
-            runner_id="usage-estimate-pusher",
             seq=1,
             payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None, estimated_cost_usd=0.03),
         )["applied"] == [1]

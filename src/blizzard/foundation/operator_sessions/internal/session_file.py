@@ -8,8 +8,8 @@ from pathlib import Path
 
 import platformdirs
 
+from blizzard.foundation.operator_sessions import IReadSessionStore, IWriteSessionStore
 from blizzard.foundation.roles import collaborator
-from blizzard.hub.cli.sessions import IReadSessionStore, IWriteSessionStore
 
 _APP_NAME = "blizzard"
 
@@ -26,18 +26,19 @@ class SessionFile:
         return cls(Path(platformdirs.user_config_dir(_APP_NAME)) / "sessions.json")
 
     def load(self, hub_url: str) -> str | None:
-        return self._all().get(hub_url)
+        return self._all().get(_key(hub_url))
 
     def save(self, hub_url: str, token: str) -> None:
         sessions = self._all()
-        sessions[hub_url] = token
+        sessions[_key(hub_url)] = token
         self._write(sessions)
 
     def delete(self, hub_url: str) -> None:
         sessions = self._all()
-        if hub_url not in sessions:
+        key = _key(hub_url)
+        if key not in sessions:
             return
-        del sessions[hub_url]
+        del sessions[key]
         if sessions:
             self._write(sessions)
         else:
@@ -50,13 +51,19 @@ class SessionFile:
             data = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return {}
-        return data if isinstance(data, dict) else {}
+        return {_key(url): token for url, token in data.items()} if isinstance(data, dict) else {}
 
     def _write(self, sessions: dict[str, str]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         os.chmod(self.path.parent, stat.S_IRWXU)
         self.path.write_text(json.dumps(sessions))
         os.chmod(self.path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def _key(hub_url: str) -> str:
+    """One hub, one key: a stored or looked-up URL drops its trailing ``/``, so
+    ``http://hub/`` and ``http://hub`` find the same session."""
+    return hub_url.rstrip("/")
 
 
 def _conforms_session_file_read(x: SessionFile) -> IReadSessionStore:

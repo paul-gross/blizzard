@@ -8,7 +8,7 @@ the runner-shared machinery; only the reserved open-of-stream comment names this
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated
@@ -54,13 +54,19 @@ async def events_stream(
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 
-def _event_view(row: OperationalEvent) -> EventView:
+def _runner_names(services: HubServices, runner_ids: Iterable[str | None]) -> dict[str, str]:
+    """The registered names of the runners a feed's rows name — one batched registry read."""
+    return services.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
+
+
+def _event_view(row: OperationalEvent, runner_names: Mapping[str, str]) -> EventView:
     return EventView(
         id=row.id,
         recorded_at=iso_utc(row.recorded_at),
         severity=row.severity,
         kind=row.kind,
         runner_id=row.runner_id,
+        runner_name=runner_names.get(row.runner_id) if row.runner_id is not None else None,
         chunk_id=row.chunk_id,
         lease_id=row.lease_id,
         node_name=row.node_name,
@@ -73,9 +79,11 @@ def _event_view(row: OperationalEvent) -> EventView:
 @dataclass(frozen=True)
 class Events:
     rows: Sequence[OperationalEvent]
+    #: The rows' runners' registered names, keyed by runner id.
+    runner_names: Mapping[str, str]
 
     def response(self) -> EventsResponse:
-        return EventsResponse(events=[_event_view(row) for row in self.rows])
+        return EventsResponse(events=[_event_view(row, self.runner_names) for row in self.rows])
 
 
 @router.get(
@@ -105,10 +113,11 @@ def list_events(
         for e in services.chunks.escalations.list_open_escalations()
         if e.matches(severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc)
     ]
-    return Events(EventFeed.of(events, escalations).rows[:limit]).response()
+    rows = EventFeed.of(events, escalations).rows[:limit]
+    return Events(rows, _runner_names(services, (row.runner_id for row in rows))).response()
 
 
-def _activity_view(row: ActivityEntry) -> ActivityView:
+def _activity_view(row: ActivityEntry, runner_names: Mapping[str, str]) -> ActivityView:
     return ActivityView(
         type=row.type,
         key=row.key,
@@ -119,6 +128,7 @@ def _activity_view(row: ActivityEntry) -> ActivityView:
         node=row.node,
         prev_node=row.prev_node,
         runner_id=row.runner_id,
+        runner_name=runner_names.get(row.runner_id) if row.runner_id is not None else None,
         cause=row.cause,
         graph_id=row.graph_id,
         severity=row.severity,
@@ -132,9 +142,11 @@ def _activity_view(row: ActivityEntry) -> ActivityView:
 @dataclass(frozen=True)
 class Activity:
     rows: Sequence[ActivityEntry]
+    #: The rows' runners' registered names, keyed by runner id.
+    runner_names: Mapping[str, str]
 
     def response(self) -> ActivityResponse:
-        return ActivityResponse(activity=[_activity_view(row) for row in self.rows])
+        return ActivityResponse(activity=[_activity_view(row, self.runner_names) for row in self.rows])
 
 
 @router.get(
@@ -156,4 +168,5 @@ def list_activity(
     chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit)
     events = services.chunks.events.activity_events_since(since_utc, limit=limit)
     runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
-    return Activity(ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows).response()
+    rows = ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows
+    return Activity(rows, _runner_names(services, (row.runner_id for row in rows))).response()

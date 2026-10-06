@@ -46,50 +46,51 @@ value stays additive. A null in a nullable column means what its meaning says.
 
 Major version 1; identity column `step_key`; partitioned by the UTC date of `ended_at`.
 
-| Column                | Type           | Null | Meaning                                                                                | Values                                                                                                                             |
-| --------------------- | -------------- | ---- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `step_key`            | `string`       | no   | The row's identity: chunk_id/epoch, or chunk_id/epoch/gate/decision_id for a gate step |                                                                                                                                    |
-| `trace_id`            | `string`       | no   | The step's derived trace id, as 32 hex characters, so a row joins to its trace         |                                                                                                                                    |
-| `step_kind`           | `string`       | no   | runner, hub or gate                                                                    | closed: `runner`, `hub`, `gate`                                                                                                    |
-| `chunk_id`            | `string`       | no   | The chunk                                                                              |                                                                                                                                    |
-| `work_refs`           | `list<string>` | no   | Its work items as source-native tokens; empty when it has none                         |                                                                                                                                    |
-| `sources`             | `list<string>` | no   | The distinct work sources of those items                                               |                                                                                                                                    |
-| `graph_id`            | `string`       | no   | The graph the step stood in                                                            |                                                                                                                                    |
-| `graph_name`          | `string`       | no   | The graph's name                                                                       |                                                                                                                                    |
-| `node_id`             | `string`       | no   | The node                                                                               |                                                                                                                                    |
-| `node_name`           | `string`       | no   | The node's name                                                                        |                                                                                                                                    |
-| `epoch`               | `int64`        | no   | The epoch                                                                              |                                                                                                                                    |
-| `decision_id`         | `string`       | yes  | A gate step's decision; null otherwise                                                 |                                                                                                                                    |
-| `visit`               | `int64`        | no   | Which arrival at this node this is, counting from 1                                    |                                                                                                                                    |
-| `runner_id`           | `string`       | yes  | The runner that held a runner step; null for hub and gate steps                        |                                                                                                                                    |
-| `harness_id`          | `string`       | yes  | The harness of the step's last invocation                                              |                                                                                                                                    |
-| `models`              | `list<string>` | no   | Distinct models across its invocations                                                 |                                                                                                                                    |
-| `started_at`          | `timestamp`    | no   | When the step started                                                                  |                                                                                                                                    |
-| `ended_at`            | `timestamp`    | no   | When the step ended; a gate ends at resolved_at when resolved                          |                                                                                                                                    |
-| `closed_at`           | `timestamp`    | no   | When the closing fact was recorded; equal to ended_at except for a resolved gate       |                                                                                                                                    |
-| `duration_ms`         | `int64`        | no   | ended_at minus started_at                                                              |                                                                                                                                    |
-| `outcome`             | `string`       | no   | How the step ended                                                                     | closed: `transitioned`, `gated`, `migrated`, `escalated`, `released`, `stopped`, `completed`, `superseded`, `decided`, `restarted` |
-| `choice`              | `string`       | yes  | The resolved choice, when there is one                                                 |                                                                                                                                    |
-| `to_node_name`        | `string`       | yes  | Where it led: a node name, done, or graph:<name>                                       |                                                                                                                                    |
-| `preceded_by`         | `string`       | yes  | restart, requeue or released-claim                                                     | closed: `restart`, `requeue`, `released-claim`                                                                                     |
-| `bounce_cause`        | `string`       | yes  | conflict, checks, master-moved, poll-timeout, or a choice                              | open: `conflict`, `checks`, `master-moved`, `poll-timeout`                                                                         |
-| `asks`                | `int64`        | no   | Asks raised in the step                                                                |                                                                                                                                    |
-| `asks_unanswered`     | `int64`        | no   | How many asks were never answered                                                      |                                                                                                                                    |
-| `wait_queue_ms`       | `int64`        | no   | Queue wait, summed                                                                     |                                                                                                                                    |
-| `wait_claim_ms`       | `int64`        | no   | Claim wait, summed                                                                     |                                                                                                                                    |
-| `wait_ask_ms`         | `int64`        | no   | Ask wait, summed                                                                       |                                                                                                                                    |
-| `wait_pause_ms`       | `int64`        | no   | Pause wait, summed                                                                     |                                                                                                                                    |
-| `wait_pickup_ms`      | `int64`        | no   | Decision pickup wait, summed                                                           |                                                                                                                                    |
-| `invocations`         | `int64`        | no   | How many invocations rows belong to the step                                           |                                                                                                                                    |
-| `input_tokens`        | `int64`        | no   | Summed across its invocations, with blizzard's uncached input count                    |                                                                                                                                    |
-| `output_tokens`       | `int64`        | no   | Summed across its invocations                                                          |                                                                                                                                    |
-| `cache_read_tokens`   | `int64`        | no   | Summed across its invocations                                                          |                                                                                                                                    |
-| `cache_create_tokens` | `int64`        | no   | Summed across its invocations                                                          |                                                                                                                                    |
-| `cost_billed_usd`     | `money`        | yes  | The harness-billed cost, summed; null when no invocation carried one                   |                                                                                                                                    |
-| `cost_estimated_usd`  | `money`        | yes  | The estimated cost, summed; null when no invocation carried one                        |                                                                                                                                    |
-| `cost_partial`        | `bool`         | no   | Some invocation carried neither a billed nor an estimated cost                         |                                                                                                                                    |
-| `billed_partial`      | `bool`         | no   | Some invocation carried no billed cost                                                 |                                                                                                                                    |
-| `exported_at`         | `timestamp`    | no   | When this copy of the row was written                                                  |                                                                                                                                    |
+| Column                | Type           | Null | Meaning                                                                                                      | Values                                                                                                                             |
+| --------------------- | -------------- | ---- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `step_key`            | `string`       | no   | The row's identity: chunk_id/epoch, or chunk_id/epoch/gate/decision_id for a gate step                       |                                                                                                                                    |
+| `trace_id`            | `string`       | no   | The step's derived trace id, as 32 hex characters, so a row joins to its trace                               |                                                                                                                                    |
+| `step_kind`           | `string`       | no   | runner, hub or gate                                                                                          | closed: `runner`, `hub`, `gate`                                                                                                    |
+| `chunk_id`            | `string`       | no   | The chunk                                                                                                    |                                                                                                                                    |
+| `work_refs`           | `list<string>` | no   | Its work items as source-native tokens; empty when it has none                                               |                                                                                                                                    |
+| `sources`             | `list<string>` | no   | The distinct work sources of those items                                                                     |                                                                                                                                    |
+| `graph_id`            | `string`       | no   | The graph the step stood in                                                                                  |                                                                                                                                    |
+| `graph_name`          | `string`       | no   | The graph's name                                                                                             |                                                                                                                                    |
+| `node_id`             | `string`       | no   | The node                                                                                                     |                                                                                                                                    |
+| `node_name`           | `string`       | no   | The node's name                                                                                              |                                                                                                                                    |
+| `epoch`               | `int64`        | no   | The epoch                                                                                                    |                                                                                                                                    |
+| `decision_id`         | `string`       | yes  | A gate step's decision; null otherwise                                                                       |                                                                                                                                    |
+| `visit`               | `int64`        | no   | Which arrival at this node this is, counting from 1                                                          |                                                                                                                                    |
+| `runner_id`           | `string`       | yes  | The runner that held a runner step; null for hub and gate steps                                              |                                                                                                                                    |
+| `runner_name`         | `string`       | yes  | That runner's name as it last registered; null for hub and gate steps or a runner the hub holds no record of |                                                                                                                                    |
+| `harness_id`          | `string`       | yes  | The harness of the step's last invocation                                                                    |                                                                                                                                    |
+| `models`              | `list<string>` | no   | Distinct models across its invocations                                                                       |                                                                                                                                    |
+| `started_at`          | `timestamp`    | no   | When the step started                                                                                        |                                                                                                                                    |
+| `ended_at`            | `timestamp`    | no   | When the step ended; a gate ends at resolved_at when resolved                                                |                                                                                                                                    |
+| `closed_at`           | `timestamp`    | no   | When the closing fact was recorded; equal to ended_at except for a resolved gate                             |                                                                                                                                    |
+| `duration_ms`         | `int64`        | no   | ended_at minus started_at                                                                                    |                                                                                                                                    |
+| `outcome`             | `string`       | no   | How the step ended                                                                                           | closed: `transitioned`, `gated`, `migrated`, `escalated`, `released`, `stopped`, `completed`, `superseded`, `decided`, `restarted` |
+| `choice`              | `string`       | yes  | The resolved choice, when there is one                                                                       |                                                                                                                                    |
+| `to_node_name`        | `string`       | yes  | Where it led: a node name, done, or graph:<name>                                                             |                                                                                                                                    |
+| `preceded_by`         | `string`       | yes  | restart, requeue or released-claim                                                                           | closed: `restart`, `requeue`, `released-claim`                                                                                     |
+| `bounce_cause`        | `string`       | yes  | conflict, checks, master-moved, poll-timeout, or a choice                                                    | open: `conflict`, `checks`, `master-moved`, `poll-timeout`                                                                         |
+| `asks`                | `int64`        | no   | Asks raised in the step                                                                                      |                                                                                                                                    |
+| `asks_unanswered`     | `int64`        | no   | How many asks were never answered                                                                            |                                                                                                                                    |
+| `wait_queue_ms`       | `int64`        | no   | Queue wait, summed                                                                                           |                                                                                                                                    |
+| `wait_claim_ms`       | `int64`        | no   | Claim wait, summed                                                                                           |                                                                                                                                    |
+| `wait_ask_ms`         | `int64`        | no   | Ask wait, summed                                                                                             |                                                                                                                                    |
+| `wait_pause_ms`       | `int64`        | no   | Pause wait, summed                                                                                           |                                                                                                                                    |
+| `wait_pickup_ms`      | `int64`        | no   | Decision pickup wait, summed                                                                                 |                                                                                                                                    |
+| `invocations`         | `int64`        | no   | How many invocations rows belong to the step                                                                 |                                                                                                                                    |
+| `input_tokens`        | `int64`        | no   | Summed across its invocations, with blizzard's uncached input count                                          |                                                                                                                                    |
+| `output_tokens`       | `int64`        | no   | Summed across its invocations                                                                                |                                                                                                                                    |
+| `cache_read_tokens`   | `int64`        | no   | Summed across its invocations                                                                                |                                                                                                                                    |
+| `cache_create_tokens` | `int64`        | no   | Summed across its invocations                                                                                |                                                                                                                                    |
+| `cost_billed_usd`     | `money`        | yes  | The harness-billed cost, summed; null when no invocation carried one                                         |                                                                                                                                    |
+| `cost_estimated_usd`  | `money`        | yes  | The estimated cost, summed; null when no invocation carried one                                              |                                                                                                                                    |
+| `cost_partial`        | `bool`         | no   | Some invocation carried neither a billed nor an estimated cost                                               |                                                                                                                                    |
+| `billed_partial`      | `bool`         | no   | Some invocation carried no billed cost                                                                       |                                                                                                                                    |
+| `exported_at`         | `timestamp`    | no   | When this copy of the row was written                                                                        |                                                                                                                                    |
 
 View `steps_newest`:
 
@@ -106,30 +107,31 @@ WHERE copy_rank = 1
 
 Major version 1; identity column `usage_id`; partitioned by the UTC date of `recorded_at`.
 
-| Column                | Type        | Null | Meaning                                           | Values                           |
-| --------------------- | ----------- | ---- | ------------------------------------------------- | -------------------------------- |
-| `usage_id`            | `int64`     | no   | The row's identity: the usage_facts id            |                                  |
-| `step_key`            | `string`    | no   | The runner step it belongs to, by chunk and epoch |                                  |
-| `trace_id`            | `string`    | no   | The step's derived trace id, as 32 hex characters |                                  |
-| `chunk_id`            | `string`    | no   | The chunk                                         |                                  |
-| `epoch`               | `int64`     | no   | The epoch                                         |                                  |
-| `graph_id`            | `string`    | no   | The graph its step stood in                       |                                  |
-| `graph_name`          | `string`    | no   | The graph's name                                  |                                  |
-| `node_id`             | `string`    | no   | The node                                          |                                  |
-| `node_name`           | `string`    | no   | The node's name                                   |                                  |
-| `runner_id`           | `string`    | no   | The runner that reported it                       |                                  |
-| `kind`                | `string`    | no   | spawn, resume or judge; a nudge reads resume      | open: `spawn`, `resume`, `judge` |
-| `model`               | `string`    | no   | As reported                                       |                                  |
-| `harness_id`          | `string`    | yes  | As reported                                       |                                  |
-| `harness_version`     | `string`    | yes  | As reported                                       |                                  |
-| `input_tokens`        | `int64`     | no   | As reported                                       |                                  |
-| `output_tokens`       | `int64`     | no   | As reported                                       |                                  |
-| `cache_read_tokens`   | `int64`     | no   | As reported                                       |                                  |
-| `cache_create_tokens` | `int64`     | no   | As reported                                       |                                  |
-| `cost_billed_usd`     | `money`     | yes  | As reported; null when absent                     |                                  |
-| `cost_estimated_usd`  | `money`     | yes  | As reported; null when absent                     |                                  |
-| `recorded_at`         | `timestamp` | no   | When the hub received it                          |                                  |
-| `exported_at`         | `timestamp` | no   | When this copy of the row was written             |                                  |
+| Column                | Type        | Null | Meaning                                                                                | Values                           |
+| --------------------- | ----------- | ---- | -------------------------------------------------------------------------------------- | -------------------------------- |
+| `usage_id`            | `int64`     | no   | The row's identity: the usage_facts id                                                 |                                  |
+| `step_key`            | `string`    | no   | The runner step it belongs to, by chunk and epoch                                      |                                  |
+| `trace_id`            | `string`    | no   | The step's derived trace id, as 32 hex characters                                      |                                  |
+| `chunk_id`            | `string`    | no   | The chunk                                                                              |                                  |
+| `epoch`               | `int64`     | no   | The epoch                                                                              |                                  |
+| `graph_id`            | `string`    | no   | The graph its step stood in                                                            |                                  |
+| `graph_name`          | `string`    | no   | The graph's name                                                                       |                                  |
+| `node_id`             | `string`    | no   | The node                                                                               |                                  |
+| `node_name`           | `string`    | no   | The node's name                                                                        |                                  |
+| `runner_id`           | `string`    | no   | The runner that reported it                                                            |                                  |
+| `runner_name`         | `string`    | yes  | That runner's name as it last registered; null for a runner the hub holds no record of |                                  |
+| `kind`                | `string`    | no   | spawn, resume or judge; a nudge reads resume                                           | open: `spawn`, `resume`, `judge` |
+| `model`               | `string`    | no   | As reported                                                                            |                                  |
+| `harness_id`          | `string`    | yes  | As reported                                                                            |                                  |
+| `harness_version`     | `string`    | yes  | As reported                                                                            |                                  |
+| `input_tokens`        | `int64`     | no   | As reported                                                                            |                                  |
+| `output_tokens`       | `int64`     | no   | As reported                                                                            |                                  |
+| `cache_read_tokens`   | `int64`     | no   | As reported                                                                            |                                  |
+| `cache_create_tokens` | `int64`     | no   | As reported                                                                            |                                  |
+| `cost_billed_usd`     | `money`     | yes  | As reported; null when absent                                                          |                                  |
+| `cost_estimated_usd`  | `money`     | yes  | As reported; null when absent                                                          |                                  |
+| `recorded_at`         | `timestamp` | no   | When the hub received it                                                               |                                  |
+| `exported_at`         | `timestamp` | no   | When this copy of the row was written                                                  |                                  |
 
 View `invocations_newest`:
 
@@ -240,13 +242,16 @@ WHERE copy_rank = 1
   time. A backfilled row lands in its own date's partition, in a new file. An `events` row's own time is the start of
   the step its transcript came from, so a re-derivation lands beside the copy it supersedes.
 - **Files are immutable.** A file is staged under `.staging/`, then placed under its final name by an operation that
-  fails rather than replace. A reader never sees a half-written file, and blizzard never deletes or overwrites anything
-  in the directory: pruning it is yours.
+  fails rather than replace. A reader never sees a half-written file, and blizzard never deletes or overwrites a data
+  file or a manifest: pruning the directory is yours.
 - **Manifests.** A pass writes its manifest last. It lists every file the pass placed, with dataset, version, partition,
   row count, first and last cursor position and SHA-256. A manifest that holds `events` files also records the
   `extractor_version` the hub was on.
 - **Schemas.** `_schema/` holds each dataset's columns, types, nullability and meanings, which are the same as the
-  dictionary above. NDJSON carries no schema of its own, so this is its schema.
+  dictionary above. NDJSON carries no schema of its own, so this is its schema. A document is the one file blizzard
+  replaces: when an upgrade adds nullable columns to a dataset, the first pass to write its rows swaps its document
+  whole for the wider one, and the files go on under the same major version. Any other difference from the document
+  already there fails the pass with `schema-conflict`, and nothing is written.
 
 ### Loading whole passes
 
@@ -334,11 +339,12 @@ SET VARIABLE <dataset>_files = (
   WHERE file.dataset = '<dataset>'
 );
 CREATE VIEW <dataset> AS
-SELECT * FROM read_json_auto(getvariable('<dataset>_files'), format = 'newline_delimited');
+SELECT * FROM read_json_auto(getvariable('<dataset>_files'), format = 'newline_delimited', union_by_name = true);
 ```
 
-`events` also needs `union_by_name = true` and `sample_size = -1`, since a column that is null throughout one file is
-typed by another:
+`union_by_name = true` matches columns across files by name, so a file written before a nullable column was added reads
+as null in it. `events` also needs `sample_size = -1`, since a column that is null throughout one file is typed by
+another:
 
 <!-- recipe:load-events-ndjson -->
 
@@ -363,7 +369,7 @@ SET VARIABLE <dataset>_files = (
   FROM (SELECT unnest(files) AS file FROM read_json_auto('<directory>/_manifests/*.json', union_by_name = true))
   WHERE file.dataset = '<dataset>'
 );
-CREATE VIEW <dataset> AS SELECT * FROM read_parquet(getvariable('<dataset>_files'));
+CREATE VIEW <dataset> AS SELECT * FROM read_parquet(getvariable('<dataset>_files'), union_by_name = true);
 ```
 
 Wrap the dictionary's view around that relation. The cost and slowest recipes read the newest-copy view as
@@ -478,3 +484,41 @@ Ids, names, counts, times and costs are the whole of what leaves, plus an event'
 ## Changes to the shape
 
 [`versioning.md`](../versioning.md#the-egress-contract) owns what may change and how a breaking change is announced.
+
+## Upgrading to hub-minted runner ids
+
+The hub mints each runner's id, `rn_` and a ULID, when an operator adds the runner, and the runner's name becomes a
+label beside it. `steps` and `invocations` stay at major version 1, since the change only adds a nullable column. From
+the upgrade on:
+
+- **`runner_id` carries the `rn_` id.** Rows written before the upgrade carry the runner's name there, and blizzard
+  never rewrites a file it placed.
+- **`runner_name` rides beside it**: the runner's name as it last registered when the copy was written, so a copy
+  written after a rename by restart carries the new name. It is null wherever `runner_id` is, and for a runner the hub
+  holds no record of.
+- **`_schema/steps.v1.json` and `_schema/invocations.v1.json` widen in place**, as [The directory](#the-directory)
+  describes. A file written before the upgrade has no `runner_name`, which the load recipes read as null. `events` names
+  no runner and does not change.
+
+The hub's upgrade re-keys its record, and rows are assembled from the record as it stands, so exporting history again
+writes copies with the `rn_` id and the name, which the newest-copy views keep over the older copies. Either move each
+dataset's cursor back to the start of the export, and the live export writes everything again:
+
+```sh
+blizzard hub egress reset --dataset steps --to <t>
+blizzard hub egress reset --dataset invocations --to <t>
+```
+
+or backfill window by window, each within `backfill_max_window`, without moving a cursor:
+
+```sh
+blizzard hub egress backfill --dataset steps --since <t> --until <t>
+blizzard hub egress backfill --dataset invocations --since <t> --until <t>
+```
+
+Until history is exported again, select one runner across the upgrade by its name: `runner_name`, or `runner_id` on a
+row that has no `runner_name`.
+
+A hub rolled back to a release before the upgrade finds the wider documents and fails every pass with `schema-conflict`.
+Move `_schema/steps.v1.json` and `_schema/invocations.v1.json` aside and it places its own, which the upgraded hub
+widens again.

@@ -168,6 +168,8 @@ class ChunkSummary(BaseModel):
     # The chunk's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
     runner_id: str | None = None
+    # The routed runner's name — not unique, never a key; `None` when the registry holds no such runner.
+    runner_name: str | None = None
     # The count of environments the chunk's live route holds — 0 when unrouted; a grouped
     # chunk counts them all, so a per-runner sum does not undercount.
     environment_count: int = 0
@@ -215,6 +217,8 @@ class RouteView(BaseModel):
     """A chunk's route — where it is being worked."""
 
     runner_id: str
+    # The routing runner's name — not unique, never a key; `None` when the registry holds no such runner.
+    runner_name: str | None = None
     workspace_id: str
     environment_ids: list[str] = []
 

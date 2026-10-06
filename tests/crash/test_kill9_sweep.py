@@ -694,7 +694,12 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     # polls just fail and are swallowed, and the local API serves regardless.
     hub_port, runner_port = free_port(), free_port()
     write_runner_config(
-        runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        runner_dir,
+        workspace=crash_env.workspace,
+        bin_dir=crash_env.bin_dir,
+        hub_port=hub_port,
+        port=runner_port,
+        join=False,
     )
     db_url = RunnerConfig.load(runner_dir).db_url
 
@@ -710,7 +715,6 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
             node_id="nd_review",
             node_name="review",
             epoch=4,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_ATTACH_NOW,
         )
@@ -809,7 +813,12 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # hub polls just fail and are swallowed, and the local API serves regardless.
     hub_port, runner_port = free_port(), free_port()
     write_runner_config(
-        runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        runner_dir,
+        workspace=crash_env.workspace,
+        bin_dir=crash_env.bin_dir,
+        hub_port=hub_port,
+        port=runner_port,
+        join=False,
     )
     db_url = RunnerConfig.load(runner_dir).db_url
 
@@ -825,7 +834,6 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             node_id="nd_build",
             node_name="build",
             epoch=4,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_DECLARE_COMMIT_NOW,
         )

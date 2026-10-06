@@ -49,7 +49,14 @@ class _FakePublisher:
     published: list[tuple[str, str]] = field(default_factory=list)
 
     def publish_event_logged(
-        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str | None, key: str | None = None
+        self,
+        *,
+        severity: str,
+        kind: str,
+        chunk_id: str | None,
+        runner_id: str | None,
+        runner_name: str | None = None,
+        key: str | None = None,
     ) -> int:
         self.published.append((severity, kind))
         return len(self.published)

@@ -43,6 +43,10 @@ from blizzard.foundation.trace_ids import (
 from blizzard.hub.domain.observability.tracing import attributes as hub_attr
 from blizzard.runner.composition import RunnerProcess, build_runner_platform_tracing, build_runner_process
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.identity import RunnerIdentityHolder
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.lifecycle.registration import Registration
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import route_tokens
 from blizzard.runner.tracing import attributes as runner_attr
 from tests.repo_files import repo_root
@@ -622,23 +626,6 @@ def stashed_route_tokens(config: RunnerConfig) -> list[str]:
         engine.dispose()
 
 
-def enroll_runner(hub: httpx.Client, config: RunnerConfig) -> RunnerConfig:
-    """``config`` with a bearer the hub resolves to this runner. The hub continues a trace only for a caller whose
-    credential resolves, so a runner that is not enrolled leaves no hub span under its requests."""
-    registered = hub.post(
-        "/api/fleet/runners",
-        json={
-            "runner_id": config.runner_id,
-            "workspace_id": config.workspace_id,
-            "url": f"http://{config.host}:{config.port}",
-        },
-    )
-    assert registered.status_code == 201, registered.text
-    enrolled = hub.post(f"/api/runners/{config.runner_id}/enrollments")
-    assert enrolled.status_code == 201, enrolled.text
-    return dataclasses.replace(config, hub_token=enrolled.json()["token"])
-
-
 # --------------------------------------------------------------------------- #
 # The running collector
 
@@ -894,14 +881,27 @@ class RunnerSweep:
     ``process`` is the one traced graph the scenario's ticks and local API share, so a worker command's request
     lands in the runner's platform spans; ``None`` where there is no collector, and the scenario runs untraced."""
 
-    def __init__(self, process: RunnerProcess | None, collector: FleetCollector) -> None:
+    def __init__(self, process: RunnerProcess | None, collector: FleetCollector, config: RunnerConfig) -> None:
         self.process = process
         self._sweep = process.trace_sweep if process is not None else None
         self._collector = collector
+        self._config = config
 
     def plant(self) -> None:
-        if self._sweep is not None:
-            self._sweep.sweep()
+        """Register the runner over the graph, then run the sweep's first pass. The sweep tells nothing until the
+        runner holds its hub identity, and its first pass starts the cursor at now — so the pass must follow the
+        first registration and precede every lease's close."""
+        if self.process is None or self._sweep is None:
+            return
+        config = self._config
+        with httpx.Client(base_url=config.hub_url, headers=config.auth_headers(), timeout=30.0) as client:
+            ctx = LoopWiring.of(config).context(HttpHubClient(client), self.process)
+            try:
+                Registration(ctx).run()
+            finally:
+                ctx.usage_http_client.close()
+        assert self.process.identity.current() is not None, "the hub refused the runner's first registration"
+        self._sweep.sweep()
 
     def drain(self, *, workers: int) -> None:
         if self._sweep is not None:
@@ -915,7 +915,7 @@ def runner_sweep(
     """The runner's one process graph, traced like the hub: fleet sweep and platform spans (at a zero root sample
     ratio, so only spans parented on a step's context export) to ``collector``."""
     if not collector.available:
-        yield RunnerSweep(None, collector)
+        yield RunnerSweep(None, collector, config)
         return
     environ = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
     environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint
@@ -927,11 +927,16 @@ def runner_sweep(
         ),
     )
     with mock.patch.dict(os.environ, environ, clear=True):
+        # One holder for the graph and its platform stamp: no span leaves before the first registration fills it.
+        identity = RunnerIdentityHolder()
         process = build_runner_process(
-            traced, environ=environ, platform_tracing=build_runner_platform_tracing(traced, environ)
+            traced,
+            environ=environ,
+            platform_tracing=build_runner_platform_tracing(traced, environ, identity=identity),
+            identity=identity,
         )
     try:
         assert process.trace_sweep is not None, "the collector endpoint did not enable the runner's trace sweep"
-        yield RunnerSweep(process, collector)
+        yield RunnerSweep(process, collector, traced)
     finally:
         process.close()

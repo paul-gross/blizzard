@@ -22,7 +22,7 @@ from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError, SubscriptionDeclaration
+from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.leases import Lease, Liveness, as_utc
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -48,6 +48,7 @@ from blizzard.runner.lifecycle.model import (
     reap_move,
     resumable,
 )
+from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
@@ -132,7 +133,7 @@ class SpendCeiling(Step):
         cap = ctx.config.runner_ceiling_usd
         if cap is None:
             return
-        if ctx.stores.pause.local_paused(ctx.config.runner_id):
+        if ctx.stores.pause.local_paused():
             return  # already engaged — engage-once; `blizzard runner start` is the only clear
         now = ctx.clock.now()
         window_hours = ctx.config.runner_ceiling_window_hours
@@ -144,15 +145,13 @@ class SpendCeiling(Step):
         )
         _log.warning(
             f"runner locally paused — {reason}",
-            runner_id=ctx.config.runner_id,
+            runner_name=ctx.config.runner_name,
             ceiling_usd=cap,
             spend_usd=totals.cost_usd,
             window_hours=ctx.config.runner_ceiling_window_hours,
             cost_partial=totals.cost_partial,
         )
-        PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(
-            ctx.config.runner_id, by="runner-ceiling", reason=reason
-        )
+        PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(by="runner-ceiling", reason=reason)
 
 
 class Reap(Step):
@@ -163,6 +162,11 @@ class Reap(Step):
         An exited session-bearing worker is ADVANCE's: exit is the done declaration, and the
         conservative staleness threshold is what keeps the two apart."""
         ctx = self.ctx
+        if registered_runner_id(ctx.identity) is None:
+            # Failing an attempt judges whether its route is still ours — not knowable before the
+            # first registration, so every reap waits for it.
+            _log.info("reap deferred — not registered at the hub yet", runner_name=ctx.config.runner_name)
+            return
         _CP_REAP_BEFORE.reached()
         braked = not Spawner(ctx).brakes().starts_processes
         now = ctx.clock.now()
@@ -201,7 +205,7 @@ class Reap(Step):
                 _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
                 Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="reap")
         if deferred:
-            _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
+            _log.info("reap deferred — locally paused", runner_name=ctx.config.runner_name, count=deferred)
         _CP_REAP_AFTER.reached()
 
 
@@ -300,6 +304,8 @@ class Resume(Step):
         intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         if not intents:
             return
+        if registered_runner_id(ctx.identity) is None:
+            return  # whether each route is still ours waits for the first registration; the intents are durable
         _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
         active = {lease.lease_id: lease for lease in ctx.stores.lease_record.list_active_leases()}
         takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
@@ -329,35 +335,17 @@ class Pull(Step):
         _CP_PULL_AFTER.reached()
 
     def _sync_registry(self) -> None:
-        """Register + heartbeat and mirror the hub's pause brake locally.
-
-        Registration is idempotent and doubles as the runner-level liveness heartbeat. The pause
-        brake is mirrored locally, and an unreachable hub leaves the last mirrored value standing.
-        """
-        ctx = self.ctx
-        try:
-            ctx.hub.register_runner(
-                ctx.config.runner_id,
-                ctx.config.workspace_id,
-                env_capacity=ctx.config.env_capacity,
-                url=ctx.config.public_url or None,
-                redirect_uris=ctx.config.redirect_uris,
-                capabilities=ctx.capability_snapshot(),
-                subscriptions=tuple(
-                    SubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider) for s in ctx.subscriptions
-                ),
-                gates=ctx.config.gates,
-            )
-            paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
-        except HubClientError:
-            return  # hub unreachable — keep the last-mirrored brake
-        ctx.stores.pause.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
+        """Register, record the identity the reply names, and mirror the hub's pause brake locally."""
+        Registration(self.ctx).run()
 
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against its chunk's view — abandon, park, or preempt it
         per ``lease_reconcile_move`` — from one ``ctx.chunk_views.get`` per lease. A transport
         failure leaves the lease as it is."""
         ctx = self.ctx
+        runner_id = registered_runner_id(ctx.identity)
+        if runner_id is None:
+            return  # no route can be judged ours before the first registration — every lease holds
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
         fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
         for lease in ctx.stores.lease_record.list_active_leases():
@@ -373,7 +361,7 @@ class Pull(Step):
             move = lease_reconcile_move(
                 view,
                 lease,
-                runner_id=ctx.config.runner_id,
+                runner_id=runner_id,
                 pause_parked=pause_parked,
                 fenced=fenced.out(view, lease),
             )
@@ -389,6 +377,9 @@ class Pull(Step):
         ``ctx.chunk_views.get`` each; an unreadable chunk leaves it open. Supersession is owned by
         ``blizzard-context:/domain/humans/escalation.md`` §Supersession."""
         ctx = self.ctx
+        runner_id = registered_runner_id(ctx.identity)
+        if runner_id is None:
+            return  # supersession reads the route's holder — every escalation stays open until the first registration
         fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
         for escalation in ctx.stores.escalations.open_escalations():
             try:
@@ -397,9 +388,7 @@ class Pull(Step):
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
-            superseded = escalation.superseded_by(
-                view, runner_id=ctx.config.runner_id, fenced_out=fenced.out(view, escalation)
-            )
+            superseded = escalation.superseded_by(view, runner_id=runner_id, fenced_out=fenced.out(view, escalation))
             if not superseded:
                 _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=view.status.value)
                 continue
@@ -449,7 +438,7 @@ class Fill(Step):
         if brakes.blocks_claims:
             _log.info(
                 "paused — no new claims this tick",
-                runner_id=ctx.config.runner_id,
+                runner_name=ctx.config.runner_name,
                 hub_paused=brakes.hub,
                 local_paused=brakes.local,
             )

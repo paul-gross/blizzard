@@ -43,7 +43,6 @@ def _seed_lease(store, lease_id: str = "lease_1") -> None:  # type: ignore[no-un
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )

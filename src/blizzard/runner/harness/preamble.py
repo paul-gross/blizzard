@@ -87,7 +87,7 @@ class Preamble:
         workspace_prompt: str,
         environments: Sequence[AcquiredEnvironment],
         lease_id: str,
-        runner_id: str,
+        runner_id: str | None,
         chunk_id: str,
         node: str,
         prior: PreambleFingerprint | None = None,
@@ -98,8 +98,9 @@ class Preamble:
         one where an unchanged layer collapses and a changed one is announced. ``node`` names this
         turn's node-step — required, so no call site can silently suppress the role-change line —
         and a ``prior_node`` known to differ from it composes that line in."""
-        rows = [
-            ("runner id", runner_id),
+        # No runner id row before the runner's first registration at its hub has named one.
+        rows = [("runner id", runner_id)] if runner_id is not None else []
+        rows += [
             ("chunk id", chunk_id),
             ("lease id", lease_id),
         ]

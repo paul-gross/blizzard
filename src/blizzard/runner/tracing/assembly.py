@@ -62,7 +62,8 @@ def _dimensions(facts: LeaseTraceFacts) -> dict[str, AttributeValue]:
         shared.NODE_NAME: context.node_name,
         shared.NODE_EXECUTOR: _EXECUTOR,
         shared.STEP_EPOCH: lease.epoch,
-        attr.RUNNER_ID: lease.runner_id,
+        attr.RUNNER_ID: facts.runner.runner_id,
+        attr.RUNNER_NAME: facts.runner.runner_name,
         attr.LEASE_ID: lease.lease_id,
     }
     if context.graph_name is not None:

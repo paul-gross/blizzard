@@ -16,7 +16,6 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -481,6 +480,7 @@ def test_create_stamps_the_caller_s_user_id_not_their_username(tmp_path: Path) -
         "user_id": user.user_id,
         "login": "alice",
         "runner_id": None,
+        "runner_name": None,
         "chunk_id": None,
         "node_name": None,
     }
@@ -567,7 +567,7 @@ def test_runner_bearer_token_is_rejected_on_every_work_source_route(tmp_path: Pa
     warn_hub = build_hub(tmp_path)
     ref = warn_hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     headers = _bearer(token)
     assert hub.client.get("/api/work-sources", headers=headers).status_code == 403
     assert hub.client.get("/api/work-sources/hub/items", headers=headers).status_code == 403

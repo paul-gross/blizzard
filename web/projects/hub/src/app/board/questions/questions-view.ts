@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { type QuestionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -31,5 +31,10 @@ export class QuestionsPanelView {
 
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
+  }
+
+  /** The asking runner's display name. */
+  protected runnerName(question: QuestionView): string {
+    return runnerDisplayName(question.runner_id, question.runner_name);
   }
 }

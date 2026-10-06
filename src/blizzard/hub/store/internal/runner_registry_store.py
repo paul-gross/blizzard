@@ -2,13 +2,13 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only,
 status derived (``bzh:facts-not-status``): each brake derives from the newest row of its
-own fact table; ``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns.
+own fact table; ``name``, ``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Select, insert, select
@@ -20,6 +20,7 @@ from blizzard.hub.domain.runners.registration import (
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
     RecordedPause,
+    RunnerAddition,
     RunnerCapability,
     RunnerRegistration,
     SubscriptionUsageMiss,
@@ -73,7 +74,11 @@ class RunnerRegistryStore:
 
     def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
-            rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
+            rows = conn.execute(
+                select(s.runner_registrations).order_by(
+                    s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id
+                )
+            ).all()
             runner_ids = [row.runner_id for row in rows]
             lifecycle = self._lifecycle_many(conn, runner_ids)
             if not include_retired:
@@ -103,6 +108,15 @@ class RunnerRegistryStore:
                 .limit(1)
             ).first()
             return row is not None
+
+    def revoked_token_runner_id(self, token_hash: str) -> str | None:
+        with self._store.read("revoked_token_runner_id") as conn:
+            return conn.execute(
+                select(s.runner_token_revocations.c.runner_id)
+                .where(s.runner_token_revocations.c.token_hash == token_hash)
+                .order_by(s.runner_token_revocations.c.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
         with self._store.read("registration_for_token_hash") as conn:
@@ -161,12 +175,40 @@ class RunnerRegistryStore:
         ]
         return [*fleet, *local]
 
+    def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:
+        ids = list(dict.fromkeys(runner_ids))
+        names: dict[str, str] = {}
+        if not ids:
+            return names
+        with self._store.read("names_for") as conn:
+            for batch in id_batches(ids):
+                rows = conn.execute(
+                    select(s.runner_registrations.c.runner_id, s.runner_registrations.c.name).where(
+                        s.runner_registrations.c.runner_id.in_(batch)
+                    )
+                ).all()
+                names.update({row.runner_id: row.name for row in rows})
+        return names
+
     # --- writes -------------------------------------------------------------
 
-    def upsert_registration(
+    def add(self, addition: RunnerAddition) -> None:
+        with self._store.write("add") as conn:
+            conn.execute(
+                insert(s.runner_registrations).values(
+                    runner_id=addition.runner_id,
+                    name=addition.name,
+                    token_hash=addition.token_hash,
+                    added_at=addition.at,
+                    added_by=addition.by,
+                )
+            )
+
+    def record_registration(
         self,
         runner_id: str,
         *,
+        name: str | None = None,
         workspace_id: str,
         env_capacity: int | None,
         public_url: str | None = None,
@@ -176,7 +218,7 @@ class RunnerRegistryStore:
         gates: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
-        # Written unconditionally on both branches, `None`/empty verbatim included: the
+        # Written unconditionally on every registration, `None`/empty verbatim included: the
         # overwrite on refresh is what converges a changed value on re-registration.
         redirect_uris_json = json.dumps(list(redirect_uris)) if redirect_uris else None
         capabilities_json = (
@@ -203,47 +245,38 @@ class RunnerRegistryStore:
             else None
         )
         gates_json = json.dumps(list(gates)) if gates else None
-        with self._store.write("upsert_registration") as conn:
-            existing = conn.execute(
-                select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
-            ).one_or_none()
-            if existing is None:
-                conn.execute(
-                    insert(s.runner_registrations).values(
-                        runner_id=runner_id,
-                        workspace_id=workspace_id,
-                        registered_at=at,
-                        last_seen_at=at,
-                        env_capacity=env_capacity,
-                        public_url=public_url,
-                        redirect_uris=redirect_uris_json,
-                        capabilities=capabilities_json,
-                        subscriptions=subscriptions_json,
-                        gates=gates_json,
-                    )
-                )
-                return True
-            conn.execute(
+        refreshed = {
+            "workspace_id": workspace_id,
+            "last_seen_at": at,
+            "env_capacity": env_capacity,
+            "public_url": public_url,
+            "redirect_uris": redirect_uris_json,
+            "capabilities": capabilities_json,
+            "subscriptions": subscriptions_json,
+            "gates": gates_json,
+        }
+        if name is not None:
+            refreshed["name"] = name
+        registration = s.runner_registrations.c.runner_id == runner_id
+        with self._store.write("record_registration") as conn:
+            if not conn.execute(s.runner_registrations.update().where(registration).values(refreshed)).rowcount:
+                raise LookupError(f"runner {runner_id!r} was never added")
+            # Stamped only while unset, so of two racing first registrations exactly one reads as first.
+            first = conn.execute(
                 s.runner_registrations.update()
-                .where(s.runner_registrations.c.runner_id == runner_id)
-                .values(
-                    workspace_id=workspace_id,
-                    last_seen_at=at,
-                    env_capacity=env_capacity,
-                    public_url=public_url,
-                    redirect_uris=redirect_uris_json,
-                    capabilities=capabilities_json,
-                    subscriptions=subscriptions_json,
-                    gates=gates_json,
-                )
+                .where(registration, s.runner_registrations.c.registered_at.is_(None))
+                .values(registered_at=at)
             )
-            return False
+            return bool(first.rowcount)
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
         with self._store.write("touch_last_seen") as conn:
             result = conn.execute(
                 s.runner_registrations.update()
-                .where(s.runner_registrations.c.runner_id == runner_id)
+                .where(
+                    s.runner_registrations.c.runner_id == runner_id,
+                    s.runner_registrations.c.registered_at.is_not(None),
+                )
                 .values(last_seen_at=at)
             )
             return bool(result.rowcount)
@@ -595,6 +628,9 @@ class RunnerRegistryStore:
         )
         return RunnerRegistration(
             runner_id=row.runner_id,
+            name=row.name,
+            added_at=row.added_at,
+            added_by=row.added_by,
             workspace_id=row.workspace_id,
             registered_at=row.registered_at,
             last_seen_at=row.last_seen_at,

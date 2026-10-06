@@ -112,7 +112,7 @@ def _setup(
     store = make_store("sqlite://")
     hub = _ScriptedClaimHub(outcomes)
     views = _RecordingChunkViews(hub=hub)
-    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, queue_strict=strict)
+    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, queue_strict=strict)
     ctx = make_context(
         store,
         hub=hub,
@@ -123,12 +123,11 @@ def _setup(
         chunk_views=views,
     )
     store.record_local_pause(
-        "r1",
         paused=True,
         at=_NOW,
         by="operator",
         report_kind=RUNNER_LOCALLY_PAUSED,
-        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+        report_payload=json.dumps({"by": "operator"}),
     )
     return store, hub, views, ctx
 
@@ -220,7 +219,7 @@ def test_claim_one_disposes_each_claim_outcome(  # type: ignore[no-untyped-def]
     else:
         message, denial_fields = loss_log
         assert losses == [
-            {"event": message, "log_level": "info", "chunk_id": "ch_1", "runner_id": "r1", **denial_fields}
+            {"event": message, "log_level": "info", "chunk_id": "ch_1", "runner_name": "r1", **denial_fields}
         ]
 
     queue.claim_one()  # the entry a strict dependency hold keeps is claimed again; any other is gone

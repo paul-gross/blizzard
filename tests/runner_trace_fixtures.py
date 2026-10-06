@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.tracing.facts import (
     BoundaryFact,
     CheckResultFact,
@@ -19,6 +20,7 @@ from blizzard.runner.tracing.facts import (
     ParkFact,
     ParkResumeFact,
     PauseParkFact,
+    RunnerFact,
     SessionEndFact,
     SpawnFact,
     TakeoverFact,
@@ -27,6 +29,8 @@ from blizzard.runner.tracing.facts import (
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
+#: The registration the store's identity row holds, which every fixture lease's spans carry.
+REGISTERED = RunnerIdentity(runner_id="r-1", runner_name="r-claude", registered_at=T0)
 LEASE_ID = "lease_1"
 CHUNK_ID = "ch_1"
 EPOCH = 1
@@ -74,7 +78,8 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
     }
     defaults.update(kwargs)
     return LeaseTraceFacts(
-        lease=LeaseGrantFact(LEASE_ID, CHUNK_ID, EPOCH, "r-1", at(0)),
+        lease=LeaseGrantFact(LEASE_ID, CHUNK_ID, EPOCH, at(0)),
+        runner=RunnerFact(REGISTERED.runner_id, REGISTERED.runner_name),
         context=LeaseContextFact(
             graph_id="g1",
             node_id="g1-build",

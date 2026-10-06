@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { eventChunkIds, eventRunnerIds, filterUniverse } from './events-panel.model';
+import { eventChunkIds, eventRunnerIds, eventRunnerNames, filterUniverse } from './events-panel.model';
 
 describe('filterUniverse', () => {
   it('is empty with at most one distinct id and no selection', () => {
@@ -31,6 +31,18 @@ describe('eventRunnerIds', () => {
 
   it('keeps the selected runner', () => {
     expect(eventRunnerIds([{ runner_id: 'r1' }], 'r9')).toEqual(['r1', 'r9']);
+  });
+});
+
+describe('eventRunnerNames', () => {
+  it('maps each runner id to the name its events carry, skipping a nameless or runnerless event', () => {
+    const names = eventRunnerNames([
+      { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' },
+      { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runner_name: null },
+      { runner_id: null, runner_name: 'r-orphan' },
+      {},
+    ]);
+    expect([...names]).toEqual([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude']]);
   });
 });
 

@@ -48,7 +48,6 @@ def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  # typ
             node_id=node_id,
             node_name=node_name,
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -90,7 +89,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         harness=harness,
         probe=FakeProbe(),  # worker exited
         worktree_git=wt,
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", gates=("build",)),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", gates=("build",)),
     )
 
     Advance(ctx).run()  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
@@ -137,7 +136,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         worktree_git=wt,
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", gates=("build",)),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", gates=("build",)),
     )
 
     Advance(ctx).run()

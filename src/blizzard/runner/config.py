@@ -28,6 +28,7 @@ from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
+from blizzard.runner.hub.token_file import HubTokenFile
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
@@ -68,7 +69,7 @@ ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
 # Reconciliation-loop defaults — the runner is machine-level and single-workspace.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
-DEFAULT_RUNNER_ID = "runner-local"
+DEFAULT_RUNNER_NAME = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
@@ -152,6 +153,28 @@ def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | N
             f"name a directory the operator owns (in {path})"
         )
     return expanded
+
+
+def _hub_token(root: Path, token_env: str) -> str:
+    """The hub bearer token: the process environment's ``token_env``, else the runtime dir's
+    ``.env`` assignment of it — so a token ``runner init`` wrote is read with no environment set,
+    and one the environment supplies overrides it."""
+    return os.environ.get(token_env, "") or HubTokenFile.of(root, token_env).held()
+
+
+def _runner_name(raw: dict[str, object], path: Path) -> tuple[str, str | None]:
+    """The runner's name, stripped, and the legacy ``runner_id`` it shadows, if any: ``name`` wins, a toml
+    declaring only the legacy ``runner_id`` reads it as the name, and neither falls back to the default."""
+    if "name" in raw:
+        key, shadowed = "name", raw.get("runner_id")
+    elif "runner_id" in raw:
+        key, shadowed = "runner_id", None
+    else:
+        return DEFAULT_RUNNER_NAME, None
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{key} must be a non-blank name, got {value!r} (in {path})")
+    return value.strip(), None if shadowed is None else str(shadowed)
 
 
 def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
@@ -446,10 +469,13 @@ class RunnerConfig:
     port: int = DEFAULT_PORT
     # Reconciliation-loop seams.
     hub_url: str = DEFAULT_HUB_URL
-    runner_id: str = DEFAULT_RUNNER_ID
+    #: This runner's display name at the hub — not unique, and never its identity.
+    name: str = DEFAULT_RUNNER_NAME
+    #: A legacy ``runner_id`` key the toml declares beside ``name``, which wins; ``host`` warns about it.
+    shadowed_runner_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    #: Names the env var carrying the hub bearer token; :attr:`hub_token` is
-    #: the resolved secret, and empty is a valid state.
+    #: Names the env var carrying the hub bearer token; :attr:`hub_token` is the resolved secret —
+    #: the process environment's, else the runtime dir's ``.env`` — and empty is a valid state.
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
     #: Names the env var carrying the session-signing secret; :attr:`session_secret` is the
@@ -735,18 +761,19 @@ class RunnerConfig:
         """The outbound ``Authorization`` header every runner->hub call carries.
 
         One credential path for every outbound call rather than a header built per call
-        site. Empty when :attr:`hub_token` is unset: an unenrolled runner attaches
-        nothing, and the hub decides whether that is tolerated."""
+        site. Empty when :attr:`hub_token` is unset — a runner no hub has added yet, which
+        every fleet call refuses until ``runner init`` adds it."""
         if not self.hub_token:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}
 
     @classmethod
-    def scaffold(cls, root: Path) -> RunnerConfig:
+    def scaffold(cls, root: Path, *, hub_url: str | None = None) -> RunnerConfig:
         """The default config for a fresh runtime root (used by ``init``).
 
         The loop seams are read from the injected environment when present, so ``init``
-        produces a runnable config; each falls back to its dataclass default."""
+        produces a runnable config; each falls back to its dataclass default. ``hub_url``,
+        when given, wins over ``BZ_HUB_URL``."""
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
         gates = os.environ.get(ENV_GATES)
         passthrough = os.environ.get(ENV_ENV_PASSTHROUGH, "")
@@ -756,9 +783,9 @@ class RunnerConfig:
             db_url=cls.default_db_url(root),
             host=os.environ.get(ENV_HOST, DEFAULT_HOST),
             port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
-            hub_url=os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
+            hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
             token_env=DEFAULT_TOKEN_ENV,
-            hub_token=os.environ.get(DEFAULT_TOKEN_ENV, ""),
+            hub_token=_hub_token(root, DEFAULT_TOKEN_ENV),
             workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
             workspace_provider="basic" if not os.environ.get(ENV_WORKSPACE_ROOT) else "winter",
             workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
@@ -818,7 +845,7 @@ class RunnerConfig:
             "\n# Names the env var carrying the secret that signs this runner's session cookie\n"
             "# (base64, >= 32 bytes decoded; unique per runner). Unset = a fresh secret each start.\n"
             f'session_secret_env = "{self.session_secret_env}"\n'
-            f'runner_id = "{self.runner_id}"\n'
+            f"name = {json.dumps(self.name)}\n"
             f'workspace_id = "{self.workspace_id}"\n'
             f'workspace_root = "{self.workspace_root}"\n'
             f'workspace_provider = "{self.workspace_provider}"\n'
@@ -1009,6 +1036,7 @@ class RunnerConfig:
         if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
             raise ConfigError(f"max_environments must be a positive integer, got {cap!r}")
         repos = _workspace_repos(raw.get("workspace_repo", []))
+        name, shadowed_runner_id = _runner_name(raw, path)
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -1016,10 +1044,11 @@ class RunnerConfig:
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
             hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
             token_env=token_env,
-            hub_token=os.environ.get(token_env, ""),
+            hub_token=_hub_token(root, token_env),
             session_secret_env=session_secret_env,
             session_secret=resolve_session_secret(session_secret_env),
-            runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
+            name=name,
+            shadowed_runner_id=shadowed_runner_id,
             workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             workspace_root=str(raw.get("workspace_root", "")),
             workspace_provider=provider,

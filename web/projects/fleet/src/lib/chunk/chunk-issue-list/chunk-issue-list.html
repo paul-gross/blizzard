@@ -54,7 +54,7 @@
                   }
                   @case ('fleet') {
                     <span
-                      >Proposed by runner {{ author.runner_id }}, chunk
+                      >Proposed by runner {{ runnerLabel(author) }}, chunk
                       <a [routerLink]="[...linkBase(), author.chunk_id]" data-testid="issue-author-chunk">{{
                         author.chunk_id
                       }}</a>, node {{ author.node_name }}</span

@@ -43,7 +43,6 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
             node_id=_NODE_ID,
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

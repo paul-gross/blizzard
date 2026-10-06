@@ -57,6 +57,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
 from blizzard.runner.harness.wiring import claude_code_section
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease, NewLease
 from blizzard.runner.loop.context import LoopContext
@@ -64,11 +65,12 @@ from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
-from blizzard.runner.tracing.attributes import RUNNER_ID
+from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     TICK_STEP,
+    identity_stamp,
 )
 from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
 from blizzard.runner.tracing.receiver_limits import (
@@ -81,6 +83,7 @@ from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
 from tests.runner_fakes import (
+    REGISTERED_AT,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -90,6 +93,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     no_retry_clock,
+    registered_identity,
 )
 
 pytestmark = pytest.mark.component
@@ -102,18 +106,23 @@ _BODY = "body-secret-3"
 _ROUTE_TOKEN = "route-secret-4"
 _CALLER = "blizzard.caller"
 _RUNNER = "r1"
+_NAME = "runner-local"
 
 
-def _handle(exporter: InMemorySpanExporter) -> IPlatformTracing:
+def _handle(exporter: InMemorySpanExporter, identity: ICurrentRunnerIdentity | None = None) -> IPlatformTracing:
     return build_platform_tracing(
         TracingConfig(platform=True, platform_sample_ratio=1.0),
         _ENDPOINT,
         resource={"service.name": "blizzard-runner"},
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        stamped={RUNNER_ID: _RUNNER},
+        stamp=identity_stamp(identity or registered_identity(_RUNNER, _NAME)),
         exporter=exporter,
     )
+
+
+def _stamped(span: ReadableSpan) -> tuple[object, object]:
+    return _attr(span, RUNNER_ID), _attr(span, RUNNER_NAME)
 
 
 def _attr(span: ReadableSpan, key: str) -> object:
@@ -142,7 +151,6 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id=_RUNNER,
             retries_max=2,
             created_at=_NOW,
         )
@@ -163,6 +171,7 @@ def _app(  # type: ignore[no-untyped-def]
     metric_bounds: ReceiverBounds | None = None,
     log_bounds: ReceiverBounds | None = None,
     claude_counter: ReceiverCounter | None = None,
+    identity: ICurrentRunnerIdentity | None = None,
 ):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(
@@ -194,6 +203,7 @@ def _app(  # type: ignore[no-untyped-def]
         hub_proxy_client=proxy,
         hub_retry_clock=no_retry_clock(),
         platform_tracing=handle,
+        identity=identity or registered_identity(_RUNNER, _NAME),
         span_limiter=limiter,
         receiver_counter=counter,
         claude_trace_counter=claude_counter,
@@ -231,7 +241,25 @@ def test_a_lease_scoped_request_is_a_worker_server_span_and_a_hub_call_propagate
     http_children = [s for s in spans if s.kind.name == "CLIENT" and s.parent is not None]
     assert any(_parent_id(s) == _span_id(server[0]) for s in http_children)
     assert seen and "traceparent" in seen[0].headers
-    assert all(_attr(s, RUNNER_ID) == _RUNNER for s in spans)
+    assert all(_stamped(s) == (_RUNNER, _NAME) for s in spans)
+
+
+def test_no_platform_span_leaves_before_the_first_registration_and_a_rename_shows_from_the_next(
+    tmp_path: Path,
+) -> None:
+    exporter = InMemorySpanExporter()
+    identity = RunnerIdentityHolder()
+    handle = _handle(exporter, identity)
+    with TestClient(_app(tmp_path, handle, [], identity=identity)) as client:
+        assert _history(client).status_code == 200
+        identity.hold(RunnerIdentity("rn_01JRUNNER", "runner-a", REGISTERED_AT))
+        assert _history(client).status_code == 200
+        identity.hold(RunnerIdentity("rn_01JRUNNER", "runner-b", REGISTERED_AT))
+        assert _history(client).status_code == 200
+    spans = _finished(handle, exporter)
+    server = sorted((s for s in spans if s.name.startswith("GET /api/leases/")), key=lambda s: s.start_time or 0)
+    assert [_stamped(s) for s in server] == [("rn_01JRUNNER", "runner-a"), ("rn_01JRUNNER", "runner-b")]
+    assert all(_attr(s, RUNNER_ID) == "rn_01JRUNNER" for s in spans)
 
 
 def test_heartbeat_and_the_trace_receiver_path_yield_no_span_at_all(tmp_path: Path) -> None:
@@ -290,7 +318,6 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    handle.instrument_engine(store._engine)
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
     handle.instrument_client(client)
     ctx = make_context(
@@ -300,6 +327,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
     )
+    handle.instrument_engine(store._engine)
     ctx = type(ctx)(**{**ctx.__dict__, "tracer": handle.tracer})
     tick(ctx)
     spans = _finished(handle, exporter)
@@ -323,7 +351,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     step_ids = {_span_id(s) for s in steps}
     hub_calls = [s for s in spans if s.kind.name == "CLIENT"]
     assert hub_calls and all(_parent_id(s) in step_ids or _parent_id(s) == _span_id(roots[0]) for s in hub_calls)
-    assert all(_attr(s, RUNNER_ID) == _RUNNER for s in spans)
+    assert all(_stamped(s) == (_RUNNER, _NAME) for s in spans)
 
 
 # --- The OTLP receiver --------------------------------------------------------------------------------
@@ -493,9 +521,9 @@ def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_a
     admitted: list[list[str]] = []
     real_admit = otlp_receiver.admit
 
-    def spy(spans, lease, allowlist):  # type: ignore[no-untyped-def]
+    def spy(spans, lease, allowlist, *, runner):  # type: ignore[no-untyped-def]
         admitted.append([span.scope_name for span in spans])
-        return real_admit(spans, lease, allowlist)
+        return real_admit(spans, lease, allowlist, runner=runner)
 
     monkeypatch.setattr(otlp_receiver, "admit", spy)
     filler = [{"key": f"filler.{i:03d}", "value": {"stringValue": "x"}} for i in range(70)]
@@ -694,7 +722,6 @@ def _lease(epoch: int) -> NewLease:
         node_id="nd_build",
         node_name="build",
         epoch=epoch,
-        runner_id=_RUNNER,
         retries_max=2,
         created_at=_NOW,
     )
@@ -713,7 +740,7 @@ def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFact
 def test_a_buffered_completion_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
     hub = FakeHub()
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
-    submission = Completion(choice="pass", epoch=3, runner_id=_RUNNER, from_node_id="nd_build")
+    submission = Completion(choice="pass", epoch=3, from_node_id="nd_build")
 
     def seed(ctx: LoopContext) -> None:
         _buffer_closed(ctx, 3, lambda facts, lease: facts.completion(lease, submission, at=_NOW))
@@ -723,7 +750,7 @@ def test_a_buffered_completion_posts_under_its_attempt_step_root(tmp_path: Path)
 
 
 def test_a_buffered_decision_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
-    submission = GateSubmission(from_node_id="nd_build", epoch=4, runner_id=_RUNNER)
+    submission = GateSubmission(from_node_id="nd_build", epoch=4)
 
     def seed(ctx: LoopContext) -> None:
         _buffer_closed(ctx, 4, lambda facts, lease: facts.decision(lease, submission, at=_NOW))
@@ -799,7 +826,13 @@ _CLAUDE_TRACING_SCOPE = "com.anthropic.claude_code.tracing"
 _CLAUDE_SERVICE = "blizzard-claude-code"
 _ENCODED = {"json": "application/json", "protobuf": "application/x-protobuf"}
 _NEW_PATHS = ["/v1/metrics", "/v1/logs"]
-_STAMPS = {_CALLER: "worker", "blizzard.chunk.id": "ch_1", "blizzard.lease.id": "lease_1", RUNNER_ID: _RUNNER}
+_STAMPS = {
+    _CALLER: "worker",
+    "blizzard.chunk.id": "ch_1",
+    "blizzard.lease.id": "lease_1",
+    RUNNER_ID: _RUNNER,
+    RUNNER_NAME: _NAME,
+}
 
 
 class _CapturingMetricExporter(MetricExporter):
@@ -1039,6 +1072,19 @@ def test_the_new_receivers_are_404_while_either_switch_is_off(tmp_path: Path, pa
     (tmp_path / "second").mkdir()
     with TestClient(_app(tmp_path / "second", _handle(InMemorySpanExporter()), [])) as client:
         assert _post(client, path, _body_for(path)).status_code == 404
+
+
+def test_every_otlp_receiver_is_404_before_the_first_registration(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    telemetry = _Telemetry()
+    app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle, identity=RunnerIdentityHolder())
+    with TestClient(app) as client:
+        assert _post_json(client, _export(_own_trace())).status_code == 404
+        for path in _NEW_PATHS:
+            assert _post(client, path, _body_for(path)).status_code == 404
+    assert _worker_spans(_finished(handle, exporter)) == []
+    assert telemetry.metric_points() == [] and telemetry.log_records() == ()
 
 
 @pytest.mark.parametrize("path", _NEW_PATHS)

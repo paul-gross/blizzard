@@ -37,8 +37,9 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     make_usage_recorder,
+    registered_identity,
 )
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, RunnerFleetClient, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
@@ -108,7 +109,11 @@ class _RealRunner:
 
     def __init__(self, tmp_path: Path, hub: HubHarness, runner_id: str) -> None:
         self.store = make_store(f"sqlite:///{tmp_path / f'{runner_id}.db'}")
-        self.recording = _RecordingClient(hub.client)
+        assert hub.app is not None
+        # The hub resolves this runner from its own token, so it presents ``runner_id``'s.
+        self.recording = _RecordingClient(
+            RunnerFleetClient(hub.app, services=hub.services, default_runner_id=runner_id)
+        )
         hub_client = HttpHubClient(cast(httpx.Client, self.recording))
         provider = FakeProvider({"e1": "/ws/e1"})
         harness = FakeHarness(handle=_HANDLE, verdict=None)
@@ -123,7 +128,8 @@ class _RealRunner:
             provider=provider,
             process=FakeProbe(alive={(200, "start-200")}),
             worktree_git=FakeWorktreeGit(),
-            config=LoopConfig(runner_id=runner_id, workspace_id="w1", max_agents=1),
+            config=LoopConfig(runner_name=runner_id, workspace_id="w1", max_agents=1),
+            identity=registered_identity(runner_id, runner_id),
             worker_files=WorkerStdoutFiles("", self.store),
             elicitation_files=ElicitationFiles(str(tmp_path / f"{runner_id}-elicit")),
             worker_scratch=WorkerScratchDirs(""),

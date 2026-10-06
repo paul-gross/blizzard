@@ -14,7 +14,6 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -168,7 +167,7 @@ def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> 
 @pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
     token = _seed_enrolled(tmp_path, runner_id="runner-a")
-    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(path, headers=_bearer(token))
     assert resp.status_code == 403

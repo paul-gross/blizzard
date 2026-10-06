@@ -1,6 +1,6 @@
-"""``blizzard hub login``'s local session-token store — CLI-client state, not
-hub daemon state: session bearers keyed by hub base URL under the user config dir,
-owner-only (``0600``; parent dir ``0700``)."""
+"""The operator's local session-token store — CLI-client state, not daemon state, so
+both CLIs read it: session bearers keyed by hub base URL (any trailing ``/`` stripped)
+under the user config dir, owner-only (``0600``; parent dir ``0700``)."""
 
 from __future__ import annotations
 

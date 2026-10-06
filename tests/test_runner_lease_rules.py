@@ -35,7 +35,6 @@ def _lease(*, pid: int | None = 7, session_id: str | None = "sess") -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=1,
-        runner_id="r1",
         retries_max=2,
         created_at=_MINT,
         pid=pid,

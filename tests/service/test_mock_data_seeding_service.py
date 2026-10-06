@@ -225,11 +225,11 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert paused_runner["locally_paused_reason"] is not None
         assert "spend ceiling" in paused_runner["locally_paused_reason"], paused_runner
 
-        # --stress's long-identity runner: present, neither truncated nor erroring — every
-        # ordinary base runner id is short, so a very long one is unambiguously the extra.
-        long_identity_runners = [rid for rid in runners if len(rid) > 100]
-        assert len(long_identity_runners) == 1, sorted(runners)
-        long_runner = runners[long_identity_runners[0]]
+        # --stress's long-named runner: present, neither truncated nor erroring — every
+        # ordinary base runner name is short, so a very long one is unambiguously the extra.
+        long_named_runners = [rid for rid, runner in runners.items() if len(runner["runner_name"]) > 100]
+        assert len(long_named_runners) == 1, sorted(runner["runner_name"] for runner in runners.values())
+        long_runner = runners[long_named_runners[0]]
         assert long_runner["workspace_id"] == "workspace-stress", long_runner
 
 

@@ -20,10 +20,12 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
@@ -33,6 +35,7 @@ from tests.e2e.test_acceptance_loop import (
     _terminate,
     _winter_source,
 )
+from tests.runner_join import add_runner, runner_spawn_env
 from tests.support import daemon_log_sink, shared_daemon_log_dir
 
 
@@ -393,24 +396,35 @@ def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
 
 @contextlib.contextmanager
 def mock_runner(
-    bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "runner-mock", log_dir: Path | None = None
+    bin_dir: Path,
+    port: int,
+    hub_port: int,
+    *,
+    name: str = "runner-mock",
+    token: str | None = None,
+    log_dir: Path | None = None,
 ) -> Iterator[httpx.Client]:
-    """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it."""
-    env = {**os.environ, "BZ_HUB_URL": f"http://127.0.0.1:{hub_port}"}
+    """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it. With no
+    ``token`` the driver adds itself at the hub on start, as ``runner init`` does; the id the hub minted
+    reads back from its ``POST /_drive/register`` (:func:`registered_runner_id`)."""
+    hub_url = f"http://127.0.0.1:{hub_port}"
     log = _mock_daemon_log("mock-runner", port, log_dir)
+    args = [
+        str(bin_dir / "blizzard-mock-runner"),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--hub-url",
+        hub_url,
+        "--name",
+        name,
+    ]
+    if token is not None:
+        args += ["--token", token]
     proc = subprocess.Popen(
-        [
-            str(bin_dir / "blizzard-mock-runner"),
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-            "--hub-url",
-            f"http://127.0.0.1:{hub_port}",
-            "--runner-id",
-            runner_id,
-        ],
-        env=env,
+        args,
+        env=runner_spawn_env(hub_url),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
@@ -424,13 +438,36 @@ def mock_runner(
         _terminate(proc)
 
 
+def registered_runner_id(runner: httpx.Client, body: dict[str, object] | None = None) -> str:
+    """Drive the mock runner's registration (``POST /_drive/register``) and answer the id the hub
+    resolved its token to."""
+    registered = runner.post("/_drive/register", json=body) if body is not None else runner.post("/_drive/register")
+    assert registered.json()["status"] == 201, registered.text
+    return str(registered.json()["response"]["runner_id"])
+
+
+def runner_fleet_view(hub: httpx.Client, config: RunnerConfig) -> dict[str, Any]:
+    """The hub's fleet view of the runner ``config`` names, read as that runner — under its own token,
+    at the id the hub resolves it to — since the fleet answers a runner only about itself."""
+    who = hub.get("/api/fleet/identity", headers=config.auth_headers())
+    assert who.status_code == 200, who.text
+    view = hub.get(f"/api/fleet/runners/{who.json()['runner_id']}", headers=config.auth_headers())
+    assert view.status_code == 200, view.text
+    return view.json()
+
+
 @contextlib.contextmanager
-def http_hub_client(port: int) -> Iterator[HttpHubClient]:
-    """A real :class:`HttpHubClient` pointed at a mock-hub subprocess on ``port``, driven
+def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-parity") -> Iterator[HttpHubClient]:
+    """A real :class:`HttpHubClient` pointed at a hub subprocess on ``port``, driven
     directly rather than through the runner loop — for a wire-parity assertion that needs
     a specific ``IHubClient`` method's response (see ``LoopWiring.tick_once`` for the
-    behavioral-outcome alternative)."""
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    behavioral-outcome alternative). It presents ``token``, else one for a runner it adds
+    under ``name``, since the hub answers every tokenless fleet call ``401``."""
+    base_url = f"http://127.0.0.1:{port}"
+    if token is None:
+        with httpx.Client(base_url=base_url, timeout=15.0) as operator:
+            _runner_id, token = add_runner(operator, name)
+    client = httpx.Client(base_url=base_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"})
     try:
         yield HttpHubClient(client)
     finally:

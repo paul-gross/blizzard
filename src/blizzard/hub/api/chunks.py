@@ -7,6 +7,7 @@ stored column. The work-item read is a pass-through whose contents are never sto
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Annotated
@@ -210,6 +211,10 @@ def list_chunks(
     live_holders = resolve_live_holders(
         ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
     )
+    # The page's routed runners' registered names — one batched read, narrowed to the page.
+    runner_names = services.registry.names_for(
+        route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
+    )
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -224,6 +229,7 @@ def list_chunks(
                     facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
                     delivery_sources.get(chunk.chunk_id, DeliverySources()),
                 ),
+                runner_names=runner_names,
             ).summary()
             for chunk in page_chunks
         ],
@@ -732,14 +738,16 @@ def delete_chunk(
     return ChunkDeleteResponse(chunk_id=chunk_id)
 
 
-def _author_view(author: AuthorView) -> WorkItemAuthorView:
-    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here:
-    the source already resolved it, this only reshapes the fields."""
+def _author_view(author: AuthorView, runner_names: Mapping[str, str]) -> WorkItemAuthorView:
+    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here: the
+    source already resolved it, this only reshapes the fields and names a fleet author's
+    runner out of ``runner_names``, the caller's one batched read."""
     return WorkItemAuthorView(
         kind=author.kind,
         user_id=author.user_id,
         login=author.login,
         runner_id=author.runner_id,
+        runner_name=runner_names.get(author.runner_id) if author.runner_id is not None else None,
         chunk_id=author.chunk_id,
         node_name=author.node_name,
     )
@@ -755,20 +763,24 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     fetched_at = iso_utc(services.clock.now())
     holders = services.chunks.work_refs.live_holders(chunk.work_refs)
-    entries: list[WorkItemEntry] = []
+    # Each entry beside its fetched author, so one read names every fleet author afterwards.
+    entries: list[tuple[WorkItemEntry, AuthorView | None]] = []
     for pointer in chunk.work_refs:
         source = services.work_sources.get(pointer.source)
         hub_source = pointer.source == RESERVED_HUB_SOURCE_NAME
         if source is None:
             entries.append(
-                WorkItemEntry(
-                    source=pointer.source,
-                    ref=pointer.ref,
-                    hub_source=hub_source,
-                    label=None,
-                    web_url=None,
-                    fetched_at=fetched_at,
-                    error=f"no configured work source named {pointer.source!r}",
+                (
+                    WorkItemEntry(
+                        source=pointer.source,
+                        ref=pointer.ref,
+                        hub_source=hub_source,
+                        label=None,
+                        web_url=None,
+                        fetched_at=fetched_at,
+                        error=f"no configured work source named {pointer.source!r}",
+                    ),
+                    None,
                 )
             )
             continue
@@ -779,33 +791,46 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
             stated_priority = WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None
         except (WorkSourceError, ValueError) as exc:
             entries.append(
-                WorkItemEntry(
-                    source=pointer.source,
-                    ref=pointer.ref,
-                    hub_source=hub_source,
-                    label=label,
-                    web_url=web_url,
-                    fetched_at=fetched_at,
-                    error=str(exc),
+                (
+                    WorkItemEntry(
+                        source=pointer.source,
+                        ref=pointer.ref,
+                        hub_source=hub_source,
+                        label=label,
+                        web_url=web_url,
+                        fetched_at=fetched_at,
+                        error=str(exc),
+                    ),
+                    None,
                 )
             )
         else:
             entries.append(
-                WorkItemEntry(
-                    source=pointer.source,
-                    ref=pointer.ref,
-                    hub_source=hub_source,
-                    label=label,
-                    web_url=web_url,
-                    fetched_at=fetched_at,
-                    title=item.title,
-                    body=item.body,
-                    comments=item.comments,
-                    author=_author_view(item.author) if item.author is not None else None,
-                    stated_priority=stated_priority,
+                (
+                    WorkItemEntry(
+                        source=pointer.source,
+                        ref=pointer.ref,
+                        hub_source=hub_source,
+                        label=label,
+                        web_url=web_url,
+                        fetched_at=fetched_at,
+                        title=item.title,
+                        body=item.body,
+                        comments=item.comments,
+                        stated_priority=stated_priority,
+                    ),
+                    item.author,
                 )
             )
-    return WorkItemsView(items=entries)
+    runner_names = services.registry.names_for(
+        author.runner_id for _, author in entries if author is not None and author.runner_id is not None
+    )
+    return WorkItemsView(
+        items=[
+            entry if author is None else entry.model_copy(update={"author": _author_view(author, runner_names)})
+            for entry, author in entries
+        ]
+    )
 
 
 # `/pm-items` is a deprecated alias onto the *same handler* as `/work-items`:

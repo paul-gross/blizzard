@@ -110,7 +110,7 @@ def _oauth_app() -> TestClient:
     config = RunnerConfig(
         root=Path("/tmp/runner-gating-guard"),  # store-free app: a gated route 401s before any store read
         db_url="sqlite://",
-        runner_id="runner-guard",
+        name="runner-guard",
         hub_url="http://hub.example",
         public_urls=("https://runner-guard.example",),
     )

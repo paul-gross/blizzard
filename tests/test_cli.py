@@ -197,7 +197,6 @@ def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Pa
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=datetime(2026, 7, 14, tzinfo=UTC),
                 pid=999999,  # not a real, live pid
                 process_start_time="start-999999",
@@ -517,6 +516,31 @@ def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None
     assert result.exception is None or isinstance(result.exception, SystemExit)
     assert str(copy_dir) in result.output
     assert "serving blizzard-hub" not in result.output
+
+
+def test_runner_host_without_a_token_names_both_ways_to_get_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A runner the hub already lists takes an enroll, not a second add under a fresh id, so the
+    no-token warning names both."""
+    runner = CliRunner()
+    root = tmp_path / "runner"
+    assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    (root / ".env").unlink()
+
+    def stop(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("stop before serving")
+
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_runner_process", stop)
+
+    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
+
+    assert isinstance(result.exception, RuntimeError)
+    assert "the hub refuses this runner until `blizzard runner init` adds it" in result.output
+    assert (
+        "if `blizzard hub runner list` already shows it, put the line `blizzard hub runner enroll <id>` prints in"
+        in result.output
+    )
 
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:

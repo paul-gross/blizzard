@@ -55,7 +55,6 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -81,7 +80,6 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=retries_max,
             created_at=_NOW,
         )
@@ -297,9 +295,9 @@ class _OrderTrackingHub(FakeHub):
         self.calls.append("chunk_statuses")
         return super().chunk_statuses(chunk_ids)
 
-    def push_facts(self, runner_id, facts):  # type: ignore[no-untyped-def]
+    def push_facts(self, facts):  # type: ignore[no-untyped-def]
         self.calls.append("push_facts")
-        return super().push_facts(runner_id, facts)
+        return super().push_facts(facts)
 
 
 @pytest.mark.unit

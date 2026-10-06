@@ -20,6 +20,7 @@ from blizzard.runner.lifecycle.model import (
     held_chunk_move,
     held_chunk_reads_local_epoch,
 )
+from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.node_steps.chunk_state import ChunkGate
 from blizzard.runner.node_steps.envelope import Envelope
@@ -80,9 +81,12 @@ class HeldChunk:
         # The local epoch is read only where a decision compares against it (`bzh:bulk-reconstitution`).
         reads_epoch = held_chunk_reads_local_epoch(view) or takeovers.covers(self.chunk_id)
         local_epoch = self.ctx.stores.lease_record.latest_epoch(self.chunk_id) if reads_epoch else 0
+        runner_id = registered_runner_id(self.ctx.identity)
+        if runner_id is None:
+            return  # whether the route is still ours waits for the runner's first registration
         move = held_chunk_move(
             view,
-            runner_id=self.ctx.config.runner_id,
+            runner_id=runner_id,
             local_latest_epoch=local_epoch,
             taken_over=takeovers.holds(self.chunk_id, local_epoch),
         )
@@ -153,7 +157,6 @@ class HeldChunk:
         submission = Completion(
             choice=decision.resolved_choice or "",
             epoch=decision.epoch,
-            runner_id=self.ctx.config.runner_id,
             from_node_id=decision.node_id,
             artifacts=[],  # the decision's artifacts already landed
             decision_id=decision.decision_id,

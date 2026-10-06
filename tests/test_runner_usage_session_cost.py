@@ -38,7 +38,6 @@ def _spawned_lease(store, lease: str, *, chunk: str = "ch_1") -> None:  # type: 
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -134,7 +133,6 @@ def test_a_lease_with_no_identified_session_banks_its_figure_verbatim(tmp_path):
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

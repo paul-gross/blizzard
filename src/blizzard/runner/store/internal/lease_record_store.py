@@ -160,7 +160,6 @@ class LeaseRecordStore:
                     lease_id=lease.lease_id,
                     chunk_id=lease.chunk_id,
                     epoch=lease.epoch,
-                    runner_id=lease.runner_id,
                     created_at=lease.created_at,
                 )
             )

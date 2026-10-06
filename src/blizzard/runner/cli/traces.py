@@ -146,7 +146,7 @@ def traces_replay(
                     f"in {failure['batches']} batches before it stopped; {where})"
                 )
             if resp.status_code in (httpx.codes.CONFLICT, httpx.codes.UNPROCESSABLE_ENTITY):
-                reason = "tracing is off" if resp.status_code == httpx.codes.CONFLICT else "window refused"
+                reason = "replay unavailable" if resp.status_code == httpx.codes.CONFLICT else "window refused"
                 raise click.ClickException(f"{reason}: {resp.json().get('detail', '')} ({where})")
             try:
                 resp.raise_for_status()

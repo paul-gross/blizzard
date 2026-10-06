@@ -101,9 +101,11 @@ def test_heartbeat_unknown_runner_is_404(tmp_path: Path) -> None:
     assert hub.client.post("/api/fleet/runners/ghost/heartbeats").status_code == 404
 
 
-def test_get_unknown_runner_is_404(tmp_path: Path) -> None:
+def test_get_of_a_runner_that_never_registered_is_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/fleet/runners/ghost").status_code == 404
+    resp = hub.client.get("/api/fleet/runners/ghost")
+    assert resp.status_code == 409
+    assert resp.json() == {"detail": "runner ghost has not registered"}
 
 
 def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:

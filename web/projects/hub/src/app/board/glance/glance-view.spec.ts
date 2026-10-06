@@ -149,7 +149,7 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01estimate0000000000000000',
         shortId: 'C-0001',
-        runnerId: 'r1',
+        runner: 'r1',
         node: 'build',
         pillLabel: 'run',
         costUsd: 0,
@@ -180,7 +180,7 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01billedandestimate00000000',
         shortId: 'C-0003',
-        runnerId: 'r1',
+        runner: 'r1',
         node: 'build',
         pillLabel: 'run',
         costUsd: 0.05,
@@ -200,7 +200,7 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01billedonly000000000000000',
         shortId: 'C-0002',
-        runnerId: 'r1',
+        runner: 'r1',
         node: 'build',
         pillLabel: 'run',
         costUsd: 2.03,
@@ -230,7 +230,7 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01nothingspent0000000000000',
         shortId: 'C-0004',
-        runnerId: 'r1',
+        runner: 'r1',
         node: 'build',
         pillLabel: 'run',
         costUsd: 0,

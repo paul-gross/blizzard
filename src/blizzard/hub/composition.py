@@ -609,7 +609,9 @@ def build_services(
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
-    trace_store = TraceStore(store_connections, graphs=graph_store, label=_work_ref_label(work_sources))
+    trace_store = TraceStore(
+        store_connections, graphs=graph_store, names=registry_store, label=_work_ref_label(work_sources)
+    )
     trace_config = tracing or TracingConfig()
     trace_export = (
         TraceExportSweep(

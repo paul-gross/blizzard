@@ -46,7 +46,6 @@ def _seed_lease(config: RunnerConfig, *, lease_id: str, token: str, graph_id: st
                 node_id="nd_build",
                 node_name="build",
                 epoch=1,
-                runner_id="runner-service",
                 retries_max=1,
                 created_at=_NOW,
             )
@@ -111,7 +110,7 @@ def test_system_scope_read_fails_rather_than_resolving_locally_when_the_hub_is_u
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     unreachable_hub_port = _free_port()  # nothing is listening here
 
-    base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port)
+    base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port, join=False)
     config = dataclasses.replace(base_config, host="127.0.0.1", port=_free_port())
     lease_id, token = "lease_sys_unreachable", "tok_sys_unreachable"
     _seed_lease(config, lease_id=lease_id, token=token, graph_id="gr_service_system_2")

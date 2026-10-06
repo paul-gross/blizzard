@@ -52,7 +52,6 @@ def _setup(tmp_path: Path) -> tuple[UsageRecorder, EventBroker, Lease]:
             node_id="nd_build",
             node_name="build",
             epoch=3,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -153,7 +152,6 @@ def test_a_sessionless_lease_records_the_samples_own_identity_unstamped(tmp_path
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

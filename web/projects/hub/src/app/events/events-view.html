@@ -58,7 +58,9 @@
           }}</fleet-kit-badge>
           <span class="kind" data-testid="events-kind" [title]="ev.kind">{{ ev.kind }}</span>
           @if (ev.runner_id; as runnerId) {
-            <span class="runner" data-testid="events-runner" [title]="runnerId">{{ shortId(runnerId) }}</span>
+            <span class="runner" data-testid="events-runner" [title]="runnerTitle(runnerId, ev.runner_name)">{{
+              runnerName(runnerId, ev.runner_name)
+            }}</span>
           } @else {
             <span class="runner" data-testid="events-runner" aria-hidden="true">—</span>
           }

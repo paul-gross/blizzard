@@ -2,7 +2,7 @@
 
 The hub and the runner expose identical offline-admin surfaces, so store tests
 parametrize over both via the ``daemon`` fixture. Also strips blizzard's own worker
-identity vars — see ``_strip_worker_identity_env``.
+identity vars and a live runner's hub URL and token.
 """
 
 from __future__ import annotations
@@ -18,13 +18,17 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.cli.sessions.internal import session_file
 from blizzard.hub.config import LEGACY_FORGE_VARIABLES
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
 from tests.repo_files import install_repo_read_guard
+
+# Its autouse fixture joins every in-process runner init to a fake hub.
+pytest_plugins = ("tests.runner_init_fakes",)
 
 # Install before test-module imports so collection-time reads are covered too.
 install_repo_read_guard()
@@ -110,6 +114,18 @@ _WORKER_IDENTITY_ENV = (
 def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset the worker identity vars so the suite is green inside a blizzard worker."""
     for name in _WORKER_IDENTITY_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
+# The hub a runner joins and the token it presents there.
+_HUB_COORDINATES_ENV = (ENV_HUB_URL, DEFAULT_TOKEN_ENV)
+
+
+@pytest.fixture(autouse=True)
+def _strip_hub_coordinates_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset the hub URL and runner token so a developer's shell never leaks them into an
+    in-process runner config load."""
+    for name in _HUB_COORDINATES_ENV:
         monkeypatch.delenv(name, raising=False)
 
 

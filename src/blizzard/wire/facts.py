@@ -37,9 +37,9 @@ class RunnerFact(BaseModel):
 
 
 class RunnerFactBatch(BaseModel):
-    """A runner's push of one-or-more buffered facts, ordered by seq."""
+    """A runner's push of one-or-more buffered facts, ordered by seq — attributed to the runner
+    its bearer token names; the body carries no runner id."""
 
-    runner_id: str
     facts: list[RunnerFact]
 
 

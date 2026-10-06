@@ -471,8 +471,8 @@ export const listOpenTakeoversApiTakeoversGet = <ThrowOnError extends boolean = 
  * Trace Replay
  *
  * Tell every lease closed in ``[since, until)`` again, inside the request, without moving the live cursor.
- * A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
- * refuses is 502 with the counts it accepted before.
+ * A bad window is 422; a replay that must export while tracing is off, or any replay before the runner's first
+ * registration, is 409; and an exporter that refuses is 502 with the counts it accepted before.
  */
 export const traceReplayApiTracesReplayPost = <ThrowOnError extends boolean = false>(options: Options<TraceReplayApiTracesReplayPostData, ThrowOnError>): RequestResult<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError> => (options.client ?? client).post<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError>({
     url: '/api/traces/replay',

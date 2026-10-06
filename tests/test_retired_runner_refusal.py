@@ -24,7 +24,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
-from tests.support import HubHarness, build_hub, make_ready, report_lease
+from tests.support import HubHarness, build_hub, make_ready, report_lease, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +33,8 @@ _RUNNER = "runner-a"
 
 def _retired_hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path)
-    hub.services.fleet.register(_RUNNER, "ws-a", capabilities=(RunnerCapability("claude", default=True),))
+    seed_runner(hub, _RUNNER, register=False)
+    hub.services.fleet.register(_registration(hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),))
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op")
     return hub
@@ -50,7 +51,8 @@ def test_register_refuses_a_retired_runner_before_any_write(tmp_path: Path) -> N
     before = _registration(hub)
 
     with pytest.raises(RunnerRetired):
-        hub.services.fleet.register(_RUNNER, "ws-b", env_capacity=9)
+        seed_runner(hub, _RUNNER, register=False)
+        hub.services.fleet.register(_registration(hub), "ws-b", env_capacity=9)
 
     after = _registration(hub)
     assert after.workspace_id == before.workspace_id
@@ -75,11 +77,12 @@ def test_heartbeat_on_an_unregistered_runner_is_false_not_a_refusal(tmp_path: Pa
 
 def test_enroll_refuses_a_retired_runner_without_setting_a_token(tmp_path: Path) -> None:
     hub = _retired_hub(tmp_path)
+    held = _registration(hub).token_hash
 
     with pytest.raises(RunnerRetired, match="reinstate"):
         hub.services.enrollment.enroll(_registration(hub))
 
-    assert _registration(hub).token_hash is None
+    assert _registration(hub).token_hash == held
 
 
 def test_claim_refuses_a_retired_runner_and_leaves_the_chunk_unrouted(tmp_path: Path) -> None:
@@ -113,7 +116,10 @@ class _Routed:
 
     def __init__(self, tmp_path: Path) -> None:
         self.hub = build_hub(tmp_path)
-        self.hub.services.fleet.register(_RUNNER, "ws-a", capabilities=(RunnerCapability("claude", default=True),))
+        seed_runner(self.hub, _RUNNER, register=False)
+        self.hub.services.fleet.register(
+            _registration(self.hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),)
+        )
         self.chunk_id = self.hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
         assert self.hub.client.post(f"/api/chunks/{self.chunk_id}/promote").status_code == 202
         make_ready(self.hub, self.chunk_id)

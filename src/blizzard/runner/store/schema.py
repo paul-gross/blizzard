@@ -33,7 +33,6 @@ leases = Table(
     Column("lease_id", String, primary_key=True),  # lease_<ulid>
     Column("chunk_id", String, nullable=False),  # the chunk this lease attempt is for
     Column("epoch", Integer, nullable=False),  # incrementing fence, reported to the hub
-    Column("runner_id", String, nullable=False),
     Column("pid", Integer, nullable=True),  # filled at spawn-return (phase one of a two-phase spawn)
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
     Column("session_id", String, nullable=True),  # harness-assigned, recorded once identified (phase two)
@@ -312,14 +311,26 @@ session_ends = Table(
 )
 
 # --- Hub control mirror (the declarative pause brake read on PULL) -----------
-# Mirrored so the last-known directive holds while the hub is unreachable.
+# A singleton row, mirrored so the last-known directive holds while the hub is unreachable.
 
 hub_control = Table(
     "hub_control",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("id", Integer, primary_key=True, autoincrement=True),
     Column("paused", Boolean, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+)
+
+# --- Runner identity (who this runner is at its hub) -------------------------
+# A singleton row: the id and name of the latest successful registration. Nothing keys on it.
+
+runner_identity = Table(
+    "runner_identity",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),  # hub-minted rn_<ulid>
+    Column("runner_name", String, nullable=False),  # the name the hub recorded at that registration
+    Column("registered_at", UtcDateTime, nullable=False),  # injected-clock stamp of the registration
 )
 
 # --- Local pause facts (the runner's own brake) -------------------
@@ -329,7 +340,6 @@ local_pause_facts = Table(
     "local_pause_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("runner_id", String, nullable=False),
     Column("paused", Boolean, nullable=False),  # locally paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -348,12 +358,12 @@ workspace_prompt = Table(
 )
 
 # --- Daemon liveness (when the runner was last known alive) -------
-# The crash-time reference recovery measures staleness against, not `now - heartbeat`.
+# A singleton row: the crash-time reference recovery measures staleness against, not `now - heartbeat`.
 
 daemon_liveness = Table(
     "daemon_liveness",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("id", Integer, primary_key=True, autoincrement=True),
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
 )
 

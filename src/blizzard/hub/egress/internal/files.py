@@ -1,8 +1,9 @@
 """The format-neutral directory discipline both file bindings share (``bzh:pluggable-seams``).
 
 Stage under ``.staging/``, flush and fsync, place with ``os.link`` (which fails with ``EEXIST`` instead of
-replacing), fsync the parent, then drop the staged name. ``rename`` is never used: it overwrites. Only files this
-writer staged are ever removed; ``.staging/`` is shared with other processes and is never cleared wholesale."""
+replacing), fsync the parent, then drop the staged name. ``rename`` overwrites, so it is used for one file only: a
+``_schema/`` document the current schema widens with nullable columns, swapped whole for the wider one. Only files
+this writer staged are ever removed; ``.staging/`` is shared with other processes and is never cleared wholesale."""
 
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from typing import BinaryIO, Protocol
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import (
+    ColumnSpec,
+    ColumnType,
     DatasetSchema,
     EgressBatch,
     EgressFailure,
@@ -63,6 +66,19 @@ def schema_document(schema: DatasetSchema) -> bytes:
         ],
     }
     return (json.dumps(document, indent=2) + "\n").encode()
+
+
+def read_schema_document(content: bytes) -> DatasetSchema | None:
+    """The schema ``content`` holds, or ``None`` unless it is exactly what :func:`schema_document` writes for one."""
+    try:
+        document = json.loads(content)
+        columns = tuple(
+            ColumnSpec(c["name"], ColumnType(c["type"]), c["nullable"], c["meaning"]) for c in document["columns"]
+        )
+        schema = DatasetSchema(document["dataset"], document["major_version"], columns)
+    except (ValueError, KeyError, TypeError):
+        return None
+    return schema if schema_document(schema) == content else None
 
 
 class DirectoryEgressWriter:
@@ -174,12 +190,29 @@ class DirectoryEgressWriter:
         if isinstance(result, EgressFailure):
             if result.cause is not EgressFailureCause.NAME_EXISTS:
                 return result
-            if (self._root / path).read_bytes() != document:
-                return EgressFailure(EgressFailureCause.SCHEMA_CONFLICT, f"{path} exists with different content")
+            if (conflict := self._reconcile_schema(path, schema, document)) is not None:
+                return conflict
         self._schemas_placed.add(key)
         return None
 
-    def _place(self, relative: Path, body: Callable[[BinaryIO], None]) -> _Placed | EgressFailure:
+    def _reconcile_schema(self, path: Path, schema: DatasetSchema, document: bytes) -> EgressFailure | None:
+        """Keep the existing ``path`` when it is ``document``, or swap it for ``document`` when ``schema`` only adds
+        nullable columns to it; any other difference is a conflict."""
+        try:
+            existing = (self._root / path).read_bytes()
+        except OSError as error:
+            return EgressFailure(EgressFailureCause.IO_ERROR, f"{path}: {error}")
+        if existing == document:
+            return None
+        older = read_schema_document(existing)
+        if older is None or not schema.widens(older):
+            return EgressFailure(EgressFailureCause.SCHEMA_CONFLICT, f"{path} exists with different content")
+        swapped = self._place(path, lambda out: _write_all(out, document), replace=True)
+        return swapped if isinstance(swapped, EgressFailure) else None
+
+    def _place(
+        self, relative: Path, body: Callable[[BinaryIO], None], *, replace: bool = False
+    ) -> _Placed | EgressFailure:
         final = self._root / relative
         staging = self._root / _STAGING
         staged = staging / f"{self._token}-{self._sequence:06d}-{relative.name}"
@@ -191,17 +224,20 @@ class DirectoryEgressWriter:
                 out.flush()
                 os.fsync(out.fileno())
             digest = hashlib.sha256(staged.read_bytes()).hexdigest()
-            try:
-                os.link(staged, final)
-            except FileExistsError:
-                return EgressFailure(EgressFailureCause.NAME_EXISTS, f"{relative} already exists")
-            except OSError as error:
-                if error.errno in _NO_HARD_LINKS:
-                    return EgressFailure(
-                        EgressFailureCause.HARD_LINKS_UNSUPPORTED,
-                        f"{self._root} does not support hard links ({error}); placement never falls back to rename",
-                    )
-                raise
+            if replace:
+                os.replace(staged, final)
+            else:
+                try:
+                    os.link(staged, final)
+                except FileExistsError:
+                    return EgressFailure(EgressFailureCause.NAME_EXISTS, f"{relative} already exists")
+                except OSError as error:
+                    if error.errno in _NO_HARD_LINKS:
+                        return EgressFailure(
+                            EgressFailureCause.HARD_LINKS_UNSUPPORTED,
+                            f"{self._root} does not support hard links ({error}); placement never falls back to rename",
+                        )
+                    raise
             _fsync_directory(final.parent)
             return _Placed(digest)
         except OSError as error:

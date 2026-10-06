@@ -98,7 +98,6 @@ def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_p
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -155,7 +154,6 @@ def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -219,7 +217,6 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -251,7 +248,6 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
     # runner is now also locally paused — the operator brake, not a per-lease park.
     blocked_ctx = replace(ctx, harnesses=HarnessRegistry({}))
     store.record_local_pause(
-        "r1",
         paused=True,
         at=ctx.clock.now(),
         by="operator",
@@ -281,7 +277,6 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -338,7 +333,6 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=0,  # exhausted on the first failure
             created_at=_NOW,
         )
@@ -387,7 +381,6 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,  # budget still open — the owner block must pre-empt it
             created_at=_NOW,
         )
@@ -463,7 +456,6 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             session_name="code",
             created_at=_NOW,
@@ -532,7 +524,6 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

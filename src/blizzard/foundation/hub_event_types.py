@@ -73,6 +73,7 @@ ActivityChunkChangeCause = Literal[
 #: What a ``runner-changed`` frame reports — see
 #: the hub event broker's ``publish_runner_changed``.
 RunnerChangeKind = Literal[
+    "added",
     "registered",
     "heartbeat",
     "paused",

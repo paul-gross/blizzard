@@ -697,7 +697,6 @@ def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             session_name="code",
             resolved_model=model,
@@ -1093,7 +1092,6 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
             node_id="nd_verify",
             node_name="verify",
             epoch=mint.epoch + 1,
-            runner_id="r1",
             retries_max=1,
             created_at=now2,
         )

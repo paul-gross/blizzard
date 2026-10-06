@@ -51,6 +51,7 @@ class IdPrefix(StrEnum):
     GARDEN_PROPOSAL = "gprop"  # a garden proposal — never confused with a work-item proposal
     DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
     CONFIG_APPLY = "apl"  # one declarative config apply — groups the change rows it writes
+    RUNNER = "rn"  # a runner — minted with its bearer token when the runner is added; never changes
 
 
 CHUNK_PREFIX = IdPrefix.CHUNK
@@ -75,6 +76,7 @@ FINDING_PREFIX = IdPrefix.FINDING
 FINDING_SET_PREFIX = IdPrefix.FINDING_SET
 GARDEN_PROPOSAL_PREFIX = IdPrefix.GARDEN_PROPOSAL
 DEPENDENCY_EDGE_PREFIX = IdPrefix.DEPENDENCY_EDGE
+RUNNER_PREFIX = IdPrefix.RUNNER
 
 
 @domain_model

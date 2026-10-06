@@ -91,7 +91,7 @@ def _two_harness_ctx():  # type: ignore[no-untyped-def]
         provider=FakeProvider({"e_a": "/ws/e_a", "e_b": "/ws/e_b"}),
         harness=harness_a,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     registry = HarnessRegistry(
         {
@@ -114,7 +114,6 @@ def _seed_open_segment(ctx, *, chunk_id: str, lease_id: str, env_id: str, harnes
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -171,7 +170,6 @@ def test_backfill_imports_both_owners_of_the_same_raw_session_id() -> None:  # t
                 node_id="nd_build",
                 node_name="build",
                 epoch=1,
-                runner_id="r1",
                 retries_max=2,
                 created_at=_NOW,
             )

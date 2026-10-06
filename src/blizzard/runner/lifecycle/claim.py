@@ -40,6 +40,7 @@ from blizzard.runner.lifecycle.model import (
     reclaim_verdict,
     recovery_owner,
 )
+from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import Environments, SpawnConfig, SpawnContext, Spawner, SpawnStores
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -102,6 +103,8 @@ class ReadyQueue:
 
     @classmethod
     def peeked(cls, ctx: ClaimContext) -> ReadyQueue:
+        if registered_runner_id(ctx.identity) is None:
+            return cls(ctx, _entries=[])  # nothing is claimed before the runner's first registration
         try:
             peeked = ctx.hub.peek_queue(
                 ctx.capability_snapshot(),
@@ -143,7 +146,7 @@ class ReadyQueue:
             _log.info(
                 _CLAIM_LOSS_LOG[disposition.verdict],
                 chunk_id=chunk_id,
-                runner_id=self.ctx.config.runner_id,
+                runner_name=self.ctx.config.runner_name,
                 **claim_denial_fields(outcome),
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
@@ -231,7 +234,6 @@ class ReadyQueue:
     def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> ClaimRequest:
         return ClaimRequest(
             chunk_id=chunk_id,
-            runner_id=self.ctx.config.runner_id,
             workspace_id=self.ctx.config.workspace_id,
             environment_ids=[env.environment_id for env in acquired],
         )
@@ -259,8 +261,10 @@ class InterruptedClaims:
         new hub claim, keeps its binding instead of claiming; every other arm still runs.
 
         An open takeover holding the chunk suppresses only the adopt arm — a restart-entry adopt
-        would spawn into the person's workdir, so it keeps the binding and waits; the release,
-        reclaim, and requeue-resume arms still run."""
+        would spawn into the person's workdir, so it keeps the binding and waits."""
+        runner_id = registered_runner_id(self.ctx.identity)
+        if runner_id is None:
+            return
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
         # One read before the loop, not one `active_lease_for_chunk` per chunk
         # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.
@@ -269,10 +273,14 @@ class InterruptedClaims:
         bindings_by_chunk = group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
         for chunk_id, bindings in bindings_by_chunk.items():
             if chunk_id not in active_chunk_ids:
-                self._reconcile_one(chunk_id, bindings, requeued=chunk_id in requeue_pending, braked=braked)
+                self._reconcile_one(
+                    chunk_id, bindings, runner_id=runner_id, requeued=chunk_id in requeue_pending, braked=braked
+                )
             # else a live worker holds it — REAP/ADVANCE own it
 
-    def _reconcile_one(self, chunk_id: str, bindings: list[EnvBinding], *, requeued: bool, braked: bool) -> None:
+    def _reconcile_one(
+        self, chunk_id: str, bindings: list[EnvBinding], *, runner_id: str, requeued: bool, braked: bool
+    ) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
@@ -285,9 +293,7 @@ class InterruptedClaims:
         takeover = (
             self.ctx.stores.takeover.open_takeover_for_chunk(chunk_id) if view.status == ChunkStatus.RUNNING else None
         )
-        move = interrupted_claim_move(
-            view, runner_id=self.ctx.config.runner_id, requeued=requeued, braked=braked, takeover=takeover
-        )
+        move = interrupted_claim_move(view, runner_id=runner_id, requeued=requeued, braked=braked, takeover=takeover)
         if move is InterruptedClaimMove.HOLD_TAKEN_OVER and takeover is not None:
             _log.info(
                 "holding interrupted claim — an open takeover holds the workdir",
@@ -391,7 +397,6 @@ class InterruptedClaims:
         envs = Environments(bindings).acquired
         claim = ClaimRequest(
             chunk_id=chunk_id,
-            runner_id=self.ctx.config.runner_id,
             workspace_id=self.ctx.config.workspace_id,
             environment_ids=[b.environment_id for b in bindings],
         )

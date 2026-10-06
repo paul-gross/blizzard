@@ -60,7 +60,6 @@ def _seed_lease(  # type: ignore[no-untyped-def]
             node_id=node_id,
             node_name=node_name,
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

@@ -116,6 +116,8 @@ def _registration(
 ) -> RunnerRegistration:
     return RunnerRegistration(
         runner_id="runner-a",
+        name="runner-a",
+        added_at=_NOW,
         workspace_id="ws-a",
         registered_at=_NOW,
         last_seen_at=_NOW,

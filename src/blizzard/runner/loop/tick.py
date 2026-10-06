@@ -51,10 +51,10 @@ def tick(ctx: LoopContext) -> None:
 
 
 def _tick(ctx: LoopContext) -> None:
-    _log.debug("tick start", runner_id=ctx.config.runner_id)
+    _log.debug("tick start", runner_name=ctx.config.runner_name)
     # Stamp liveness first, so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
-    ctx.stores.pause.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
+    ctx.stores.pause.record_daemon_liveness(alive_at=ctx.clock.now())
     # This tick's own memoized chunk-status cache — every step below shares
     # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
     # hub at most one round-trip. Primed with the ids every reconcile sweep below is about
@@ -90,7 +90,7 @@ def _tick(ctx: LoopContext) -> None:
     # Last — its own docstring reserves this position; still safe to run
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
     _traced(ctx, ExternalUsageSample)
-    _log.debug("tick end", runner_id=ctx.config.runner_id)
+    _log.debug("tick end", runner_name=ctx.config.runner_name)
 
 
 def _primed_chunk_ids(ctx: LoopContext) -> set[str]:

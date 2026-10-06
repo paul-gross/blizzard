@@ -155,7 +155,7 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
         config = RunnerConfig(
             root=tmp_path,
             db_url="sqlite://",
-            runner_id="runner-hermetic",
+            name="runner-hermetic",
             hub_url=f"http://127.0.0.1:{server.server_address[1]}",
             public_urls=("http://runner-hermetic.example",),
         )

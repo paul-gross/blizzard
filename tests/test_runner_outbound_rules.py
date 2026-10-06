@@ -44,7 +44,6 @@ def _lease(**overrides: object) -> Lease:
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 3,
-        "runner_id": "r1",
         "retries_max": 2,
         "created_at": _T0,
         "pid": 100,

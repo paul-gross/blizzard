@@ -740,7 +740,7 @@
       "short_help": "Become the blizzard-runner daemon: the reconciliation loop + the local API."
     },
     "init": {
-      "help": "Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.\n\nDIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+      "help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its\nhub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one \u2014 and its token written to DIRECTORY/.env. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
       "params": [
         {
           "hidden": false,
@@ -752,10 +752,34 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "The hub a fresh config names (overrides $BZ_HUB_URL).",
+          "hidden": false,
+          "kind": "option",
+          "name": "hub_url",
+          "opts": [
+            "--hub"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Add the runner again when its hub does not know its token \u2014 only after that hub's data was reset.",
+          "hidden": false,
+          "kind": "option",
+          "name": "allow_readd",
+          "opts": [
+            "--allow-readd"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
         }
       ],
       "path": "runner init",
-      "short_help": "Scaffold config + data dir + a migrated store under DIRECTORY."
+      "short_help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its hub."
     },
     "migrate": {
       "help": "Apply pending store migrations, or reverse with --down <rev>.",

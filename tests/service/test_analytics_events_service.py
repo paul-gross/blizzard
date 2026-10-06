@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.runner_join import fleet_headers
 from tests.service.support import mint_fixture, require_mock_fleet, require_winter_source, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -77,7 +78,7 @@ def test_both_encodings_serve_the_same_derived_events_in_the_same_order(tmp_path
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics events over a real hub")
-        push = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id)]})
+        push = hub.post("/api/fleet/transcripts", json={"records": [_record(chunk_id)]}, headers=fleet_headers(hub))
         assert push.status_code == 200, push.text
         derived = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id})
         assert derived.status_code == 200, derived.text
@@ -98,7 +99,7 @@ def test_a_json_page_bounded_below_the_total_covers_it_exactly_once_via_its_curs
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics paging over a real hub")
-        push = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id)]})
+        push = hub.post("/api/fleet/transcripts", json={"records": [_record(chunk_id)]}, headers=fleet_headers(hub))
         assert push.status_code == 200, push.text
         derived = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id})
         assert derived.status_code == 200, derived.text

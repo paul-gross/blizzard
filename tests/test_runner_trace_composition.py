@@ -14,9 +14,10 @@ from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.runner_fakes import REGISTERED_AT, SqlAlchemyRunnerStore, make_store, migrated_store_at
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
 
@@ -33,6 +34,7 @@ def _config(tmp_path: Path) -> tuple[RunnerConfig, SqlAlchemyRunnerStore]:
         tracing=TracingConfig(settle_seconds=0),
     )
     config.data_dir.mkdir(parents=True, exist_ok=True)
+    migrated_store_at(config.db_url)
     return config, make_store(config.db_url)
 
 
@@ -76,6 +78,7 @@ def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> No
 
 def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
+    store.record_runner_identity(RunnerIdentity("rn_01JREGISTERED", "runner-local", REGISTERED_AT))
     exporter = InMemoryTraceExporter()
     graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter)
     try:

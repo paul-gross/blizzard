@@ -42,7 +42,13 @@ def _as_write_registry(registry: _FakeRegistry) -> IWriteRunnerRegistry:
 
 def _registration(runner_id: str = "runner-a") -> RunnerRegistration:
     return RunnerRegistration(
-        runner_id=runner_id, workspace_id="ws-a", registered_at=_T0, last_seen_at=_T0, hub_paused=False
+        runner_id=runner_id,
+        name=runner_id,
+        added_at=_T0,
+        workspace_id="ws-a",
+        registered_at=_T0,
+        last_seen_at=_T0,
+        hub_paused=False,
     )
 
 

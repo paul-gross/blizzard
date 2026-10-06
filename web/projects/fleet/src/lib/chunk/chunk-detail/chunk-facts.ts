@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkNeighborView, RouteView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
+import { runnerDisplayName } from '../../core/runner-display-name';
 import { KitButton } from '../../kit/kit-button';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { formatUtcYmd } from '../../core/when';
@@ -61,8 +62,11 @@ export class ChunkFacts {
   /** The chunk's live route, read here as a plain fact. */
   private readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
-  /** The runner currently holding the chunk's route, or `—` when nothing holds it. */
-  protected readonly runner = computed<string>(() => this.route()?.runner_id ?? '—');
+  /** The display name of the runner holding the chunk's route, or `—` when nothing holds it. */
+  protected readonly runner = computed<string>(() => {
+    const route = this.route();
+    return route ? runnerDisplayName(route.runner_id, route.runner_name) : '—';
+  });
 
   /**
    * How many attempts the chunk has taken. The epoch is incremented per work

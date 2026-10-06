@@ -38,6 +38,7 @@ class EventBroker(_EventBroker):
         prev_node: str | None = None,
         node: str | None = None,
         runner_id: str | None = None,
+        runner_name: str | None = None,
         cause: ChunkChangeCause | None = None,
         graph_id: str | None = None,
         by: str | None = None,
@@ -45,10 +46,9 @@ class EventBroker(_EventBroker):
     ) -> int:
         """A chunk's derived status changed.
 
-        Optionals are added to the payload only when supplied, never serialized as
-        ``null``. ``key`` is the table-qualified natural key of
-        the fact this frame describes, absent when there is no such fact. ``by`` rides
-        the ``deleted`` cause, mirroring :meth:`publish_runner_changed`."""
+        Optionals are added to the payload only when supplied, never serialized as ``null``. ``key`` is
+        the table-qualified natural key of the fact this frame describes, absent when there is no such
+        fact. ``by`` rides the ``deleted`` cause; ``runner_name`` is resolved by the publisher, never here."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
@@ -56,6 +56,7 @@ class EventBroker(_EventBroker):
             prev_node=prev_node,
             node=node,
             runner_id=runner_id,
+            runner_name=runner_name,
             cause=cause,
             graph_id=graph_id,
             by=by,
@@ -95,16 +96,19 @@ class EventBroker(_EventBroker):
         runner_id: str,
         *,
         kind: RunnerChangeKind,
+        runner_name: str | None = None,
         by: str | None = None,
         reason: str | None = None,
         key: str | None = None,
     ) -> int:
         """A runner's registry state changed — ``kind`` names which change.
 
-        ``by`` rides the four pause/resume kinds and the three retirement kinds, ``reason`` the runner-local pair.
-        ``key`` names the pause- or retirement-family fact's identity, absent on
-        ``registered``/``heartbeat``, which have no fact table."""
-        payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
+        ``by`` rides ``added``, the four pause/resume kinds and the three retirement kinds, ``reason`` the
+        runner-local pair. ``key`` names the pause- or retirement-family fact's identity, absent on
+        ``added``/``registered``/``heartbeat``, which have no fact table."""
+        payload = RunnerChangedPayload(
+            runner_id=runner_id, runner_name=runner_name, kind=kind, by=by, reason=reason, key=key
+        ).to_payload()
         return self.publish(HubEventType.RUNNER_CHANGED, payload)
 
     def publish_event_logged(
@@ -114,12 +118,14 @@ class EventBroker(_EventBroker):
         kind: str,
         chunk_id: str | None,
         runner_id: str | None,
+        runner_name: str | None = None,
         key: str | None = None,
     ) -> int:
         """An operational event landed in the event log. The frame carries
         only identifying fields; the row itself is read back off ``GET /api/events``.
-        ``key`` names the ``event_log`` row's own id."""
+        ``key`` names the ``event_log`` row's own id; ``runner_name`` rides only when the
+        recorder was handed the runner's name."""
         payload = EventLoggedPayload(
-            severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=key
+            severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, runner_name=runner_name, key=key
         ).to_payload()
         return self.publish(HubEventType.EVENT_LOGGED, payload)

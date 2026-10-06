@@ -8,7 +8,7 @@ import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from blizzard.hub.cli.sessions import IReadSessionStore, IWriteSessionStore
+from blizzard.foundation.operator_sessions import IReadSessionStore, IWriteSessionStore
 
 
 @dataclass(frozen=True)

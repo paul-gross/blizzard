@@ -43,7 +43,6 @@ class DecisionSubmission(BaseModel):
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest
-    runner_id: str
     artifacts: list[SubmittedArtifact] = []
     proposals: list[WorkItemProposal] = []
     # The route capability token stamped at enqueue — see
@@ -74,6 +73,8 @@ class DecisionView(BaseModel):
     docket: list[DocketEntryView] = []
     #: The runner whose configuration imposed this gate; ``None`` when the graph declared it.
     imposed_by_runner_id: str | None = None
+    #: That runner's name — not unique, never a key; ``None`` when the registry holds no such runner.
+    imposed_by_runner_name: str | None = None
 
 
 class OpenDecisionsResponse(BaseModel):

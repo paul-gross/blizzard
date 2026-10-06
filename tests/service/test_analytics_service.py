@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     mint_fixture,
     require_mock_fleet,
@@ -48,7 +49,8 @@ def test_a_segment_scoped_call_forces_that_one_segment(tmp_path: Path) -> None:
         chunk_id = _ingest(forge, hub, "re-derive segment scope")
         ack = hub.post(
             "/api/fleet/transcripts",
-            json={"runner_id": "r1", "records": [_record(chunk_id, segment_id="sg_1", seq=1)]},
+            json={"records": [_record(chunk_id, segment_id="sg_1", seq=1)]},
+            headers=fleet_headers(hub),
         )
         assert ack.status_code == 200, ack.text
 
@@ -63,7 +65,7 @@ def test_a_chunk_scoped_bounded_call_converges_over_repeated_calls(tmp_path: Pat
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "re-derive chunk scope")
         records = [_record(chunk_id, segment_id=f"sg_{i}", seq=i) for i in range(1, 4)]
-        ack = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": records})
+        ack = hub.post("/api/fleet/transcripts", json={"records": records}, headers=fleet_headers(hub))
         assert ack.status_code == 200, ack.text
 
         first = hub.post("/api/analytics/re-derive", json={"chunk_id": chunk_id, "limit": 2})

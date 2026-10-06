@@ -11,58 +11,75 @@ no inbound firewall rule is fine: no port to open, no address the hub needs to k
 ## Install
 
 On a runner-only machine, follow [`docs/deployment/install.md`](./deployment/install.md)'s "First install" for the
-service account, the wheel venv, and the runtime-dir seeding — but skip `blizzard-hub init` (a runner machine hosts no
-hub) and install only the `blizzard-runner.service` unit. Workspace and harness bindings are configured exactly as in
-the colocated install; distance changes none of that.
+service account, the wheel venv, and the unit — but skip `blizzard-hub init` (a runner machine hosts no hub), install
+only the `blizzard-runner.service` unit, and don't enable it yet. Stop before step 5: its `blizzard-runner init` names
+no hub, so it would try to add the runner at the default `http://127.0.0.1:8421`. [Add](#add) runs init against the real
+hub and starts the unit. Workspace and harness bindings are configured exactly as in the colocated install; distance
+changes none of that.
 
 ## Point it at the hub
 
 Only the config differs from the colocated case — in `blizzard-runner.toml`, two keys do the pointing:
 
 - `hub_url = "https://hub.example.net"` — the hub's front door, not localhost. Give the runner the hub's TLS front door,
-  not a bare container port: the enrolled bearer token rides every call and deserves transport encryption.
-- `runner_id = "anna-laptop"` — unique per runner in the fleet.
+  not a bare container port: the runner's bearer token rides every call and deserves transport encryption.
+- `name = "anna-laptop"` — the label `hub runner list` and the board show beside the runner's id. It identifies nothing:
+  two runners may share a name, and every operator verb takes the id. It defaults to `runner-local`.
 
-Choose the final `runner_id` before the first start: it defaults to `runner-local`, every runner on a multi-runner hub
-needs its own, and enrollment binds the bearer token to the exact id — under `runner_auth_mode = "enforce"` a token
-presented for a different id is rejected.
+The toml's `hub_url` is authoritative: `BZ_HUB_URL` seeds it only at `blizzard-runner init` time, as `--hub <url>` does
+over it, and a running daemon reads the toml alone — re-pointing a runner means editing the file and restarting, not
+exporting a variable. The same `BZ_HUB_URL` variable does live-target the operator's `blizzard hub …` client CLI — two
+consumers, two behaviors; the client obeying the variable does not mean the daemon does. Init refuses a `--hub` that
+differs from the hub an existing config names.
 
-The toml's `hub_url` is authoritative: `BZ_HUB_URL` seeds it only at `blizzard-runner init` time, and a running daemon
-reads the toml alone — re-pointing a runner means editing the file and restarting, not exporting a variable. The same
-`BZ_HUB_URL` variable does live-target the operator's `blizzard hub …` client CLI — two consumers, two behaviors; the
-client obeying the variable does not mean the daemon does.
+The runner renames itself: change `name` and restart it, and its next registration shows the new name everywhere from
+then on. Its id, token, pause state, and history stay as they were. A toml that declares a `runner_id` and no `name`
+reads that value as the name.
 
-## Enroll
+## Add
 
-The enrollment sequence, the auth rollout modes, and where the token lives are owned by
-[`docs/deployment/runner-auth.md`](./deployment/runner-auth.md); the remote case changes only how each step reaches the
-hub. Enrollment presumes registration — the runner must have been started once so it registers at the hub, asserting the
-harnesses and tiers it can execute alongside its identity, per that owner, or the enroll call 404s.
+A runner has no identity until the hub adds it and issues the token it proves that identity with;
+[`docs/deployment/runner-auth.md`](./deployment/runner-auth.md) owns adding, where the token lives, and rotation. The
+remote case changes only how each step reaches the hub.
 
-Enroll from any operator machine:
+On the runner machine, `init` adds the runner and installs its token in one step:
 
 ```bash
-blizzard hub runner enroll anna-laptop --hub-url https://hub.example.net
+blizzard-runner init /var/lib/blizzard/runner --hub https://hub.example.net
+```
+
+On a hub with `auth.mode = "oauth"`, that add runs under your `blizzard hub login --hub-url …` session on the runner
+machine, so it takes an operator holding `runner:add`. Where you would rather not sign in there, add the runner from any
+operator machine instead:
+
+```bash
+blizzard hub runner add anna-laptop --hub-url https://hub.example.net
 ```
 
 Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL` in the shell — and on a hub with
 `auth.mode = "oauth"`, `blizzard hub login --hub-url …` comes first.
 
-Install the token on the runner machine in the environment variable its `token_env` key names
-([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md)) — the unit's `EnvironmentFile` is the natural place —
-then restart the runner.
+`add` prints the runner's id and, once, its token as a `BZ_HUB_TOKEN=…` line. Put that line in the runtime dir's `.env`
+on the runner machine as the service account, under a umask that keeps the file owner-only (`0600`) — the token is the
+runner's whole credential, so no other account may read it:
+
+```bash
+sudo -u blizzard mkdir -p /var/lib/blizzard/runner
+sudo -u blizzard sh -c 'umask 077; echo "BZ_HUB_TOKEN=…" >> /var/lib/blizzard/runner/.env'
+```
+
+Then run the same `blizzard-runner init … --hub https://hub.example.net` there: it finds the token, confirms the hub
+knows it, and adds nothing. It also makes a `.env` that other accounts can read owner-only, or warns when it cannot.
 
 Give the runner its own session-signing secret too, so board sessions survive a restart: generate one with
 `openssl rand -base64 48` and put it in the environment variable the `session_secret_env` key names (default
-`BZ_RUNNER_SESSION_SECRET`), beside the token. It must be base64 decoding to at least 32 bytes — a shorter one fails
-config load with an error naming the variable. Unset, the runner signs with a fresh random secret each start and logs
-that sessions will not survive a restart. Never share one secret between runners: a cookie minted by one would verify on
-the other.
+`BZ_RUNNER_SESSION_SECRET`) — the unit's `EnvironmentFile` is the natural place, since the daemon reads only the hub
+token from the runtime dir's `.env`. It must be base64 decoding to at least 32 bytes — a shorter one fails config load
+with an error naming the variable. Unset, the runner signs with a fresh random secret each start and logs that sessions
+will not survive a restart. Never share one secret between runners: a cookie minted by one would verify on the other.
 
-A brand-new runner cannot join a hub already at `runner_auth_mode = "enforce"` unaided: registration itself is
-authenticated under `enforce`, and enrollment requires a prior registration. The operator bridges an enforcing hub by
-hand: set it to `runner_auth_mode = "warn"` and restart, let the new runner register, enroll it, install the token, then
-re-enforce — keeping the window short, since it relaxes enforcement for the whole fleet, not just the newcomer.
+Then start the runner with `systemctl enable --now blizzard-runner`, or `systemctl restart blizzard-runner` if the unit
+already runs: the daemon reads its token and session secret only at start.
 
 ## Verify
 
@@ -70,7 +87,8 @@ re-enforce — keeping the window short, since it relaxes enforcement for the wh
 blizzard hub runner list --hub-url https://hub.example.net
 ```
 
-The runner shows `online` (`--json` carries `last_seen_at`), and the board's fleet column agrees.
+The runner's row shows its id and name. It reads `never-connected` until the runner's first registration and `online`
+after it (`--json` carries `last_seen_at`), and the board's fleet column agrees.
 
 ## What distance changes
 

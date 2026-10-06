@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import type { ChunkDetail } from 'fleet';
+import { type ChunkDetail, RUNNER_NAME_SEPARATOR, compactRef } from 'fleet';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -17,7 +17,9 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * the dock's own right edge, at 800px (wider than any real dock share) and at
  * 390/320px (`bzh:narrow-viewport-tier-rule`). A second case opens the menu and
  * sweeps its own panel items at the same widths — a real CDK overlay, not the
- * `.d-actions` flex row, so it needs its own layout claim.
+ * `.d-actions` flex row, so it needs its own layout claim. A third keeps the claim
+ * line's compact runner id — what tells two runners sharing a name apart — inside the
+ * chip's visible box however much of the name it clips.
  *
  * The selector list below is asserted against an exact count, not merely non-empty:
  * a hard-coded list that silently misses a newly added control is a sweep that stays
@@ -39,8 +41,16 @@ const DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'a-long-runner-identity-that-wraps-under-a-narrow-column', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+  route: {
+    runner_id: 'rn_01M49GZR9G2S7PT1TB5ZT4E4AX',
+    runner_name: 'a-long-runner-name-that-wraps-under-a-narrow-column',
+    workspace_id: 'ws_01',
+    environment_ids: ['env_01'],
+  },
 };
+
+/** The same chunk claimed by a runner with a typical name — 12 characters, inside the 13 the claim line holds whole. */
+const TYPICAL_NAME_DETAIL: ChunkDetail = { ...DETAIL, route: { ...DETAIL.route!, runner_name: 'runner-local' } };
 
 const WIDTHS = [800, 390, 320];
 
@@ -52,15 +62,18 @@ const SWEPT = ['pause-chunk', 'chunk-actions-menu', 'detail-close'] as const;
  * (`blocking` gate open) makes all three live at once. */
 const MENU_ITEMS = ['detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
 
-async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {
+async function renderHeader(
+  width: number,
+  detail: ChunkDetail = DETAIL,
+): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [ChunkDetailHeader],
     providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkDetailHeader);
-  fixture.componentRef.setInput('detail', DETAIL);
-  fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+  fixture.componentRef.setInput('detail', detail);
+  fixture.componentRef.setInput('renderedStatus', detail.status);
   fixture.componentRef.setInput('canControl', true);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
@@ -125,5 +138,37 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
         root.remove();
       }
     });
+
+    it(`keeps the claim line's compact runner id readable at width ${width}`, async () => {
+      const { root } = await renderHeader(width);
+      try {
+        const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+        const text = chip.firstChild as Text;
+        // Through the separator: an ellipsis that clips the name lands on it at the earliest.
+        const lead = `Claimed by ${compactRef(DETAIL.route!.runner_id)}${RUNNER_NAME_SEPARATOR}`;
+        expect(text.data.startsWith(lead), `width ${width}: the chip reads ${JSON.stringify(text.data)}`).toBe(true);
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, lead.length);
+        const visibleRight = chip.getBoundingClientRect().left + chip.clientWidth;
+        expect(
+          range.getBoundingClientRect().right,
+          `width ${width}: the chip clips its lead ${JSON.stringify(lead)} (visible to ${visibleRight})`,
+        ).toBeLessThanOrEqual(visibleRight + 0.5);
+      } finally {
+        root.remove();
+      }
+    });
   }
+
+  it('shows a typical display name whole on the claim line at width 800', async () => {
+    const { root } = await renderHeader(800, TYPICAL_NAME_DETAIL);
+    try {
+      const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+      expect(chip.textContent).toBe('Claimed by R-E4AX.runner-local');
+      expect(chip.scrollWidth, `the chip clips ${JSON.stringify(chip.textContent)}`).toBeLessThanOrEqual(chip.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
 });

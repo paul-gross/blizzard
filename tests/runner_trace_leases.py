@@ -24,7 +24,6 @@ def closed_lease(
             node_id=NODE_ID,
             node_name="build",
             epoch=1,
-            runner_id="r-1",
             retries_max=2,
             created_at=opened,
         )

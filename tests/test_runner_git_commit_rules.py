@@ -48,7 +48,6 @@ _LEASE = Lease(
     node_id="nd_build",
     node_name="build",
     epoch=3,
-    runner_id="runner-local",
     retries_max=2,
     created_at=_AT,
 )

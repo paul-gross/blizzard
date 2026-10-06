@@ -1,9 +1,9 @@
 """The route claim — how a runner takes work.
 
-``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk,
-runner, workspace, and the acquired env ids. Exactly one claim per chunk is accepted; a
-second races and loses with **409**, and an unregistered, retired, or paused claimant is
-refused with **403**."""
+``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk, workspace, and the acquired env
+ids — and its bearer token names the runner. Exactly one claim per chunk is accepted; a second races and loses with
+**409**; an unregistered or paused claimant is refused with **403**, as is a retired one whose token still resolves —
+retiring revokes the token, so a retired runner's claim usually stops at **401**."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from blizzard.wire.envelope import NodeEnvelope
 
 
 class RouteClaim(BaseModel):
-    """A complete route fact posted by the claiming runner."""
+    """A complete route fact posted by the claiming runner. The claimant is the runner its bearer
+    token names; the body carries no runner id."""
 
     chunk_id: str
-    runner_id: str
     workspace_id: str
     environment_ids: list[str]
 

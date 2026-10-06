@@ -88,10 +88,12 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
     )
 
     with TestClient(hub_app.build_hosted_app(hub_config, platform_tracing=hub_handle)) as hub:
-        assert hub.post("/api/fleet/runners", json={"runner_id": _RUNNER, "workspace_id": "ws-a"}).status_code == 201
-        bearer = hub.post(f"/api/runners/{_RUNNER}/enrollments").json()["token"]
+        added = hub.post("/api/runners", json={"name": _RUNNER})
+        assert added.status_code == 201, added.text
+        bearer = added.json()["token"]
         chunk_id = hub.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         hub.headers["Authorization"] = f"Bearer {bearer}"
+        assert hub.post("/api/fleet/runners", json={"name": _RUNNER, "workspace_id": "ws-a"}).status_code == 201
         hub_exporter.clear()
 
         db_url = f"sqlite:///{tmp_path / 'runner.db'}"
@@ -104,7 +106,6 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
                 node_id="nd_build",
                 node_name="build",
                 epoch=1,
-                runner_id=_RUNNER,
                 retries_max=2,
                 created_at=_NOW,
             )

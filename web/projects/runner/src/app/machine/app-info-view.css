@@ -10,6 +10,18 @@
   display: block;
   --kv-label-col: 88px;
 }
+/* The runner's full id, never split mid-string by the fact list's `overflow-wrap: anywhere`:
+   it moves whole below the name when the two do not share a line, and at --fs-xs all of it fits
+   the desktop hub card's 216px value column; a narrower column clips it, its title holding it whole. */
+.rid {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+  font-size: var(--fs-xs);
+}
 .path {
   display: block;
   color: var(--cyan);

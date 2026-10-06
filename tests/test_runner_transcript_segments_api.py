@@ -73,7 +73,6 @@ def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", run
             node_id=node,
             node_name="build",
             epoch=epoch,
-            runner_id=runner_id,
             retries_max=2,
             created_at=_NOW,
         )

@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from tests.support import build_hub
+from tests.support import build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -29,12 +29,9 @@ def _enroll(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped
 
 
 def _seed_enrolled(tmp_path: Path, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
-    """Register + enroll ``runner_id`` under a throwaway ``warn`` hub; return its token —
-    the same two-hub-instances-over-one-store shape ``test_runner_enrollment.py`` uses,
-    since registration is itself auth-checked."""
-    warn_hub = build_hub(tmp_path)
-    _register(warn_hub, runner_id=runner_id, workspace_id=workspace_id)
-    return _enroll(warn_hub, runner_id)
+    """Add and register ``runner_id`` in the store over ``tmp_path``; return its token. The caller
+    builds its own hub over the same store, as a restarted hub reopens it."""
+    return seed_runner(build_hub(tmp_path), runner_id, workspace_id=workspace_id)
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -47,15 +44,18 @@ def _bearer(token: str) -> dict[str, str]:
 
 def test_valid_runner_token_succeeds_on_a_fleet_verb(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
 
     resp = hub.client.get("/api/fleet/queue/peek", headers=_bearer(token))
     assert resp.status_code == 200
 
 
-def test_missing_token_is_rejected_on_a_fleet_verb_under_enforce(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    assert hub.client.get("/api/fleet/queue/peek").status_code == 401
+@pytest.mark.parametrize("auth_mode", ["none", "oauth"])
+def test_missing_token_is_rejected_on_a_fleet_verb_under_every_configuration(tmp_path: Path, auth_mode: str) -> None:
+    hub = build_hub(tmp_path, auth_mode=auth_mode)
+    assert hub.app is not None
+    resp = TestClient(hub.app).get("/api/fleet/queue/peek")
+    assert (resp.status_code, resp.json()) == (401, {"detail": "missing or malformed Authorization header"})
 
 
 # The same token is rejected on an operator verb — not anonymous-plus-credential
@@ -64,7 +64,7 @@ def test_missing_token_is_rejected_on_a_fleet_verb_under_enforce(tmp_path: Path)
 
 def test_valid_runner_token_is_rejected_on_ingest(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
 
     resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_bearer(token))
     assert resp.status_code == 403
@@ -72,15 +72,15 @@ def test_valid_runner_token_is_rejected_on_ingest(tmp_path: Path) -> None:
 
 def test_valid_runner_token_is_rejected_on_queue_replace(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
 
     resp = hub.client.put("/api/queue", json={"chunk_ids": []}, headers=_bearer(token))
     assert resp.status_code == 403
 
 
 def test_valid_runner_token_is_rejected_on_pause_resume(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)  # registers + enrolls "runner-a" under a throwaway warn hub
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    token = _seed_enrolled(tmp_path)
+    hub = build_hub(tmp_path)
 
     paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "op"}, headers=_bearer(token))
     assert paused.status_code == 403
@@ -88,34 +88,23 @@ def test_valid_runner_token_is_rejected_on_pause_resume(tmp_path: Path) -> None:
     assert resumed.status_code == 403
 
 
-def test_valid_runner_token_under_warn_is_logged_and_proceeds_on_an_operator_verb(tmp_path: Path) -> None:
-    """``warn`` (the default) is a rollout brake, not a partition: the token is
-    warn-logged, not rejected, so an already-deployed anonymous fleet keeps working
-    unchanged until the operator flips to ``enforce``."""
-    token = _seed_enrolled(tmp_path)
-    hub = build_hub(tmp_path)  # warn, the default
-
-    resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_bearer(token))
-    assert resp.status_code in (201, 409)  # not 403 — a normal ingest outcome
-
-
 # Operator verbs stay accessible with no credential
 # --------------------------------------------------------------------------- #
 
 
 def test_operator_verbs_are_accessible_with_no_credential(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     assert hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).status_code == 201
     assert hub.client.get("/api/spend", params={"since": "1970-01-01T00:00:00+00:00"}).status_code == 200
 
 
-# Declared-runner_id confinement on a fleet write
+# A fleet write is the token's runner's, whatever its body declares
 # --------------------------------------------------------------------------- #
 
 
-def test_wrong_runner_id_is_rejected_on_a_fleet_write(tmp_path: Path) -> None:
+def test_a_body_runner_id_naming_another_runner_is_ignored_on_a_fleet_write(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path, "runner-a", "ws-a")
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
 
     resp = hub.client.post(
@@ -126,7 +115,27 @@ def test_wrong_runner_id_is_rejected_on_a_fleet_write(tmp_path: Path) -> None:
         },
         headers=_bearer(token),
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["runner_id"] == "runner-a"
+    assert hub.services.registry.get_runner("runner-b") is None
+
+
+# A path naming another runner is refused, whatever the token
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("method", "path"), [("post", "/api/fleet/runners/runner-b/heartbeats"), ("get", "/api/fleet/runners/runner-b")]
+)
+def test_a_runner_verb_on_a_path_naming_another_runner_is_refused_403(tmp_path: Path, method: str, path: str) -> None:
+    hub = build_hub(tmp_path)
+    token = seed_runner(hub, "runner-a")
+    seed_runner(hub, "runner-b")
+
+    resp = getattr(hub.client, method)(path, headers=_bearer(token))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"detail": "token belongs to runner 'runner-a', not 'runner-b'"}
 
 
 # No fleet route reachable at its old anonymous path
@@ -142,7 +151,7 @@ def test_moved_write_verbs_404_or_405_at_their_old_path(tmp_path: Path) -> None:
         ("post", "/api/chunks/ch_x/leases"),
         ("post", "/api/chunks/ch_x/escalations"),
         ("post", "/api/events"),
-        ("post", "/api/runners"),
+        # `POST /api/runners` is the operator's add verb; registration is `POST /api/fleet/runners`.
         ("post", "/api/runners/ghost/heartbeats"),
         ("post", "/api/chunks/ch_x/hub-advance"),
     ]:

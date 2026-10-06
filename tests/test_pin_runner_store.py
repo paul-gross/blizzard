@@ -81,7 +81,6 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
                 node_id="nd_build",
                 node_name="build",
                 epoch=epoch,
-                runner_id="r1",
                 retries_max=2,
                 created_at=_NOW,
             )
@@ -104,7 +103,6 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
             node_id="nd_retro",
             node_name="retro",
             epoch=2,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -126,7 +124,6 @@ def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -157,7 +154,6 @@ def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  # type: ignor
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,  # the same instant the mark carries
         )
@@ -237,7 +233,6 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
                 node_id="nd_build",
                 node_name="build",
                 epoch=1,
-                runner_id="r1",
                 retries_max=2,
                 created_at=_NOW,
             )

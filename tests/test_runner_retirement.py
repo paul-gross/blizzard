@@ -12,10 +12,9 @@ from typing import cast
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE, RUNNER_AUTH_WARN
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, pointer_token, report_lease, runner_token
 
 pytestmark = pytest.mark.component
 
@@ -60,7 +59,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 def _enrolled(tmp_path: Path, runner_id: str = "runner-a") -> str:
-    """Register + enroll under a throwaway ``warn`` hub over the shared store; return the token."""
+    """Register + enroll under a first hub over the shared store; return the token."""
     hub = build_hub(tmp_path)
     _register(hub, runner_id)
     return _enroll(hub, runner_id)
@@ -198,10 +197,9 @@ def test_a_forced_retire_leaves_a_finished_chunk_untouched(tmp_path: Path) -> No
     assert _retire(hub, force=True).json()["released_chunk_ids"] == []
 
 
-@pytest.mark.parametrize("mode", [RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE])
-def test_a_retired_runners_token_gets_401_on_fleet_routes_under_every_mode(tmp_path: Path, mode: str) -> None:
+def test_a_retired_runners_token_gets_401_on_fleet_routes(tmp_path: Path) -> None:
     token = _enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=mode)
+    hub = build_hub(tmp_path)
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(token)).status_code == 200
 
     assert _retire(hub).status_code == 200
@@ -209,22 +207,22 @@ def test_a_retired_runners_token_gets_401_on_fleet_routes_under_every_mode(tmp_p
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(token)).status_code == 401
 
 
-@pytest.mark.parametrize("mode", [RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE])
-def test_a_revoked_token_gets_401_while_the_runner_stays_listed(tmp_path: Path, mode: str) -> None:
+def test_a_revoked_token_gets_401_while_the_runner_stays_listed(tmp_path: Path) -> None:
     token = _enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=mode)
+    hub = build_hub(tmp_path)
 
     resp = hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"})
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["runner"]["retired"] is False
-    assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(token)).status_code == 401
+    refused = hub.client.get("/api/fleet/queue/peek", headers=_bearer(token))
+    assert (refused.status_code, refused.json()) == (401, {"detail": "bearer token has been revoked"})
     assert [r["runner_id"] for r in _listed(hub)] == ["runner-a"]
 
 
 def test_revoke_then_re_enroll_works_and_the_old_token_stays_dead(tmp_path: Path) -> None:
     old = _enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 201
 
     new = _enroll(hub)
@@ -233,9 +231,10 @@ def test_revoke_then_re_enroll_works_and_the_old_token_stays_dead(tmp_path: Path
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(old)).status_code == 401
 
 
-def test_revoke_token_on_an_unenrolled_runner_is_409(tmp_path: Path) -> None:
+def test_revoke_token_on_a_runner_holding_none_is_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _register(hub)
+    assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 201
 
     assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 409
 
@@ -250,7 +249,11 @@ def _store_rows(hub) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         }
 
 
-def test_a_retired_id_is_refused_on_every_runner_contact_route_with_no_token_under_warn(tmp_path: Path) -> None:
+def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_runner_contact_route(
+    tmp_path: Path,
+) -> None:
+    """Retirement recorded without revoking the token — as when an enroll races the retire — still
+    refuses every contact, since the guard keys on the runner, not on how its token fared."""
     hub = build_hub(tmp_path)
     _register(hub)
     held = _held_chunk(hub)
@@ -314,7 +317,9 @@ def test_a_retired_id_is_refused_on_every_runner_contact_route_with_no_token_und
             f"/api/fleet/chunks/{held}/decisions",
             json={"from_node_id": node_id, "epoch": 1, "runner_id": "runner-a"},
         ),
-        "route-token rekey": hub.client.post(f"/api/fleet/chunks/{held}/route-token"),
+        "route-token rekey": hub.client.post(
+            f"/api/fleet/chunks/{held}/route-token", headers=_bearer(runner_token("runner-a"))
+        ),
         "claim": hub.client.post(
             "/api/fleet/routes",
             json={"chunk_id": ready, "runner_id": "runner-a", "workspace_id": "ws-a", "environment_ids": ["e1"]},
@@ -370,7 +375,10 @@ def test_the_retired_claim_refusal_parses_as_the_paused_denial_older_runners_rea
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "666"})]}
     ).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    assert _retire(hub).status_code == 200
+    # Retired with its token still current — as when an enroll races the retire — so the claim
+    # reaches the domain's refusal rather than the gate's 401 for a revoked token.
+    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
 
     resp = hub.client.post(
         "/api/fleet/routes",
@@ -381,17 +389,6 @@ def test_the_retired_claim_refusal_parses_as_the_paused_denial_older_runners_rea
     denial = RouteClaimPausedDenial.model_validate(resp.json())
     assert (denial.chunk_id, denial.runner_id) == (chunk_id, "runner-a")
     assert "retired" in denial.detail
-
-
-def test_under_warn_a_revoked_token_stays_refused_after_re_enrollment(tmp_path: Path) -> None:
-    old = _enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_WARN)
-    assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 201
-
-    new = _enroll(hub)
-
-    assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(new)).status_code == 200
-    assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(old)).status_code == 401
 
 
 def test_a_forced_retire_records_the_fact_before_its_first_release(

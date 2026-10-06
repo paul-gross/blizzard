@@ -15,6 +15,7 @@ DEFAULT_SERVICE_NAME = "blizzard-runner"
 
 # Dimensions
 RUNNER_ID = "blizzard.runner.id"
+RUNNER_NAME = "blizzard.runner.name"
 
 # Lease and session
 LEASE_ID = "blizzard.lease.id"

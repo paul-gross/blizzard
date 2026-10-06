@@ -183,6 +183,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       prev_node: true,
       node: true,
       runner_id: true,
+      runner_name: true,
       cause: true,
       graph_id: true,
       by: true,
@@ -211,7 +212,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   },
   'runner-changed': {
     required: exactRequired<RunnerFrame>()({ runner_id: true, kind: true }),
-    optional: exactOptional<RunnerFrame>()({ by: true, reason: true, key: true }),
+    optional: exactOptional<RunnerFrame>()({ runner_name: true, by: true, reason: true, key: true }),
   },
   'event-logged': {
     required: exactRequired<EventLoggedFrame>()({
@@ -220,7 +221,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       chunk_id: true,
       runner_id: true,
     }),
-    optional: exactOptional<EventLoggedFrame>()({ key: true }),
+    optional: exactOptional<EventLoggedFrame>()({ runner_name: true, key: true }),
   },
 };
 

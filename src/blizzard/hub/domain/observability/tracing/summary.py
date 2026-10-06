@@ -58,7 +58,8 @@ class Interval:
 @domain_model
 @dataclass(frozen=True)
 class StepSummary:
-    """One closed step. ``runner_id`` is the holder as a span reports it — a gate's holding runner included."""
+    """One closed step. ``runner_id`` is the holder as a span reports it — a gate's holding runner included —
+    and ``runner_name`` that runner's latest registered name, ``None`` when the hub has no registration for it."""
 
     step_key: StepKey
     kind: StepKind
@@ -74,6 +75,7 @@ class StepSummary:
     decision_id: str | None
     visit: int
     runner_id: str | None
+    runner_name: str | None
     harness_id: str | None
     models: tuple[str, ...]
     started_at: datetime
@@ -283,6 +285,7 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
     asks = [i for i in intervals if i.kind is IntervalKind.ASK]
     choice, to_node = _choice_and_destination(facts, step)
     graph = facts.graphs.get(step.position.graph_id)
+    runner_id = _runner_id(facts, step)
     return StepSummary(
         step_key=step.key,
         kind=step.kind,
@@ -297,7 +300,8 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
         epoch=step.epoch,
         decision_id=step.decision_id,
         visit=step.position.visit,
-        runner_id=_runner_id(facts, step),
+        runner_id=runner_id,
+        runner_name=facts.runner_names.get(runner_id) if runner_id is not None else None,
         harness_id=next((u.harness_id for u in reversed(usage) if u.harness_id is not None), None),
         models=tuple(dict.fromkeys(u.model for u in usage)),
         started_at=step.start,

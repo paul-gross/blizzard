@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { WorkItemAuthorView, WorkItemEntry } from '../../api/hub';
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../../kit';
 import type { Tone } from '../../kit';
+import { runnerDisplayName } from '../../core/runner-display-name';
 
 /** A stated priority's badge tone — advice for the triaging human, never
  * a queue position, so it borrows the shared urgency ladder rather than inventing one. */
@@ -109,6 +110,11 @@ export class ChunkIssueList {
    * bare id only when the hub source could not resolve one (a deleted user). */
   protected userLabel(author: WorkItemAuthorView): string {
     return author.login ?? author.user_id ?? 'someone';
+  }
+
+  /** A `fleet`-authored item's proposing runner, by display name. */
+  protected runnerLabel(author: WorkItemAuthorView): string {
+    return author.runner_id ? runnerDisplayName(author.runner_id, author.runner_name) : 'unknown';
   }
 
   /** Whether `item`'s section reads open right now — the operator's own

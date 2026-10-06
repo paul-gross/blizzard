@@ -6,11 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
-from tests.support import build_hub, seed_session, seed_user
+from tests.support import build_hub, seed_runner, seed_session, seed_user
 from tests.test_fleet_auth import _enroll, _register
 
 pytestmark = pytest.mark.component
@@ -110,10 +110,10 @@ def test_a_replayed_ingest_is_idempotent_through_the_route(tmp_path: Path) -> No
 
 
 def test_ingest_accepts_a_record_with_and_without_spawn_cwd_and_no_read_returns_it(tmp_path: Path) -> None:
-    warn_hub = build_hub(tmp_path)
-    _register(warn_hub, runner_id="r1")
-    runner = _bearer(_enroll(warn_hub, "r1"))
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    seed_hub = build_hub(tmp_path)
+    _register(seed_hub, runner_id="r1")
+    runner = _bearer(_enroll(seed_hub, "r1"))
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     with_cwd = _record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0, segment_id="sg_1") | {"spawn_cwd": "/ws"}
     without = _record(chunk_id, seq=2, turn_range_start=0, turn_range_end=0, segment_id="sg_2")
@@ -133,15 +133,15 @@ def test_ingest_accepts_a_record_with_and_without_spawn_cwd_and_no_read_returns_
     assert "spawn_cwd" not in operator.text
 
 
-def test_ingest_is_refused_for_a_runner_that_does_not_own_the_batchs_runner_id(tmp_path: Path) -> None:
-    warn_hub = build_hub(tmp_path)
-    register = warn_hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"})
+def test_ingest_attributes_the_batch_to_the_tokens_runner_whatever_its_body_declares(tmp_path: Path) -> None:
+    seed_hub = build_hub(tmp_path)
+    register = seed_hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"})
     assert register.status_code == 201, register.text
-    enroll = warn_hub.client.post("/api/runners/runner-a/enrollments")
+    enroll = seed_hub.client.post("/api/runners/runner-a/enrollments")
     assert enroll.status_code == 201, enroll.text
     token = str(enroll.json()["token"])
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
 
     resp = hub.client.post(
@@ -149,7 +149,8 @@ def test_ingest_is_refused_for_a_runner_that_does_not_own_the_batchs_runner_id(t
         json={"runner_id": "runner-b", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
         headers=_bearer(token),
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["runner_id"] == "runner-a"
 
 
 # --- operator-plane reads: the 401/403/200 auth triad ---------------------------
@@ -198,19 +199,19 @@ def test_get_segment_is_403_below_transcript_read(tmp_path: Path) -> None:
 
 
 def _enrolled_runner_token(tmp_path: Path) -> str:
-    """A runner token enrolled through its own throwaway ``warn`` hub over ``tmp_path``
-    (registration is itself auth-checked) — the same two-hub-instances-over-one-store
-    shape ``test_fleet_auth.py``'s own ``_seed_enrolled`` uses."""
-    warn_hub = build_hub(tmp_path)
-    _register(warn_hub, runner_id="runner-a", workspace_id="ws-a")
-    return _enroll(warn_hub, "runner-a")
+    """A runner token enrolled through its own throwaway hub over ``tmp_path``, for the caller's
+    oauth hub to read — the same two-hub-instances-over-one-store shape ``test_fleet_auth.py``'s
+    own ``_seed_enrolled`` uses."""
+    seed_hub = build_hub(tmp_path)
+    _register(seed_hub, runner_id="runner-a", workspace_id="ws-a")
+    return _enroll(seed_hub, "runner-a")
 
 
 def test_list_segments_refuses_a_runner_principal(tmp_path: Path) -> None:
     """Blizzard#545's own out-of-scope: a routine run reads no transcript content at
     all, so this stays refused even though no other test names it."""
     token = _enrolled_runner_token(tmp_path)
-    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=_bearer(token))
     assert resp.status_code == 403
@@ -218,7 +219,7 @@ def test_list_segments_refuses_a_runner_principal(tmp_path: Path) -> None:
 
 def test_get_segment_refuses_a_runner_principal(tmp_path: Path) -> None:
     token = _enrolled_runner_token(tmp_path)
-    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=_bearer(token))
     assert resp.status_code == 403
@@ -370,19 +371,19 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
     assert body["segments"][0]["byte_count"] > 5000 * 50
 
 
-# --- the fleet lease-transcript read (#249): both refusals under the hub's default ---
-# --- `RUNNER_AUTH_WARN`, where `assert_owns` is inert on both branches — refuse anyway. ---
+# --- the fleet lease-transcript read: a tokenless read is refused before any store read ---
 
 
-def test_lease_transcript_read_is_401_with_no_resolvable_token_under_the_default_auth_mode(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)  # warn, the default
+def test_lease_transcript_read_is_401_with_no_resolvable_token(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
     )
 
-    resp = hub.client.get(
+    assert hub.app is not None
+    resp = TestClient(hub.app).get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments", params={"node_id": "nd_build", "epoch": 1}
     )
 
@@ -392,7 +393,7 @@ def test_lease_transcript_read_is_401_with_no_resolvable_token_under_the_default
 def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_segments_under_the_default_auth_mode(
     tmp_path: Path,
 ) -> None:
-    hub = build_hub(tmp_path)  # warn, the default
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
@@ -412,7 +413,7 @@ def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_se
 def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path: Path) -> None:
     """The response body must not turn any enrolled runner into a fleet-wide ownership
     oracle — it can learn a lease is owned by someone else, never by whom."""
-    hub = build_hub(tmp_path)  # warn, the default
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
@@ -434,7 +435,7 @@ def test_lease_transcript_read_401s_before_the_segment_store_is_ever_read(tmp_pa
     """Pinned against a lease whose segments violate the invariant ``runner_id_for_lease``
     depends on: reaching the *segment* store would raise, so a 401 proves the route refuses
     first. (Token resolution reads the runner registry before this, by construction.)"""
-    hub = build_hub(tmp_path)  # warn, the default
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
@@ -445,7 +446,8 @@ def test_lease_transcript_read_401s_before_the_segment_store_is_ever_read(tmp_pa
         json={"runner_id": "r2", "records": [_record(chunk_id, seq=1, turn_range_start=1, turn_range_end=1)]},
     )
 
-    resp = hub.client.get(
+    assert hub.app is not None
+    resp = TestClient(hub.app).get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments", params={"node_id": "nd_build", "epoch": 1}
     )
 
@@ -456,7 +458,7 @@ def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp
     """Past the auth gate, a genuine fencing-epoch violation (two runners' segments under
     one lease key) must surface as a definite 500 — the store's ``RuntimeError`` caught
     and logged at the route, not an unhandled exception."""
-    hub = build_hub(tmp_path)  # warn, the default
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
@@ -475,6 +477,29 @@ def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp
     )
 
     assert resp.status_code == 500
+
+
+def test_lease_transcript_read_confines_by_the_tokens_runner_id_not_its_name(tmp_path: Path) -> None:
+    """A hub-minted id and the name its runner declares differ, so neither the owner check nor the
+    record read may key on the name."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest_chunk(hub)
+    token = seed_runner(hub, "rn_reader", name="r-claude")
+    pushed = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=1)]},
+        headers=_bearer(token),
+    )
+    assert pushed.status_code == 200, pushed.text
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+        params={"node_id": "nd_build", "epoch": 1},
+        headers=_bearer(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [t["index"] for t in resp.json()["turns"]] == [0, 1]
 
 
 def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path: Path) -> None:

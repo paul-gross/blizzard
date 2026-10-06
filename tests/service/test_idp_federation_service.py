@@ -15,6 +15,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import quote, unquote
 
 import httpx
@@ -24,25 +25,30 @@ from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
-from tests.service.support import require_stub_idp, service_gate, stub_idp
+from tests.runner_join import RUNNER_BIN, adopt_runner, runner_spawn_env
+from tests.service.support import add_runner, poll_until, require_stub_idp, service_gate, stub_idp
 from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
 
 _SECRET_ENV = "BZ_OAUTH_TEST_SECRET"
 _SECRET = "test-secret"
-_RUNNER_ID = "runner-svc-a"
-
-_NAMES = CookieNames(_RUNNER_ID)
-_BOUNCE_COOKIES = (_NAMES.bounce_state, _NAMES.bounce_return)
+_RUNNER_NAME = "runner-svc-a"
 
 
-def _replay_bounce_cookies(runner: httpx.Client, login_resp: httpx.Response) -> None:
+class _FederatedRunner(NamedTuple):
+    """A joined runner's HTTP client and the cookie names its hub-minted id keys."""
+
+    client: httpx.Client
+    names: CookieNames
+
+
+def _replay_bounce_cookies(runner: _FederatedRunner, login_resp: httpx.Response) -> None:
     """Re-set the bounce cookies on ``runner`` so the callback POST carries them, as a
     browser's would — ``http.cookiejar`` withholds any ``Secure`` cookie from an ``http``
     request, so the jar alone never returns them here."""
-    for name in _BOUNCE_COOKIES:
-        runner.cookies.set(name, login_resp.cookies[name])
+    for name in (runner.names.bounce_state, runner.names.bounce_return):
+        runner.client.cookies.set(name, login_resp.cookies[name])
 
 
 @contextlib.contextmanager
@@ -76,23 +82,22 @@ def _oauth_hub(
 
 @contextlib.contextmanager
 def _federated_runner(
-    runner_dir: Path, *, hub_port: int, port: int, runner_id: str = _RUNNER_ID
-) -> Iterator[httpx.Client]:
-    """A real ``blizzard runner host`` subprocess registered at ``hub_port`` with its
-    own federation identity (``public_url``) — the runner this scenario bounces into."""
+    runner_dir: Path, *, hub_port: int, port: int, sign_in: str, name: str = _RUNNER_NAME
+) -> Iterator[_FederatedRunner]:
+    """A real ``blizzard runner host`` subprocess joined to the hub on ``hub_port`` with its own
+    federation identity (``public_url``) — the runner this scenario bounces into. A hub with sign-in
+    adds a runner only for a signed-in operator, so one signs in through provider ``sign_in`` (its
+    profile must be the hub's superuser) and adds it; the token lands in the runner's ``.env``."""
     public_url = f"http://127.0.0.1:{port}"
-    runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    subprocess.run(
-        [runner_bin, "init", str(runner_dir)],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "BZ_HUB_URL": f"http://127.0.0.1:{hub_port}"},
-    )
+    hub_url = f"http://127.0.0.1:{hub_port}"
+    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+        operator.get(f"/api/auth/{sign_in}/authorize", follow_redirects=True)
+        runner_id, token = add_runner(operator, name)
+    adopt_runner(runner_dir, hub_url, token)
     config = RunnerConfig.load(runner_dir)
     config = dataclasses.replace(
         config,
-        runner_id=runner_id,
+        name=name,
         public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
         # trips before any request is built.
@@ -100,26 +105,10 @@ def _federated_runner(
     )
     config.config_path.write_text(config.to_toml())
 
-    # Registration carries this runner's own federation identity so the
-    # hub's authorize endpoint will accept a bounce to it.
-    reg_client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
-    try:
-        reg_resp = reg_client.post(
-            "/api/fleet/runners",
-            json={
-                "runner_id": runner_id,
-                "workspace_id": "workspace-svc",
-                "url": public_url,
-                "redirect_uris": [f"{public_url}/api/auth/callback"],
-            },
-        )
-        assert reg_resp.status_code == 201, reg_resp.text
-    finally:
-        reg_client.close()
-
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
-        [runner_bin, "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
+        [str(RUNNER_BIN), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
+        env=runner_spawn_env(hub_url),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
@@ -127,20 +116,26 @@ def _federated_runner(
     client = httpx.Client(base_url=public_url, timeout=15.0)
     try:
         _await_http(proc, client, "/api/health", log=log)
-        yield client
+        # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
+        # daemon's first registration — the one that declares this federation identity.
+        with httpx.Client(base_url=public_url, timeout=15.0) as probe:
+            assert poll_until(lambda: probe.get("/api/auth/login", follow_redirects=False).status_code != 503), (
+                "the runner never registered at its hub"
+            )
+        yield _FederatedRunner(client, CookieNames(runner_id))
     finally:
         client.close()
         _terminate(proc)
 
 
-def _bounce_once(hub: httpx.Client, runner: httpx.Client) -> None:
+def _bounce_once(hub: httpx.Client, runner: _FederatedRunner) -> None:
     """Drive one federation round trip: the runner mints its own bounce ``state``
     (``GET /api/auth/login``), the hub (already carrying a session cookie in ``hub``'s
     own jar) mints+delivers a token for it, and the runner's callback consumes it."""
-    login_resp = runner.get("/api/auth/login?return_to=/", follow_redirects=False)
+    login_resp = runner.client.get("/api/auth/login?return_to=/", follow_redirects=False)
     assert login_resp.status_code in (302, 307)
     authorize_url = login_resp.headers["location"]
-    state = login_resp.cookies[_NAMES.bounce_state]
+    state = login_resp.cookies[runner.names.bounce_state]
 
     authorize_resp = hub.get(authorize_url, follow_redirects=False)
     assert authorize_resp.status_code == 200, authorize_resp.text
@@ -151,14 +146,14 @@ def _bounce_once(hub: httpx.Client, runner: httpx.Client) -> None:
     assert state_match.group(1) == state  # round-tripped intact
 
     _replay_bounce_cookies(runner, login_resp)
-    callback_resp = runner.post(
+    callback_resp = runner.client.post(
         "/api/auth/callback",
         content=f"token={token_match.group(1)}&state={state_match.group(1)}",
         headers={"content-type": "application/x-www-form-urlencoded"},
         follow_redirects=False,
     )
     assert callback_resp.status_code == 303, callback_resp.text
-    assert _NAMES.session in callback_resp.cookies
+    assert runner.names.session in callback_resp.cookies
 
 
 def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
@@ -180,18 +175,20 @@ def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="svc-user@example.com") as hub:
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
             assert "bz_session" in hub.cookies
 
-            with _federated_runner(tmp_path / "runner", hub_port=hub_port, port=runner_port) as runner:
-                assert runner.get("/", follow_redirects=False).status_code in (302, 307)
+            with _federated_runner(
+                tmp_path / "runner", hub_port=hub_port, port=runner_port, sign_in="oidc-svc"
+            ) as runner:
+                assert runner.client.get("/", follow_redirects=False).status_code in (302, 307)
 
                 _bounce_once(hub, runner)
 
-                session_cookie = runner.cookies.get(_NAMES.session)
+                session_cookie = runner.client.cookies.get(runner.names.session)
                 assert session_cookie
-                gated = runner.get("/")
+                gated = runner.client.get("/")
                 assert gated.status_code == 200
 
 
@@ -218,7 +215,9 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
             assert "bz_session" in hub.cookies
 
-            with _federated_runner(tmp_path / "runner", hub_port=hub_port, port=runner_port) as runner:
+            with _federated_runner(
+                tmp_path / "runner", hub_port=hub_port, port=runner_port, sign_in="oidc-svc"
+            ) as runner:
                 _bounce_once(hub, runner)  # first bounce, current key — proves the baseline works
 
                 rotate_resp = hub.post("/api/auth/rotate-signing-key")
@@ -265,15 +264,15 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             issuer=f"http://127.0.0.1:{idp_b_port}",
         )
         with (
-            _oauth_hub(tmp_path / "hub", hub_port, providers=(provider_a, provider_b)),
-            _federated_runner(tmp_path / "runner", hub_port=hub_port, port=runner_port) as runner,
+            _oauth_hub(tmp_path / "hub", hub_port, providers=(provider_a, provider_b), superuser="user-a@example.com"),
+            _federated_runner(tmp_path / "runner", hub_port=hub_port, port=runner_port, sign_in="oidc-a") as runner,
         ):
             # 1. The runner mints its own bounce state and points the browser at the
             #    hub's authorize endpoint.
-            login_resp = runner.get("/api/auth/login?return_to=/", follow_redirects=False)
+            login_resp = runner.client.get("/api/auth/login?return_to=/", follow_redirects=False)
             assert login_resp.status_code in (302, 307)
             authorize_url = login_resp.headers["location"]
-            bounce_state = login_resp.cookies[_NAMES.bounce_state]
+            bounce_state = login_resp.cookies[runner.names.bounce_state]
 
             # 2. A fresh browser hits authorize. Two providers means no single dance to
             #    auto-run, so it is handed to the /login chooser as return_to.
@@ -304,13 +303,13 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
                 # 4. Hand the delivered token to the runner's own callback: it ends in a
                 #    runner-domain session with no manual re-visit of the runner.
                 _replay_bounce_cookies(runner, login_resp)
-                callback_resp = runner.post(
+                callback_resp = runner.client.post(
                     "/api/auth/callback",
                     content=f"token={token_match.group(1)}&state={state_match.group(1)}",
                     headers={"content-type": "application/x-www-form-urlencoded"},
                     follow_redirects=False,
                 )
                 assert callback_resp.status_code == 303, callback_resp.text
-                assert _NAMES.session in callback_resp.cookies
+                assert runner.names.session in callback_resp.cookies
             finally:
                 browser.close()

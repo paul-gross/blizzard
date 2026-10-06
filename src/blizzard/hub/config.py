@@ -35,19 +35,14 @@ ENV_PORT = "BZ_HUB_PORT"
 # identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
-# The runner-identity rollout brake — `warn` logs a missing/invalid bearer
-# token and proceeds; `enforce` rejects. Defaults to `warn` so tokens can enroll first.
-RUNNER_AUTH_WARN = "warn"
-RUNNER_AUTH_ENFORCE = "enforce"
-_KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
-
-# The route-capability-token rollout brake, separate from `runner_auth_mode`
-# so the two enforce independently — `warn` proceeds; `enforce` rejects before the fence.
+# The route-capability-token rollout brake — `warn` proceeds; `enforce` rejects before the fence.
+# A runner's bearer token has no brake: a fleet call without one the hub issued is always refused,
+# and a toml that still sets `runner_auth_mode` boots with the key ignored.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
-# The produces-artifact rollout brake, separate from the two above — `warn`
+# The produces-artifact rollout brake, separate from the route-token brake above — `warn`
 # logs a `produces:` name with no attachment and proceeds; `enforce` rejects it.
 PRODUCES_WARN = "warn"
 PRODUCES_ENFORCE = "enforce"
@@ -570,7 +565,6 @@ class HubConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
     #: Fleet-wide default for re-pinning a chunk to its graph name's newest mint.
@@ -668,7 +662,6 @@ class HubConfig:
         lines += [
             f'host = "{self.host}"\n',
             f"port = {self.port}\n",
-            f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
             f'produces_mode = "{self.produces_mode}"\n',
             "\n# Follow-latest: when true, a chunk re-pins to the newest enabled\n"
@@ -737,11 +730,6 @@ class HubConfig:
         if not path.exists():
             raise ConfigError(f"{root} is not an initialized hub runtime (run `blizzard hub init {root}`)")
         raw = tomllib.loads(path.read_text())
-        runner_auth_mode = str(raw.get("runner_auth_mode", RUNNER_AUTH_WARN))
-        if runner_auth_mode not in _KNOWN_RUNNER_AUTH_MODES:
-            raise ConfigError(
-                f"runner_auth_mode must be one of {sorted(_KNOWN_RUNNER_AUTH_MODES)}, got {runner_auth_mode!r}"
-            )
         route_token_mode = str(raw.get("route_token_mode", ROUTE_TOKEN_WARN))
         if route_token_mode not in _KNOWN_ROUTE_TOKEN_MODES:
             raise ConfigError(
@@ -774,7 +762,6 @@ class HubConfig:
             db_url=db_url,
             host=host or env.text(ENV_HOST) or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else env.port(toml_port),
-            runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
             follow_latest=follow_latest,

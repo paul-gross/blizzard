@@ -28,6 +28,7 @@ from blizzard.runner.store.schema import leases, transcript_segments, usage_fact
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config
 from tests.runner_fakes import loop_graph
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     BUILD_SCRIPT,
     JUDGEMENT_SCRIPT,
@@ -67,7 +68,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
+    return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
 def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
@@ -120,8 +121,8 @@ def _lease_id_for_chunk(config: RunnerConfig, chunk_id: str) -> str | None:
     return rows[0]["lease_id"] if rows else None
 
 
-# 1. Capability-matched dispatch. The mock's matched-peek gap is recorded at
-# blizzard-context:/verification/blizzard/gaps.md ("hold-vs-pass-over").
+# 1. Capability-matched dispatch: the matched peek offers only an entry this runner's reported
+# capabilities can work and claim.
 
 
 def _incompatible_chunk_spec(work_ref: str) -> dict:
@@ -132,12 +133,12 @@ def _incompatible_chunk_spec(work_ref: str) -> dict:
     return spec
 
 
-def test_capability_denial_starves_a_workable_entry_behind_it_then_recovers_once_it_clears(
+def test_under_strict_an_incompatible_head_starves_the_workable_entry_behind_it_until_it_clears(
     tmp_path: Path,
 ) -> None:
-    """An incompatible chunk queued ahead of a workable one is denied by the real claim
-    on every attempt, starving the workable entry; stopping the incompatible one lets
-    the same runner loop reach and land the workable one."""
+    """Under `[queue] strict` an incompatible chunk queued ahead of a workable one holds the
+    matched peek empty on every tick, starving the workable entry; stopping the incompatible
+    one lets the same runner loop reach and land the workable one."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -146,11 +147,13 @@ def test_capability_denial_starves_a_workable_entry_behind_it_then_recovers_once
     with mock_hub(bin_dir, hub_port) as hub:
         incompatible_id = _seed(hub, _incompatible_chunk_spec(_WORK_REF_URL))  # seeded first — the peek's head
         workable_id = _seed(hub, mock_hub_chunk_spec(_WORK_REF_URL))
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+        )
 
         _drive(config, fenced, ticks=5, pause=0.3)
 
-        # Denied every attempt — never claimed, never escalated (nothing was ever leased).
+        # Never offered — never claimed, never escalated (nothing was ever leased).
         assert _status(hub, incompatible_id) == "ready"
         assert _lease_id_for_chunk(config, incompatible_id) is None
         # Starved behind it — the runner never even reached this one.
@@ -160,6 +163,28 @@ def test_capability_denial_starves_a_workable_entry_behind_it_then_recovers_once
         assert hub.post("/_seed/stop", json={"chunk_id": incompatible_id}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, workable_id, "done"), timeout=90.0)
         assert landed, f"the workable entry never landed once unblocked (status {_status(hub, workable_id)!r})"
+
+
+def test_by_default_the_matched_peek_passes_over_an_incompatible_head_to_the_workable_entry(tmp_path: Path) -> None:
+    """Without `[queue] strict` the same queue never starves: the matched peek passes over the
+    incompatible head, so the runner loop lands the workable entry behind it and never leases
+    the incompatible one."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        incompatible_id = _seed(hub, _incompatible_chunk_spec(_WORK_REF_URL))  # seeded first — the queue's head
+        workable_id = _seed(hub, mock_hub_chunk_spec(_WORK_REF_URL))
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        landed = poll_until(lambda: _run_and_check(config, fenced, hub, workable_id, "done"), timeout=90.0)
+        assert landed, (
+            f"the workable entry behind an incompatible head never landed (status {_status(hub, workable_id)!r})"
+        )
+        assert _status(hub, incompatible_id) == "ready"
+        assert _lease_id_for_chunk(config, incompatible_id) is None
 
 
 # 2. Claim revalidation — the incompatibility denial, through the real runner loop's own
@@ -202,11 +227,12 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
             ctx = wiring.context(HttpHubClient(client), graph)
             try:
                 Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
-                # A stale registration for the same runner_id regresses the stored set.
+                # A stale registration under the same runner's token regresses the stored set.
                 regressed = hub.post(
                     "/api/fleet/runners",
+                    headers=config.auth_headers(),
                     json={
-                        "runner_id": config.runner_id,
+                        "name": config.name,
                         "workspace_id": config.workspace_id,
                         "capabilities": [{"harness_id": "claude_code", "default": True}],
                     },
@@ -309,10 +335,10 @@ def test_a_bare_node_with_no_declared_preference_resolves_through_this_runners_c
         assert harness_ids == {"claude_code"}, harness_ids
 
 
-def test_a_bare_node_still_honors_the_chunks_own_declared_default_at_claim_time(tmp_path: Path) -> None:
-    """A bare node's CLAIM-time eligibility reads the chunk's own declared
-    `default_harnesses`, proven both ways: denied+starved under an unbound default,
-    then claimed once a compatible chunk's own default takes its place."""
+def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path) -> None:
+    """A bare node's eligibility reads the chunk's own declared `default_harnesses`, proven
+    both ways under `[queue] strict`: never offered and starved behind an unbound default, then
+    claimed once a compatible chunk's own default takes its place."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -325,11 +351,13 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default_at_claim_time(
         compatible_spec["default_harnesses"] = ["opencode"]  # the node's own field stays empty
         incompatible_id = _seed(hub, incompatible_spec)  # seeded first — the peek's head
         compatible_id = _seed(hub, compatible_spec)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+        )
 
         _drive(config, fenced, ticks=5, pause=0.3)
 
-        # Denied every attempt: a claim ignoring the chunk's own default would admit it.
+        # Never offered: a peek ignoring the chunk's own default would hand it out.
         assert _status(hub, incompatible_id) == "ready"
         assert _lease_id_for_chunk(config, incompatible_id) is None
         # Starved behind it — the runner never even reached the compatible entry.

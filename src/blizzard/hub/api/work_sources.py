@@ -9,6 +9,7 @@ carries no gate; it renders each source's capability booleans instead."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -82,7 +83,20 @@ def _blank(exc: WorkItemFieldBlank) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
-def _view(item: HubWorkItem, source_obj: IWorkSource, author: AuthorView, *, live_holder: str | None) -> WorkItemView:
+def _runner_names(services: HubServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
+    """The registered names of the fleet authors among ``authors`` — one batched registry read,
+    none at all when every author is a person."""
+    return services.registry.names_for(author.runner_id for author in authors if author.runner_id is not None)
+
+
+def _view(
+    item: HubWorkItem,
+    source_obj: IWorkSource,
+    author: AuthorView,
+    *,
+    live_holder: str | None,
+    runner_names: Mapping[str, str],
+) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
     return WorkItemView(
         source=item.source,
@@ -96,6 +110,7 @@ def _view(item: HubWorkItem, source_obj: IWorkSource, author: AuthorView, *, liv
             user_id=author.user_id,
             login=author.login,
             runner_id=author.runner_id,
+            runner_name=runner_names.get(author.runner_id) if author.runner_id is not None else None,
             chunk_id=author.chunk_id,
             node_name=author.node_name,
         ),
@@ -293,6 +308,7 @@ def list_work_items(
         if item.author.kind is WorkItemAuthorKind.USER and item.author.user_id is not None
     }
     users_by_id = services.users.get_many(list(user_ids))
+    runner_names = _runner_names(services, (item.author for item in items))
     return WorkItemsListView(
         items=[
             _view(
@@ -300,6 +316,7 @@ def list_work_items(
                 source_obj,
                 resolve_author_view(item.author, users_by_id),
                 live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
+                runner_names=runner_names,
             )
             for item in items
         ]
@@ -360,6 +377,7 @@ def create_work_item(
             source_obj,
             resolve_author_view(created.item.author, services.users),
             live_holder=created.chunk_id,
+            runner_names=_runner_names(services, [created.item.author]),
         ).model_dump(),
         chunk_id=created.chunk_id,
     )
@@ -384,6 +402,7 @@ def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depend
         source_obj,
         resolve_author_view(item.author, services.users),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
+        runner_names=_runner_names(services, [item.author]),
     )
 
 
@@ -424,6 +443,7 @@ def patch_work_item(
         source_obj,
         resolve_author_view(updated.author, services.users),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
+        runner_names=_runner_names(services, [updated.author]),
     )
 
 
@@ -464,5 +484,9 @@ def withdraw_work_item(
         services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
     holder = services.chunks.work_refs.find_live_holder(pointer)
     return _view(
-        withdrawn.item, source_obj, resolve_author_view(withdrawn.item.author, services.users), live_holder=holder
+        withdrawn.item,
+        source_obj,
+        resolve_author_view(withdrawn.item.author, services.users),
+        live_holder=holder,
+        runner_names=_runner_names(services, [withdrawn.item.author]),
     )

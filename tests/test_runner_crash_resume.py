@@ -57,7 +57,6 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=created,
         )
@@ -74,7 +73,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
 
 def _crashed_at(store, when):  # type: ignore[no-untyped-def]
     """Stamp the daemon's last liveness beat — the crash-time reference the scan reads back."""
-    store.record_daemon_liveness(runner_id="r1", alive_at=when)
+    store.record_daemon_liveness(alive_at=when)
 
 
 # --------------------------------------------------------------------------- #
@@ -290,7 +289,6 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

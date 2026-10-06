@@ -180,6 +180,7 @@ def _journey() -> StepFacts:
             TracedLease(4, fx.at(125)),
             TracedLease(5, fx.at(140)),
         ),
+        runner_names={"r-1": "runner-one"},
     )
 
 
@@ -616,10 +617,12 @@ def test_the_platform_section_is_the_code_constants() -> None:
         hub_platform.RUN_STEP_EXIT_CODE,
         hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,
+        attr.RUNNER_NAME,
         runner_platform.TICK_STEP,
         *platform_attr.CLI_ATTRIBUTES,
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
+    assert attr.RUNNER_NAME == runner_attr.RUNNER_NAME
     assert cli_spans.SCOPE_NAME == platform_attr.CLI_SCOPE
     assert (cli_spans.ATTR_COMMAND, cli_spans.ATTR_EXIT_CODE) == (platform_attr.CLI_COMMAND, platform_attr.EXIT_CODE)
     assert (cli_spans.ATTR_LEASE_ID, cli_spans.ATTR_CHUNK_ID) == (platform_attr.LEASE_ID, shared.CHUNK_ID)

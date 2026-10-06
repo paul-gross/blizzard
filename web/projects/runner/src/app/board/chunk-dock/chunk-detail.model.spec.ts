@@ -1,6 +1,6 @@
 import { compactRef, type runnerApi } from 'fleet';
 
-import { heartbeatLabel, leaseRefLabel } from './chunk-detail.model';
+import { heartbeatLabel, leaseRefLabel, ownRunnerLabel } from './chunk-detail.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -25,6 +25,20 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     ...overrides,
   };
 }
+
+describe('ownRunnerLabel', () => {
+  it('names a registered runner by its display name', () => {
+    expect(ownRunnerLabel({ runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' })).toBe('R-ABF3.r-claude');
+  });
+
+  it('names the runner by its configured name before its first registration', () => {
+    expect(ownRunnerLabel({ runner_id: null, runner_name: 'r-claude' })).toBe('r-claude');
+  });
+
+  it('is null before the dashboard read resolves', () => {
+    expect(ownRunnerLabel(undefined)).toBeNull();
+  });
+});
 
 describe('leaseRefLabel', () => {
   it('renders the lease compact ref', () => {

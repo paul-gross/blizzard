@@ -10,7 +10,7 @@ import {
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
-import { heartbeatLabel, leaseRefLabel } from './chunk-detail.model';
+import { heartbeatLabel, leaseRefLabel, ownRunnerLabel } from './chunk-detail.model';
 import { MachineDetailView } from './chunk-detail-view';
 import { injectRunnerDashboardQuery } from '../../core/status.query';
 import type { MachineChunkStatus } from '../chunk-list/chunk-status';
@@ -133,11 +133,12 @@ export class MachineDetail {
     });
   }
 
-  /** This runner's own id, for the header's `pauseCopy`/`resumeCopy` `<runner>` slot
+  /** This runner's display name (its configured name alone before its first registration),
+   * for the header's `pauseCopy`/`resumeCopy` `<runner>` slot
    * (`bzh:claim-vocabulary`) — the same dashboard read every other rail on the panel
    * already polls (`status.query.ts`'s own dedupe note), not a second one. */
   private readonly dashboardQuery = injectRunnerDashboardQuery();
-  protected readonly runnerName = computed<string | null>(() => this.dashboardQuery.data()?.runner?.runner_id ?? null);
+  protected readonly runnerName = computed<string | null>(() => ownRunnerLabel(this.dashboardQuery.data()?.runner));
 
   protected readonly leaseRef = computed(() => leaseRefLabel(this.newestLease()));
 

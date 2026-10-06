@@ -21,7 +21,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.leases import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.runner_fakes import FakeHub, make_store
+from tests.runner_fakes import FakeHub, make_store, migrated_store_at
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -37,6 +37,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
         max_environments=3,
     )
     workdir = str(tmp_path / "scratch" / "e1")
+    migrated_store_at(config.db_url)
     graph = build_runner_process(config, events=EventBroker())
     hosted = build_hosted_app(config, process_graph=graph)
     try:
@@ -52,7 +53,6 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
                         node_id="nd_build",
                         node_name="build",
                         epoch=1,
-                        runner_id=config.runner_id,
                         retries_max=2,
                         created_at=_NOW,
                     )

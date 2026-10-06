@@ -207,14 +207,33 @@ describe('EventsView', () => {
     expect(chosen).toBe('critical');
   });
 
-  it("renders each row's runner id, compact-ref'd", async () => {
+  it("renders each row's runner by display name, titled with that name and the full id", async () => {
+    const fixture = render({
+      events: [
+        { ...EVENTS[0], runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' },
+        { ...EVENTS[1], runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' },
+      ],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const [named, nameless] = Array.from(el.querySelectorAll('[data-testid="events-runner"]'));
+    expect(named.textContent?.trim()).toBe('R-ABF3.r-claude');
+    expect(named.getAttribute('title')).toBe('R-ABF3.r-claude · rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
+    // A runner the row carries no name for reads as its compact id alone.
+    expect(nameless.textContent?.trim()).toBe('R-7Q2M');
+    expect(nameless.getAttribute('title')).toBe('R-7Q2M · rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M');
+  });
+
+  it('sizes the runner track to hold a display name whole', async () => {
     const fixture = render();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="events-row"]');
-    expect(rows[0].querySelector('[data-testid="events-runner"]')?.textContent).toContain('R-02');
-    expect(rows[1].querySelector('[data-testid="events-runner"]')?.textContent).toContain('R-01');
+    // The cell's --fs-xs text is narrower than the row's --fs-sm ch, so a track as many ch
+    // wide as the display name has characters holds it.
+    const runnerTrack = getComputedStyle(el.querySelector('.ev') as HTMLElement).gridTemplateColumns.split(' ')[4];
+    expect(parseFloat(runnerTrack)).toBeGreaterThanOrEqual('R-ABF3.runner-local'.length);
   });
 
   it('hides the runner and chunk filter rows when handed no id universe', async () => {
@@ -240,6 +259,23 @@ describe('EventsView', () => {
     expect(inOverlay('events-runner-filter-all')).not.toBeNull();
     inOverlay('events-runner-filter-rn_02')?.click();
     expect(chosen).toBe('rn_02');
+  });
+
+  it('labels each runner option by display name, a runner with no name by its compact id', async () => {
+    const fixture = render({
+      runnerIds: ['rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3'],
+      runnerNames: new Map([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude']]),
+      runner: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter"]');
+    expect(trigger?.textContent).toContain('R-ABF3.r-claude');
+    trigger?.click();
+    await fixture.whenStable();
+    expect(inOverlay('events-runner-filter-rn_01KXKVVF1J3D6H6VYZ3XYNABF3')?.textContent?.trim()).toBe('R-ABF3.r-claude');
+    expect(inOverlay('events-runner-filter-rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M')?.textContent?.trim()).toBe('R-7Q2M');
   });
 
   it('renders a chunk option per id and emits chunkFilterChange when one is clicked', async () => {

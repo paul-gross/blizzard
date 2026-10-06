@@ -70,15 +70,26 @@
     animation: none;
   }
 }
-.id {
+.name {
   flex: 1;
   min-width: 0;
   color: var(--amber);
   font-size: var(--fs-md);
   overflow-wrap: anywhere;
 }
-.runner.offline .id {
+.runner.offline .name,
+.runner.never .name {
   color: var(--label);
+}
+/* Added at the hub but never started: no contact yet, so neither the green of a live
+   runner nor the red blink of a missing one — a hollow mark. */
+.dot.never {
+  border: 1px solid var(--label-dim);
+}
+.rid {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
 }
 .seen {
   color: var(--label-dim);

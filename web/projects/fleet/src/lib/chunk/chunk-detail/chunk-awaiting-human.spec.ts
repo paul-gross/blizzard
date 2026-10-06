@@ -192,19 +192,37 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="decision-origin-runner"]')).toBeNull();
   });
 
-  it('names the runner whose configuration imposed the gate', async () => {
+  it('names the runner whose configuration imposed the gate by its display name, titled with its full id', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', {
       ...WAITING_DECISION_DETAIL,
-      decision: { ...WAITING_DECISION_DETAIL.decision, imposed_by_runner_id: 'r-claude' },
+      decision: {
+        ...WAITING_DECISION_DETAIL.decision,
+        imposed_by_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+        imposed_by_runner_name: 'r-claude',
+      },
     });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="decision-origin"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      'gated by runner r-claude (runner config)',
+      'gated by runner R-ABF3.r-claude (runner config)',
     );
-    expect(el.querySelector('[data-testid="decision-origin-runner"]')?.textContent?.trim()).toBe('r-claude');
+    const runner = el.querySelector('[data-testid="decision-origin-runner"]');
+    expect(runner?.textContent?.trim()).toBe('R-ABF3.r-claude');
+    expect(runner?.getAttribute('title')).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
+  });
+
+  it('names a gating runner with no name by its compact id', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_DECISION_DETAIL,
+      decision: { ...WAITING_DECISION_DETAIL.decision, imposed_by_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' },
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="decision-origin-runner"]')?.textContent?.trim()).toBe('R-7Q2M');
   });
 
   it('withholds the answer input and option chips without question:answer', async () => {

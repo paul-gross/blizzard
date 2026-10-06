@@ -12,7 +12,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import daemon_liveness
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260716_0532_runner_crash_recovery_context"
 down_revision: str | None = "20260715_1641_runner_session_ends"
@@ -27,15 +27,21 @@ _lease_spawns = sa.Table(
     sa.Column("lease_id", sa.String(), nullable=False),
     sa.Column("spawned_at", sa.DateTime(), nullable=False),
 )
+_daemon_liveness = sa.Table(
+    "daemon_liveness",
+    _frozen_metadata,
+    sa.Column("runner_id", sa.String(), primary_key=True),
+    sa.Column("alive_at", UtcDateTime(), nullable=False),
+)
 
 
 def upgrade() -> None:
     bind = op.get_bind()
     _lease_spawns.create(bind, checkfirst=True)
-    daemon_liveness.create(bind, checkfirst=True)
+    _daemon_liveness.create(bind, checkfirst=True)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    daemon_liveness.drop(bind, checkfirst=True)
+    _daemon_liveness.drop(bind, checkfirst=True)
     _lease_spawns.drop(bind, checkfirst=True)

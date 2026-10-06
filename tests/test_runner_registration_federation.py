@@ -12,8 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -57,13 +56,23 @@ def test_reregistration_converges_a_changed_redirect_uri(tmp_path: Path) -> None
     assert registration.redirect_uris == ("https://new.example/api/auth/callback",)
 
 
-def test_unauthenticated_registration_with_redirect_uris_is_rejected_under_enforce(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    resp = _register(hub, url="https://evil.example", redirect_uris=["https://evil.example/api/auth/callback"])
+def test_unauthenticated_registration_with_redirect_uris_is_rejected(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    seed_runner(hub, "runner-a", register=False)
+    assert hub.app is not None
+    body = {
+        "runner_id": "runner-a",
+        "workspace_id": "ws-a",
+        "url": "https://evil.example",
+        "redirect_uris": ["https://evil.example/api/auth/callback"],
+    }
+    resp = TestClient(hub.app).post("/api/fleet/runners", json=body)
     assert resp.status_code == 401
 
     registration = hub.services.registry.get_runner("runner-a")
-    assert registration is None
+    assert registration is not None
+    assert registration.never_connected()
+    assert registration.redirect_uris == ()
 
 
 def test_registration_persists_the_capability_snapshot(tmp_path: Path) -> None:

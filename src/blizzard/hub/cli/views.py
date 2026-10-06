@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.runner_connection import RunnerConnection
 
 
 @dto
@@ -60,10 +61,29 @@ class ChunkLine:
 @dataclass(frozen=True)
 class RunnerLine:
     row: dict[str, Any]
+    #: The name column's width; a listing widens it to the longest name it shows.
+    name_width: int = 16
+
+    #: The name column's narrowest width.
+    NAME_WIDTH: ClassVar[int] = 16
 
     @property
-    def liveness(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+    def name(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        """The runner's display name — not unique, so always rendered beside its id."""
+        return self.row.get("runner_name") or "-"
+
+    @property
+    def connection(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        """``never-connected`` for a runner added but never registered — never ``offline``,
+        which it has not yet been — else ``online`` or ``offline``."""
+        if self.row.get("connection") == RunnerConnection.NEVER_CONNECTED:
+            return "never-connected"
         return "online" if self.row.get("online") else "offline"
+
+    @property
+    def workspace(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        """The workspace the runner registered from; ``-`` before it first registers."""
+        return self.row.get("workspace_id") or "-"
 
     @property
     def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -86,7 +106,7 @@ class RunnerLine:
 
     def line(self) -> str:
         return (
-            f"{self.row['runner_id']:<16} {self.liveness:<8} ws={self.row.get('workspace_id', '-')}"
+            f"{self.row['runner_id']}  {self.name:<{self.name_width}} {self.connection:<15} ws={self.workspace}"
             f"{self.brake}{self.retirement}"
         )
 

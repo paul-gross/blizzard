@@ -33,6 +33,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
+from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import mock_runner
 from tests.service.test_hub_service import _graph_yaml as _activity_graph_yaml
 
@@ -180,14 +181,23 @@ def _reset_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[P
 
 
 def _push_event(
-    hub: httpx.Client, *, seq: int, severity: str, kind: str, chunk_id: str, message: str, runner_id: str = "runner-ui"
+    hub: httpx.Client,
+    *,
+    seq: int,
+    severity: str,
+    kind: str,
+    chunk_id: str,
+    message: str,
+    runner_name: str = "runner-ui",
 ) -> None:
     """Push one operational event straight through the hub's fold — the deterministic
-    stand-in for the runner's own emission, so the browser sees a known feed."""
+    stand-in for the runner's own emission, so the browser sees a known feed. Each ``runner_name``
+    pushes as its own runner, added at the hub on first use."""
     payload = {"severity": severity, "kind": kind, "message": message, "chunk_id": chunk_id}
     resp = hub.post(
         "/api/fleet/events",
-        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "event.recorded", "payload": payload}]},
+        json={"facts": [{"seq": seq, "kind": "event.recorded", "payload": payload}]},
+        headers=fleet_headers(hub, runner_name),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["applied"] == [seq] and resp.json()["rejected"] == [], resp.text
@@ -260,14 +270,20 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                     kind="worker-lost",
                     chunk_id=chunk_id,
                     message="other runner",
-                    runner_id="runner-two",
+                    runner_name="runner-two",
                 )
                 expect(page.get_by_test_id("events-row")).to_have_count(4)
                 expect(page.get_by_test_id("events-runner-filter")).to_be_visible()
 
-                # The runner filter narrows to just the second runner's event, then restores.
+                # The runner filter narrows to just the second runner's event, then restores. Its
+                # chips are keyed by the id the hub minted for each runner.
+                runner_two = next(
+                    event["runner_id"]
+                    for event in hub.get("/api/events").json()["events"]
+                    if event["runner_name"] == "runner-two"
+                )
                 page.get_by_test_id("events-runner-filter").click()
-                page.get_by_test_id("events-runner-filter-runner-two").click()
+                page.get_by_test_id(f"events-runner-filter-{runner_two}").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(1)
                 expect(page.get_by_test_id("events-message").first).to_have_text("other runner")
                 page.get_by_test_id("events-runner-filter").click()
@@ -340,6 +356,12 @@ def _rail_messages(page: Page) -> list[str]:
     return page.get_by_test_id("activity-message").all_text_contents()
 
 
+def _added_rows(messages: list[str]) -> list[str]:
+    """The rail's runner-add rows. Each runner a scenario adds at the hub lands one, live only:
+    the hub's activity read backfills no add, so only the broker's replay tail renders it."""
+    return [message for message in messages if "added to the fleet" in message]
+
+
 def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
     tmp_path: Path, chromium_available: bool
 ) -> None:
@@ -365,9 +387,12 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
             "chunk_id"
         ]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        # Added up front so the facts below push as the runner holding the lease, under its token.
+        _pusher_id, pusher_token = add_runner(hub, "activity-pusher")
+        pusher = {"Authorization": f"Bearer {pusher_token}"}
 
         with (
-            mock_runner(bin_dir, _free_port(), hub_port, runner_id="activity-pusher") as runner,
+            mock_runner(bin_dir, _free_port(), hub_port, name="activity-pusher", token=pusher_token) as runner,
             sync_playwright() as pw,
         ):
             assert runner.post("/_drive/register").status_code == 200
@@ -375,15 +400,17 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
             page = browser.new_page()
             try:
                 page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
-                expect(page.get_by_test_id("activity-row")).to_have_count(2)
+                # The mint, the promotion, and the runner's add.
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                assert len(_added_rows(_rail_messages(page))) == 1
                 claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
                 assert claim["claimed"] is True, claim
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
                 assert any("claimed" in message for message in _rail_messages(page))
 
                 completed = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
                 assert completed["response"]["outcome"] == "next", completed
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                expect(page.get_by_test_id("activity-row")).to_have_count(5)
                 node_id = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
                 facts = [
                     {"seq": 3, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
@@ -404,16 +431,15 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                         },
                     },
                 ]
-                pushed = hub.post("/api/fleet/events", json={"runner_id": "activity-pusher", "facts": facts})
+                pushed = hub.post("/api/fleet/events", json={"facts": facts}, headers=pusher)
                 assert pushed.status_code == 200, pushed.text
                 assert pushed.json()["applied"] == [3, 4], pushed.text
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.03")
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                expect(page.get_by_test_id("activity-row")).to_have_count(5)
 
                 asked = hub.post(
                     "/api/fleet/events",
                     json={
-                        "runner_id": "activity-pusher",
                         "facts": [
                             {
                                 "seq": 5,
@@ -423,7 +449,6 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                                     "chunk_id": chunk_id,
                                     "node_id": node_id,
                                     "session_id": "sess-activity",
-                                    "runner_id": "activity-pusher",
                                     "epoch": 2,
                                     "question": "Which path?",
                                     "options": ["a", "b"],
@@ -432,10 +457,11 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                             }
                         ],
                     },
+                    headers=pusher,
                 )
                 assert asked.status_code == 200, asked.text
                 assert asked.json()["applied"] == [5], asked.text
-                expect(page.get_by_test_id("activity-row")).to_have_count(5)
+                expect(page.get_by_test_id("activity-row")).to_have_count(6)
 
                 read = hub.get("/api/activity").json()["activity"]
                 keys = [row["key"] for row in read]
@@ -448,10 +474,11 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                     "question-asked",
                 }
                 live_messages = _rail_messages(page)
-                assert len(live_messages) == len(keys)
+                assert len(live_messages) == len(keys) + len(_added_rows(live_messages)) == len(keys) + 1
                 assert sum("claimed" in message for message in live_messages) == 1
                 page.reload(wait_until="load")
-                expect(page.get_by_test_id("activity-row")).to_have_count(len(keys))
+                # The same hub's replay tail still holds the add, so the reload renders it again.
+                expect(page.get_by_test_id("activity-row")).to_have_count(len(keys) + 1)
                 assert sum("claimed" in message for message in _rail_messages(page)) == 1
                 assert hub.get("/api/activity", params={"limit": 201}).status_code == 422
             finally:
@@ -499,16 +526,18 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                     kind="attempt-failed",
                     chunk_id=chunk_a,
                     message="a probed operational event",
-                    runner_id="runner-reload-seam",
+                    runner_name="runner-reload-seam",
                 )
 
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
-                # Facts already landed before this subscribes; the initial activity read
-                # supplies the durable baseline, before the restart assertion below.
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
-                first_load_messages = _rail_messages(page)
+                # Facts already landed before this subscribes; the initial activity read supplies the durable
+                # baseline. The fourth row is the add of the runner that pushed the event — live only.
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                added = _added_rows(_rail_messages(page))
+                assert len(added) == 1, added
+                first_load_messages = [m for m in _rail_messages(page) if m not in added]
                 assert len(first_load_messages) == 3, first_load_messages
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
@@ -516,10 +545,11 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
             with _hub(hub_dir, forge_port, hub_port, rehost=True):
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
-                # The fresh broker's replay tail is empty — only `GET /api/activity`
-                # backfill can repopulate these rows, at the same count as the baseline.
+                # The fresh broker's replay tail is empty — only `GET /api/activity` backfill can repopulate
+                # these rows; the live-only add does not come back.
                 expect(page.get_by_test_id("activity-row")).to_have_count(3)
                 reload_messages = _rail_messages(page)
+                assert _added_rows(reload_messages) == [], reload_messages
 
                 # The event-logged row carries the same severity/kind fields whichever
                 # source renders it, so its text matches exactly across both loads.

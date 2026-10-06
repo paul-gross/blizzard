@@ -40,6 +40,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -55,7 +56,6 @@ from blizzard.hub.config import (
     PRODUCES_WARN,
     RESERVED_HUB_SOURCE_NAME,
     ROUTE_TOKEN_WARN,
-    RUNNER_AUTH_WARN,
     AuthConfig,
     EgressConfig,
     HubConfig,
@@ -76,10 +76,9 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
-from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerCapability
+from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -651,28 +650,111 @@ def forge_state(double: TestClient) -> dict[str, object]:
     return double.forge_state  # type: ignore[attr-defined]
 
 
+def runner_token(runner_id: str) -> str:
+    """The bearer token a test runner holds — derived from its id, so a second hub built over the
+    same store, or a second client, recomputes it instead of sharing state."""
+    return f"test-token-{runner_id}"
+
+
+#: What a seeded runner declares unless a test names its own: the claude default a live runner reports.
+SEEDED_CAPABILITIES = (RunnerCapability("claude", default=True),)
+
+
+def seed_runner(
+    target: HubHarness | HubServices,
+    runner_id: str,
+    *,
+    name: str | None = None,
+    workspace_id: str = "w1",
+    token: str | None = None,
+    capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
+    register: bool = True,
+) -> str:
+    """Add ``runner_id`` at the hub as ``hub runner add`` does, but under a chosen id and holding
+    ``token`` (default :func:`runner_token`), and — with ``register`` — record its first registration
+    so it is connected; returns the plaintext token. ``register=False`` leaves it added but never
+    connected. A runner the hub already holds is left as is, except that ``register`` connects one
+    that never has."""
+    services = target.services if isinstance(target, HubHarness) else target
+    registry = services.registry
+    assert isinstance(registry, RunnerRegistryStore), "seeding writes through the hub's own registry store"
+    plaintext = token or runner_token(runner_id)
+    token_hash = TokenHash(plaintext).hex
+    present = registry.get_runner(runner_id)
+    if present is None:
+        registry.add(RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test"))
+    if register and (present is None or present.never_connected()):
+        services.fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
+    return plaintext
+
+
+def added_runner(target: HubHarness | HubServices, runner_id: str) -> RunnerRegistration:
+    """The registration the hub holds for ``runner_id`` — what an edge resolves before handing a
+    runner to the fleet service; fails the test when the hub never added it."""
+    services = target.services if isinstance(target, HubHarness) else target
+    registration = services.registry.get_runner(runner_id)
+    assert registration is not None, f"runner {runner_id} has not been added"
+    return registration
+
+
+_FLEET_PREFIX = "/api/fleet/"
+_FLEET_RUNNERS_PREFIX = "/api/fleet/runners/"
+
+
 class RunnerFleetClient(TestClient):
-    """The hub harness's client: before a claim through ``POST /api/fleet/routes`` it registers the
-    claiming runner when unregistered, as a live runner does every tick; a standing registration, retired
-    included, is left as is. A test pinning the unregistered refusal passes
-    ``build_hub(..., auto_register_claimants=False)``."""
+    """The hub harness's client: a call under ``/api/fleet/`` that carries no ``Authorization`` header presents
+    the bearer token (:func:`runner_token`) of the runner it names, adding that runner, never connected, when the
+    hub does not hold it, and registers a never-connected claimant before a claim unless ``register_claimants=False``.
+    A test pinning a tokenless refusal uses a plain ``TestClient``."""
 
-    def __init__(self, app: FastAPI, *, fleet: FleetService, registry: IReadRunnerRegistry) -> None:
+    def __init__(
+        self,
+        app: FastAPI,
+        *,
+        services: HubServices,
+        default_runner_id: str = "r1",
+        register_claimants: bool = True,
+    ) -> None:
         super().__init__(app)
-        self._fleet = fleet
-        self._registry = registry
-        self._registering = threading.Lock()
+        self.default_runner_id = default_runner_id
+        self._services = services
+        self._register_claimants = register_claimants
+        self._seeding = threading.Lock()
+        # Ids this client has seen present (or connected): neither condition is ever undone, so a
+        # repeat call reads nothing extra and a statement-counting test sees only the route's reads.
+        self._present: set[str] = set()
+        self._connected: set[str] = set()
 
-    def post(self, url: Any, *args: Any, **kwargs: Any) -> Any:
+    def request(self, method: str, url: Any, *args: Any, **kwargs: Any) -> Any:
+        path = httpx.URL(str(url)).path
+        headers = httpx.Headers(kwargs.get("headers"))
+        if path.startswith(_FLEET_PREFIX) and "authorization" not in headers and "authorization" not in self.headers:
+            runner_id = self._caller(str(url), path, kwargs)
+            claim = method.upper() == "POST" and path == "/api/fleet/routes"
+            self._seed(runner_id, kwargs.get("json"), connect=claim and self._register_claimants)
+            headers["Authorization"] = f"Bearer {runner_token(runner_id)}"
+            kwargs["headers"] = headers
+        return super().request(method, url, *args, **kwargs)
+
+    def _caller(self, url: str, path: str, kwargs: Mapping[str, Any]) -> str:
         body = kwargs.get("json")
-        if str(url) == "/api/fleet/routes" and isinstance(body, dict) and isinstance(body.get("runner_id"), str):
-            self._register(body["runner_id"], str(body.get("workspace_id") or "w1"))
-        return super().post(url, *args, **kwargs)
+        if isinstance(body, dict) and isinstance(body.get("runner_id"), str):
+            return str(body["runner_id"])
+        if path.startswith(_FLEET_RUNNERS_PREFIX):
+            return path.removeprefix(_FLEET_RUNNERS_PREFIX).split("/", 1)[0]
+        query = httpx.URL(url).params.get("runner_id") or httpx.QueryParams(kwargs.get("params")).get("runner_id")
+        return query or self.default_runner_id
 
-    def _register(self, runner_id: str, workspace_id: str) -> None:
-        with self._registering:
-            if self._registry.get_runner(runner_id) is None:
-                self._fleet.register(runner_id, workspace_id, capabilities=(RunnerCapability("claude", default=True),))
+    def _seed(self, runner_id: str, body: object, *, connect: bool) -> None:
+        known = self._connected if connect else self._present
+        if runner_id in known:
+            return
+        with self._seeding:
+            workspace_id = body.get("workspace_id") if isinstance(body, dict) else None
+            seed_runner(self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect)
+            self._present.add(runner_id)
+            if connect:
+                self._connected.add(runner_id)
 
 
 @dataclass
@@ -769,7 +851,6 @@ def build_hub(
     hub_workdir: IHubWorkdir | None = None,
     repositories: Sequence[RepositoryFields] | None = None,
     public_url: str | None = None,
-    runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
     produces_mode: str = PRODUCES_WARN,
     follow_latest: bool = False,
@@ -788,14 +869,13 @@ def build_hub(
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
-    ``auto_register_claimants`` (on by default) makes ``hub.client`` a :class:`RunnerFleetClient`.
+    ``hub.client`` is a :class:`RunnerFleetClient`.
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
     ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
         db_url=db_url,
-        runner_auth_mode=runner_auth_mode,
         route_token_mode=route_token_mode,
         produces_mode=produces_mode,
         follow_latest=follow_latest,
@@ -856,11 +936,7 @@ def build_hub(
         egress_path_key=egress_path_key,
     )
     app = create_app(config, services=services)
-    client = (
-        RunnerFleetClient(app, fleet=services.fleet, registry=services.registry)
-        if auto_register_claimants
-        else TestClient(app)
-    )
+    client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
     client.get("/api/_route_cache_warm")

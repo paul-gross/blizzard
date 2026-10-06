@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, STATUS_TONE, formatSeenAgo, type ChunkStatus, type KitAsyncStateValue, type Tone } from 'fleet';
+import { KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, type ChunkStatus, type KitAsyncStateValue, type Tone } from 'fleet';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
-import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
 
 /**
  * The mobile Fleet screen's presentational half: a phone-width, full-width
@@ -52,7 +52,10 @@ export class RunnersView {
   /** Emitted when the "show retired" chip is clicked. */
   readonly toggleShowRetired = output<void>();
 
-  protected readonly formatSeenAgo = formatSeenAgo;
+  protected readonly seenLabel = runnerSeenLabel;
+
+  /** The wire's connection vocabulary, for the row's connection classes and badge. */
+  protected readonly connection = RunnerConnection;
 
   /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE`
    * (`bzh:frontend-formatters`). */

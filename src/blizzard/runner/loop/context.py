@@ -30,6 +30,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
@@ -54,7 +55,8 @@ DEFAULT_RETRIES_MAX = 2
 class LoopConfig:
     """The reconciliation loop's static configuration."""
 
-    runner_id: str
+    #: The configured name every registration declares — a label, never this runner's identity.
+    runner_name: str
     workspace_id: str
     max_agents: int = 1
     base_branch: str = "main"
@@ -158,6 +160,8 @@ class LoopContext:
     stores: RunnerStores
     clock: IClock
     hub: IHubClient
+    #: Who this runner is at its hub; it holds ``None`` until the first successful registration.
+    identity: RunnerIdentityHolder
     #: This tick's (or, standalone, this step's own) chunk-status read seam —
     #: see :mod:`blizzard.runner.hub.chunk_status_cache`.
     chunk_views: IChunkViews
@@ -246,6 +250,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
+    from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
     from blizzard.runner.throttle.overload import OverloadContext
@@ -293,4 +298,7 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_judgement(ctx: LoopContext) -> JudgementContext:
+        return ctx
+
+    def _conforms_to_registration(ctx: LoopContext) -> RegistrationContext:
         return ctx

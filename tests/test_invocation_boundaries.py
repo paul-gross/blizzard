@@ -58,7 +58,6 @@ def _seed_exited_lease(store, *, lease="lease_r", chunk="ch_1", node="nd_review"
             node_id=node,
             node_name="review",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

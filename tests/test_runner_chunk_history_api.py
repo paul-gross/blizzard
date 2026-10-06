@@ -224,7 +224,6 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 3,
-        "runner_id": "runner-local",
         "retries_max": 2,
         "created_at": _NOW,
     }
@@ -486,7 +485,6 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_pat
             node_id=review_node_id_2,
             node_name="review",
             epoch=4,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )

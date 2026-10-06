@@ -41,6 +41,7 @@ from tests.runner_fakes import (
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
+    registered_identity,
     runner_store_errors,
 )
 
@@ -113,7 +114,6 @@ def _mint(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -266,7 +266,6 @@ def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: dateti
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=at,
         )
@@ -305,7 +304,7 @@ def _tick_statement_count(
         probe=FakeProbe(alive={(1000 + i, f"t{i}") for i in range(n)}),
         clock=FixedClock(_NOW),
         config=LoopConfig(
-            runner_id="r1",
+            runner_name="r1",
             workspace_id="ws1",
             max_agents=n,
             context_warn_tokens=300_000,
@@ -366,7 +365,8 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
         asks=store,
         takeover=store,
         escalations=store,
-        runner_id="r1",
+        identity=registered_identity("r1"),
+        runner_name="r1",
         workspace_id="ws1",
         max_agents=10,
         hub_url="http://hub",
@@ -398,7 +398,6 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime)
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=at,
         )

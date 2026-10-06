@@ -1,12 +1,12 @@
-import type { RunnerView } from 'fleet';
+import type { RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
 import { foldRunnerRows } from './runner-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
-function runner(id: string): RunnerView {
-  return { runner_id: id, subscriptions: [] } as unknown as RunnerView;
+function runner(id: string): RunnerRegistryView {
+  return { runner_id: id, subscriptions: [] } as unknown as RunnerRegistryView;
 }
 
 function chunk(id: string, runnerId: string | null, envs: number): ChunkSummary {
@@ -43,7 +43,7 @@ describe('foldRunnerRows', () => {
           sampled_at: '2026-07-16T11:50:00.000Z',
         },
       ],
-    } as unknown as RunnerView;
+    } as unknown as RunnerRegistryView;
     const [row] = foldRunnerRows([r], [], NOW);
     expect(row.nowMs).toBe(NOW);
     expect(row.subscriptionPaces[0].paceBars[0].elapsedPct).toBe(50);

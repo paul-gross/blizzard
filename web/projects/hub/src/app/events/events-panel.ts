@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, output, signal } from '@a
 import { type KitAsyncStateValue, asyncState } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
 import { EventsView } from './events-view';
-import { eventChunkIds, eventRunnerIds } from './events-panel.model';
+import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
 import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
@@ -73,6 +73,8 @@ export class EventsPanel {
    * no runner, and an id-less row must not become a label-less chip whose `''` value
    * collides with the "All" chip's own reset sentinel. */
   protected readonly runnerIds = computed(() => eventRunnerIds(this.optionsQuery.data() ?? [], this.runnerId()));
+  /** The runner chips' names, from the same options read. */
+  protected readonly runnerNames = computed(() => eventRunnerNames(this.optionsQuery.data() ?? []));
 
   /** The chunk-id universe for the filter chips — same rule as {@link runnerIds}, over
    * the non-null `chunk_id`s (a runner-scoped event names no chunk). */

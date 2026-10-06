@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from tests.support import build_hub, make_ready, pointer_token, report_lease
 from tests.test_fleet_auth import _seed_enrolled
 
@@ -96,7 +95,7 @@ def test_refuses_a_runner_principal(tmp_path: Path) -> None:
     spend total nowhere at all (held here since no
     other test refuses a runner token on this route)."""
     token = _seed_enrolled(tmp_path, runner_id="runner-a")
-    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(
         "/api/spend", params={"since": "2026-01-01T00:00:00Z"}, headers={"Authorization": f"Bearer {token}"}

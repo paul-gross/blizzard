@@ -12,8 +12,8 @@ import click
 import httpx
 
 from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
-from blizzard.hub.cli.sessions import IReadSessionStore
 
 
 class View(Protocol):

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import _free_port
+from tests.runner_join import fleet_headers
 from tests.service.support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -43,11 +44,11 @@ def test_the_mock_hub_serves_the_chunk_findings_list_and_get_routes(tmp_path: Pa
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        listed = hub.get(f"/api/fleet/chunks/{chunk_id}/findings")
+        listed = hub.get(f"/api/fleet/chunks/{chunk_id}/findings", headers=fleet_headers(hub))
         assert listed.status_code == 200, listed.text
         assert [row["finding_id"] for row in listed.json()] == ["fin_1"]
 
-        got = hub.get(f"/api/fleet/chunks/{chunk_id}/findings/fin_1")
+        got = hub.get(f"/api/fleet/chunks/{chunk_id}/findings/fin_1", headers=fleet_headers(hub))
         assert got.status_code == 200, got.text
         assert got.json()["finding_id"] == "fin_1"
 
@@ -61,6 +62,6 @@ def test_the_mock_hub_404s_a_chunk_answering_no_proposal(tmp_path: Path) -> None
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        resp = hub.get(f"/api/fleet/chunks/{chunk_id}/findings")
+        resp = hub.get(f"/api/fleet/chunks/{chunk_id}/findings", headers=fleet_headers(hub))
         assert resp.status_code == 404, resp.text
         assert "no accepted, minted garden proposal" in resp.json()["detail"]

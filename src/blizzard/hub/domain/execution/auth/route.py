@@ -2,8 +2,8 @@
 fact hold the chunk's **currently-live** acquisition?
 
 A value over already-loaded values (``bzh:domain-takes-objects``), not a service. ``route_token_mode``
-is a **separate** rollout brake from ``runner_auth_mode``. Comparison is constant-time against the
-sha256 hex digest :class:`TokenHash` produces, the same one the mint uses."""
+is this check's own rollout brake; the runner's bearer token, checked first, has none. Comparison is
+constant-time against the sha256 hex digest :class:`TokenHash` produces, the same one the mint uses."""
 
 from __future__ import annotations
 

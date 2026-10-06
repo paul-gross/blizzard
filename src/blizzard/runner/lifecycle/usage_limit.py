@@ -127,9 +127,7 @@ def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimi
 
 def _engage(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> None:
     reason = _reason(ctx, harness_id, limit)
-    PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(
-        ctx.config.runner_id, by="usage-limit", reason=reason
-    )
+    PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(by="usage-limit", reason=reason)
 
 
 def _reason(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> str:

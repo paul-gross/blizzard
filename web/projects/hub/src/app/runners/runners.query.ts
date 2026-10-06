@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type RunnerView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubRunnersKey } from 'fleet';
+import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubRunnersKey } from 'fleet';
 
 /**
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived
@@ -15,7 +15,7 @@ import { type RunnerView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_M
 export function injectHubRunnersQuery(includeRetired: () => boolean = () => false) {
   return injectQuery(() => ({
     queryKey: includeRetired() ? [...hubRunnersKey, 'include-retired'] : hubRunnersKey,
-    queryFn: async (): Promise<RunnerView[]> => {
+    queryFn: async (): Promise<RunnerRegistryView[]> => {
       const { data, error } = await listRunnersApiRunnersGet({
         query: includeRetired() ? { include_retired: true } : undefined,
         throwOnError: false,

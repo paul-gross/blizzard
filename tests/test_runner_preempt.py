@@ -50,7 +50,6 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # ty
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             session_name="main",
             created_at=_NOW,
@@ -99,7 +98,6 @@ def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode
 def _brake(store, *, paused):  # type: ignore[no-untyped-def]
     """Set the runner's own local brake, the way ``PATCH /runner`` does — fact + report."""
     store.record_local_pause(
-        "r1",
         paused=paused,
         at=_NOW,
         by="operator",
@@ -198,7 +196,7 @@ def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):
     """Reconcile before draining the queued completion; its rejection spends no retry."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    submission = Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+    submission = Completion(choice="pass", epoch=1, from_node_id="nd_build")
     store.enqueue_outbound(
         kind=COMPLETION_KIND,
         chunk_id="ch_1",
@@ -398,7 +396,6 @@ def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: igno
             node_id="nd_build",
             node_name="build",
             epoch=3,  # the first re-entry, minted above the restart at 2; never spawned
-            runner_id="r1",
             retries_max=2,
             session_name="main",
             created_at=_NOW,

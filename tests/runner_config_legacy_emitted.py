@@ -29,7 +29,7 @@ token_env = "BZ_HUB_TOKEN"
 # Names the env var carrying the secret that signs this runner's session cookie
 # (base64, >= 32 bytes decoded; unique per runner). Unset = a fresh secret each start.
 session_secret_env = "BZ_RUNNER_SESSION_SECRET"
-runner_id = "runner-local"
+name = "runner-local"
 workspace_id = "workspace-local"
 workspace_root = ""
 workspace_provider = "winter"

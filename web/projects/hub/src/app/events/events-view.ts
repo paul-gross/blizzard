@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
@@ -69,6 +69,8 @@ export class EventsView {
    * severity-only read so it stays stable under a runner/chunk selection). Empty hides the
    * runner filter row. */
   readonly runnerIds = input<readonly string[]>([]);
+  /** Each runner's name by id, for the runner chips' display names; an id absent here shows its compact ref. */
+  readonly runnerNames = input<ReadonlyMap<string, string>>(new Map());
 
   /** The chunk-id universe for the chunk filter chips — same contract as {@link runnerIds}. */
   readonly chunkIds = input<readonly string[]>([]);
@@ -93,24 +95,30 @@ export class EventsView {
   protected readonly severityOptions = SEVERITY_OPTIONS;
 
   /** The runner filter chips — an "All" option plus one per id in {@link runnerIds},
-   * compact-ref labelled. Empty when the container handed no ids (nothing to filter). */
+   * labelled with the runner's display name. Empty when the container handed no ids (nothing to filter). */
   protected readonly runnerFilterOptions = computed(() =>
-    EventsView.toOptions(this.runnerIds(), 'events-runner-filter'),
+    EventsView.toOptions(this.runnerIds(), 'events-runner-filter', (id) =>
+      runnerDisplayName(id, this.runnerNames().get(id)),
+    ),
   );
 
   /** The chunk filter chips — same shape as {@link runnerFilterOptions}. */
   protected readonly chunkFilterOptions = computed(() =>
-    EventsView.toOptions(this.chunkIds(), 'events-chunk-filter'),
+    EventsView.toOptions(this.chunkIds(), 'events-chunk-filter', compactRef),
   );
 
   /** Build a chip row from an id universe: an "All" reset plus one chip per id, keyed
-   * by the raw id (unique testid) and labelled with its compact ref. `[]` in → `[]` out,
+   * by the raw id (unique testid) and labelled by `label`. `[]` in → `[]` out,
    * so the row hides when there is nothing to filter. */
-  private static toOptions(ids: readonly string[], testidPrefix: string): readonly KitChipOption[] {
+  private static toOptions(
+    ids: readonly string[],
+    testidPrefix: string,
+    label: (id: string) => string,
+  ): readonly KitChipOption[] {
     if (ids.length === 0) return [];
     return [
       { value: '', label: 'All', testid: `${testidPrefix}-all` },
-      ...ids.map((id) => ({ value: id, label: compactRef(id), testid: `${testidPrefix}-${id}` })),
+      ...ids.map((id) => ({ value: id, label: label(id), testid: `${testidPrefix}-${id}` })),
     ];
   }
 
@@ -121,6 +129,11 @@ export class EventsView {
   protected shortId(id: string): string {
     return compactRef(id);
   }
+
+  protected readonly runnerName = runnerDisplayName;
+
+  /** The runner cell's tooltip — the display name the cell may ellipsize, then the full id it compacts. */
+  protected readonly runnerTitle = runnerTitle;
 
   protected onChoose(value: string): void {
     this.filterChange.emit(value);

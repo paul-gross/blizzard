@@ -28,30 +28,20 @@ class PauseStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def hub_contact_at(self, runner_id: str) -> datetime | None:
-        rows = self._store.all(select(hub_control.c.updated_at).where(hub_control.c.runner_id == runner_id))
+    def hub_contact_at(self) -> datetime | None:
+        rows = self._store.all(select(hub_control.c.updated_at).order_by(hub_control.c.id.desc()).limit(1))
         return rows[0].updated_at if rows else None
 
-    def hub_paused(self, runner_id: str) -> bool:
-        rows = self._store.all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))
+    def hub_paused(self) -> bool:
+        rows = self._store.all(select(hub_control.c.paused).order_by(hub_control.c.id.desc()).limit(1))
         return bool(rows[0].paused) if rows else False
 
-    def local_paused(self, runner_id: str) -> bool:
-        rows = self._store.all(
-            select(local_pause_facts.c.paused)
-            .where(local_pause_facts.c.runner_id == runner_id)
-            .order_by(local_pause_facts.c.id.desc())
-            .limit(1)
-        )
+    def local_paused(self) -> bool:
+        rows = self._store.all(select(local_pause_facts.c.paused).order_by(local_pause_facts.c.id.desc()).limit(1))
         return bool(rows[0].paused) if rows else False
 
-    def local_pause_reason(self, runner_id: str) -> str | None:
-        rows = self._store.all(
-            select(local_pause_facts.c.reason)
-            .where(local_pause_facts.c.runner_id == runner_id)
-            .order_by(local_pause_facts.c.id.desc())
-            .limit(1)
-        )
+    def local_pause_reason(self) -> str | None:
+        rows = self._store.all(select(local_pause_facts.c.reason).order_by(local_pause_facts.c.id.desc()).limit(1))
         return rows[0].reason if rows else None
 
     def last_daemon_liveness(self) -> datetime | None:
@@ -84,36 +74,29 @@ class PauseStore:
             )
         return parks
 
-    def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
+    def record_daemon_liveness(self, *, alive_at: datetime) -> None:
         with self._store.begin() as conn:
-            existing = conn.execute(
-                select(daemon_liveness.c.runner_id).where(daemon_liveness.c.runner_id == runner_id)
-            ).one_or_none()
+            existing = conn.execute(select(daemon_liveness.c.id).limit(1)).one_or_none()
             if existing is None:
-                conn.execute(daemon_liveness.insert().values(runner_id=runner_id, alive_at=alive_at))
+                conn.execute(daemon_liveness.insert().values(alive_at=alive_at))
             else:
                 conn.execute(
-                    daemon_liveness.update().where(daemon_liveness.c.runner_id == runner_id).values(alive_at=alive_at)
+                    daemon_liveness.update().where(daemon_liveness.c.id == existing.id).values(alive_at=alive_at)
                 )
-        _log.debug("daemon liveness stamped", runner_id=runner_id)
+        _log.debug("daemon liveness stamped")
 
-    def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
+    def set_hub_paused(self, *, paused: bool, at: datetime) -> None:
         with self._store.begin() as conn:
-            existing = conn.execute(
-                select(hub_control.c.runner_id).where(hub_control.c.runner_id == runner_id)
-            ).one_or_none()
+            existing = conn.execute(select(hub_control.c.id).limit(1)).one_or_none()
             if existing is None:
-                conn.execute(hub_control.insert().values(runner_id=runner_id, paused=paused, updated_at=at))
+                conn.execute(hub_control.insert().values(paused=paused, updated_at=at))
             else:
                 conn.execute(
-                    hub_control.update()
-                    .where(hub_control.c.runner_id == runner_id)
-                    .values(paused=paused, updated_at=at)
+                    hub_control.update().where(hub_control.c.id == existing.id).values(paused=paused, updated_at=at)
                 )
 
     def record_local_pause(
         self,
-        runner_id: str,
         *,
         paused: bool,
         at: datetime,
@@ -125,17 +108,13 @@ class PauseStore:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
         # has stopped claiming and the hub is never told.
         with self._store.begin() as conn:
-            conn.execute(
-                local_pause_facts.insert().values(
-                    runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
-                )
-            )
+            conn.execute(local_pause_facts.insert().values(paused=paused, set_at=at, set_by=by, reason=reason))
             result = conn.execute(
                 outbound_buffer.insert().values(
                     kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
                 )
             )
-        _log.info("local pause fact recorded", runner_id=runner_id, paused=paused, set_by=by, report=report_kind)
+        _log.info("local pause fact recorded", paused=paused, set_by=by, report=report_kind)
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 

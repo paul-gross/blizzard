@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,8 +28,9 @@ from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, Q
 router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
 
 
-def question_view(row: NodeQuestion) -> QuestionView:
-    """Render a stored question row as its wire view — derived answer + delivery state."""
+def question_view(row: NodeQuestion, runner_names: Mapping[str, str]) -> QuestionView:
+    """Render a stored question row as its wire view — derived answer + delivery state, and the
+    asking runner's registered name out of ``runner_names``, the caller's one batched read."""
     return QuestionView(
         question_id=row.question_id,
         chunk_id=row.chunk_id,
@@ -36,6 +38,7 @@ def question_view(row: NodeQuestion) -> QuestionView:
         session_id=row.session_id,
         harness_id=row.harness_id,
         runner_id=row.runner_id,
+        runner_name=runner_names.get(row.runner_id),
         epoch=row.epoch,
         question=row.question,
         options=row.options,
@@ -125,4 +128,6 @@ def answer_question(
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
-    return [question_view(row) for row in services.chunks.questions.list_open_questions()]
+    rows = services.chunks.questions.list_open_questions()
+    runner_names = services.registry.names_for(row.runner_id for row in rows)
+    return [question_view(row, runner_names) for row in rows]

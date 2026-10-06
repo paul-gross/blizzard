@@ -24,6 +24,7 @@ from tests import claude_code_telemetry
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import make_store
+from tests.runner_join import runner_spawn_env
 from tests.service.support import (
     mint_fixture,
     mock_hub,
@@ -111,12 +112,14 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
         config.config_path.write_text(config.to_toml())
-        env = {
-            **os.environ,
-            "BLIZZARD_MOCK_HARNESS_FENCE": "1",
-            "BZ_RUNNER_TICK_SECONDS": "0.5",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url,
-        }
+        env = runner_spawn_env(
+            config.hub_url,
+            {
+                "BLIZZARD_MOCK_HARNESS_FENCE": "1",
+                "BZ_RUNNER_TICK_SECONDS": "0.5",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url,
+            },
+        )
         log = config.root / "daemon.log"
         proc = subprocess.Popen(
             [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
@@ -131,9 +134,11 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
         )
         try:
             _await_http(proc, tcp, "/api/health", log=log)
+            # No platform span leaves before the runner's first registration, which its first tick makes.
+            assert poll_until(lambda: read_daemon_log(log).count('"tick end"') >= 1, timeout=30.0)
             assert tcp.get("/api/health?token=planted-secret").status_code == 200
             assert uds.get("/api/health").status_code == 200
-            assert poll_until(lambda: read_daemon_log(log).count('"tick end"') >= 2, timeout=30.0)
+            assert poll_until(lambda: read_daemon_log(log).count('"tick end"') >= 3, timeout=30.0)
         finally:
             tcp.close()
             uds.close()
@@ -170,7 +175,9 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
         config.config_path.write_text(config.to_toml())
-        env = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        env = runner_spawn_env(
+            config.hub_url, {"BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        )
         log = config.root / "daemon.log"
         proc = subprocess.Popen(
             [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
@@ -197,7 +204,6 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
                     node_id="nd_build",
                     node_name="build",
                     epoch=1,
-                    runner_id=config.runner_id,
                     retries_max=2,
                     created_at=now,
                 )
@@ -224,7 +230,9 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
         tracing = TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
         config = dataclasses.replace(config, tracing=tracing)
         config.config_path.write_text(config.to_toml())
-        env = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        env = runner_spawn_env(
+            config.hub_url, {"BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        )
         log = config.root / "daemon.log"
         proc = subprocess.Popen(
             [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
@@ -241,6 +249,9 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
             _await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
             store = make_store(config.db_url)
+            # The first tick registered: the identity every forwarded item is stamped with.
+            identity = store.runner_identity()
+            assert identity is not None, read_daemon_log(log)
             now = datetime.now(UTC)
             store.record_lease(
                 NewLease(
@@ -250,7 +261,6 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
                     node_id="nd_build",
                     node_name="build",
                     epoch=1,
-                    runner_id=config.runner_id,
                     retries_max=2,
                     created_at=now,
                 )
@@ -290,4 +300,5 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
             assert names["service.name"] == "blizzard-claude-code"
             stamped = {kv.key: kv.value.string_value for kv in item.attributes}
             assert stamped["blizzard.lease.id"] == "lease_svc"
-            assert stamped["blizzard.runner.id"] == config.runner_id
+            assert stamped["blizzard.runner.id"] == identity.runner_id
+            assert stamped["blizzard.runner.name"] == identity.runner_name == config.name

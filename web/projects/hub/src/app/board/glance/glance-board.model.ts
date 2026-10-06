@@ -1,13 +1,19 @@
-import { STATUS_TONE, ageMs, compactRef, type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerView, type SseStatus } from 'fleet';
+import { RunnerConnection, STATUS_TONE, ageMs, compactRef, runnerDisplayName, type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView, type SseStatus } from 'fleet';
 
 import type { AttentionRow, DoneRow, MotionRow, UpNextRow, Vitals } from './glance-view';
 
 /** How far back "Done today" reaches — a rolling window, not a calendar day. */
 const DONE_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** The runners still on the fleet registry — a retired runner never counts toward runners-up. */
-export function liveRunners(runners: readonly RunnerView[]): readonly RunnerView[] {
-  return runners.filter((runner) => !runner.retired);
+/** The runners that count toward runners-up: a retired runner has left the fleet, and a never-connected
+ * one (added but never started) has not joined it yet — neither reads as down. */
+export function liveRunners(runners: readonly RunnerRegistryView[]): readonly RunnerRegistryView[] {
+  return runners.filter((runner) => !runner.retired && runner.connection !== RunnerConnection.NEVER_CONNECTED);
+}
+
+/** The display name of the runner holding a chunk's route, or `null` when none does. */
+function chunkRunner(chunk: ChunkSummary): string | null {
+  return chunk.runner_id ? runnerDisplayName(chunk.runner_id, chunk.runner_name) : null;
 }
 
 /**
@@ -25,19 +31,19 @@ export function needsYouRows(
     rows.set(question.chunk_id, {
       chunkId: question.chunk_id,
       shortId: compactRef(question.chunk_id),
-      runnerId: question.runner_id,
+      runner: runnerDisplayName(question.runner_id, question.runner_name),
       tone: 'waiting',
       pillLabel: 'ask',
       sub: question.question,
     });
   }
-  const runnerOf = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk.runner_id ?? null]));
+  const runnerOf = new Map(chunks.map((chunk) => [chunk.chunk_id, chunkRunner(chunk)]));
   for (const decision of decisions) {
     if (rows.has(decision.chunk_id)) continue;
     rows.set(decision.chunk_id, {
       chunkId: decision.chunk_id,
       shortId: compactRef(decision.chunk_id),
-      runnerId: runnerOf.get(decision.chunk_id) ?? null,
+      runner: runnerOf.get(decision.chunk_id) ?? null,
       tone: 'waiting',
       pillLabel: 'gate',
       sub: decision.node_name,
@@ -50,7 +56,7 @@ export function needsYouRows(
     rows.set(chunk.chunk_id, {
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runnerId: chunk.runner_id ?? null,
+      runner: chunkRunner(chunk),
       tone,
       pillLabel: tone === 'needs' ? 'needs human' : 'waiting',
       sub: chunk.current_node_name ?? chunk.current_node_id ?? '—',
@@ -66,7 +72,7 @@ export function inMotionRows(chunks: readonly ChunkSummary[]): readonly MotionRo
     .map((chunk) => ({
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runnerId: chunk.runner_id ?? null,
+      runner: chunkRunner(chunk),
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       pillLabel: chunk.status === 'delivering' ? ('deliver' as const) : ('run' as const),
       costUsd: chunk.cost?.cost_usd ?? 0,
@@ -126,7 +132,7 @@ export function doneTodayTotal(isPending: boolean, isError: boolean, total: numb
  * connection label — `offline` only once the health read has failed while the stream is neither open nor
  * reconnecting. */
 export function glanceVitals(
-  runners: readonly RunnerView[],
+  runners: readonly RunnerRegistryView[],
   streamState: SseStatus,
   healthIsError: boolean,
   needsYouCount: number,

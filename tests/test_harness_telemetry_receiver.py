@@ -30,6 +30,7 @@ from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.receiver import (
     MAX_ATTRIBUTES,
@@ -38,12 +39,14 @@ from blizzard.runner.tracing.receiver import (
     admit_log_records,
 )
 from tests import claude_code_telemetry
+from tests.runner_fakes import REGISTERED_AT
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _METRICS_SCOPE = "com.anthropic.claude_code"
 _LOGS_SCOPE = "com.anthropic.claude_code.events"
+_RUNNER = RunnerIdentity(runner_id="r1", runner_name="r-claude", registered_at=REGISTERED_AT)
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
 _ENCODINGS = [
     (PROTOBUF_CONTENT_TYPE, claude_code_telemetry.protobuf_body),
@@ -59,7 +62,6 @@ def _lease() -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=1,
-        runner_id="r1",
         retries_max=2,
         created_at=_NOW,
     )
@@ -267,7 +269,7 @@ def test_rejected_counts_are_named_only_when_some_were() -> None:
 
 def test_admitted_data_points_are_stamped_and_replace_the_senders_stamps() -> None:
     forged = {"blizzard.lease.id": "other", "blizzard.caller": "operator", "blizzard.runner.id": "x", "user.id": "u"}
-    admission = admit_data_points([_point(attributes=forged)], _lease(), _METRICS_SCOPE)
+    admission = admit_data_points([_point(attributes=forged)], _lease(), _METRICS_SCOPE, runner=_RUNNER)
     (kept,) = admission.kept
     assert admission.dropped == 0
     assert kept.attributes == {
@@ -276,23 +278,29 @@ def test_admitted_data_points_are_stamped_and_replace_the_senders_stamps() -> No
         "blizzard.chunk.id": "ch_1",
         "blizzard.lease.id": "lease_1",
         "blizzard.runner.id": "r1",
+        "blizzard.runner.name": "r-claude",
     }
 
 
 def test_data_points_under_another_scope_are_dropped_and_counted() -> None:
-    admission = admit_data_points([_point(), _point(scope_name="some.library")], _lease(), _METRICS_SCOPE)
+    admission = admit_data_points(
+        [_point(), _point(scope_name="some.library")], _lease(), _METRICS_SCOPE, runner=_RUNNER
+    )
     assert (len(admission.kept), admission.dropped) == (1, 1)
 
 
 def test_admission_caps_attributes_and_strings() -> None:
     sent = {f"k{i}": "v" * (MAX_STRING_CHARS + 5) for i in range(MAX_ATTRIBUTES + 10)}
     (kept,) = admit_data_points(
-        [_point(attributes=sent, metric_name="n" * (MAX_STRING_CHARS + 1))], _lease(), _METRICS_SCOPE
+        [_point(attributes=sent, metric_name="n" * (MAX_STRING_CHARS + 1))], _lease(), _METRICS_SCOPE, runner=_RUNNER
     ).kept
     assert len(kept.metric_name) == MAX_STRING_CHARS
-    assert len(kept.attributes) == MAX_ATTRIBUTES + 4
-    assert set(kept.attributes.values()) - {"worker", "ch_1", "lease_1", "r1"} == {"v" * MAX_STRING_CHARS}
-    (record,) = admit_log_records([_record(body="b" * (MAX_STRING_CHARS + 1))], _lease(), _LOGS_SCOPE).kept
+    assert len(kept.attributes) == MAX_ATTRIBUTES + 5
+    stamps = {"worker", "ch_1", "lease_1", "r1", "r-claude"}
+    assert set(kept.attributes.values()) - stamps == {"v" * MAX_STRING_CHARS}
+    (record,) = admit_log_records(
+        [_record(body="b" * (MAX_STRING_CHARS + 1))], _lease(), _LOGS_SCOPE, runner=_RUNNER
+    ).kept
     assert record.body == "b" * MAX_STRING_CHARS
 
 
@@ -306,6 +314,7 @@ def test_a_log_record_keeps_its_trace_context_only_inside_the_leases_chunk_trace
         ],
         _lease(),
         _LOGS_SCOPE,
+        runner=_RUNNER,
     )
     kept_inside, kept_outside = admission.kept
     assert admission.dropped == 1

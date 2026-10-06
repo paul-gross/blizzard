@@ -36,17 +36,18 @@ EXPORTED = datetime(2026, 2, 1, tzinfo=UTC)
 
 STEP_COLUMNS = [
     "step_key", "trace_id", "step_kind", "chunk_id", "work_refs", "sources", "graph_id", "graph_name", "node_id",
-    "node_name", "epoch", "decision_id", "visit", "runner_id", "harness_id", "models", "started_at", "ended_at",
-    "closed_at", "duration_ms", "outcome", "choice", "to_node_name", "preceded_by", "bounce_cause", "asks",
+    "node_name", "epoch", "decision_id", "visit", "runner_id", "runner_name", "harness_id", "models", "started_at",
+    "ended_at", "closed_at", "duration_ms", "outcome", "choice", "to_node_name", "preceded_by", "bounce_cause", "asks",
     "asks_unanswered", "wait_queue_ms", "wait_claim_ms", "wait_ask_ms", "wait_pause_ms", "wait_pickup_ms",
     "invocations", "input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens", "cost_billed_usd",
     "cost_estimated_usd", "cost_partial", "billed_partial", "exported_at",
 ]  # fmt: skip
 INVOCATION_COLUMNS = [
     "usage_id", "step_key", "trace_id", "chunk_id", "epoch", "graph_id", "graph_name", "node_id", "node_name",
-    "runner_id", "kind", "model", "harness_id", "harness_version", "input_tokens", "output_tokens",
+    "runner_id", "runner_name", "kind", "model", "harness_id", "harness_version", "input_tokens", "output_tokens",
     "cache_read_tokens", "cache_create_tokens", "cost_billed_usd", "cost_estimated_usd", "recorded_at", "exported_at",
 ]  # fmt: skip
+NAMES = {"r-1": "runner-one", "r-9": "runner-nine"}
 
 
 def _summaries(facts: StepFacts) -> list[StepSummary]:
@@ -55,7 +56,12 @@ def _summaries(facts: StepFacts) -> list[StepSummary]:
 
 
 def _all() -> list[tuple[str, StepSummary]]:
-    return [(name, summary) for name, facts in fx.scenarios().items() for summary in _summaries(facts)]
+    return [(name, summary) for name, facts in _named_scenarios().items() for summary in _summaries(facts)]
+
+
+def _named_scenarios() -> dict[str, StepFacts]:
+    """The shared scenarios, with every runner they name registered under a name."""
+    return {name: replace(facts, runner_names=NAMES) for name, facts in fx.scenarios().items()}
 
 
 def _usage_row(fact: object, usage_id: int = 1, chunk_id: str = "ch_1") -> AttributedUsage:
@@ -83,6 +89,7 @@ def test_a_steps_row_only_renames_its_summary(name: str, summary: StepSummary) -
         summary.node_name,
     )
     assert row.runner_id == (summary.runner_id if summary.kind is StepKind.RUNNER else None)
+    assert row.runner_name == (summary.runner_name if summary.kind is StepKind.RUNNER else None)
     assert row.outcome == summary.outcome.value
     assert row.duration_ms == round((row.ended_at - row.started_at).total_seconds() * 1000)
     assert (row.started_at, row.ended_at, row.closed_at) == (summary.started_at, summary.ended_at, summary.closed_at)
@@ -115,9 +122,21 @@ def test_a_gate_resolved_long_before_its_pickup() -> None:
 
 def test_hub_and_gate_rows_carry_no_runner_but_runner_rows_do() -> None:
     by_kind = {s.kind: step_row(s, EXPORTED) for _, s in _all()}
-    assert by_kind[StepKind.RUNNER].runner_id == "r-1"
-    assert by_kind[StepKind.HUB].runner_id is None
-    assert by_kind[StepKind.GATE].runner_id is None
+    assert (by_kind[StepKind.RUNNER].runner_id, by_kind[StepKind.RUNNER].runner_name) == ("r-1", "runner-one")
+    assert (by_kind[StepKind.HUB].runner_id, by_kind[StepKind.HUB].runner_name) == (None, None)
+    assert (by_kind[StepKind.GATE].runner_id, by_kind[StepKind.GATE].runner_name) == (None, None)
+
+
+def test_a_gate_imposed_by_a_named_runner_still_carries_no_runner() -> None:
+    gates = [s for name, s in _all() if name == "gate-runner-imposed" and s.kind is StepKind.GATE]
+    assert gates and all(s.runner_name is not None for s in gates)
+    assert all((row.runner_id, row.runner_name) == (None, None) for row in (step_row(s, EXPORTED) for s in gates))
+
+
+def test_a_runner_row_without_a_registered_name_carries_its_id_alone() -> None:
+    summary = next(s for _, facts in fx.scenarios().items() for s in _summaries(facts) if s.kind is StepKind.RUNNER)
+    row = step_row(summary, EXPORTED)
+    assert (row.runner_id, row.runner_name) == ("r-1", None)
 
 
 def test_a_migration_and_a_restart_row() -> None:
@@ -202,6 +221,7 @@ def test_an_invocation_row_renames_its_usage_fact() -> None:
     facts = fx.make_facts(usage=(fact,), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
     row = fx.invocation_of(facts, AttributedUsage(7, "ch_1", "r-9", fact), EXPORTED)
     assert (row.usage_id, row.runner_id, row.kind, row.model) == (7, "r-9", "spawn", "claude-x")
+    assert row.runner_name is None
     assert (row.harness_id, row.harness_version) == (None, None)
     assert (row.cost_billed_usd, row.cost_estimated_usd) == (None, Decimal("0.25"))
     assert (row.input_tokens, row.cache_read_tokens) == (100, 1000)
@@ -212,7 +232,13 @@ def test_an_invocation_row_renames_its_usage_fact() -> None:
 def _release_facts() -> StepFacts:
     """A chunk whose every identifying value differs from the fixtures' defaults."""
     graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
-    return fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
+    return fx.make_facts(
+        chunk_id="ch_7",
+        graphs={"g5": graph},
+        pin_graph_id="g5",
+        runner_names={"r-x": "release-runner"},
+        **fx.runner_epoch(2, 40, "r-x"),
+    )
 
 
 def test_an_invocation_row_in_full() -> None:
@@ -243,6 +269,7 @@ def test_an_invocation_row_in_full() -> None:
         node_id="g5-plan",
         node_name="plan",
         runner_id="r-x",
+        runner_name="release-runner",
         kind="judge",
         model="gpt-q",
         harness_id="opencode",

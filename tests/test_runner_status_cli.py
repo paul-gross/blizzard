@@ -110,7 +110,6 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )
@@ -143,7 +142,6 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             # The session stamps — so `status` renders which lineage parked
             # and the resume command an operator can paste lands in its configuration.
@@ -373,7 +371,6 @@ def test_status_prints_the_local_pause_reason_on_the_brake_line(
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
     _store(root).record_local_pause(
-        "runner-local",
         paused=True,
         at=_NOW,
         by="usage-limit",
@@ -397,7 +394,6 @@ def _seed_escalation(store: SqlAlchemyRunnerStore, *, reason: str) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=0,
             created_at=_NOW,
         )

@@ -32,15 +32,17 @@ export class LocalInfoView {
   readonly lastTickLabel = input.required<string>();
 
   /** The hub-link facts table's rows — a method, not a stored computed, since the
-   * endpoint/link/loop rows need the `<ng-template>`s this template declares for them
+   * identity/endpoint/link/loop rows need the `<ng-template>`s this template declares for them
    * (`KitFactList`'s own templated-row contract). */
   protected factRows(
+    identityValue: TemplateRef<unknown>,
     endpointValue: TemplateRef<unknown>,
     linkValue: TemplateRef<unknown>,
     loopValue: TemplateRef<unknown>,
   ): readonly KitFact[] {
     const v = this.view();
     return [
+      { label: 'runner', template: identityValue, testid: 'runner-identity' },
       { label: 'endpoint', template: endpointValue },
       { label: 'link', template: linkValue },
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },

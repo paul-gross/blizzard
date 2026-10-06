@@ -18,6 +18,7 @@ from tests.support import (
     hub_store_connections,
     pointer_token,
     seed_chunk_record,
+    seed_runner,
     seed_work_item,
 )
 
@@ -142,6 +143,9 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
         work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
 
+    # The proposing runner's name is read at render time, the registry's latest.
+    seed_runner(hub, "runner-local", name="r-proposer", register=False)
+
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 
     hub_entry = entries["hub"]
@@ -151,6 +155,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
         "user_id": None,
         "login": None,
         "runner_id": "runner-local",
+        "runner_name": "r-proposer",
         "chunk_id": "ch_proposer",
         "node_name": "triage",
     }

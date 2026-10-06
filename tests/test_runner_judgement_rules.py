@@ -59,7 +59,6 @@ def _lease(*, session_id: str | None = "sess-a") -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=1,
-        runner_id="runner-local",
         retries_max=2,
         created_at=_LAUNCHED,
         session_id=session_id,

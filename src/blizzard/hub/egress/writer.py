@@ -75,6 +75,15 @@ class DatasetSchema:
     major_version: int
     columns: tuple[ColumnSpec, ...]
 
+    def widens(self, older: DatasetSchema) -> bool:
+        """Whether this schema is ``older`` with nullable columns added and nothing else changed — the one schema
+        change that keeps a major version, so the export carries on under ``older``'s files."""
+        if (self.name, self.major_version) != (older.name, older.major_version):
+            return False
+        kept = {c.name for c in older.columns}
+        added = [c for c in self.columns if c.name not in kept]
+        return all(c.nullable for c in added) and [c for c in self.columns if c.name in kept] == list(older.columns)
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -165,7 +174,8 @@ class IEgressWriter(Protocol):
     """Places a pass's files, then its manifest. Single-caller by contract."""
 
     def write(self, batch: EgressBatch) -> FilesWritten | EgressFailure:
-        """Place ``batch``'s rows as one file per ``max_rows_per_file`` rows. Never replaces an existing name."""
+        """Place ``batch``'s rows as one file per ``max_rows_per_file`` rows. Never replaces a data file; swaps
+        the dataset's ``_schema/`` document in place when the current schema only adds nullable columns to it."""
         ...
 
     def commit_pass(self, egress_pass: EgressPass, placed: Sequence[PlacedFile]) -> ManifestCommitted | EgressFailure:

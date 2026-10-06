@@ -73,3 +73,13 @@ a bad release also corrupted state outside the store, restore from backup ([`doc
 
 A rollback past the `chunk_deleted` migration resurrects every chunk deleted after it into the claimable queue — its
 `hub:` items stay withdrawn, so a runner picking it back up runs against dead pointers.
+
+A rollback past the `runner_minted_ids` migration keys every runner by its current name again, so a rename made since
+carries over, and a runner whose name another runner shares as a name or an id keeps its `rn_` id. A runner named `hub`
+is keyed `hub` again — the hub's own executor id — so its lease and transition rows can no longer be told apart from the
+hub node's. A runner added but never connected comes back as registered when it was added, and who added each runner is
+lost. Each runner rolls back with its hub: its own store's downgrade keys its rows by the name of its latest
+registration, or by `runner-local` if it never registered, so roll a runner back only after it has registered with the
+upgraded hub. A rolled-back runner whose older config names a different id reads its local pause facts as never set. An
+older hub also refuses to export into the widened egress `_schema/` documents until they are moved aside
+([`docs/deployment/egress.md`](./deployment/egress.md#upgrading-to-hub-minted-runner-ids)).

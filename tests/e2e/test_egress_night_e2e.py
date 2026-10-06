@@ -45,6 +45,7 @@ from tests.e2e.test_acceptance_loop import (
     _winter_source,
 )
 from tests.e2e.test_ask_answer_e2e import _tick_until
+from tests.runner_join import held_token, token_identity
 
 pytestmark = [
     pytest.mark.e2e,
@@ -391,8 +392,9 @@ def _forward_late_usage(night: Night, ndjson_dir: Path) -> tuple[str, dict[str, 
         lambda: proof.read_rows(ndjson_dir, "ndjson"),
         lambda rows: step_key in proof.newest(rows["steps"], "step_key"),
     )
-    runner_id = night.config.runner_id
-    seq = night.hub.post("/api/fleet/events", json={"runner_id": runner_id, "facts": []}).json()["high_water"]
+    # Forwarded as the runner itself, under its own token, so the fact lands on its seq line.
+    as_runner = night.config.auth_headers()
+    seq = night.hub.post("/api/fleet/events", json={"facts": []}, headers=as_runner).json()["high_water"]
     late = {
         "chunk_id": plain,
         "node_id": usage["node_id"],
@@ -408,7 +410,8 @@ def _forward_late_usage(night: Night, ndjson_dir: Path) -> tuple[str, dict[str, 
     }
     posted = night.hub.post(
         "/api/fleet/events",
-        json={"runner_id": runner_id, "facts": [{"seq": seq + 1, "kind": "usage.recorded", "payload": late}]},
+        json={"facts": [{"seq": seq + 1, "kind": "usage.recorded", "payload": late}]},
+        headers=as_runner,
     )
     assert posted.status_code == 200 and posted.json()["applied"] == [seq + 1], posted.text
     before_late = len(night.detail(plain)["usage"])
@@ -534,6 +537,23 @@ def test_both_exports_hold_the_hubs_record(exported: Exported) -> None:
     """Every step of the chunks' history and every usage fact on the spend surface is in both exports."""
     _assert_the_export_holds_the_hub_record(exported.night, exported.ndjson_rows, "ndjson")
     _assert_the_export_holds_the_hub_record(exported.night, exported.parquet_rows, "parquet")
+
+
+def test_both_exports_name_the_runner_by_its_minted_id_and_its_name(exported: Exported) -> None:
+    """Every step the runner ran and every invocation carries the id the hub minted for the runner, beside
+    the name it registered under."""
+    night = exported.night
+    joined = token_identity(night.hub_url, held_token(night.config.root))
+    assert joined.status_code == 200, joined.text
+    runner = (joined.json()["runner_id"], night.config.name)
+    assert runner[0].startswith("rn_"), runner
+    for label, rows in (("ndjson", exported.ndjson_rows), ("parquet", exported.parquet_rows)):
+        steps = proof.newest(rows["steps"], "step_key").values()
+        ran = {(r["runner_id"], r["runner_name"]) for r in steps if r["runner_id"] is not None}
+        assert ran == {runner}, f"{label} steps: {ran}"
+        invocations = proof.newest(rows["invocations"], "usage_id").values()
+        billed = {(r["runner_id"], r["runner_name"]) for r in invocations}
+        assert billed == {runner}, f"{label} invocations: {billed}"
 
 
 def test_manifests_name_every_file(exported: Exported) -> None:

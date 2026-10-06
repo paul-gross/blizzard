@@ -87,7 +87,6 @@ def _open_segment(ctx, *, chunk_id: str, lease_id: str, session: SessionReferenc
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -112,7 +111,7 @@ def test_pump_skips_only_the_segment_with_an_unresolvable_owner(tmp_path, unavai
         provider=FakeProvider({"e_ch_blocked": "/ws/ch_blocked", "e_ch_ok": "/ws/ch_ok"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, unavailable=unavailable))
 

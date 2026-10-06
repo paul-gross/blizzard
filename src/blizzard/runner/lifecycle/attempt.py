@@ -34,6 +34,7 @@ from blizzard.runner.lifecycle.model import (
     retry_owner_admitted,
     routed_away,
 )
+from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
@@ -149,7 +150,7 @@ class Attempt:
             # Deliberate deferral, not a surfaced failure — emit nothing.
             _log.info(
                 "escalation deferred — locally paused",
-                runner_id=self.ctx.config.runner_id,
+                runner_name=self.ctx.config.runner_name,
                 via=via,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
@@ -295,7 +296,7 @@ class Attempt:
             # lease stays open, untouched, for a later pass once the pause lifts.
             _log.info(
                 "owner-unresolvable escalation deferred — locally paused",
-                runner_id=self.ctx.config.runner_id,
+                runner_name=self.ctx.config.runner_name,
                 via=via,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
@@ -522,14 +523,18 @@ class Attempt:
         """True iff the hub no longer routes this chunk here, or it is gone outright.
 
         Unreachable hub → ``False``: a transport failure is never read as a detach. A 404 is the
-        one exception — terminal, not something to wait out."""
+        one exception — terminal, not something to wait out. Before the runner's first registration
+        no route can be judged another's, so it answers ``False`` then too."""
+        runner_id = registered_runner_id(self.ctx.identity)
+        if runner_id is None:
+            return False
         try:
             view = self.ctx.chunk_views.get(self.lease.chunk_id)
         except ChunkNotFoundError:
             return True  # the chunk no longer exists at the hub — terminal, not retryable
         except HubClientError:
             return False  # hub unreachable — last-known directive holds; keep working
-        return routed_away(view, self.ctx.config.runner_id)
+        return routed_away(view, runner_id)
 
     def _braked(self) -> bool:
         """The runner's own brake holds back this attempt's escalations and starts."""

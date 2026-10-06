@@ -55,9 +55,7 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
     so "a pause-parked lease has no closure" is deliberately not an invariant."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
         conn.execute(
             insert(runner.lease_closures).values(

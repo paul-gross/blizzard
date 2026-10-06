@@ -62,7 +62,7 @@ def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=config or LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=config or LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
     )
 
 
@@ -161,7 +161,7 @@ def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp
     stale_mtime = (_NOW - timedelta(days=15)).timestamp()  # past the 14-day default
     os.utime(old_stdout, (stale_mtime, stale_mtime))
     os.utime(old_stderr, (stale_mtime, stale_mtime))
-    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
+    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
     ctx = _ctx(store, config=config)
 
     Retention(ctx).run()

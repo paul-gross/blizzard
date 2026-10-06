@@ -97,7 +97,6 @@ class NewLease:
     node_id: str
     node_name: str
     epoch: int
-    runner_id: str
     retries_max: int
     created_at: datetime
     # What session this attempt runs and under what configuration, stamped on
@@ -142,7 +141,6 @@ class Lease:
     node_id: str
     node_name: str
     epoch: int
-    runner_id: str
     retries_max: int
     created_at: datetime
     # This attempt's session stamps, read back. `None` on any of the three

@@ -53,7 +53,6 @@ def _seed_exited_lease(
             node_id=node_id,
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

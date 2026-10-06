@@ -1,4 +1,4 @@
-import { type ChunkStatus, type ExternalSubscriptionUsageWindowView, type RunnerView, compactRef, ageMs, formatRefreshedAgo } from 'fleet';
+import { type ChunkStatus, type ExternalSubscriptionUsageWindowView, RunnerConnection, type RunnerRegistryView, compactRef, ageMs, formatRefreshedAgo, formatSeenAgo } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
 /** One claim line under a registry row: the chunk a runner holds, where it sits, and
@@ -64,10 +64,21 @@ export interface SubscriptionPace {
   readonly missReason: string | null;
 }
 
+/**
+ * A row's liveness label: a never-connected runner has no contact to age, so it says so;
+ * otherwise "seen 12s ago" from `last_seen_at` (`bzh:utc-instants`). The hub decides the
+ * connection (`connection`, `online`) on its own clock; this label is decoration read against
+ * the browser's, so it defers to the shared skew-tolerant `formatSeenAgo` (`when.ts`).
+ */
+export function runnerSeenLabel(row: RunnerRow): string {
+  if (row.connection === RunnerConnection.NEVER_CONNECTED) return 'never connected';
+  return formatSeenAgo(row.last_seen_at, row.online, row.nowMs);
+}
+
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded
  * so a presentational view needs no second read to render them. `used` is the slot
  * bar's numerator — environments held by this runner's live routes. */
-export interface RunnerRow extends RunnerView {
+export interface RunnerRow extends RunnerRegistryView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
   readonly subscriptionPaces: readonly SubscriptionPace[];
@@ -160,7 +171,7 @@ function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
 
 /** A runner's reported subscription samples, grouped by slug. A runner that has
  * reported none yields an empty list. */
-function toSubscriptionPaces(runner: RunnerView, nowMs: number): readonly SubscriptionPace[] {
+function toSubscriptionPaces(runner: RunnerRegistryView, nowMs: number): readonly SubscriptionPace[] {
   return (runner.subscriptions ?? []).map((s) => {
     const sampledAt = s.sampled_at ?? null;
     const delta = sampledAt === null ? null : ageMs(sampledAt, nowMs);
@@ -180,7 +191,7 @@ function toSubscriptionPaces(runner: RunnerView, nowMs: number): readonly Subscr
 /** Each runner with its claims, slot-bar numerator, and subscription pace groups folded
  * on, every time-relative field read against the one `nowMs`. */
 export function foldRunnerRows(
-  runners: readonly RunnerView[],
+  runners: readonly RunnerRegistryView[],
   chunks: readonly ChunkSummary[],
   nowMs: number,
 ): readonly RunnerRow[] {

@@ -370,6 +370,8 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None: 
     now = datetime(2026, 7, 13, tzinfo=UTC)
     registration = RunnerRegistration(
         runner_id="r1",
+        name="r1",
+        added_at=now,
         workspace_id="w1",
         registered_at=now,
         last_seen_at=now,

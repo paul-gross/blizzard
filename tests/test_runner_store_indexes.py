@@ -87,7 +87,6 @@ def test_binding_tenure_lease_probe_uses_the_chunk_epoch_index(tmp_path: Path) -
             node_id="nd_1",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=1,
             created_at=_NOW,
         )

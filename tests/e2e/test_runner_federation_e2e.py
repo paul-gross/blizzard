@@ -15,7 +15,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 import pytest
@@ -24,7 +24,8 @@ from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
-from tests.service.support import require_stub_idp, stub_idp
+from tests.runner_join import add_runner, adopt_runner, runner_spawn_env
+from tests.service.support import poll_until, require_stub_idp, stub_idp
 from tests.support import daemon_log_sink
 
 pytestmark = [
@@ -39,9 +40,15 @@ _SECRET_ENV = "BZ_OAUTH_E2E_FED_SECRET"
 _SECRET = "e2e-fed-oauth-secret"
 _PROVIDER_NAME = "oidc-fed"
 _PROFILE_EMAIL = "fed-admin@example.com"
-_NAMES_A = CookieNames("runner-e2e-a")
-_NAMES_B = CookieNames("runner-e2e-b")
-_NAMES_SESSION = CookieNames("runner-e2e-session")
+# Both A/B runners hold it: runner names are not unique, so only their hub-minted ids keep their cookies apart.
+_SHARED_NAME = "runner-e2e"
+
+
+class _FederatedRunner(NamedTuple):
+    """A joined runner's daemon and the cookie names its hub-minted id keys."""
+
+    proc: subprocess.Popen[str]
+    names: CookieNames
 
 
 def _bounce_state_cookie(response: Any, names: CookieNames) -> str:
@@ -109,6 +116,7 @@ def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
         [_runner_bin(), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
+        env=runner_spawn_env(RunnerConfig.load(runner_dir).hub_url),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
@@ -116,25 +124,31 @@ def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         _await_http(proc, client, "/api/health", log=log)
+        # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
+        # daemon's registration — the one that declares this federation identity.
+        assert poll_until(lambda: client.get("/api/auth/login", follow_redirects=False).status_code != 503), (
+            "the runner never registered at its hub"
+        )
     finally:
         client.close()
     return proc
 
 
 @contextlib.contextmanager
-def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: str) -> Iterator[subprocess.Popen[str]]:
+def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, name: str) -> Iterator[_FederatedRunner]:
+    """A runner joined to the hub with its own federation identity. A hub with sign-in adds a runner
+    only for a signed-in operator, so the bootstrap superuser signs in and adds it; the token lands in
+    the runner's ``.env``."""
     public_url = f"http://127.0.0.1:{port}"
-    subprocess.run(
-        [_runner_bin(), "init", str(runner_dir)],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "BZ_HUB_URL": f"http://127.0.0.1:{hub_port}"},
-    )
+    hub_url = f"http://127.0.0.1:{hub_port}"
+    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+        operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
+        runner_id, token = add_runner(operator, name)
+    adopt_runner(runner_dir, hub_url, token)
     config = RunnerConfig.load(runner_dir)
     config = dataclasses.replace(
         config,
-        runner_id=runner_id,
+        name=name,
         public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
         # trips before any request is built.
@@ -142,24 +156,9 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: 
     )
     config.config_path.write_text(config.to_toml())
 
-    reg_client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
-    try:
-        reg_resp = reg_client.post(
-            "/api/fleet/runners",
-            json={
-                "runner_id": runner_id,
-                "workspace_id": f"workspace-{runner_id}",
-                "url": public_url,
-                "redirect_uris": [f"{public_url}/api/auth/callback"],
-            },
-        )
-        assert reg_resp.status_code == 201, reg_resp.text
-    finally:
-        reg_client.close()
-
     proc = _spawn_runner(runner_dir, port=port)
     try:
-        yield proc
+        yield _FederatedRunner(proc, CookieNames(runner_id))
     finally:
         _terminate(proc)
 
@@ -184,12 +183,13 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
         with (
             _oauth_hub(tmp_path / "hub", idp_port, hub_port),
             _federated_runner(
-                tmp_path / "runner-a", hub_port=hub_port, port=runner_a_port, runner_id=_NAMES_A.runner_id
-            ),
+                tmp_path / "runner-a", hub_port=hub_port, port=runner_a_port, name=_SHARED_NAME
+            ) as runner_a,
             _federated_runner(
-                tmp_path / "runner-b", hub_port=hub_port, port=runner_b_port, runner_id=_NAMES_B.runner_id
-            ),
+                tmp_path / "runner-b", hub_port=hub_port, port=runner_b_port, name=_SHARED_NAME
+            ) as runner_b,
         ):
+            names_a, names_b = runner_a.names, runner_b.names
             browser = pw.chromium.launch(headless=True)
             context = browser.new_context()
             page = context.new_page()
@@ -212,7 +212,7 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # dance, lands back on runner A's own served page authenticated.
                 page.goto(f"{runner_a_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
-                assert any(c.get("name") == _NAMES_A.session for c in context.cookies(runner_a_url))
+                assert any(c.get("name") == names_a.session for c in context.cookies(runner_a_url))
 
                 # AC: the token never appears in a query string, across every request
                 # Chromium made during the whole dance.
@@ -230,12 +230,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # different `aud`), is rejected even with a state B itself minted.
                 login_b = page.request.get(f"{runner_b_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_b.status in (302, 307)
-                state_b = _bounce_state_cookie(login_b, _NAMES_B)
+                state_b = _bounce_state_cookie(login_b, names_b)
                 cross_resp = page.request.post(
                     f"{runner_b_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_NAMES_B.bounce_state}={state_b}",
+                        "cookie": f"{names_b.bounce_state}={state_b}",
                     },
                     data=f"token={captured_token}&state={state_b}",
                 )
@@ -245,12 +245,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # A-own state so only the jti check can fail it), is rejected.
                 login_a_again = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_again.status in (302, 307)
-                state_a2 = _bounce_state_cookie(login_a_again, _NAMES_A)
+                state_a2 = _bounce_state_cookie(login_a_again, names_a)
                 replay_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_NAMES_A.bounce_state}={state_a2}",
+                        "cookie": f"{names_a.bounce_state}={state_a2}",
                     },
                     data=f"token={captured_token}&state={state_a2}",
                 )
@@ -259,12 +259,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # --- 4. A mismatched `state` is rejected outright.
                 login_a_3 = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_3.status in (302, 307)
-                state_a3 = _bounce_state_cookie(login_a_3, _NAMES_A)
+                state_a3 = _bounce_state_cookie(login_a_3, names_a)
                 mismatch_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_NAMES_A.bounce_state}={state_a3}",
+                        "cookie": f"{names_a.bounce_state}={state_a3}",
                     },
                     data=f"token={captured_token}&state=not-the-real-state",
                 )
@@ -277,7 +277,9 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
 
                 page.goto(f"{runner_b_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
-                assert any(c.get("name") == _NAMES_B.session for c in context.cookies(runner_b_url))
+                assert any(c.get("name") == names_b.session for c in context.cookies(runner_b_url))
+                # Same host, same name: B's sign-in left A's session cookie in the jar.
+                assert any(c.get("name") == names_a.session for c in context.cookies(runner_a_url))
             finally:
                 browser.close()
 
@@ -303,10 +305,9 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
 
         with (
             _oauth_hub(tmp_path / "hub", idp_port, hub_port),
-            _federated_runner(
-                runner_dir, hub_port=hub_port, port=runner_port, runner_id=_NAMES_SESSION.runner_id
-            ) as proc,
+            _federated_runner(runner_dir, hub_port=hub_port, port=runner_port, name=_SHARED_NAME) as runner,
         ):
+            proc, names = runner
             browser = pw.chromium.launch(headless=True)
             context = browser.new_context()
             page = context.new_page()
@@ -319,7 +320,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 expect(page).to_have_title(re.compile("blizzard runner"))
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
                 before_cookie = next(
-                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == _NAMES_SESSION.session
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == names.session
                 )
 
                 # 2. Restart in place (same dir/port, no re-`init`) — a redeploy.
@@ -334,7 +335,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 page.wait_for_load_state("load")
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
                 after_cookie = next(
-                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == _NAMES_SESSION.session
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == names.session
                 )
                 assert after_cookie != before_cookie, "the session cookie never changed — no fresh bounce happened"
             finally:

@@ -41,7 +41,6 @@ from tests.e2e.fleet_traces import (
     assert_invocations,
     assert_platform_nesting,
     assert_skeleton,
-    enroll_runner,
     fleet_collector,
     is_fleet,
     planted_lease_tokens,
@@ -51,6 +50,7 @@ from tests.e2e.fleet_traces import (
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.harness_sections import claude_code, opencode, sections
+from tests.runner_join import join_runner
 from tests.support import (
     create_repositories,
     create_work_sources,
@@ -469,8 +469,6 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
 
         # 3. Drive the runner loop one synchronous tick at a time until the chunk lands.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        if fleet_traces.available:
-            config = enroll_runner(hub, config)
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)
@@ -615,7 +613,7 @@ def test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace(
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = enroll_runner(hub, _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)
@@ -645,12 +643,18 @@ def test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace(
                 assert_platform_nesting(collector.spans(roots=3), collector.platform_spans())
 
 
-def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
+def _runner_config(
+    runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, *, join: bool = True
+) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
     ``host``/``port`` bind to a free port rather than the base config's default, which
     can collide with this machine's live dogfood runner. Both mock
     harness binaries are always wired: harness selection is per-node, never this function, so a
-    scenario opts in to OpenCode by naming ``opencode``."""
+    scenario opts in to OpenCode by naming ``opencode``. ``join`` first adds the runner at the hub
+    on ``hub_port`` through ``runner init``, so the config carries the token it wrote to
+    ``runner_dir/.env``; a scenario whose hub is not up yet passes ``join=False`` and joins later."""
+    if join:
+        join_runner(runner_dir, f"http://127.0.0.1:{hub_port}")
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     return dataclasses.replace(

@@ -2,8 +2,8 @@
 
 Every outbound ``httpx.Client`` and the work-items proxy fold in the same
 ``Authorization: Bearer`` header, assertable against a real mock-hub subprocess via
-``GET /_captured``. Covers a token-bearing runner (every call carries it) and an
-unenrolled runner (no header, hub still serves it in warn mode)."""
+``GET /_captured``. Covers a token-bearing runner (every call carries it) and a runner no
+hub has added (no header; the hub refuses it, so it never registers)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _runner_api, _runner_config
+from tests.runner_fakes import make_store
 from tests.service.support import (
+    add_runner,
     mint_fixture,
     mock_hub,
     poll_until,
@@ -43,7 +45,7 @@ def _captured_from_the_runner(hub: httpx.Client) -> list[dict[str, Any]]:
 def _status(hub: httpx.Client, chunk_id: str) -> str:
     """The test's own out-of-band status read, marked so it never masquerades as a runner
     call."""
-    resp = hub.get(f"/api/fleet/chunks/{chunk_id}", headers={_PROBE_HEADER: "1"})
+    resp = hub.get(f"/api/fleet/chunks/{chunk_id}", headers={_PROBE_HEADER: "1", "Authorization": f"Bearer {_TOKEN}"})
     return resp.json()["status"]
 
 
@@ -55,7 +57,9 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        # Pinned at the mock hub, so the assertion names the token rather than reading one back.
+        assert hub.post("/_seed/runners", json={"name": "runner-auth", "token": _TOKEN}).status_code in (200, 201)
+        base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
         config = dataclasses.replace(base_config, hub_token=_TOKEN)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
@@ -97,7 +101,9 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         assert work_items_calls[-1]["headers"].get("authorization") == f"Bearer {_TOKEN}"
 
 
-def test_runner_with_no_token_sends_no_authorization_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.delenv("BZ_HUB_TOKEN", raising=False)
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
@@ -105,17 +111,19 @@ def test_runner_with_no_token_sends_no_authorization_header(tmp_path: Path, monk
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
         assert config.hub_token == "", "the runner config must scaffold with no token for this scenario"
 
-        # A couple of ticks is enough to register + heartbeat + peek — no chunk needed.
+        # A couple of ticks is enough to try registering — no chunk needed.
         _drive(config, fenced, ticks=2, pause=0.3)
 
         requests = _captured_from_the_runner(hub)
         assert requests, "the mock hub captured no runner requests at all"
         assert all("authorization" not in entry["headers"] for entry in requests), (
-            f"an unenrolled runner sent an Authorization header: {requests}"
+            f"a runner holding no token sent an Authorization header: {requests}"
         )
+        # The hub refused every tokenless call, so the runner holds no identity and claims nothing.
+        assert make_store(config.db_url).runner_identity() is None
 
 
 def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
@@ -123,29 +131,25 @@ def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Clie
     return _status(hub, chunk_id) == target
 
 
-def test_a_running_hub_rejects_a_revoked_token_under_warn(tmp_path: Path) -> None:
-    """``warn`` lets an unresolved token through as anonymous, so revocation must be keyed on the
-    revoked hash: the same token that peeked fine before its revocation is refused after."""
+def test_a_running_hub_refuses_a_revoked_token_and_a_tokenless_call(tmp_path: Path) -> None:
+    """Revocation is keyed on the revoked hash: the same token that peeked fine before its
+    revocation is refused after, and a call carrying no token is refused throughout."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert (
-            hub.post(
-                "/api/fleet/runners",
-                json={
-                    "runner_id": "r1",
-                    "workspace_id": "w1",
-                    "capabilities": [{"harness_id": "claude", "default": True}],
-                },
-            ).status_code
-            == 201
+        runner_id, token = add_runner(hub, "r1")
+        auth = {"Authorization": f"Bearer {token}"}
+        registered = hub.post(
+            "/api/fleet/runners",
+            headers=auth,
+            json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
         )
-        enrolled = hub.post("/api/runners/r1/enrollments")
-        assert enrolled.status_code == 201, enrolled.text
-        auth = {"Authorization": f"Bearer {enrolled.json()['token']}"}
+        assert registered.status_code == 201, registered.text
+        assert registered.json()["runner_id"] == runner_id
         assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 200
+        assert hub.get("/api/fleet/queue/peek").status_code == 401
 
-        revoked = hub.post("/api/runners/r1/token-revocations", json={"by": "svc"})
+        revoked = hub.post(f"/api/runners/{runner_id}/token-revocations", json={"by": "svc"})
         assert revoked.status_code == 201, revoked.text
 
         assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 401
-        assert hub.get("/api/fleet/queue/peek").status_code == 200  # tokenless stays tolerated under warn
+        assert hub.get("/api/fleet/queue/peek").status_code == 401

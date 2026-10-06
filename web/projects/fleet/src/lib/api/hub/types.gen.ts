@@ -99,6 +99,10 @@ export type ActivityView = {
      */
     runner_id?: string | null;
     /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+    /**
      * Severity
      */
     severity?: 'critical' | 'warning' | 'info' | null;
@@ -909,6 +913,10 @@ export type ChunkChangedPayload = {
      */
     runner_id?: string | null;
     /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+    /**
      * Status
      */
     status: string;
@@ -1601,6 +1609,10 @@ export type ChunkSummary = {
      * Runner Id
      */
     runner_id?: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     status: ChunkStatus;
     /**
      * Terminal
@@ -1809,10 +1821,6 @@ export type CompletionSubmission = {
      * Route Token
      */
     route_token?: string | null;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
 };
 
 /**
@@ -2110,10 +2118,6 @@ export type DecisionSubmission = {
      * Route Token
      */
     route_token?: string | null;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
 };
 
 /**
@@ -2150,6 +2154,10 @@ export type DecisionView = {
      * Imposed By Runner Id
      */
     imposed_by_runner_id?: string | null;
+    /**
+     * Imposed By Runner Name
+     */
+    imposed_by_runner_name?: string | null;
     /**
      * Node Id
      */
@@ -2605,6 +2613,10 @@ export type EventLoggedPayload = {
      */
     runner_id: string | null;
     /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+    /**
      * Severity
      */
     severity: 'critical' | 'warning' | 'info';
@@ -2615,7 +2627,7 @@ export type EventLoggedPayload = {
  *
  * One operational event on the wire — an ``event_log`` row or a projected open
  * escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
- * event; ``runner_id`` is absent for a projected escalation (``null``,
+ * event; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,
  * never ``""``); ``detail`` is the event-specific JSON payload.
  */
 export type EventView = {
@@ -2657,6 +2669,10 @@ export type EventView = {
      * Runner Id
      */
     runner_id?: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * Severity
      */
@@ -4144,7 +4160,8 @@ export const IdPrefix = {
     FINS: 'fins',
     GPROP: 'gprop',
     DEP: 'dep',
-    APL: 'apl'
+    APL: 'apl',
+    RN: 'rn'
 } as const;
 
 /**
@@ -4634,6 +4651,7 @@ export const Permission = {
     QUEUE_REORDER: 'queue:reorder',
     RUNNER_PAUSE: 'runner:pause',
     RUNNER_RETIRE: 'runner:retire',
+    RUNNER_ADD: 'runner:add',
     GRAPH_EDIT: 'graph:edit',
     USER_MANAGE: 'user:manage',
     TRANSCRIPT_READ: 'transcript:read',
@@ -4861,6 +4879,10 @@ export type QuestionView = {
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * Session Id
      */
@@ -5360,7 +5382,8 @@ export type RotatePolicyView = {
 /**
  * RouteClaim
  *
- * A complete route fact posted by the claiming runner.
+ * A complete route fact posted by the claiming runner. The claimant is the runner its bearer
+ * token names; the body carries no runner id.
  */
 export type RouteClaim = {
     /**
@@ -5371,10 +5394,6 @@ export type RouteClaim = {
      * Environment Ids
      */
     environment_ids: Array<string>;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
     /**
      * Workspace Id
      */
@@ -5442,6 +5461,10 @@ export type RouteView = {
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * Workspace Id
      */
@@ -5838,6 +5861,42 @@ export type RunRowView = {
 };
 
 /**
+ * RunnerAddRequest
+ *
+ * Add a runner under an initial display name. The hub mints the runner's id and bearer
+ * token together; the runner's own registrations set its name from then on.
+ */
+export type RunnerAddRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * RunnerAddResponse
+ *
+ * The added runner — its hub-minted id, its initial name, and its plaintext bearer token.
+ *
+ * ``token`` is visible only here, once — only its sha256 hash is kept. The runner is added but
+ * never connected until it first registers with this token.
+ */
+export type RunnerAddResponse = {
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
  * RunnerCapability
  *
  * One harness binding this runner can execute — the id, its observed
@@ -5870,6 +5929,7 @@ export type RunnerCapability = {
 };
 
 export const RunnerChangeKind = {
+    ADDED: 'added',
     REGISTERED: 'registered',
     HEARTBEAT: 'heartbeat',
     PAUSED: 'paused',
@@ -5899,7 +5959,7 @@ export type RunnerChangedPayload = {
     /**
      * Kind
      */
-    kind: 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed' | 'external-usage' | 'retired' | 'reinstated' | 'token-revoked';
+    kind: 'added' | 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed' | 'external-usage' | 'retired' | 'reinstated' | 'token-revoked';
     /**
      * Reason
      */
@@ -5908,15 +5968,43 @@ export type RunnerChangedPayload = {
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
 };
+
+/**
+ * RunnerConnection
+ *
+ * An added runner's connection condition, derived at read time: ``NEVER_CONNECTED``, added
+ * at the hub but never registered, so it has no workspace, capabilities, or liveness yet;
+ * ``ONLINE``, registered and heard from within the liveness threshold; ``OFFLINE``, registered
+ * but not heard from within it.
+ */
+export const RunnerConnection = {
+    NEVER_CONNECTED: 'never_connected',
+    ONLINE: 'online',
+    OFFLINE: 'offline'
+} as const;
+
+/**
+ * RunnerConnection
+ *
+ * An added runner's connection condition, derived at read time: ``NEVER_CONNECTED``, added
+ * at the hub but never registered, so it has no workspace, capabilities, or liveness yet;
+ * ``ONLINE``, registered and heard from within the liveness threshold; ``OFFLINE``, registered
+ * but not heard from within it.
+ */
+export type RunnerConnection = typeof RunnerConnection[keyof typeof RunnerConnection];
 
 /**
  * RunnerEnrollmentResponse
  *
- * A freshly minted (or rotated) bearer token.
+ * A rotated bearer token for an existing runner id.
  *
- * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. A
- * re-enroll rotates: the old token stops resolving the moment this response lands.
+ * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. The old
+ * token stops resolving the moment this response lands.
  */
 export type RunnerEnrollmentResponse = {
     /**
@@ -5993,17 +6081,46 @@ export type RunnerFactAck = {
 /**
  * RunnerFactBatch
  *
- * A runner's push of one-or-more buffered facts, ordered by seq.
+ * A runner's push of one-or-more buffered facts, ordered by seq — attributed to the runner
+ * its bearer token names; the body carries no runner id.
  */
 export type RunnerFactBatch = {
     /**
      * Facts
      */
     facts: Array<RunnerFact>;
+};
+
+/**
+ * RunnerIdentityRefusal
+ *
+ * Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names
+ * the runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``
+ * or ``unknown`` one.
+ */
+export type RunnerIdentityRefusal = {
+    reason: RunnerTokenRefusalReason;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+};
+
+/**
+ * RunnerIdentityView
+ *
+ * Who the presented runner bearer token belongs to — its hub-minted id and current name.
+ * Answering records nothing: no registration, no liveness.
+ */
+export type RunnerIdentityView = {
     /**
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
 };
 
 /**
@@ -6016,18 +6133,6 @@ export type RunnerLifecycleRequest = {
      * By
      */
     by?: string;
-};
-
-/**
- * RunnerListResponse
- *
- * The fleet registry — every registered runner with its liveness.
- */
-export type RunnerListResponse = {
-    /**
-     * Runners
-     */
-    runners?: Array<RunnerView>;
 };
 
 /**
@@ -6045,10 +6150,9 @@ export type RunnerPauseRequest = {
 /**
  * RunnerRegistrationRequest
  *
- * Register a runner into the fleet — runner id + workspace binding.
- *
- * ``env_capacity`` is the runner's configured environment-pool size; ``None`` when the
- * client reports none, never a guessed total. Re-registration overwrites it.
+ * Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
+ * in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
+ * ``None`` when the client reports none, never a guessed total.
  */
 export type RunnerRegistrationRequest = {
     /**
@@ -6064,13 +6168,13 @@ export type RunnerRegistrationRequest = {
      */
     gates?: Array<string>;
     /**
+     * Name
+     */
+    name?: string | null;
+    /**
      * Redirect Uris
      */
     redirect_uris?: Array<string>;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
     /**
      * Subscriptions
      */
@@ -6088,7 +6192,8 @@ export type RunnerRegistrationRequest = {
 /**
  * RunnerRegistrationResponse
  *
- * The registered runner's id, and whether this call first created its row.
+ * The registered runner's hub-minted id and current name, and whether this call was its
+ * first registration since it was added.
  */
 export type RunnerRegistrationResponse = {
     /**
@@ -6099,6 +6204,111 @@ export type RunnerRegistrationResponse = {
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+};
+
+/**
+ * RunnerRegistryListResponse
+ *
+ * The fleet registry as operators list it — every added runner, oldest first, each with its
+ * connection condition. Two runners may share a name; each is listed under its own id.
+ */
+export type RunnerRegistryListResponse = {
+    /**
+     * Runners
+     */
+    runners?: Array<RunnerRegistryView>;
+};
+
+/**
+ * RunnerRegistryView
+ *
+ * One runner as an operator sees the registry — including one that has never connected.
+ *
+ * A ``never_connected`` runner has no ``workspace_id``, ``registered_at`` or ``last_seen_at``, no
+ * capabilities, and is not ``online``.
+ */
+export type RunnerRegistryView = {
+    /**
+     * Added At
+     */
+    added_at: string;
+    /**
+     * Added By
+     */
+    added_by?: string | null;
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
+    connection: RunnerConnection;
+    /**
+     * Env Capacity
+     */
+    env_capacity?: number | null;
+    /**
+     * Gates
+     */
+    gates?: Array<string>;
+    /**
+     * Hub Paused
+     */
+    hub_paused: boolean;
+    /**
+     * Last Seen At
+     */
+    last_seen_at?: string | null;
+    /**
+     * Locally Paused
+     */
+    locally_paused?: boolean;
+    /**
+     * Locally Paused By
+     */
+    locally_paused_by?: string | null;
+    /**
+     * Locally Paused Reason
+     */
+    locally_paused_reason?: string | null;
+    /**
+     * Online
+     */
+    online: boolean;
+    /**
+     * Registered At
+     */
+    registered_at?: string | null;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Retired At
+     */
+    retired_at?: string | null;
+    /**
+     * Retired By
+     */
+    retired_by?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
+    /**
+     * Subscriptions
+     */
+    subscriptions?: Array<SubscriptionUsageView>;
+    /**
+     * Workspace Id
+     */
+    workspace_id?: string | null;
 };
 
 /**
@@ -6127,7 +6337,7 @@ export type RunnerRetireResponse = {
      * Released Chunk Ids
      */
     released_chunk_ids?: Array<string>;
-    runner: RunnerView;
+    runner: RunnerRegistryView;
 };
 
 /**
@@ -6152,18 +6362,43 @@ export type RunnerSubscriptionDeclaration = {
 };
 
 /**
+ * RunnerTokenRefusalReason
+ *
+ * Why a presented runner bearer token names no runner the hub admits. ``UNKNOWN``: a token the
+ * hub never issued, as after its data is reset; ``REVOKED``: a revoked token whose runner is not
+ * retired; ``RETIRED``: a token issued to a runner retired now — retiring revokes the token, so
+ * this outranks ``REVOKED``.
+ */
+export const RunnerTokenRefusalReason = {
+    MISSING: 'missing',
+    UNKNOWN: 'unknown',
+    REVOKED: 'revoked',
+    RETIRED: 'retired'
+} as const;
+
+/**
+ * RunnerTokenRefusalReason
+ *
+ * Why a presented runner bearer token names no runner the hub admits. ``UNKNOWN``: a token the
+ * hub never issued, as after its data is reset; ``REVOKED``: a revoked token whose runner is not
+ * retired; ``RETIRED``: a token issued to a runner retired now — retiring revokes the token, so
+ * this outranks ``REVOKED``.
+ */
+export type RunnerTokenRefusalReason = typeof RunnerTokenRefusalReason[keyof typeof RunnerTokenRefusalReason];
+
+/**
  * RunnerTokenRevocationResponse
  *
- * The runner after its token was revoked — still registered, now unenrolled.
+ * The runner after its token was revoked — still added, now unenrolled.
  */
 export type RunnerTokenRevocationResponse = {
-    runner: RunnerView;
+    runner: RunnerRegistryView;
 };
 
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
+ * A registered runner's own view of its registration.
  *
  * The two brakes stay separate: ``hub_paused`` is claims-only, while
  * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
@@ -6225,6 +6460,10 @@ export type RunnerView = {
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * Subscriptions
      */
@@ -6818,17 +7057,14 @@ export type TranscriptSegmentAck = {
  *
  * A runner's push of one-or-more buffered transcript records, ordered by ``seq`` —
  * the transcript lane's own store-and-forward batch, distinct from the fact lane's
- * ``RunnerFactBatch``.
+ * ``RunnerFactBatch``. Attributed to the runner its bearer token names; the body carries no
+ * runner id.
  */
 export type TranscriptSegmentBatch = {
     /**
      * Records
      */
     records: Array<TranscriptSegmentRecord>;
-    /**
-     * Runner Id
-     */
-    runner_id: string;
 };
 
 /**
@@ -7337,7 +7573,8 @@ export type ValidationError = {
  *
  * Who filed a hub-owned work item, legible for display — ``user_id``
  * and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
- * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``.
+ * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``, with
+ * ``runner_name`` the proposing runner's latest registered name when the registry holds it.
  */
 export type WorkItemAuthorView = {
     /**
@@ -7360,6 +7597,10 @@ export type WorkItemAuthorView = {
      * Runner Id
      */
     runner_id?: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * User Id
      */
@@ -10996,6 +11237,31 @@ export type IngestRunnerFactsApiFleetEventsPostResponses = {
 
 export type IngestRunnerFactsApiFleetEventsPostResponse = IngestRunnerFactsApiFleetEventsPostResponses[keyof IngestRunnerFactsApiFleetEventsPostResponses];
 
+export type GetRunnerIdentityApiFleetIdentityGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/identity';
+};
+
+export type GetRunnerIdentityApiFleetIdentityGetErrors = {
+    /**
+     * Unauthorized
+     */
+    401: RunnerIdentityRefusal;
+};
+
+export type GetRunnerIdentityApiFleetIdentityGetError = GetRunnerIdentityApiFleetIdentityGetErrors[keyof GetRunnerIdentityApiFleetIdentityGetErrors];
+
+export type GetRunnerIdentityApiFleetIdentityGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerIdentityView;
+};
+
+export type GetRunnerIdentityApiFleetIdentityGetResponse = GetRunnerIdentityApiFleetIdentityGetResponses[keyof GetRunnerIdentityApiFleetIdentityGetResponses];
+
 export type GetQuestionApiFleetQuestionsQuestionIdGetData = {
     body?: never;
     path: {
@@ -12707,10 +12973,35 @@ export type ListRunnersApiRunnersGetResponses = {
     /**
      * Successful Response
      */
-    200: RunnerListResponse;
+    200: RunnerRegistryListResponse;
 };
 
 export type ListRunnersApiRunnersGetResponse = ListRunnersApiRunnersGetResponses[keyof ListRunnersApiRunnersGetResponses];
+
+export type AddRunnerApiRunnersPostData = {
+    body: RunnerAddRequest;
+    path?: never;
+    query?: never;
+    url: '/api/runners';
+};
+
+export type AddRunnerApiRunnersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddRunnerApiRunnersPostError = AddRunnerApiRunnersPostErrors[keyof AddRunnerApiRunnersPostErrors];
+
+export type AddRunnerApiRunnersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RunnerAddResponse;
+};
+
+export type AddRunnerApiRunnersPostResponse = AddRunnerApiRunnersPostResponses[keyof AddRunnerApiRunnersPostResponses];
 
 export type GetRunnerApiRunnersRunnerIdGetData = {
     body?: never;
@@ -12737,7 +13028,7 @@ export type GetRunnerApiRunnersRunnerIdGetResponses = {
     /**
      * Successful Response
      */
-    200: RunnerView;
+    200: RunnerRegistryView;
 };
 
 export type GetRunnerApiRunnersRunnerIdGetResponse = GetRunnerApiRunnersRunnerIdGetResponses[keyof GetRunnerApiRunnersRunnerIdGetResponses];
@@ -12797,7 +13088,7 @@ export type PauseRunnerApiRunnersRunnerIdPausePostResponses = {
     /**
      * Successful Response
      */
-    200: RunnerView;
+    200: RunnerRegistryView;
 };
 
 export type PauseRunnerApiRunnersRunnerIdPausePostResponse = PauseRunnerApiRunnersRunnerIdPausePostResponses[keyof PauseRunnerApiRunnersRunnerIdPausePostResponses];
@@ -12827,7 +13118,7 @@ export type ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses = {
     /**
      * Successful Response
      */
-    200: RunnerView;
+    200: RunnerRegistryView;
 };
 
 export type ReinstateRunnerApiRunnersRunnerIdReinstatePostResponse = ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses[keyof ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses];
@@ -12857,7 +13148,7 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
     /**
      * Successful Response
      */
-    200: RunnerView;
+    200: RunnerRegistryView;
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];

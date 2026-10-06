@@ -42,8 +42,8 @@
             <fleet-kit-badge class="pill" [tone]="row.tone" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>
-              @if (row.runnerId) {
-                <span class="rid">{{ row.runnerId }}</span>
+              @if (row.runner) {
+                <span class="rid">{{ row.runner }}</span>
               }
               <span class="sub">{{ row.sub }}</span>
             </span>
@@ -77,7 +77,7 @@
             <fleet-kit-badge class="pill" tone="running" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>
-              <span class="rid">{{ row.runnerId }} · {{ row.node }}</span>
+              <span class="rid">{{ row.runner }} · {{ row.node }}</span>
             </span>
             @if (hasCostFigure(row.costUsd, row.estimatedCostUsd, row.costPartial)) {
               <span class="num" data-testid="in-motion-cost">{{

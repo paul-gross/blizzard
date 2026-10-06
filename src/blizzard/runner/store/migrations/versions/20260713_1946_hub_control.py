@@ -9,16 +9,26 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import hub_control
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260713_1946_runner_hub_control"
 down_revision: str | None = "20260713_1801_runner_asks_and_parks"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (hub_control,)
+# Frozen literal (`bzh:frozen-revisions`): the table as this revision creates it, keyed by runner id.
+_hub_control = sa.Table(
+    "hub_control",
+    sa.MetaData(),
+    sa.Column("runner_id", sa.String(), primary_key=True),
+    sa.Column("paused", sa.Boolean(), nullable=False),
+    sa.Column("updated_at", UtcDateTime(), nullable=False),
+)
+
+_TABLES = (_hub_control,)
 
 
 def upgrade() -> None:

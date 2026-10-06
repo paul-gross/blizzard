@@ -45,7 +45,6 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -277,7 +276,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, workspace_root=workspace_root),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, workspace_root=workspace_root),
     )
 
     Advance(ctx).run()

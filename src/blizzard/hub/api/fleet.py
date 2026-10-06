@@ -1,9 +1,9 @@
-"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*``.
+"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*`` but the token-identity read.
 
-Enforcement is structural, not per-route: the router's own ``dependencies`` mean a fleet verb is
-authenticated *because of where it is mounted*, and a route declaring its own ``runner_id`` confines
-it further through :meth:`FleetRequest.assert_owns` — except the lease-transcript read, whose
-:func:`_demand_lease_owner` always raises rather than deferring."""
+Enforcement is structural: the router's own ``dependencies`` authenticate a fleet verb *because of where it
+is mounted*, and the caller is always the runner its bearer token names (:meth:`FleetRequest.caller_id`) — a
+``runner_id`` a request body carries is never read. A route addressing a runner or a route by id confines it
+to the caller through :meth:`FleetRequest.assert_owns`."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
@@ -34,7 +34,7 @@ from blizzard.hub.api.analytics import (
     operational_criteria,
     spend_response,
 )
-from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
+from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
@@ -64,7 +64,12 @@ from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
-from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerCapability, RunnerRetired
+from blizzard.hub.domain.runners.registration import (
+    DeclaredSubscription,
+    RunnerCapability,
+    RunnerNeverConnected,
+    RunnerRetired,
+)
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
     ChunkDetail,
@@ -106,24 +111,21 @@ _log = get_logger("blizzard.hub.fleet")
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
 
+@collaborator
 @dataclass(frozen=True)
 class FleetRequest:
-    """One fleet-router call: who it resolved to, and the hub policy it is judged under.
+    """One fleet-router call: the runner its bearer token names, and the hub policy it is judged under."""
 
-    Ownership is asked of this object rather than of :attr:`principal`, which is ``None``
-    under ``warn`` — absent, not mismatched."""
-
-    principal: RunnerPrincipal | None
-    mode: AuthMode
+    principal: RunnerPrincipal
     config: HubConfig
 
     @classmethod
     def of(
         cls,
         request: Request,
-        principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+        principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
     ) -> FleetRequest:
-        return cls(principal, AuthMode.of(request), request.app.state.config)
+        return cls(principal, request.app.state.config)
 
     @property
     def route_token_mode(self) -> str:
@@ -137,24 +139,25 @@ class FleetRequest:
     def follow_latest(self) -> bool:
         return bool(self.config.follow_latest)
 
+    def caller_id(self) -> str:
+        """The calling runner's id — the bearer-token principal's, the one identity a fleet call
+        carries; the gate has already refused a call whose token resolved to no runner."""
+        return self.principal.runner_id
+
     def assert_owns(self, runner_id: str) -> None:
-        """Reject a call whose declared ``runner_id`` differs from the resolved principal's
-        — only ever fires once a token *did* resolve, to some other runner."""
-        if self.principal is None or self.principal.runner_id == runner_id:
+        """Refuse with 403 a call on a runner, or a runner's route, other than the caller's own."""
+        if self.principal.runner_id == runner_id:
             return
-        self.mode.refuse(
+        _log.warning("runner_id mismatch", declared_runner_id=runner_id, token_runner_id=self.principal.runner_id)
+        raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"token belongs to runner {self.principal.runner_id!r}, not the declared {runner_id!r}",
-            event="runner_id mismatch",
-            declared_runner_id=runner_id,
-            token_runner_id=self.principal.runner_id,
+            detail=f"token belongs to runner {self.principal.runner_id!r}, not {runner_id!r}",
         )
 
 
 def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
-    """The lease-transcript read route's ownership gate, mapped — **always** raises on a
-    mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode`` leaves inert by
-    default; :func:`refuse_foreign_lease_read` decides."""
+    """The lease-transcript read route's ownership gate, mapped — raises on a mismatch;
+    :func:`refuse_foreign_lease_read` decides."""
     try:
         refuse_foreign_lease_read(owning_runner_id, requesting_runner_id=principal.runner_id)
     except LeaseSegmentsNotOwned as exc:
@@ -203,15 +206,11 @@ def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> Queue
 def peek_matched_queue(
     request: QueuePeekRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
     """The matched fleet peek — at most one ready entry the calling principal can both
     work (declared capabilities against ``EligibilityCheck``) and claim (not
-    dependency-blocked), with ``request.policy`` applied to both. Demands a resolvable
-    principal in every auth mode, so an unenrolled runner never reads a permanently
-    empty queue as an idle fleet."""
-    if principal is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    dependency-blocked), with ``request.policy`` applied to both."""
     statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request).view
 
@@ -294,7 +293,7 @@ def get_question(question_id: str, services: Annotated[HubServices, Depends(get_
     row = services.chunks.questions.get_question(question_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
-    return questions_api.question_view(row)
+    return questions_api.question_view(row, services.registry.names_for([row.runner_id]))
 
 
 # Moved wholesale — no anonymous caller ever reached these.
@@ -573,7 +572,7 @@ def claim_route(
     """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
     already terminal ({done, stopped}), not ready, standing on an unmet prerequisite,
     or incompatible with the runner's stored capabilities, else the first node envelope."""
-    fleet.assert_owns(claim.runner_id)
+    runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {claim.chunk_id}")
@@ -585,7 +584,7 @@ def claim_route(
         result = services.claim.claim(
             chunk,
             graph,
-            runner_id=claim.runner_id,
+            runner_id=runner_id,
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
         )
@@ -663,14 +662,14 @@ def submit_completion(
 ) -> ApplyResponse:
     """Apply a node-step's completion atomically; reply carries the next envelope; 403 when the
     submitting runner is retired."""
-    fleet.assert_owns(submission.runner_id)
+    runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    completion = node_steps.completion_of(submission)
+    completion = node_steps.completion_of(submission, runner_id=runner_id)
     targets = _migration_targets(services, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.apply.apply(
@@ -708,7 +707,7 @@ def submit_decision(
 ) -> ApplyResponse:
     """Runner-config gate: park the chunk on a decision in place of a transition; 403 when the
     submitting runner is retired."""
-    fleet.assert_owns(submission.runner_id)
+    runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -719,7 +718,7 @@ def submit_decision(
     result = services.decisions.submit(
         chunk,
         graph,
-        node_steps.gate_submission_of(submission),
+        node_steps.gate_submission_of(submission, runner_id=runner_id),
         route_token_mode=fleet.route_token_mode,
         produces_mode=fleet.produces_mode,
     )
@@ -738,12 +737,15 @@ def ingest_runner_facts(
 ) -> RunnerFactAck:
     """Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
     with each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired."""
-    fleet.assert_owns(batch.runner_id)
-    broadcast = IngestBroadcast.before_ingest(services, batch)
-    result = services.facts.ingest(batch.runner_id, pushed_facts(batch), route_token_mode=fleet.route_token_mode)
+    runner_id = fleet.caller_id()
+    runner_name = fleet.principal.runner_name
+    broadcast = IngestBroadcast.before_ingest(services, runner_id, batch, runner_name=runner_name)
+    result = services.facts.ingest(
+        runner_id, pushed_facts(batch), route_token_mode=fleet.route_token_mode, runner_name=runner_name
+    )
     broadcast.publish(result)
     return RunnerFactAck(
-        runner_id=batch.runner_id,
+        runner_id=runner_id,
         high_water=result.high_water,
         applied=result.applied,
         already_applied=result.already_applied,
@@ -761,12 +763,10 @@ def ingest_transcript_segments(
     """Land the runner's batched transcript records — the transcript lane's own
     store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``; 403 when the
     runner is retired."""
-    fleet.assert_owns(batch.runner_id)
-    records = [
-        (record.seq, transcripts_api.to_domain_record(record, runner_id=batch.runner_id)) for record in batch.records
-    ]
-    result = services.transcript_ingest.ingest(batch.runner_id, records)
-    return transcripts_api.to_ack(batch.runner_id, result)
+    runner_id = fleet.caller_id()
+    records = [(record.seq, transcripts_api.to_domain_record(record, runner_id=runner_id)) for record in batch.records]
+    result = services.transcript_ingest.ingest(runner_id, records)
+    return transcripts_api.to_ack(runner_id, result)
 
 
 @router.get("/chunks/{chunk_id}/transcript-segments", response_model=LeaseTranscriptView)
@@ -775,17 +775,11 @@ def get_lease_transcript_segments(
     node_id: str,
     epoch: int,
     services: Annotated[HubServices, Depends(get_services)],
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> LeaseTranscriptView:
     """A runner's read-back of its own shipped segments — every
     accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
-    epoch)``, confined against the ``runner_id`` already on those rows regardless of
-    ``runner_auth_mode`` — this route's own always-raising ownership check, not the
-    router's mode-gated one."""
-    if principal is None:
-        # Refused before any store read, not after (an unauthenticated caller must never
-        # reach `runner_id_for_lease` at all, default `runner_auth_mode` or not).
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    epoch)``, confined against the ``runner_id`` already on those rows."""
     try:
         owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
     except RuntimeError as exc:
@@ -812,11 +806,15 @@ def register_runner(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerRegistrationResponse:
-    """Register a runner — runner id + workspace binding; idempotent upsert.
+    """Register the calling runner — the one its bearer token names — with its workspace binding
+    and the name it declares; idempotent.
 
-    Runner-auth is checked at the router level. The hub never rejects a registration over
-    its roster — it doubles as the heartbeat every tick. A retired runner is refused 403."""
-    fleet.assert_owns(request.runner_id)
+    The hub never rejects a registration over its roster — it doubles as the heartbeat every tick.
+    A body ``runner_id`` from an older runner is ignored. A retired runner is refused 403."""
+    runner_id = fleet.caller_id()
+    registration = services.registry.get_runner(runner_id)
+    if registration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     capabilities = tuple(
         RunnerCapability(
             harness_id=c.harness_id,
@@ -832,9 +830,10 @@ def register_runner(
         if request.subscriptions is not None
         else None
     )
-    first = services.fleet.register(
-        request.runner_id,
+    registered = services.fleet.register(
+        registration,
         request.workspace_id,
+        name=request.name,
         env_capacity=request.env_capacity,
         public_url=request.url,
         redirect_uris=tuple(request.redirect_uris),
@@ -842,8 +841,10 @@ def register_runner(
         subscriptions=subscriptions,
         gates=tuple(request.gates),
     )
-    services.events.publish_runner_changed(request.runner_id, kind="registered")
-    return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
+    services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
+    return RunnerRegistrationResponse(
+        runner_id=runner_id, runner_name=registered.name, first_registration=registered.first
+    )
 
 
 @router.post("/runners/{runner_id}/heartbeats", status_code=status.HTTP_204_NO_CONTENT)
@@ -852,12 +853,13 @@ def heartbeat_runner(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> Response:
-    """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when retired."""
+    """Refresh the calling runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when
+    retired or when the path names another runner; 404 before its first registration."""
     fleet.assert_owns(runner_id)
     alive = services.fleet.heartbeat(runner_id)
     if not alive:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    services.events.publish_runner_changed(runner_id, kind="heartbeat")
+    services.events.publish_runner_changed(runner_id, kind="heartbeat", runner_name=fleet.principal.runner_name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -867,9 +869,14 @@ def get_runner(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerView:
-    """One runner's declarative state — the runner's own pull read; 403 when retired."""
+    """The calling runner's own declarative state — its pull read; 403 when retired or when the path
+    names another runner, 409 before its first registration."""
     fleet.assert_owns(runner_id)
     registration = services.registry.get_runner(runner_id)
     if registration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
+    try:
+        registration.refuse_if_never_connected()
+    except RunnerNeverConnected as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return runners_api.runner_view(services.fleet.own_liveness(registration), now=services.clock.now())

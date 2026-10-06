@@ -33,8 +33,9 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     make_usage_recorder,
+    registered_identity,
 )
-from tests.support import build_hub, ingest, report_lease
+from tests.support import RunnerFleetClient, build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -121,7 +122,9 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     assert store.latest_epoch(chunk_id) == 0, "the fresh runner store must carry no local history"
     provider = FakeProvider({"e9": "/ws/e9"})
-    _hub_client = HttpHubClient(hub.client)
+    assert hub.app is not None
+    # r2 presents its own token, so the hub resolves the reclaim to r2, not to r1.
+    _hub_client = HttpHubClient(RunnerFleetClient(hub.app, services=hub.services, default_runner_id="r2"))
     harness = FakeHarness(handle=_HANDLE, verdict=None)
     _harnesses = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
@@ -134,7 +137,8 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         provider=provider,
         process=FakeProbe(alive={(200, "start-200")}),
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_id="r2", workspace_id="w2", max_agents=1),
+        config=LoopConfig(runner_name="r2", workspace_id="w2", max_agents=1),
+        identity=registered_identity("r2", "r2"),
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         worker_scratch=WorkerScratchDirs(""),
