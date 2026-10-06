@@ -35,11 +35,11 @@ scope count does reach model work its per-invocation counts leave out, but its f
 happens, so the reading still lands right; an adapter that was invocation-scoped and billed uncounted work would not.
 
 Nothing of this is visible while it goes right: a chunk's cost column and the fleet total simply read what the fleet
-spent. A rejected figure shows as the PARTIAL `+` suffix, and the runner log carries one line naming the reported
-figure that read below its session — the one place the two causes of an absent cost separate, a crashed worker being
-the other. A session already running when a runner upgrades onto this reading keeps whatever its earlier facts
-banked: every invocation from the upgrade forward is charged its own share, while the dollars those earlier rows
-recorded stay as they were recorded, so that one session's lifetime total can read high until it ends.
+spent. A rejected figure shows as the PARTIAL `+` suffix, and the runner log carries one line naming the reported figure
+that read below its session — the one place the two causes of an absent cost separate, a crashed worker being the other.
+A session already running when a runner upgrades onto this reading keeps whatever its earlier facts banked: every
+invocation from the upgrade forward is charged its own share, while the dollars those earlier rows recorded stay as they
+were recorded, so that one session's lifetime total can read high until it ends.
 
 ## Usage models
 
@@ -49,8 +49,8 @@ assistant transcript records, the result envelope when it names a model, or an u
 The reported model may differ from the session's expected model — the runner logs the mismatch rather than labeling the
 observed spend with the expectation. When none of these sources identifies a model, the fact records `unknown` instead
 of guessing from the session stamp or the runner's default. This attribution names an invocation, not every model whose
-tokens a session-scoped cost figure covers ([The two readings of a reported figure](#the-two-readings-of-a-reported-figure)
-above).
+tokens a session-scoped cost figure covers
+([The two readings of a reported figure](#the-two-readings-of-a-reported-figure) above).
 
 ## The two caps
 
@@ -65,8 +65,8 @@ line, so it reads differently from a manual pause.
 
 `chunk_cap_usd` is checked between attempts, never by killing a live worker: when a chunk's total cost reaches it, the
 runner parks the chunk `needs_human` at the next step boundary with an escalation whose cause is `spend-cap`, whose
-detail names the cap, the spend, and whether that spend figure is partial, and which carries the usual takeover command. A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap,
-then requeue.
+detail names the cap, the spend, and whether that spend figure is partial, and which carries the usual takeover command.
+A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap, then requeue.
 
 ## Usage-limit pause
 
@@ -87,14 +87,13 @@ the harness's own report.
 When a worker dies before the harness emits its final usage envelope, the attempt's tokens are recorded from the
 transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero billed dollars. A row
 flags its total PARTIAL (a trailing `+` on its figure, on the board and in `hub status`) only when it carries
-**neither** a billed cost nor a
-reported estimate — see [Estimated cost](#estimated-cost) below; a row carrying only an estimate is not a lower bound
-and does not flag PARTIAL. The runner's own two caps are a separate reading: both trip on the billed lower bound
-alone, never on an estimate, and each surfaces its own PARTIAL on its own carrier — the escalation, or the recorded
-pause reason — whenever some invocation it summed carried no billed cost. That PARTIAL means exactly "no billed cost
-recorded", unchanged by whether the same invocation also carries an estimate, so a crash-heavy chunk never silently
-reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against what its
-session already banked records no cost either, for the reason
+**neither** a billed cost nor a reported estimate — see [Estimated cost](#estimated-cost) below; a row carrying only an
+estimate is not a lower bound and does not flag PARTIAL. The runner's own two caps are a separate reading: both trip on
+the billed lower bound alone, never on an estimate, and each surfaces its own PARTIAL on its own carrier — the
+escalation, or the recorded pause reason — whenever some invocation it summed carried no billed cost. That PARTIAL means
+exactly "no billed cost recorded", unchanged by whether the same invocation also carries an estimate, so a crash-heavy
+chunk never silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs
+backwards against what its session already banked records no cost either, for the reason
 [The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
 produces a PARTIAL row on its own: the shutdown drain (see [Graceful restart](./recovery.md#graceful-restart)) waits out
 each marked worker's own SIGINT-triggered envelope, so only a worker SIGKILLed at the drain's deadline, one that exits
@@ -105,14 +104,14 @@ on SIGINT without writing an envelope, or an outright crash still lands cost-abs
 
 ## Estimated cost
 
-An OpenCode step billed against a subscription reports its cost as a literal zero, which the runner records as no
-billed cost: when every step of an invocation reads that way, its `cost_usd` stays `None`, exactly like any other
-cost-absent row. When that step's model has a priced entry in OpenCode's own local cache — `models.json`, refreshed by
-OpenCode itself, keyed by provider and then by model — the runner estimates that one step's dollar cost from the cache
-instead, pricing it the way OpenCode itself prices a step. Because OpenCode's rate can depend on a step's own prompt
-size, the rate is always chosen from that one step's own tokens, never from an invocation's summed total, so two steps
-of the same invocation can price at two different rates. A step whose model has no entry in the cache, or whose cache
-file is missing or unreadable, stays cost-absent: never a raise, never a guess past what the cache says.
+An OpenCode step billed against a subscription reports its cost as a literal zero, which the runner records as no billed
+cost: when every step of an invocation reads that way, its `cost_usd` stays `None`, exactly like any other cost-absent
+row. When that step's model has a priced entry in OpenCode's own local cache — `models.json`, refreshed by OpenCode
+itself, keyed by provider and then by model — the runner estimates that one step's dollar cost from the cache instead,
+pricing it the way OpenCode itself prices a step. Because OpenCode's rate can depend on a step's own prompt size, the
+rate is always chosen from that one step's own tokens, never from an invocation's summed total, so two steps of the same
+invocation can price at two different rates. A step whose model has no entry in the cache, or whose cache file is
+missing or unreadable, stays cost-absent: never a raise, never a guess past what the cache says.
 
 The runner reads the cache from `XDG_CACHE_HOME/opencode/models.json` when `[worker] env_passthrough` passes
 `XDG_CACHE_HOME` through to the worker, or from `HOME/.cache/opencode/models.json` otherwise — the default OpenCode
@@ -121,38 +120,38 @@ constant path, so relocating a fleet's OpenCode cache is a passthrough change, n
 OpenCode's own configured default model — with no `provider/model` the runner ever resolved for it — still gets an
 estimate: the process's own stdout events never name a step's provider or model, but when the chunk's own model is
 unpinned and transcripts are wired, the runner reads that invocation's own transcript export, whose lines carry each
-step's `providerID`/`modelID` regardless, and prices from the model it observes there. A chunk with a pinned model
-never pays for that export read, since its own stamp already names what ran; with transcripts unwired, or an export
-naming no model either, the step stays unestimated.
+step's `providerID`/`modelID` regardless, and prices from the model it observes there. A chunk with a pinned model never
+pays for that export read, since its own stamp already names what ran; with transcripts unwired, or an export naming no
+model either, the step stays unestimated.
 
 An OpenCode invocation's usage also counts the steps of every descendant session its `task` tool calls spawned — a
-child, and that child's own children — read through `opencode export`, each step priced at its own message's model.
-The runner also recovers root `task` parts still running when an invocation is interrupted, even when stdout stopped
-before the task started. The invocation's recorded start and post-exit end bound the child's steps; a later judge
-starts a separate window. A child continued across two invocations is counted once, through each invocation's own
-task window. A child whose export cannot be read is logged and contributes nothing. The estimate is all-or-nothing
-across the root and its descendants: one zero-cost step with no priced model leaves the whole invocation's
-`estimated_cost_usd` absent rather than understated.
+child, and that child's own children — read through `opencode export`, each step priced at its own message's model. The
+runner also recovers root `task` parts still running when an invocation is interrupted, even when stdout stopped before
+the task started. The invocation's recorded start and post-exit end bound the child's steps; a later judge starts a
+separate window. A child continued across two invocations is counted once, through each invocation's own task window. A
+child whose export cannot be read is logged and contributes nothing. The estimate is all-or-nothing across the root and
+its descendants: one zero-cost step with no priced model leaves the whole invocation's `estimated_cost_usd` absent
+rather than understated.
 
 For an invocation that ends with a usage envelope, a billed step and a zero-cost, estimated step can both appear
 together: its billed steps sum into `cost_usd`, and its estimated steps separately sum into `estimated_cost_usd` — the
 two are never merged and never double counted. The transcript fallback (the crash/reap path) never bills — it always
-records `cost_usd` as absent — and drops any estimate it would otherwise have built if it saw even one step with a
-real cost, so that row still reads cost-absent and stays PARTIAL rather than surfacing a partial estimate. Separately
-from all of that, the hub accepts and stores a reported `estimated_cost_usd` for a row: its own column, summed into
-its own total, never folded into `cost_usd`. A chunk's or the fleet's billed cost is never inflated by an estimate,
-and an estimate is never presented as billed spend.
+records `cost_usd` as absent — and drops any estimate it would otherwise have built if it saw even one step with a real
+cost, so that row still reads cost-absent and stays PARTIAL rather than surfacing a partial estimate. Separately from
+all of that, the hub accepts and stores a reported `estimated_cost_usd` for a row: its own column, summed into its own
+total, never folded into `cost_usd`. A chunk's or the fleet's billed cost is never inflated by an estimate, and an
+estimate is never presented as billed spend.
 
-Every surface — the CLI's `hub status`, `hub chunk list`, `hub chunk show`, and `hub analytics summary`, and every
-board figure — renders a total as **one** amount, `cost_usd + estimated_cost_usd`, to the cent, carrying two
-independent markers: a leading `~` whenever the total carries an estimate, meaning some part of the amount is
-estimated rather than billed, and a trailing `+` whenever it is PARTIAL, meaning some row carried neither amount and
-the figure is a lower bound. A total therefore reads `$4.00`, `~$4.05`, `$4.00+`, or `~$4.05+`, and a chunk whose
-cost is entirely estimated reads `~$0.07` rather than a bare `$0.00`.
+Every surface — the CLI's `hub status`, `hub chunk list`, `hub chunk show`, and `hub analytics summary`, and every board
+figure — renders a total as **one** amount, `cost_usd + estimated_cost_usd`, to the cent, carrying two independent
+markers: a leading `~` whenever the total carries an estimate, meaning some part of the amount is estimated rather than
+billed, and a trailing `+` whenever it is PARTIAL, meaning some row carried neither amount and the figure is a lower
+bound. A total therefore reads `$4.00`, `~$4.05`, `$4.00+`, or `~$4.05+`, and a chunk whose cost is entirely estimated
+reads `~$0.07` rather than a bare `$0.00`.
 
 An estimate never feeds either cap. `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above) are
-both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every
-one of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
+both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every one
+of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
 subscription spend needs to watch the `~`-marked figure itself, the tilde being the one sign that part of a total never
 reached the caps.
 
@@ -177,14 +176,14 @@ or unsampled never blanks a sibling's. Both plans meter a 5h and a 7d window tod
 as fixed: `openai` labels each window from the length its own response reports, so a plan metering differently is
 rendered as it comes rather than forced into that pair.
 
-Once a runner has declared its roster, the runner panel shows exactly one row per declared slug, whatever the age of
-its sample — the roster, not sample age, now decides what shows. Each row carries its last good sample labelled with
-its age, "refreshed &lt;age&gt; ago": styled normal up to fifteen minutes, amber past fifteen, red past an hour, and
-updated live on the board's own clock tick rather than only on a fresh read. A slug that has never produced a sample
-reads "no sample yet", naming its newest miss reason when one exists. Dropping a `[[subscription]]` block removes its
-row at the runner's next registration, even though its stored samples and misses persist. A runner that predates the
-roster (an older client, or one declaring none) keeps the prior behavior: its rows show only while sampled within the
-last fifteen minutes, the sole staleness gate that survives for it.
+Once a runner has declared its roster, the runner panel shows exactly one row per declared slug, whatever the age of its
+sample — the roster, not sample age, now decides what shows. Each row carries its last good sample labelled with its
+age, "refreshed &lt;age&gt; ago": styled normal up to fifteen minutes, amber past fifteen, red past an hour, and updated
+live on the board's own clock tick rather than only on a fresh read. A slug that has never produced a sample reads "no
+sample yet", naming its newest miss reason when one exists. Dropping a `[[subscription]]` block removes its row at the
+runner's next registration, even though its stored samples and misses persist. A runner that predates the roster (an
+older client, or one declaring none) keeps the prior behavior: its rows show only while sampled within the last fifteen
+minutes, the sole staleness gate that survives for it.
 
 Each binding reads the credential file its own vendor CLI writes: `~/.claude/.credentials.json` for `anthropic`,
 `~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Blizzard never writes

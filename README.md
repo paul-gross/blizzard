@@ -63,14 +63,14 @@ engineer's agents show up on the same board.
   context, not a cold reconstruction of what it was doing.
 - **Full control over work in flight.** Every chunk is steerable from the hub: pause it and the worker is interrupted
   and given a grace period to wind down before being force-stopped, parked with its claim intact, resume it and that
-  worker picks up in place, restart it onto any node (or onto a
-  different graph entirely) on a fresh session, requeue an escalated one where it stands, reprioritize it, make it wait
-  on another chunk, or stop it outright and release its environment. A control is recorded as a fact, and the runner
-  acts on it at its next contact, so an order given at the board reaches the agent on the machine doing the work.
+  worker picks up in place, restart it onto any node (or onto a different graph entirely) on a fresh session, requeue an
+  escalated one where it stands, reprioritize it, make it wait on another chunk, or stop it outright and release its
+  environment. A control is recorded as a fact, and the runner acts on it at its next contact, so an order given at the
+  board reaches the agent on the machine doing the work.
 - **Metered, boundable spend.** Every attempt's token usage and cost is recorded as a fact and surfaced per chunk and
   fleet-wide, with an optional per-chunk cap and a runner-level spend kill-switch.
-- **Mission control.** Each daemon hosts its own UI: the hub a fleet-wide board over chunks, graphs, and a
-  severity-ranked event log; the runner a local panel for its own machine. Both are responsive down to a phone.
+- **Mission control.** Each daemon hosts its own UI: the hub a fleet-wide board over chunks, graphs, and a newest-first
+  event log; the runner a local panel for its own machine. Both are responsive down to a phone.
 - **Insights.** Every node's result is visible at the hub: the artifacts it produced, the verdict it was given, and the
   full history of the chunk's walk through the graph. A runner can opt into shipping the agent's own conversation
   alongside it, so what a worker actually saw is readable fleet-wide rather than only on the machine that ran it.

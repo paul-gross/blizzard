@@ -196,7 +196,7 @@ def _push_event(
 def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
     tmp_path: Path, chromium_available: bool
 ) -> None:
-    """The board's Events tab over the built bundle: rows render severity-then-recency, a
+    """The board's Events tab over the built bundle: rows render newest-first, a
     severity filter narrows them, a fresh event arrives live over SSE, and a row deep-links
     to its chunk (AC#6)."""
     if not chromium_available:
@@ -220,11 +220,12 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
             "chunk_id"
         ]
-        # Seed a mixed-severity feed (recency ascending; severity mixed) so the render order
-        # proves the severity-then-recency sort, not mere arrival order.
-        _push_event(hub, seq=1, severity="info", kind="attempt-abandoned", chunk_id=chunk_id, message="abandoned")
-        _push_event(hub, seq=2, severity="warning", kind="attempt-failed", chunk_id=chunk_id, message="retried")
-        _push_event(hub, seq=3, severity="critical", kind="worker-lost", chunk_id=chunk_id, message="lost")
+        # Seed a mixed-severity feed whose newest event is deliberately neither the most nor the
+        # least severe, so the render order tells recency from severity (either severity order
+        # would put the critical row first; recency puts it last).
+        _push_event(hub, seq=1, severity="critical", kind="worker-lost", chunk_id=chunk_id, message="lost")
+        _push_event(hub, seq=2, severity="info", kind="attempt-abandoned", chunk_id=chunk_id, message="abandoned")
+        _push_event(hub, seq=3, severity="warning", kind="attempt-failed", chunk_id=chunk_id, message="retried")
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
@@ -237,8 +238,8 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 page.get_by_test_id("nav-events").click()
                 expect(page.get_by_test_id("events-panel")).to_be_visible()
                 expect(page.get_by_test_id("events-row")).to_have_count(3)
-                # Severity-then-recency: the critical row is first, even though it arrived last.
-                expect(page.get_by_test_id("events-severity").first).to_have_text("critical")
+                # Newest first: the warning row leads and the critical row, the oldest, trails.
+                expect(page.get_by_test_id("events-message")).to_have_text(["retried", "abandoned", "lost"])
 
                 # The severity filter narrows the list, then restores it.
                 page.get_by_test_id("events-filter-critical").click()

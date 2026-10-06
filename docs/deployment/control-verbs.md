@@ -205,17 +205,21 @@ list of node names, and restart the runner. When the runner finishes a step at o
 instead of a transition, and the chunk waits for a person. Only the runner enforces its gates; the hub never reads them
 to route or claim.
 
-The runner reports its gates on every registration, so they show in seven places:
+The runner reports its gates on every registration, so they show in two places:
 
 - the board's runner registry, as a "Gates:" badge row beside the harness badges;
+- the runner panel's info section.
+
+An open gate decision shows wherever a waiting chunk does, derived from the decision rather than from the registration:
+
 - the board rail's Open gates section, which lists every open gate fleet-wide with its node, origin, and choices;
 - a `gate` marker on the board card of a chunk with an open gate, and a `gate` pill in the mobile "Needs you" list;
 - the Gate panel of a waiting chunk, which reads "gated by runner `<id>` (runner config)", or "declared by the graph"
   when the graph made the node human-judged;
 - the resolved line that replaces the Gate panel's choices once someone resolves it, "`<choice>` by `<who>`, `<when>`",
-  until the runner records the transition. A resolve that loses the race to another person shows the same line;
-- the runner panel's info section;
-- `blizzard runner status`, as a `gates:` line, which reads from the runner's own configuration and so works with the hub
-  unreachable.
+  until the runner records the transition. A resolve that loses the race to another person shows the same line.
+
+`blizzard runner status` prints a `gates:` line too, which reads from the runner's own configuration and so works with
+the hub unreachable.
 
 A runner that predates gate reporting shows none until it is redeployed.

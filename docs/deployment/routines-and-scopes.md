@@ -13,9 +13,9 @@ untouched — `edit` is the only verb that changes it. `retire`/`enable` are a r
 retired scope, or enabling an enabled one, writes nothing.
 
 The hub board's Gardening tab renders the same reads from its own Scopes sub-tab: every scope beside the selected one's
-own panel, which names the routines related to it — marking which of them default here — edits the description in
-place, and retires or re-enables it. Every one of those writes is gated on `graph:edit`; without it the panel reads,
-and offers nothing.
+own panel, which names the routines related to it — marking which of them default here — edits the description in place,
+and retires or re-enables it. Every one of those writes is gated on `graph:edit`; without it the panel reads, and offers
+nothing.
 
 On mobile, the Scopes, Routines, and Runs subtabs use a drill-down instead of the desktop side-by-side layout. Each
 opens on its list; selecting a row replaces that list with the row's full-width detail, and the Back row returns to the
@@ -25,23 +25,23 @@ list. The selected child route remains in the URL, so a detail can still be open
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,
 `show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort]` are the routine
-verbs. `edit` sends only the options given; anything left out stands.
-`GRAPH_NAME` must resolve to a currently-enabled graph — a create or edit naming one that does not refuses, naming it.
-`DEFAULT_SCOPE_SLUG` is minted through the same path `scope create` uses if the slug is unseen, so a routine's default
-scope never needs a separate `scope create` first.
+verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a currently-enabled
+graph — a create or edit naming one that does not refuses, naming it. `DEFAULT_SCOPE_SLUG` is minted through the same
+path `scope create` uses if the slug is unseen, so a routine's default scope never needs a separate `scope create`
+first.
 
 A routine's `name` is its lineage and is immutable once minted: `routine edit` never changes it, and a create naming an
 already-existing routine name is refused rather than duplicating it. `routine_id` is the id every other verb addresses
-the routine by; an edit may restate the current name, which changes nothing, and is refused if it names a different one. A
-routine running the `garden-routine` graph resolves its axis from this same `name` — the target project's gardening-axes
-registry must declare an entry under it. Naming one the registry does not declare is not refused at create time: every
-run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is immutable, that
-cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend history over,
-corrects it. A routine running the `ideation` graph resolves its axis the same way, under the same immutable `name`, but
-an undeclared axis parks the run on a question instead of filing a finding: answered once the registry declares the
-axis, the run sweeps; answered that the absence stands, the run ends without delivering anything, and only a new
-routine corrects the name. An `ideation` run also accepts `--mode delta` like any other but always sweeps its whole
-scope — that graph has no delta mode.
+the routine by; an edit may restate the current name, which changes nothing, and is refused if it names a different one.
+A routine running the `garden-routine` graph resolves its axis from this same `name` — the target project's
+gardening-axes registry must declare an entry under it. Naming one the registry does not declare is not refused at
+create time: every run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is
+immutable, that cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend
+history over, corrects it. A routine running the `ideation` graph resolves its axis the same way, under the same
+immutable `name`, but an undeclared axis parks the run on a question instead of filing a finding: answered once the
+registry declares the axis, the run sweeps; answered that the absence stands, the run ends without delivering anything,
+and only a new routine corrects the name. An `ideation` run also accepts `--mode delta` like any other but always sweeps
+its whole scope — that graph has no delta mode.
 
 `show` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
 routine sweeps a set of scopes, not only its default; `blizzard hub routine scope add <routine_id> <scope_slug>` and
@@ -54,44 +54,45 @@ own default scope, which stays a member of its set for as long as it is the defa
 brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and
 neither touches the stored row, its findings, proposals, or closures. A repeated retire or enable writes nothing.
 `routine list
---include-retired` includes a retired routine in the listing, marked; every other verb still resolves a retired
-routine's `name` to its `routine_id` the same way a live one does, so it reaches the domain's own retired refusal
-rather than reading as unknown.
+--include-retired` includes a retired routine in the listing, marked; every other verb still resolves a
+retired routine's `name` to its `routine_id` the same way a live one does, so it reaches the domain's own retired
+refusal rather than reading as unknown.
 
 ## Revisions and the change log
 
-Scopes and routines are configured records. Each carries a `revision` that every committed write moves by one — an
-edit, a retire or enable that flips the state, and a routine's scope link or unlink — and each such write appends one
-row to the configuration change log ([config-changes.md](config-changes.md)), keyed by the scope's slug or the
-routine's `name`. A write that would change nothing writes nothing: no revision, no row.
+Scopes and routines are configured records. Each carries a `revision` that every committed write moves by one — an edit,
+a retire or enable that flips the state, and a routine's scope link or unlink — and each such write appends one row to
+the configuration change log ([config-changes.md](config-changes.md)), keyed by the scope's slug or the routine's
+`name`. A write that would change nothing writes nothing: no revision, no row.
 
-Over HTTP, `PATCH /api/scopes/{slug}` and `PATCH /api/routines/{routine_id}` are sparse: an absent field is unchanged,
-a present one is set, and a field that is not part of the record is refused. A routine's `graph_name` and
+Over HTTP, `PATCH /api/scopes/{slug}` and `PATCH /api/routines/{routine_id}` are sparse: an absent field is unchanged, a
+present one is set, and a field that is not part of the record is refused. A routine's `graph_name` and
 `default_scope_slug` refuse an explicit `null`; `default_effort` takes `null` to clear it. Send `If-Match: <revision>`
-to refuse the write with `409` if the record moved since you read it. Both kinds can also be declared in a
-configuration document ([config-documents.md](config-documents.md)).
+to refuse the write with `409` if the record moved since you read it. Both kinds can also be declared in a configuration
+document ([config-documents.md](config-documents.md)).
 
 ## Running one
 
-`blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a
-hub work item from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet claimable —
-until `blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints that next
-step. `NAME` resolves to the routine's `routine_id` through the routine
-list; `--scope` overrides the routine's own default with a scope already linked into the routine's own related set —
-naming one that is not, or a slug no scope row holds, refuses rather than minting it (`routine scope add` links one
-first). `--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline
-downgrades to `full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does
-too. A retired routine, a retired effective scope, or a routine whose graph has lost every enabled mint, refuses the run
-rather than running it anyway — a retired routine is checked first, before any scope is resolved.
+`blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a hub work item
+from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet claimable — until
+`blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints that next step.
+`NAME` resolves to the routine's `routine_id` through the routine list; `--scope` overrides the routine's own default
+with a scope already linked into the routine's own related set — naming one that is not, or a slug no scope row holds,
+refuses rather than minting it (`routine scope add` links one first). `--mode` defaults to `full`; a requested `delta`
+against a routine/scope pair with no recorded baseline downgrades to `full` rather than refusing — the CLI names the
+downgrade in its output, and the item's own charge does too. A retired routine, a retired effective scope, or a routine
+whose graph has lost every enabled mint, refuses the run rather than running it anyway — a retired routine is checked
+first, before any scope is resolved.
 
 The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
-routine's own panel; its confirmation names the minted chunk and says it rests `not_ready` until promoted. The scope picker offers only the routine's own related, non-retired scopes — the same set `scope
-add`/`scope remove` manage — and nothing else; linking a scope into that set is what makes it offerable here. It
-resolves the delta baseline *before* the operator submits, through `GET /api/routines/{routine_id}/baselines` — one
-entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per
-repo the sweep touched, how many `delivery_repo_landed` events that repo has recorded since. A scope absent from the
-list has never been swept by this routine; the dialog steers those pairs to full rather than offering a delta with
-nothing to run against.
+routine's own panel; its confirmation names the minted chunk and says it rests `not_ready` until promoted. The scope
+picker offers only the routine's own related, non-retired scopes — the same set `scope
+add`/`scope remove` manage — and
+nothing else; linking a scope into that set is what makes it offerable here. It resolves the delta baseline *before* the
+operator submits, through `GET /api/routines/{routine_id}/baselines` — one entry per scope this routine has ever swept,
+each carrying its finding-set id, the instant it was recorded, and, per repo the sweep touched, how many
+`delivery_repo_landed` events that repo has recorded since. A scope absent from the list has never been swept by this
+routine; the dialog steers those pairs to full rather than offering a delta with nothing to run against.
 
 ## Reading a routine's health
 
@@ -102,9 +103,8 @@ withdrawn roll-ups, and the introduced-age cut against `--introduced-boundary`.
 `blizzard hub routine sweeps <name> --since <time> --until <time>` reports two things at once: a last-swept table —
 `name`'s declared scope set, retired scopes filtered out unless already swept while linked, each with its newest
 delivered finding set's instant and per-repository revisions, or `never` when the pair has recorded none — and a
-measurement series, the opaque text each delivered set records, cut to `--since`/`--until`. Unlike the last-swept
-table, the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never
-"never".
+measurement series, the opaque text each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table,
+the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never "never".
 
 `blizzard hub routine proposal-counts [<name>] --since <time> --until <time>` reports how many garden proposals landed
 in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item

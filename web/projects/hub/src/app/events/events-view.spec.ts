@@ -48,7 +48,7 @@ describe('EventsView', () => {
     return fixture;
   }
 
-  it('renders every event handed to it, severity-ordered as given (server sort, not re-sorted)', async () => {
+  it('renders every event handed to it, in the order given (server recency sort, not re-sorted)', async () => {
     const fixture = render();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
