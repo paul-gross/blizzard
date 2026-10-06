@@ -1,8 +1,8 @@
 """ADVANCE runs a node's ``checks:`` at worker exit and records durable facts.
 
 A real ADVANCE tick against a real tmp store proves checks run at worker exit, before
-judgement, in the declared cwd, and each result is a durable fact surviving a runner
-kill. Plus unit coverage of ``Judgement.checks``'s idempotency and the store round trip.
+judgement, in the declared cwd, and each result is recorded as a durable fact in the store.
+Plus unit coverage of ``Judgement.checks``'s idempotency and the store round trip.
 """
 
 from __future__ import annotations
@@ -121,8 +121,8 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
 
 @pytest.mark.component
 def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: Path) -> None:
-    """A red check is recorded (passed=False) and — with no gating yet — the
-    worker's chosen edge still buffers. The tail is captured on the durable fact."""
+    """A red check is recorded (passed=False) and, with the
+    choice not gated on checks, the worker's chosen edge still buffers. The tail is captured on the durable fact."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)
@@ -401,7 +401,7 @@ def test_checks_gate_violated_predicate() -> None:
 @pytest.mark.component
 def test_advance_gates_a_requires_checks_pass_with_a_red_check_and_consumes_a_retry(tmp_path: Path) -> None:
     """Selecting a ``requires_checks`` choice while a check is red is treated like an
-    unparseable verdict — no completion buffers, a retry is consumed (AC #4)."""
+    unparseable verdict — no completion buffers, and the red check is still recorded."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)
 

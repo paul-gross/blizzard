@@ -34,7 +34,7 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
     response = await events_stream(_FakeRequest(EventBroker()))  # type: ignore[arg-type]
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
-    # The generator opens with the reserved comment so an EventSource connects cleanly.
+    # The stream's first bytes are the reserved comment line.
     first = b""
     async for chunk in response.body_iterator:
         first = chunk.encode() if isinstance(chunk, str) else bytes(chunk)

@@ -1,15 +1,11 @@
 """``classify_offline``'s corpus lookup — reads the committed fixture corpus
-rather than running a live probe. Mirrors `test_runner_harness_opencode_compatibility.py`'s
-own `_PACKAGE_ROOT`/corpus-path construction.
+rather than running a live probe.
 
 ``classify_offline`` classifies a version by resolving it to a *reference corpus* — the
 newest committed corpus at or below it, inside the admitted range — never by requiring a
-corpus for the exact observed version. It carries no membership concept of its own: the
-admitted range is used only to select the reference corpus, never to assert the observed
-version is itself admitted — a caller (`capability_snapshot.py`) checks that membership
-itself, before consulting this classification. The two-facts-not-one distinction that
-membership check exists for is pinned at the evaluation-policy level instead
-(`tests/test_runner_harness_health.py`, `tests/test_runner_harness_health_cache.py`)."""
+corpus for the exact observed version. The admitted range only selects the reference
+corpus; whether the observed version is itself admitted is the caller's question, not
+this module's."""
 
 from __future__ import annotations
 

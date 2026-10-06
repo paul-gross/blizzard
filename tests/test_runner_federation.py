@@ -294,8 +294,8 @@ def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) ->
 
     logout_resp = client.post("/api/auth/logout")
     assert logout_resp.status_code == 204
-    # The response clears the session cookie (empty value, immediate expiry) — a browser
-    # drops it, so model that on the jar before the next visit.
+    # The response clears the session cookie (empty value, immediate expiry); mirror that on
+    # the test client's jar before the next visit.
     set_cookie = logout_resp.headers["set-cookie"]
     assert f"{_NAMES.session}=" in set_cookie and "Max-Age=0" in set_cookie
     client.cookies.delete(_NAMES.session)
@@ -315,8 +315,7 @@ def test_logout_is_a_harmless_no_op_without_a_session(tmp_path: Path) -> None:
 
 
 def test_session_read_reports_the_signed_in_username_under_oauth(tmp_path: Path) -> None:
-    """`GET /api/auth/session` carries the hub username behind the panel's identity/
-    logout control once a session is established."""
+    """`GET /api/auth/session` reports the signed-in hub username once a session is established."""
     private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     _bounce_in(client, private_key, jti="jti-session-1")
@@ -390,8 +389,7 @@ def test_callback_ignores_forwarded_proto_with_no_trusted_proxies_configured(tmp
     assert "Secure" not in resp.headers["set-cookie"]
 
 
-# The bounce cookies' SameSite/Secure policy: a hub off this runner's site makes the
-# `response_mode=form_post` POST cross-site, so `SameSite=Lax` alone would be dropped.
+# The bounce cookies' SameSite/Secure policy, asserted on the Set-Cookie headers.
 
 
 def _bounce_set_cookie_headers(resp) -> str:
@@ -399,8 +397,7 @@ def _bounce_set_cookie_headers(resp) -> str:
 
 
 def test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner(tmp_path: Path) -> None:
-    """A loopback origin is potentially trustworthy, so `Secure` is honored over plain
-    http — which is what lets a 127.0.0.1 runner federate against a hosted hub."""
+    """A loopback runner's bounce cookies are `SameSite=None` and `Secure`."""
     _private_key, jwk = _keypair()
     client = _build_app(
         tmp_path, oauth_enabled=True, jwk=jwk, extra_public_urls=(_LOOPBACK,), base_url="http://127.0.0.1:8431"
@@ -422,9 +419,7 @@ def test_bounce_cookies_are_samesite_none_secure_over_https(tmp_path: Path) -> N
 
 
 def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: Path) -> None:
-    """No regression for the same-site plain-http deployment: a browser drops a `Secure`
-    cookie on such an origin, so claiming `SameSite=None` there would lose the cookie
-    entirely rather than merely restrict it."""
+    """On a plain-http, non-loopback origin the bounce cookies are `SameSite=Lax` with no `Secure`."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://runner-a.example")
     resp = client.get("/api/auth/login", follow_redirects=False)

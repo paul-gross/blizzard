@@ -133,14 +133,9 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path, spawn_exe
 
 
 def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
-    """A missing corpus manifest for an admitted OpenCode version degrades that binding
-    alone — `OpenCodeHealthProbe` construction never raises over it, and
-    it neither prevents Claude Code's own entry, in the same registry and cache, from
-    reporting healthy, nor the route from responding at all. An unresolvable binary path
-    (mirroring `test_reports_missing_binary_for_an_unresolvable_configured_path` above) keeps
-    this hermetic — no dependency on whether an `opencode` binary happens to be on this
-    machine's own `PATH`; the exact cause matters less here than construction, the shared
-    cache, and the route all surviving the corpus defect intact."""
+    """With an empty corpus root and an unresolvable OpenCode binary, the route answers 200
+    with OpenCode unavailable (`missing_binary`) and Claude Code still available. The
+    unresolvable binary path keeps the test independent of the machine's `PATH`."""
     config = RunnerConfig(
         root=tmp_path,
         db_url="sqlite://",
@@ -160,8 +155,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
             OPENCODE_HARNESS_ID: HarnessBinding(adapter=opencode_adapter),
         }
     )
-    # `corpus_root=tmp_path` (empty) never raises out of construction — the whole
-    # point being proven here.
+    # `corpus_root=tmp_path` is empty: no manifest to read.
     health = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={

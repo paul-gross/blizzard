@@ -1,8 +1,8 @@
 """``AnthropicSubscriptionSampler.sample``.
 
 Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and an injected
-``FixedClock`` — no real credential file location, no real network. Every failure path returns
-``None`` and logs exactly one warning, never raises; the credential file is asserted read-only."""
+``FixedClock`` — no real credential file location, no real network. Each failure path returns a
+``SampleMiss`` and logs exactly one warning, never raising; the credential file is asserted read-only."""
 
 from __future__ import annotations
 

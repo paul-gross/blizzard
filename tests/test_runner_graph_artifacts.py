@@ -110,9 +110,8 @@ def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path
 
 @pytest.mark.component
 def test_a_superseded_mints_rows_survive_a_later_mints_write(tmp_path):  # type: ignore[no-untyped-def]
-    """A re-mint of the same graph name bakes a fresh ``graph_id`` (the hub's own
-    immutability guarantee); the runner's mirror is keyed on that id, so the superseded
-    mint's rows are untouched by the newer mint's own write."""
+    """The mirror is keyed on ``graph_id``: writing a newer mint's rows leaves the
+    superseded mint's rows untouched."""
     store = _store(tmp_path)
     store.record_graph_artifacts(
         graph_id="gr_old",

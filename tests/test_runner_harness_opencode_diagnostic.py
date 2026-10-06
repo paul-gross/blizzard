@@ -1,9 +1,8 @@
-"""Component proof for the hermetic OpenCode compatibility diagnostic — the narrow slice left
-behind once every case that drives the fake OpenCode-shaped CLI as a real out-of-process
-subprocess moved to `blizzard:service-test`
-(``tests/service/test_opencode_compatibility_service.py``, ``bzh:external-cli-fake-is-service-tier``).
+"""Component proof for the hermetic OpenCode compatibility diagnostic. Cases that drive the
+fake OpenCode-shaped CLI as an out-of-process subprocess live in
+``tests/service/test_opencode_compatibility_service.py`` (``bzh:external-cli-fake-is-service-tier``).
 
-What remains here is:
+This module holds:
 
 - Pure domain logic with no subprocess at all (shape classification, evidence-path validation,
   provider-refusal parsing, isolation-root construction).

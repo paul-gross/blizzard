@@ -200,9 +200,8 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
 
 @pytest.mark.component
 def test_400_for_a_repo_the_environment_does_not_hold(tmp_path: Path) -> None:
-    """The rejection the silent drop replaces: a repo outside the env's manifest is
-    refused at declare time, while the worker is still alive to re-run the verb, and the
-    detail names what the env does hold so the correction is obvious."""
+    """A repo outside the env's manifest is refused with 400 at declare time, and the
+    detail names the repos the env does hold."""
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
     with TestClient(app) as client:
@@ -261,8 +260,8 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
 
 @pytest.mark.component
 def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -> None:
-    """The clobber the environment key removes: under a repo-only key the second env's
-    branch read as a *correction* of the first's, collapsing two facts into one."""
+    """Declarations are keyed by environment and repo: the same repo declared in two
+    environments is stored as two declarations, each keeping its own commit."""
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")

@@ -266,8 +266,7 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
 
 @pytest.mark.unit
 def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
-    """Whoever owns the ``LoopContext`` closes the shared client exactly once, and closing
-    it actually closes the real ``httpx.Client`` a sampler built."""
+    """Closing the context's shared client closes the real ``httpx.Client`` a sampler built."""
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
@@ -284,9 +283,7 @@ def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp
 
 @pytest.mark.unit
 def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_path: Path) -> None:
-    """Both reach the spawned worker only as adapter argv flags (``--settings``,
-    ``--permission-mode``), so dropping either threading leaves every worker running
-    without the runner-owned hook file, or at the interactive permission default."""
+    """The configured worker settings path and permission mode reach the Claude Code adapter."""
     settings = str(tmp_path / "worker-settings.json")
     config = RunnerConfig(
         root=tmp_path,
@@ -410,9 +407,7 @@ def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path)
 
 @pytest.mark.unit
 def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
-    """The broker the graph carries — the one ``host`` also gives ``build_hosted_app`` —
-    reaches ``PeriodicDriver``'s own ``LoopWiring``, the second of the two composition
-    paths a single instance must reach."""
+    """The broker the graph carries reaches ``PeriodicDriver``'s own ``LoopWiring``."""
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
@@ -464,9 +459,7 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
 
 @pytest.mark.unit
 def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_app(tmp_path: Path) -> None:
-    """``HostedApp.harness_health`` is the exact instance ``app.state``
-    carries — the one ``host`` then hands to ``PeriodicDriver`` too, so a dashboard read
-    and the loop's own registered availability read one shared cache, not two."""
+    """``HostedApp.harness_health`` is the instance ``app.state`` carries."""
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
 
     hosted = build_hosted_app(RunnerConfig.load(tmp_path))
@@ -588,9 +581,8 @@ def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path) -> None:
-    """A configured-but-missing ``runner_prompt_file`` must raise ``ConfigError`` from
-    the constructor, on the caller's own thread — not from inside the background loop
-    thread, where it would silently kill the loop while uvicorn keeps serving."""
+    """A configured-but-missing ``runner_prompt_file`` raises ``ConfigError`` from the
+    constructor."""
     config = RunnerConfig(
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),

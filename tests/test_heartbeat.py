@@ -130,7 +130,7 @@ def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.unit
 def test_heartbeat_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A hook must never break the worker's tool call — no identity means a clean skip."""
+    """Without identity the verb skips cleanly: exit 0 and no post attempted."""
     posted = False
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:

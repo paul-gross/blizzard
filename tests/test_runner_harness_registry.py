@@ -163,8 +163,7 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
 
 @pytest.mark.unit
 def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path, spawn_executor: Executor) -> None:
-    """OpenCode's binding now names a real transcript source on both the adapter and
-    the binding — no longer the ``UnavailableHarnessError`` an unset binding used to raise."""
+    """OpenCode's binding names a real transcript source, shared by the adapter and the binding."""
     registry = build_production_harness_registry(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings,
         process=LinuxProcessProbe(),
