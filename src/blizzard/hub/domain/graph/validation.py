@@ -142,14 +142,20 @@ class Validator:
                 self.errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
 
     def _check_harnesses(self, name: str, harnesses: list[str]) -> None:
-        """An authored empty list is rejected earlier, at parse."""
-        try:
-            validated_harnesses(harnesses)
-        except InvalidHarnesses as exc:
-            if exc.reason == "blank":
-                self.errors.append(f"session `{name}`: `harnesses` entries must be non-empty strings")
-            else:
-                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{exc.entry}`")
+        """An authored empty list is rejected earlier, at parse. Each entry is judged by the
+        shared per-entry rules so every blank and duplicate is reported, not just the first."""
+        seen: set[str] = set()
+        for position, entry in enumerate(harnesses, start=1):
+            try:
+                (stripped,) = validated_harnesses([entry])
+            except InvalidHarnesses:
+                self.errors.append(
+                    f"session `{name}`: `harnesses` entries must be non-empty strings — entry {position} is blank"
+                )
+                continue
+            if stripped in seen:
+                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{stripped}`")
+            seen.add(stripped)
 
     def _check_artifacts(self) -> None:
         """Every graph-scoped `artifacts:` name is legal, collides with no node's `produces:`
