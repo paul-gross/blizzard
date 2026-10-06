@@ -15,10 +15,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * Below the link facts is the discovery mock's fleet counts strip
  * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
  * hub read, so unlike the rest of this panel they arrive through the same
- * dashboard read's `fleet_summary` section — the runner's own `GET
- * /api/fleet-summary` pass-through: the hub API allows no cross-origin browser read, so the runner
- * forwards it. `fleet_summary` is `null` exactly when that forward fails (hub
- * unreachable or unwired) — a **200** carrying a null slot, not a failed
+ * dashboard read's `fleet_summary` section. `fleet_summary` is `null`
+ * when the hub read is unavailable — a **200** carrying a null slot, not a failed
  * request, so the strip's degraded/last-known state can no longer be read off
  * the query's own `isError()`. See {@link latchedFleet}.
  */

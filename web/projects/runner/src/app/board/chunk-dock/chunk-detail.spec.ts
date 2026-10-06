@@ -97,7 +97,7 @@ async function render(
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The header's chunk id links to the detail route now.
+      // The header's chunk id is a `routerLink`.
       provideRouter([]),
     ],
   }).compileComponents();
@@ -109,9 +109,7 @@ async function render(
 
 /**
  * `MachineDetail`'s summary facts always render off the chunk's newest
- * attempt (the `leases` list's last entry) — per-attempt selection and the
- * transcript moved to the runner-local chunk detail route —
- * the shared chunk page's spec covers that rendering contract now.
+ * attempt (the `leases` list's last entry).
  */
 describe('MachineDetail summary facts', () => {
   let stub: RequestClientStub;
@@ -138,9 +136,7 @@ describe('MachineDetail summary facts', () => {
 });
 
 /**
- * The header shape — matches the hub board's own chunk-detail header:
- * the full chunk id, work items as links, the derived state, a working Pause/Resume,
- * and a close button. Pause/Resume and the work-item links are the dock's own
+ * The header: pause/resume and work-item links. Pause/Resume and the work-item links are the dock's own
  * severable read ({@link injectChunkDetailQuery}); these specs drive that read
  * through the stubbed `GET /api/chunks/{id}` route rather than the container-fed
  * `leases`/`status` inputs the attempt-tab specs above cover.
@@ -265,15 +261,12 @@ describe('MachineDetail header', () => {
 });
 
 /**
- * Pause/Resume's own pending-disable and failure reporting — brought up to the
- * standard the hub's `board/chunk-dock/chunk-detail.ts`'s own `onPause`/`onResume`/
- * `actionError` set: the button that fired the mutation disables for its duration and
- * re-enables once it settles, and a rejected mutation renders inline rather than being
- * swallowed. Every "held pending" assertion spies on `queryClient.invalidateQueries`
- * and returns a promise it controls rather than letting the stub's fetch settle on its
- * own, the same idiom the hub's `board/chunk-dock/chunk-detail.spec.ts`'s own pending-window
- * specs use — `injectChunkPauseMutation`'s `onSettled` keeps `isPending()` true only
- * until its own invalidations resolve.
+ * Pause/Resume's own pending-disable and failure reporting: the button that fired the
+ * mutation disables for its duration and re-enables once it settles, and a rejected
+ * mutation renders inline rather than being swallowed. Every "held pending" assertion
+ * spies on `queryClient.invalidateQueries` and returns a promise it controls rather than
+ * letting the stub's fetch settle on its own, because `injectChunkPauseMutation`'s
+ * `onSettled` keeps `isPending()` true only until its own invalidations resolve.
  */
 describe('MachineDetail Pause/Resume pending + failure', () => {
   let stub: RequestClientStub;
@@ -395,9 +388,8 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
 });
 
 /**
- * The dock's panel chrome — it paints through `fleet-kit-panel`
- * now, the same chrome every sibling region in `app-panel-layout.ts` wears,
- * rather than mounting bare. `MachineDetailHeader` projects into the panel's
+ * The dock's panel chrome — it paints through `fleet-kit-panel`.
+ * `MachineDetailHeader` projects into the panel's
  * own `fleetKitPanelHeader` slot, so exactly one header bar (`KitPanel`'s own `.p-hdr`)
  * ever renders — never a second, stacked one, and never an empty one: the panel
  * observes its own slot occupancy, so the no-selection rest state (which projects

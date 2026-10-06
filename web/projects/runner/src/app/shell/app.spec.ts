@@ -26,7 +26,7 @@ describe('runner App', () => {
   const previousFetch = globalThis.fetch;
 
   beforeEach(async () => {
-    // The shell mounts `LocalPanel`, which now polls `GET /api/leases` —
+    // The shell mounts `LocalPanel`, which polls `GET /api/leases` —
     // stub a minimal empty response so this shell-level test stays independent of
     // the local panel's own query behavior (covered by the board panel's own specs).
     globalThis.fetch = (async () =>
@@ -40,10 +40,10 @@ describe('runner App', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        // `LocalPanel` now binds its selection to the URL's query params,
-        // so it injects the router — the shell test wires the real route table.
+        // `LocalPanel` binds its selection to the URL's query params,
+        // so it needs the router — the shell test wires the real route table.
         provideRouter(routes),
-        // `App` now starts `RunnerLiveUpdates` unconditionally —
+        // `App` starts `RunnerLiveUpdates` unconditionally —
         // a fake transport so the stream opens without ever reaching real `fetch`.
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],

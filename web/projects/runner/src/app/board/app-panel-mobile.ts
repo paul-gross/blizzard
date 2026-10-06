@@ -36,14 +36,7 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  * `app-panel-mobile.spec.ts`'s "mounts no local pause control or paused-by-hub
  * badge".
  *
- * Owns no titlebar: the shared `MobileTitlebar` chrome — its
- * live dot, its overflow menu, and the signed-in identity/logout row inside
- * that menu — moved up to the app root's own `app-mobile-titlebar`
- * (`../../runner/src/app/shell/nav/mobile-titlebar.ts`'s `MobileTitlebar`), the
- * same shelf the hub's app-root mounts its own mobile titlebar on. Mounted
- * once, above the routed content, rather than nested inside this routed
- * shell where it used to render only on `/board` and not at all on
- * `/events`.
+ * Owns no titlebar; see `../shell/nav/mobile-titlebar.ts`.
  */
 @Component({
   selector: 'app-panel-mobile',

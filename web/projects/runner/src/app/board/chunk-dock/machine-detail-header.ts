@@ -14,25 +14,19 @@ import {
 /**
  * The machine detail dock's header — the full chunk id, its work
  * items as links, the derived state, a working Pause/Resume on the same
- * `bzh:claim-vocabulary` copy and tooltip the hub board's own header uses
- * (the hub's `board/chunk-dock/chunk-detail-header.ts`), and a close button. The two
- * headers are structurally independent, not one shared model: the hub header
- * additionally carries a `⋯` overflow menu (Detach, Complete, Delete) this one
- * does not, Detach being a hub-side concern out of scope here.
+ * `bzh:claim-vocabulary` copy and tooltip, and a close button.
  *
- * The chunk id itself links to the runner-local
- * chunk detail route — the operator's way into the shared
- * `fleet` sections and the transcript, both of which moved out of this dock.
+ * The chunk id itself links to the runner-local chunk detail route — the
+ * operator's way into the shared `fleet` sections and the transcript.
  * The link carries the chunk in the route's own path and no query params at
- * all: `?chunk=` is the board's selection (the shared `injectChunkUrlSelection`) and means
- * nothing on the detail route, and `?attempt=` is that route's own, written
+ * all: `?chunk=` is the board's selection (the shared
+ * `injectChunkUrlSelection`) and means nothing on the detail route, and `?attempt=` is that route's own, written
  * there once an attempt is picked.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
  * owns the severable `ChunkDetail` read and the pause mutation, and forwards
- * their data down as plain inputs; this component only renders and, mirroring the
- * hub header's own `onPause`/`onResume`, asks for confirmation before emitting
- * {@link pauseChunk}/{@link resumeChunk} upward.
+ * their data down as plain inputs; this component only renders and asks for confirmation before
+ * emitting {@link pauseChunk}/{@link resumeChunk} upward.
  */
 @Component({
   selector: 'app-machine-detail-header',

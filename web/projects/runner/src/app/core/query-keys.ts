@@ -13,9 +13,7 @@ export const runnerLeasesKey = ['runner', 'leases'] as const;
  * `runner` (identity, capacities, hub connectivity, last tick),
  * `environments`, `asks`, `escalations`, `takeovers`, `facts`, and `fleet_summary`.
  * One key for every rail this panel polls, so TanStack dedupes the N components
- * that inject it into the single shared `GET /api/dashboard` request — the same
- * dedupe `app-info.ts` and `app-panel-mobile.ts` already relied on for their
- * one shared `GET /api/runner` read, now extended to all seven sections.
+ * that inject it into the single shared `GET /api/dashboard` request.
  */
 export const runnerDashboardKey = ['runner', 'dashboard'] as const;
 

@@ -25,9 +25,8 @@ import { CHUNK_PAGE_ROUTES } from './chunk-page.routes';
  *
  * The "stacks its own sections" proof only applies to General, whose own sections carry
  * a `section-`-prefixed testid (`fleet-kit-panel`'s own convention); Artifacts, Node
- * history, and Transcripts (now grouped by node, sharing the
- * `fleet-chunk-transcripts-container` nav-plus-viewer pane, not the prior lease-chip
- * `section-transcript` panel) are each one nav-plus-viewer pane rather than a stack of
+ * history, and Transcripts (grouped by node, in the
+ * `fleet-chunk-transcripts-container` nav-plus-viewer pane) are each one nav-plus-viewer pane rather than a stack of
  * independent panels (`fleet-chunk-artifacts-panel`, `fleet-chunk-node-history-tab`,
  * `fleet-chunk-transcripts-container`) — for these three, the horizontal-overflow check
  * above already stands in for it: the Artifacts tab defaults its viewer to the fixture's

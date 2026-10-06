@@ -53,9 +53,8 @@ async function render(workItemsResponse: (method: string, path: string) => unkno
 
 /**
  * `ChunkCard`'s own concern is the per-row {@link injectChunkTitleQuery} enrichment
- * read — everything else the old card carried (markup, the
- * status pill, click/Enter/Space selection) is `ChunkCardView`'s, plain-input covered
- * in `chunk-card-view.spec.ts` with no query stub required.
+ * read — markup, the status pill, and click/Enter/Space selection belong to
+ * `ChunkCardView`, plain-input covered in `chunk-card-view.spec.ts` with no query stub required.
  */
 describe('ChunkCard', () => {
   let stub: RequestClientStub;

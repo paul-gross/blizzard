@@ -89,9 +89,8 @@ describe('MobileTitlebar (runner)', () => {
   });
 
   /*
-   * The titlebar menu is a real `role="menu"` since the CDK rebuild,
-   * so everything actionable inside it has to be a menu item: CDK's roving focus
-   * only rovers `CdkMenuItem`s and `Tab` closes the menu rather than falling
+   * The titlebar menu is a real `role="menu"`, so everything
+   * actionable inside it has to be a menu item: CDK's roving focus only rovers `CdkMenuItem`s and `Tab` closes the menu rather than falling
    * through to a plain button, which would strand the identity block's own Log
    * out exactly where a mobile operator most needs it.
    */

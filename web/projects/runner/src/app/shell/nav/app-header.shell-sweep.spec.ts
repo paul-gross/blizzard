@@ -35,7 +35,7 @@ async function render(degradedConnection = false) {
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The detail dock's header links the chunk name to its route now.
+      // The chunk name in the header is a `routerLink`.
       provideRouter([]),
       // `degraded` is the connection cell's longest string — a real
       // stand-in, not `RunnerLiveUpdates.start()`'d, since this sweep proves layout,

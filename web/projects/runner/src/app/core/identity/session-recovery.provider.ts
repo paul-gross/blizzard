@@ -5,10 +5,7 @@ import { SessionRecovery } from './session-recovery';
 
 /**
  * Registers {@link SessionRecovery}'s response interceptor on the generated
- * runner client's own transport — the runner client is a separate
- * transport from the hub's, with no interceptor of its own, so the runner app's
- * `app.config.ts` provides this the way the hub app provides
- * `provideAuthInterceptor()`. An `ENVIRONMENT_INITIALIZER` (not a plain factory)
+ * runner client's own transport. An `ENVIRONMENT_INITIALIZER` (not a plain factory)
  * because registration needs `inject()` (here, {@link SessionRecovery}) but
  * produces no injectable of its own — only a side-effecting registration run
  * once at bootstrap.
