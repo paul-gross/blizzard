@@ -35,6 +35,7 @@ const RENDER_LIMIT = ACTIVITY_LIMIT;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ActivityFeedView],
   templateUrl: './activity-panel.html',
+  styleUrl: './activity-panel.css',
 })
 export class ActivityPanel {
   private readonly live = inject(FleetLiveUpdates);

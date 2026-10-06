@@ -32,6 +32,7 @@ import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from '.
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EventsView],
   templateUrl: './events-panel.html',
+  styleUrl: './events-panel.css',
 })
 export class EventsPanel {
   /** Emitted with a chunk id when a row's chunk deep-link is activated. */
