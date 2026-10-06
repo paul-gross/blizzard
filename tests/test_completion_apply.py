@@ -127,6 +127,33 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
 
 
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"commit_hash": "abc123"}, "commit_hash"),
+        ({"branch_name": "a:b"}, "branch_name"),
+        ({"repo": ""}, "repo"),
+    ],
+)
+def test_a_malformed_commit_pointer_is_refused_with_its_detail_and_nothing_lands(
+    overrides: dict[str, str], field: str, tmp_path: Path
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub)
+    completion = _completion(node_id, epoch=1)
+    completion["artifacts"][0].update(overrides)
+
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == "failure"
+    assert "git_commit artifact `w`" in body["detail"] and f"`{field}`" in body["detail"]
+    chunk = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert chunk["status"] == "running"
+    assert not any(a["kind"] == "git_commit" for a in chunk["artifacts"])
+
+
 def test_completion_on_terminal_chunk_fails(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)

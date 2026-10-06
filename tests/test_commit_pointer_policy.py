@@ -53,3 +53,17 @@ def test_each_missing_or_malformed_field_is_refused_by_name(overrides: dict[str,
 def test_an_asset_artifact_is_ignored() -> None:
     asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="diff --git a/x b/x")
     assert CommitPointerPolicy([asset]).rejection() is None
+
+
+def test_an_asset_listed_ahead_of_a_malformed_pointer_does_not_hide_it() -> None:
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="x")
+    detail = CommitPointerPolicy([asset, _commit(commit_hash="abc123")]).rejection()
+
+    assert detail is not None
+    assert "`w`" in detail and "`commit_hash`" in detail
+
+
+def test_an_asset_listed_ahead_of_a_valid_pointer_leaves_it_accepted() -> None:
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="x")
+
+    assert CommitPointerPolicy([asset, _commit()]).rejection() is None
