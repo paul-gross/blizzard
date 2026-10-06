@@ -1,9 +1,8 @@
 """The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``): asks the Codex
 CLI's own ``app-server`` (``initialize``, then ``account/read`` with ``refreshToken: true``) for a
 vendor-owned refresh, and reports ``renewed`` only once the credential file's own expiry has advanced.
-Confirmed live against Codex 0.149.0: replies are id-matched among interleaved notifications; a reply
-still in flight is dropped if stdin hits EOF first, hence the settle window before stdin closes; and
-``requiresOpenaiAuth`` is true for every ChatGPT login, so ``account: null`` is the one no-login signal."""
+Replies are id-matched among interleaved notifications; a settle window precedes closing stdin, since
+EOF drops a reply still in flight; ``account: null`` is the one no-login signal."""
 
 from __future__ import annotations
 

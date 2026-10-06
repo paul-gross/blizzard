@@ -2,7 +2,7 @@
 
 A declared ``(repo, branch, commit)`` is confirmed **read-only** against a named origin —
 never inferring a branch name off git residue, never mutating git, never consulting a
-local checkout. The subprocess-git adapter under ``internal/`` is the reference binding."""
+local checkout."""
 
 from __future__ import annotations
 

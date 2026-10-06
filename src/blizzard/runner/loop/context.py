@@ -137,9 +137,8 @@ class ResolvedSubscription:
 
 
 class ICloseableUsageHttpClient(Protocol):
-    """Owns the shared, lazily-built HTTP client every declared subscription's sampler draws
-    from; whoever owns this ``LoopContext``'s lifetime closes it
-    exactly once, whether or not a client was ever actually built."""
+    """A closeable handle on the subscription samplers' shared HTTP client; ``close`` is called
+    once and is safe whether or not a client was built."""
 
     def close(self) -> None: ...
 

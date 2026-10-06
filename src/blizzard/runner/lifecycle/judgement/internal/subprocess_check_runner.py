@@ -56,7 +56,6 @@ class SubprocessCheckRunner:
     """Run a node's ``checks:`` command in a leased worktree, via the shell."""
 
     def __init__(self, *, worker_env: AllowlistedEnv) -> None:
-        # The same allowlist the harness children get, so a check behaves like the worker did.
         self._worker_env = worker_env
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:

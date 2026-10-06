@@ -20,13 +20,8 @@ class ProducesReconciler:
     envelope: Envelope
 
     def missing(self, git_artifacts: list[CompletionArtifact], attached_names: Iterable[str]) -> list[ProducesSpec]:
-        """Every spec this attempt does not yet cover, in declaration order.
-
-        Evaluated by the shared :class:`Coverage` predicate, so this and the upstream
-        backstop cannot drift apart. Only names, not content: `Coverage.unmet` reads
-        `.name`/`.attached`/`.kind` off each artifact and never `.content` — so an attached
-        name's dummy artifact carries an empty string rather than fetching content this
-        check provably never uses."""
+        """Every spec this attempt does not yet cover, in declaration order. An attached
+        name's artifact carries empty content, since coverage is judged on names alone."""
         attached = [
             CompletionArtifact(name=name, kind=ArtifactKind.ASSET, content="", attached=True) for name in attached_names
         ]

@@ -72,8 +72,7 @@ class OpenAISubscriptionSampler:
                 f"{self._usage_api_base}{_USAGE_PATH}",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    # Required to be present; its value is not what selects the account —
-                    # the token is — but a real one is sent rather than a placeholder.
+                    # Required by the endpoint; the token, not this value, selects the account.
                     "chatgpt-account-id": account_id,
                     "User-Agent": _CLIENT_USER_AGENT,
                     "Accept": "application/json",
@@ -201,8 +200,7 @@ class OpenAISubscriptionSampler:
             if resets_at is None:
                 continue
             label = _window_label(window_seconds)
-            # Two windows reporting one length would derive one label, and the board keys
-            # its per-window render on it; the second is dropped rather than collided.
+            # Labels must be unique per snapshot; a second window of the same length is dropped.
             if any(existing.window == label for existing in windows):
                 continue
             windows.append(
@@ -251,9 +249,8 @@ class OpenAISubscriptionSampler:
 
 
 def _window_label(window_seconds: int) -> str:
-    """This provider names its windows ``primary``/``secondary``, so the operator-facing
-    label is derived from the length instead — giving the same ``5h``/``7d`` vocabulary
-    the Anthropic binding reports, for the two windows a ChatGPT plan meters on."""
+    """A window's label derived from its length (``5h``, ``7d``), since this provider names
+    its windows only ``primary``/``secondary``."""
     if window_seconds % 86_400 == 0:
         return f"{window_seconds // 86_400}d"
     if window_seconds % 3_600 == 0:

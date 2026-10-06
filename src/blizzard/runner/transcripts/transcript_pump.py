@@ -117,11 +117,9 @@ class _OutstandingBudget:
 @dataclass
 class _ShippedBytesMirror:
     """This run's own local mirror of each chunk's ``shipped_bytes`` total — seeded from
-    ONE plural read over every chunk this run's segments touch, then advanced locally
-    exactly where :meth:`_OutstandingBudget.accept` advances today, so a later segment of
-    the same chunk in the same run sees the current total without re-querying the store.
-    Never cross-tick: each ``run()``/``pump_lease()``/``drain_segment`` call seeds its own,
-    fresh — the per-tick re-derivation ``crash-correctness/transcripts.md`` relies on."""
+    one plural read, then advanced locally by each segment this run ships. Never
+    cross-tick: each call seeds its own (``blizzard-context:/architecture/crash-correctness/transcripts.md``
+    §The pump read)."""
 
     totals: dict[str, int]
 
@@ -151,11 +149,9 @@ class TranscriptPump:
         return CHUNK_TRANSCRIPT_MAX_BYTES if configured is None else configured
 
     def run(self, *, deadline: datetime | None = None) -> None:
-        """Pump every open segment. ``deadline`` bounds only how many ADDITIONAL segments a
+        """Pump every open segment. ``deadline`` bounds only how many additional segments a
         run attempts once one is already in flight — never the duration of the one being
-        read, which the harness source's own ``MAX_BATCH_BYTES`` window bounds instead, not
-        wall-clock. ``TranscriptDrain.run`` passes only a FRACTION of its own budget,
-        reserving the rest for the flush."""
+        read."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
@@ -539,9 +535,8 @@ def _late_link_wires(batch: TranscriptBatch, start_index: int, parents: Mapping[
 
 
 def _output_patch_wire(late: LateToolOutput, index: int) -> dict[str, Any]:
-    """A `tool` turn carrying ONLY an output, for the call named by ``tool_use_id``. A reader
-    merges it onto that call; one that does not is left with a card it can recognize and skip,
-    never a second call that looks like it really happened."""
+    """A `tool` turn carrying only an output, for the call named by ``tool_use_id``, marked
+    ``output_patch`` so it never reads as a second call."""
     return {
         "index": index,
         "kind": "tool",
@@ -586,8 +581,7 @@ def _late_sidechain_wire(sidechain: SidechainConversation, index: int, parent_to
 
 
 def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
-    # Sidechain turns carry no index of their own — #247's TurnSegmentView.index offsets the
-    # *linked* stream, so these are addressed by position within `turns`.
+    # Sidechain turns carry no index of their own; they are addressed by position within `turns`.
     return {
         "agent_id": sidechain.agent_id,
         "agent_type": sidechain.agent_type,

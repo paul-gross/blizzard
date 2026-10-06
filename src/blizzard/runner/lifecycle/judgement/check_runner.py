@@ -32,8 +32,7 @@ class ICheckRunner(Protocol):
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
         """Run ``command`` in ``cwd`` under a ``timeout`` (seconds), returning its
-        pass/fail and a bounded output tail. A non-zero exit is a red check; a timeout is
-        a red check too (never a raise — a hung check cannot be allowed to wedge the
-        tick). The child environment is built from the worker-env allowlist
-        (``bzh:worker-env-allowlist``), never a daemon-secret-carrying ``os.environ`` copy."""
+        pass/fail and a bounded output tail. A non-zero exit or a timeout is a failed
+        outcome, never a raise. The child environment is the worker-env allowlist
+        (``bzh:worker-env-allowlist``), never an ``os.environ`` copy."""
         ...

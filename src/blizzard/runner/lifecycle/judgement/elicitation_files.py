@@ -39,8 +39,8 @@ class ElicitationFiles:
 
     def cleanup(self, lease_id: str, epoch: int, through_attempt: int) -> None:
         """Remove every attempt's output file for this ``(lease_id, epoch)``, bounded one
-        past the durably recorded relaunch count for the same un-armable-gap reason
-        :meth:`~blizzard.runner.leases.worker_stdout.WorkerStdoutFiles.cleanup` is bounded."""
+        past the durably recorded relaunch count; the bound's reason is
+        ``src/blizzard/runner/leases/worker_stdout.py``'s ``WorkerStdoutFiles.cleanup``."""
         for attempt in range(0, through_attempt + 2):
             with contextlib.suppress(OSError):
                 os.remove(self.output_path(lease_id, epoch, attempt))

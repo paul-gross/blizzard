@@ -1,8 +1,7 @@
 """Process-liveness by (pid, start time) — the reap signal.
 
 A bare pid check is unsafe: the OS reuses pids, so this probe keys on **pid AND the
-recorded process start time together**. It is a seam (``bzh:pluggable-seams``); the Linux
-``/proc`` adapter is the reference binding.
+recorded process start time together**. It is a seam (``bzh:pluggable-seams``).
 """
 
 from __future__ import annotations

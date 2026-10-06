@@ -1,9 +1,5 @@
-"""A one-shot, argv-based subprocess seam — distinct from
-:class:`~blizzard.runner.lifecycle.judgement.check_runner.ICheckRunner` (an authored shell string, no stdin) and
-:class:`~blizzard.runner.harness.process_launch.ProcessLauncher` (a long-lived worker child
-with its own process group and parent-death signal). A credential renewer drives a vendor CLI
-that reads its request off stdin and exits on EOF — argv, stdin, and a bounded timeout are the
-whole shape that needs (``bzh:seam-size-ceiling``, ``bzh:pluggable-seams``)."""
+"""A one-shot, argv-based subprocess seam: argv, stdin, an environment, and a bounded timeout,
+for a vendor CLI that reads its request off stdin and exits on EOF (``bzh:pluggable-seams``)."""
 
 from __future__ import annotations
 

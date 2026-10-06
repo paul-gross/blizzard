@@ -1,7 +1,4 @@
-"""The runner event-publishing seam — the inner-layer Protocol every
-publishing mutation seam holds in place of the concrete
-:class:`~blizzard.runner.events.broker.EventBroker` (``bzh:dependency-inversion``), which
-stays a composition-root-only import."""
+"""The runner event-publishing seam (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
@@ -17,8 +14,7 @@ from blizzard.foundation.runner_event_types import (
 
 
 class IRunnerEventPublisher(Protocol):
-    """The six ``publish_*`` calls a runner mutation seam may make. Structurally satisfied by
-    :class:`~blizzard.runner.events.broker.EventBroker` — no explicit inheritance needed."""
+    """The ``publish_*`` calls a runner mutation seam may make; each returns the published event's sequence number."""
 
     def publish_lease_changed(self, lease_id: str, chunk_id: str, *, cause: LeaseChangeCause) -> int: ...
 

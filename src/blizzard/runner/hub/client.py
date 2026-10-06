@@ -1,8 +1,4 @@
-"""The hub-client seam — the runner's outbound edge to the hub HTTP API.
-
-The runner talks to the hub outbound-only. This Protocol is the seam; the httpx adapter
-under ``internal/`` is the reference binding, and a test injects a fake.
-"""
+"""The hub-client seam — the runner's outbound-only edge to the hub HTTP API."""
 
 from __future__ import annotations
 
@@ -28,11 +24,7 @@ class HubClientError(RuntimeError):
 class ChunkNotFoundError(HubClientError):
     """The hub reports a chunk unknown (404) — terminal, not transient.
 
-    Raised by :meth:`IHubClient.get_envelope` and, at the chunk-view cache layer
-    (:mod:`blizzard.runner.hub.chunk_status_cache`, not ``IHubClient`` itself —
-    ``IHubClient.chunk_statuses`` never raises it for an unknown id), by
-    :meth:`~blizzard.runner.hub.chunk_status_cache.IChunkViews.get`. Still a
-    :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
+    Still a :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
 
 
 class ChunkEndedError(HubClientError):
@@ -273,10 +265,7 @@ class TranscriptPushAck:
 
 
 class IChunkStatusReader(Protocol):
-    """One method of :class:`IHubClient`'s thirteen (the seam-size ceiling: a new consumer
-    re-types to the capability it calls, not the whole wide client). ``IHubClient``
-    composes this rather than re-declaring the method — one contract, not two copies free
-    to drift."""
+    """The chunk-status read alone, narrowed from :class:`IHubClient` (``bzh:seam-size-ceiling``)."""
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
@@ -290,10 +279,8 @@ class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
-        """The FILL read — at most one matched entry while this runner holds a token
-        (``POST /api/fleet/queue/peek``); the reference binding falls back to the legacy,
-        unfiltered ``GET`` on a ``401``, so every caller here sees one uniform call
-        regardless of which verb actually served it."""
+        """The FILL read — the queue entries matching ``capabilities`` under ``policy``; at most
+        one while this runner holds a token."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:

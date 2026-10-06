@@ -145,8 +145,7 @@ class OutboundFacts:
 
     def transcript_truncated(self, *, chunk_id: str, segment_id: str, reason: str, at: datetime) -> None:
         """A transcript segment stopped shipping content, surfaced as a
-        ``warning`` operational event on the FACT lane. Truncation is never silent: it is
-        also a field on the segment itself."""
+        ``warning`` operational event on the FACT lane."""
         fields = transcript_truncated_event(segment_id=segment_id, reason=reason)
         self._event(fields, chunk_id=chunk_id, lease_id=None, node_name=None, at=at)
 

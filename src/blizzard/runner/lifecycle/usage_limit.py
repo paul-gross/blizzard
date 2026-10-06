@@ -109,12 +109,8 @@ def classify_judge_usage_limit(
 
 def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit) -> None:
     """Engage the brake for a limited judge elicitation, then park the lease in place (the
-    process has already exited — nothing to kill). The elicitation record is left standing,
-    on purpose: :meth:`~blizzard.runner.lifecycle.dormant.DormantSession.on_unpause` reads it back
-    to tell a judge-side park from a worker-side one, and re-runs `Judgement` (a fresh
-    elicitation) rather than waking a worker whose own turn already finished — clearing here
-    would erase that signal. Never routed through ``Judgement._lost``: that path's staleness
-    bound would eventually fail the attempt, exactly what a usage-limit pause must not do."""
+    process has already exited — nothing to kill). The elicitation record is left standing:
+    it marks the park as judge-side. A usage-limit pause never fails the attempt."""
     session = lease.session
     assert session is not None  # only reached from a limit `classify_judge_usage_limit` returned
     _engage(ctx, session.harness_id, limit)
