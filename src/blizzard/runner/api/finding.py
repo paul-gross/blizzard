@@ -1,8 +1,7 @@
 """``GET /api/leases/{lease_id}/findings`` and its ``/{finding_id}`` sibling — the
 findings a worker's own chunk's accepted, minted garden proposal answers.
 Lease-scoped and token-authorized, then forwarded to the hub as the runner
-principal — the shape ``runner/api/garden.py`` already sets for a lease-token-authorized,
-hub-proxied read (``bzh:pluggable-seams``)."""
+principal (``bzh:pluggable-seams``)."""
 
 from __future__ import annotations
 
@@ -19,9 +18,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/leases/{lease_id}/findings", response_model=list[FindingView])
 def list_findings(lease_id: str, request: Request) -> list[FindingView]:
-    """Forward this lease's chunk's own answered-findings read to the hub — the layered
-    pass-through. A chunk answering no accepted, minted garden proposal reaches this only
-    as the hub's own refusal, forwarded verbatim rather than answered as an empty list."""
+    """Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "finding").get(
         f"/api/fleet/chunks/{lease.chunk_id}/findings", chunk_id=lease.chunk_id
@@ -31,9 +28,7 @@ def list_findings(lease_id: str, request: Request) -> list[FindingView]:
 
 @router.get("/leases/{lease_id}/findings/{finding_id}", response_model=FindingView)
 def get_finding(lease_id: str, finding_id: str, request: Request) -> FindingView:
-    """One finding within this lease's chunk's own answered set — forwarded the same
-    way; an id outside that set (or a chunk answering no such proposal at all) is the
-    hub's own refusal, forwarded verbatim."""
+    """Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "finding").get(
         f"/api/fleet/chunks/{lease.chunk_id}/findings/{quote(finding_id, safe='')}",

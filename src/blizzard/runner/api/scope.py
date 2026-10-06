@@ -1,7 +1,5 @@
-"""``GET /api/leases/{lease_id}/scopes`` — the deployment's scope vocabulary, lease-scoped
-and token-authorized, then forwarded to the hub as the runner
-principal — the shape ``runner/api/garden.py`` already sets for a lease-token-authorized,
-hub-proxied read (``bzh:pluggable-seams``)."""
+"""``GET /api/leases/{lease_id}/scopes`` — the deployment's scope vocabulary, lease-token-authorized
+and forwarded to the hub as the runner principal."""
 
 from __future__ import annotations
 

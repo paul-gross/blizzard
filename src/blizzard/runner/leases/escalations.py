@@ -52,10 +52,10 @@ ESCALATION_TRANSITIONS: Mapping[EscalationState, frozenset[EscalationVerb]] = Ma
 @domain_model
 @dataclass(frozen=True)
 class ParkedEscalation:
-    """A closed-``escalated`` lease not yet superseded — the status view's read.
+    """A closed-``escalated`` lease not yet superseded.
 
-    Open until a later lease is minted for the chunk, or the hub resolves it terminally and
-    PULL records an ``escalation_closures`` mark (#292) — two supersessions, no flag."""
+    Open until a later lease is minted for the chunk, or an ``escalation_closures`` mark
+    records a terminal resolution — two supersessions, no flag."""
 
     lease_id: str
     chunk_id: str

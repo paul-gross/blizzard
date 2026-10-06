@@ -4,8 +4,7 @@ The only module under ``src/`` that names a concrete ``runner/store/internal/`` 
 asserted by
 ``tests/test_layering.py::test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter``
 — every other collaborator takes a Protocol seam or the
-:class:`~blizzard.runner.stores.RunnerStores` bundle this builds.
-Mirrors :func:`blizzard.hub.composition.build_services`."""
+:class:`~blizzard.runner.stores.RunnerStores` bundle this builds."""
 
 from __future__ import annotations
 
@@ -304,9 +303,8 @@ def build_stores_and_connections(
     engine: Engine, *, errors: RunnerStoreErrorFactory
 ) -> tuple[RunnerStores, RunnerStoreConnections]:
     """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
-    shares — for the one caller (``build_hosted_app``) that wires a second ``store/internal/``-
-    style collaborator (``JtiCacheRepository``) over the same engine, so it reuses this instance
-    instead of building its own."""
+    shares, so a caller can wire a further ``store/internal/`` collaborator over the same
+    instance."""
     connections = RunnerStoreConnections(engine, errors)
     return _build_stores(connections), connections
 

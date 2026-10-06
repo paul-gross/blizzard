@@ -51,11 +51,9 @@ class IReadCheckRepository(Protocol):
     """Read-only check/nudge queries (held by read-path edges)."""
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
-        """``True`` iff this attempt's `produces`-unmet nudge is already spent
-        — the durable guard consulted before resuming a worker
-        session to nudge it. Written by :meth:`~IWriteCheckRepository.record_nudge_fired`
-        *before* that resume runs, so a crash between the two still leaves this reading
-        ``True`` on the next pass."""
+        """``True`` iff this attempt's `produces`-unmet nudge is already spent. Written by
+        :meth:`~IWriteCheckRepository.record_nudge_fired` *before* the nudge resume runs, so a
+        crash between the two still reads ``True``."""
         ...
 
     def checks_ran(self, lease_id: str, epoch: int) -> bool:

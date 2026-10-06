@@ -40,9 +40,8 @@ class UsageSample:
     estimated_cost_usd: float | None = None
     #: What ``cost_usd`` covers; ``None`` says the figure is this invocation's alone.
     cost_scope_tokens: int | None = None
-    #: The invocation's own recorded harness identity — stamped by the
-    #: caller from the lease's own session/spawn-generation records, never resolved
-    #: by the parser itself. ``None`` on a sample no caller has stamped yet.
+    #: The invocation's own recorded harness identity, never resolved by the parser.
+    #: ``None`` on a sample not yet stamped.
     harness_id: str | None = None
     #: The generation's own recorded harness build version, alongside ``harness_id``.
     #: ``None`` when the generation recorded none.
@@ -58,15 +57,11 @@ class UsageSample:
 @dataclass(frozen=True)
 class UsageLimit:
     """One invocation classified as exited over the account's own subscription usage
-    limit — a fact the adapter translates from its harness's own output,
-    never a decision (``bzh:deterministic-shell``): the loop is what engages the pause
-    brake from it.
+    limit — a fact the adapter translates from its harness's own output, never a decision
+    (``bzh:deterministic-shell``).
 
-    ``resets_at`` is ``None`` when the classifier could not parse a reset time from the
-    harness's own report — never a guess, never a raise. ``detail`` is the harness's own
-    free-text report, carried through and logged at engagement for diagnosis — the brake's
-    own reason string stays the fixed ``usage limit: <harness> (resets <time>)`` shape
-    and never repeats it."""
+    ``resets_at`` is ``None`` when no reset time could be parsed from the harness's own
+    report — never a guess, never a raise. ``detail`` is the harness's own free-text report."""
 
     resets_at: datetime | None
     detail: str
@@ -86,8 +81,7 @@ class SessionCostBasis:
 def invocation_cost(sample: UsageSample, prior: SessionCostBasis | None) -> float | None:
     """What ``sample`` alone cost, reading its reported figure against ``prior``.
 
-    ``None`` is cost unknown; the runner's own cap-facing total still flags that as PARTIAL — both caps
-    read billed cost alone, never an estimate. The two readings, and the one shape they cannot be told
+    ``None`` is cost unknown. The two readings, and the one shape they cannot be told
     apart in, are owned by ``docs/deployment/spend.md``."""
     if sample.cost_usd is None:
         return None

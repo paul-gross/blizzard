@@ -4,8 +4,7 @@ history.
 Lease-scoped and token-authorized, then forwarded to the hub as the runner principal.
 ``503`` unwired, ``404`` unknown/closed lease, ``403`` bad token, ``502`` on a failed
 forward; authorization resolves before the hub is consulted. The merge into one
-kind-discriminated timeline is this route's own projection (plan: hold wire/ to
-its stated contract) — ``ChunkHistoryView`` stays a pydantic shape, never a projection."""
+kind-discriminated timeline is this route's own projection."""
 
 from __future__ import annotations
 
@@ -25,10 +24,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/leases/{lease_id}/history", response_model=list[HistoryRowView])
 def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     """The worker's own chunk's timeline — transitions, migrations, and bounces merged
-    oldest-first into one kind-discriminated read. Does not include the in-flight
-    node-step this call is itself part of: a transition is recorded only once an
-    attempt completes, so a worker must not read its own current step's absence as a
-    gap in the history."""
+    oldest-first into one kind-discriminated read. Excludes the in-flight node-step."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "history").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
     return _rows(ChunkHistoryView.model_validate(upstream.json()))

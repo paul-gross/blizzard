@@ -87,8 +87,7 @@ def boundary_transition_applies(boundary: InvocationBoundary | None, transition:
 
 def worker_boundary_open(boundaries: Iterable[InvocationBoundary], generation: int) -> bool:
     """Whether some worker-starting kind (:data:`WORKER_STARTING_KINDS`) already holds an open
-    boundary at ``generation`` — one worker-starting boundary per generation, so a wake never
-    opens a second beside a nudge's own."""
+    boundary at ``generation`` — one worker-starting boundary per generation."""
     return any(b.generation == generation and b.kind in WORKER_STARTING_KINDS and b.state == "open" for b in boundaries)
 
 
@@ -121,8 +120,7 @@ class IReadInvocationBoundaryRepository(Protocol):
         self, lease_id: str, generation: int, kind: InvocationBoundaryKind
     ) -> InvocationBoundaryStart | None:
         """Where this invocation's range currently starts — the newest advance's start, the
-        marker's own when there is none, or ``None`` when it was never opened. The read
-        interrupted-usage recovery keys a standing judge's range from."""
+        marker's own when there is none, or ``None`` when it was never opened."""
         ...
 
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundary]:

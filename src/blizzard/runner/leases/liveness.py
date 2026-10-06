@@ -41,15 +41,14 @@ class IReadLeaseLivenessRepository(Protocol):
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
         """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
 
-        The primary signal in the staleness baseline; on ``None`` the caller falls back to
-        :meth:`latest_spawn`."""
+        The primary signal in the staleness baseline; :meth:`latest_spawn` is the fallback."""
         ...
 
     def latest_spawn(self, lease_id: str) -> datetime | None:
         """When this lease's newest process was spawned, or ``None`` if it never was.
 
-        The fallback half of the staleness baseline. A lease outlives its
-        processes, so the newest ``lease_spawns`` row is when the running worker started."""
+        A lease outlives its processes, so the newest ``lease_spawns`` row is when the running
+        worker started."""
         ...
 
     def liveness_facts(self, lease_ids: Sequence[str]) -> dict[str, LeaseLivenessFacts]:
@@ -67,10 +66,8 @@ class IReadLeaseLivenessRepository(Protocol):
 
     def lease_generation(self, lease_id: str) -> int:
         """This lease's current spawn generation — the count of its ``lease_spawns`` rows:
-        1 at the initial spawn, incrementing at each resume that calls
-        ``record_spawn`` again under this lease. Usage's idempotency co-key
-        (:meth:`IWriteLeaseLivenessRepository.record_usage`) and its kind discriminator —
-        generation 1 is a ``spawn``, every later generation a ``resume``."""
+        1 at the initial spawn, incrementing at each resume that calls ``record_spawn``
+        again under this lease."""
         ...
 
     def latest_spawn_harness_version(self, lease_id: str) -> str | None:
@@ -82,7 +79,7 @@ class IReadLeaseLivenessRepository(Protocol):
 
 
 class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
-    """Read-write liveness store — held only by the domain (the loop steps)."""
+    """Read-write liveness store — held only by the domain."""
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
         """Append a heartbeat for a lease — a worker tool call fired its hook."""
@@ -151,8 +148,7 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         """A provisional generation's identity never arrived: timeout, a malformed
         reply, or the process exiting first. Marks the newest still-open ``lease_spawns``
         row rather than leaving it ambiguously open forever; the lease's own ``session_id``
-        stays ``None``, so REAP's ordinary "unspawned" recovery reaps it exactly as it would
-        any lease that never got this far — this is a record of why, not a new state."""
+        stays ``None`` — this is a record of why, not a new state."""
         ...
 
 

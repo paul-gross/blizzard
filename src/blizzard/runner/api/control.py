@@ -23,9 +23,9 @@ class RunnerControlView(BaseModel):
     """The runner singleton's derived pause state."""
 
     runner_id: str
-    local_paused: bool  # this runner's own brake — "I won't try"
-    hub_paused: bool  # the hub's brake, as last mirrored by PULL
-    paused: bool  # effective: the OR of the two — what FILL actually adheres to
+    local_paused: bool  # this runner's own brake
+    hub_paused: bool  # the hub's brake, as last mirrored
+    paused: bool  # effective: the OR of the two
 
 
 class RunnerControlPatch(BaseModel):
@@ -40,8 +40,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     """Set this runner's own pause brake — it starts no new workers.
 
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
-    writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
-    deferred. Not a drain: a live worker is left running, and no retry is consumed."""
+    writes the hub's flag. Not a drain: a live worker is left running."""
     wiring = RunnerWiring.of(request)
     config = wiring.config()
     wiring.pause().set_local_pause(config.runner_id, paused=request_body.paused, by=request_body.by)

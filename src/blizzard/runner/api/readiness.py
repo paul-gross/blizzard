@@ -3,7 +3,7 @@
 "Is this daemon fit to serve?" — its store reachable and at the expected schema
 revision. Read-only over its wiring (``bzh:controller-read-only``): it never opens the
 store itself. With no readiness service wired, the probe reports ``ready=false`` with a
-detail rather than pretending — the daemon's ``host`` path always wires one."""
+detail rather than pretending."""
 
 from __future__ import annotations
 
