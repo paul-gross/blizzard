@@ -1025,9 +1025,8 @@ def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: 
 
 @pytest.mark.unit
 def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_path):  # type: ignore[no-untyped-def]
-    """A fresh spawn is generation 1, keyed on the lease's own (chunk, node, epoch), read
-    back inside ``record_spawn``'s own transaction. A rotation to a genuinely NEW
-    session_id leaves the prior generation open — see the resume test below for the other case."""
+    """A fresh spawn is generation 1, keyed on the lease's own (chunk, node, epoch). A
+    rotation to a new session_id opens generation 2 and leaves the prior one open."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn(
@@ -1495,9 +1494,9 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
 
 @pytest.mark.unit
 def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # type: ignore[no-untyped-def]
-    """A bare SQLite `INTEGER PRIMARY KEY` reuses a deleted row's rowid —
-    exactly what pruning the highest-seq acked row sets up. A reissued seq the hub already
-    marked applied would read as a replay, silently dropping genuinely new content."""
+    """A bare SQLite `INTEGER PRIMARY KEY` reuses a deleted row's rowid, which pruning
+    the highest-seq acked row sets up; the next transcript seq is still fresh. A reissued
+    seq would read as a replay of one already applied."""
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(
@@ -1610,9 +1609,7 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
 
 @pytest.mark.unit
 def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # type: ignore[no-untyped-def]
-    """A closure for a lease that never spawned (or whose segments already finalized)
-    enqueues no marker — the existing 30+ callers of ``record_closure`` in tests that
-    never touch transcripts are unaffected."""
+    """A closure for a lease that never spawned enqueues no transcript marker."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)

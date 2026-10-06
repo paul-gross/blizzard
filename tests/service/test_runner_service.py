@@ -164,9 +164,7 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
 
 
 def _local_pause_reason(config: RunnerConfig) -> str | None:
-    """The runner's own store, read directly — no local API server is up in this tier
-    (``LoopWiring.tick_once`` alone drives the loop), so the store is the ground truth
-    the runner's own ``GET /api/runner`` would otherwise mirror."""
+    """The runner's own store, read directly — no local API server is up in this tier."""
     engine = create_engine_from_url(config.db_url)
     try:
         return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason(config.runner_id)
@@ -177,9 +175,9 @@ def _local_pause_reason(config: RunnerConfig) -> str | None:
 def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_failing_the_attempt(
     tmp_path: Path,
 ) -> None:
-    """A worker generation that exits usage-limited engages the runner's own
-    local pause brake, reason mirrored to the hub, no retry spent and no escalation —
-    never the hub's own brake, and the chunk never fails."""
+    """A worker generation that exits usage-limited engages the runner's local pause
+    brake, its reason mirrored to the hub, with the chunk still running, unescalated, on
+    its first epoch."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -190,8 +188,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        # Unset, the classifier's transcript read falls back to ``~/.claude/projects`` and
-        # silently finds nothing (bzh:crash-sweep's own fix for the same gap).
+        # Points the transcript read at where the mock harness writes.
         config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
 
         engaged = poll_until(
@@ -313,7 +310,7 @@ def _pending_transcript_outbound(config: RunnerConfig) -> int:
 
 def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> None:
     """With the transcript route 503ing, the fact lane still lands the chunk while
-    transcript facts buffer; the backlog flushes with no loss or duplication on return."""
+    transcript facts buffer; the backlog drains once the route returns."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
@@ -855,14 +852,13 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
 
                 archived = panel.get(f"/api/leases/{lease_id}/transcript").json()
                 assert archived["provenance"] == "archived", archived
-                # Every kind survives the trip since the read model was widened —
-                # a thinking turn reaching the panel is what a narrowing read would lose.
+                # A thinking turn reaches the panel alongside the assistant turn.
                 assert [t["text"] for t in archived["turns"]] == ["from the hub archive", "and its reasoning"], archived
                 assert [t["kind"] for t in archived["turns"]] == ["asst", "thinking"], archived
                 assert archived["hub_unreachable"] is False, archived
 
-                # The rotation case (#249's own acceptance criterion): the local file is
-                # gone and the panel is undegraded, because the hub still answers.
+                # The rotation case: the local file is gone and the panel is undegraded,
+                # because the hub still answers.
                 shutil.rmtree(transcripts_root)
                 rotated = panel.get(f"/api/leases/{lease_id}/transcript").json()
                 assert rotated["provenance"] == "archived", rotated
@@ -1042,9 +1038,8 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
 
 
 def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
-    """SIGTERM sets ``app.state.shutdown`` synchronously: the process exits well
-    inside uvicorn's graceful-drain bound with a client still connected, so the crash
-    sweep's whole-process SIGTERM case finds the resume-marking ``finally`` unstranded."""
+    """SIGTERM exits the process within 2s — inside uvicorn's 5s graceful-drain bound —
+    with a client still connected to the event stream."""
     runner_dir = tmp_path / "runner"
     runner_port = _free_port()
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")

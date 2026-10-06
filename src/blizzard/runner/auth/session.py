@@ -87,8 +87,7 @@ class SessionCookie:
 
     def read(self, cookie: str, *, now: datetime) -> RunnerSession | None:
         """The signed cookie's contents, or ``None`` on a bad signature, malformed payload,
-        or an expired session — the caller (``runner/api/federation.py``'s
-        ``require_human_session``) treats every one of these as "no session"."""
+        or an expired session — the three are indistinguishable to the caller."""
         try:
             encoded, signature = cookie.split(".", 1)
         except ValueError:

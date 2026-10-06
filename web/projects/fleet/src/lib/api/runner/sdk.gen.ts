@@ -45,8 +45,7 @@ export const loginApiAuthLoginGet = <ThrowOnError extends boolean = false>(optio
  * Clear the runner's own session cookie. Public, like the bounce it complements:
  * logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
  * The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
- * it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
- * through the bounce; ending fleet-wide access is hub logout, which stops renewals.
+ * it *is* the logout. It ends this runner's session only, not any hub-side session.
  */
 export const logoutApiAuthLogoutPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutApiAuthLogoutPostData, ThrowOnError>): RequestResult<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError>({ url: '/api/auth/logout', ...options });
 

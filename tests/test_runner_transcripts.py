@@ -123,8 +123,7 @@ def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_thinking_turn_carries_through_as_its_own_kind(tmp_path: Path) -> None:
-    """A thinking block is now a panel turn in its own right —
-    previously the projection's own ``kind != "thinking"`` filter dropped it entirely."""
+    """A thinking block is a turn of its own ``thinking`` kind."""
     _write(tmp_path, [fx.user_env("hello"), fx.thinking_block(text="pondering", signature=None)])
     transcript = _read(tmp_path)
 
@@ -146,7 +145,7 @@ def test_a_redacted_thinking_turn_carries_presence_not_prose(tmp_path: Path) -> 
 @pytest.mark.component
 def test_a_sidecar_backed_sidechain_nests_under_its_spawning_tool_turn(tmp_path: Path) -> None:
     """A *resolved* sidechain (link route 1, via a real sidecar file) nests under its
-    spawning tool turn — it no longer vanishes."""
+    spawning tool turn."""
     _write(
         tmp_path,
         [
@@ -219,8 +218,8 @@ def test_truncated_final_line_is_dropped_silently(tmp_path: Path) -> None:
     assert transcript.turns[0].text == "build the thing"
 
 
-# Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer; the tool-input
-# MAX_BLOCK_CHARS below applies only once a serialized input would exceed it.
+# Caps — MAX_TURNS is the projection's; MAX_BLOCK_CHARS (text) is the normalizer's; the
+# tool-input MAX_BLOCK_CHARS below applies only once a serialized input would exceed it.
 
 
 @pytest.mark.component
@@ -273,8 +272,7 @@ def test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string
 
 @pytest.mark.component
 def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_path: Path) -> None:
-    """The wire's structured ``input`` — the projection no longer
-    re-materializes it to a JSON string; rendering is the viewer's job."""
+    """A tool input below the cap carries through as its structured object."""
     _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "ls"})])
     transcript = _read(tmp_path)
 
@@ -350,9 +348,7 @@ def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> Transcript
 
 @pytest.mark.unit
 def test_a_sidechain_only_truncation_now_reaches_the_panels_truncated_flag() -> None:
-    """Inverted: this projection now carries every sidechain through,
-    so a sidecar-only read-budget truncation cuts content the panel renders and must
-    raise its TRUNCATED banner — the opposite of when sidechains were discarded."""
+    """A sidecar-only read-budget truncation sets the transcript's ``truncated`` flag."""
     source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=False, sidechain_truncated=True)})
 
     transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)
@@ -362,9 +358,7 @@ def test_a_sidechain_only_truncation_now_reaches_the_panels_truncated_flag() -> 
 
 @pytest.mark.unit
 def test_a_main_file_truncation_does_reach_the_panels_truncated_flag() -> None:
-    """The companion that keeps the case above from being satisfiable by ignoring both
-    flags: a main-file tail cap did cut content the panel renders, so it must surface.
-    """
+    """A main-file tail-cap truncation sets the transcript's ``truncated`` flag."""
     source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=True, sidechain_truncated=False)})
 
     transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)

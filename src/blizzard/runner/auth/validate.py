@@ -33,8 +33,7 @@ class FederationTokenError(Exception):
 @domain_model
 @dataclass(frozen=True)
 class FederatedIdentity:
-    """The claims a validated federation token resolves to — what
-    ``runner/auth/roles.py`` resolves a local role from."""
+    """The claims a validated federation token resolves to."""
 
     user_id: str
     username: str

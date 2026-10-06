@@ -31,8 +31,8 @@ def test_init_scaffolds_the_plugin_and_references_it_from_the_worker_config(tmp_
 
 
 def test_init_scaffolds_a_repointed_worker_config_path_not_the_default(tmp_path: Path) -> None:
-    """A configured ``opencode.worker_config_path`` — the same one the adapter reads at
-    runtime — must be where ``init`` scaffolds to, not always the hardcoded default."""
+    """A configured ``opencode.worker_config_path`` is where ``init`` scaffolds to, and
+    the default path is left unwritten."""
     default_config = RunnerConfig.scaffold(tmp_path)
     custom_path = tmp_path / "custom" / "opencode-config.json"
     custom_path.parent.mkdir(parents=True)

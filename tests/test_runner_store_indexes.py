@@ -2,8 +2,7 @@
 ``tests/test_chunk_fact_table_indexes.py``'s shape: (a) five real reads each plan as an
 index search off their own captured statement, never a table scan; (b) a plan-capture sweep
 over a multi-tick loop run asserts no runner-store ``SELECT`` falls back to sqlite's own
-``AUTOMATIC COVERING INDEX``. The replaced ``ix_transcript_segments_chunk_id`` is asserted
-absent."""
+``AUTOMATIC COVERING INDEX``; (c) ``ix_transcript_segments_chunk_id`` is absent."""
 
 from __future__ import annotations
 

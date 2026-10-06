@@ -95,7 +95,7 @@ class TranscriptLedgerStore:
 
     def outstanding_transcript_buffer_bytes(self) -> int:
         # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
-        # with the encoded byte length here (same fact the pump's own `_byte_cost` relies on).
+        # with the encoded byte length here.
         stmt = select(func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)).where(
             transcript_outbound_buffer.c.acked_at.is_(None)
         )

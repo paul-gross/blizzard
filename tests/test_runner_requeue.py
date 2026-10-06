@@ -167,8 +167,7 @@ def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_chang
 
 
 def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The pasted-command flow with no takeover ever recorded — a human resumed the
-    escalation's surfaced command by hand and fixed it in place."""
+    """An escalated chunk with no takeover ever recorded still takes a requeue mark."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
 

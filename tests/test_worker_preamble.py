@@ -141,8 +141,7 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     assert '| `ask "<question>"`' in out
     assert "blizzard runner heartbeat" in out
     assert "blizzard runner session-end" in out
-    # The worker surface is discovered from the CLI's own audience labels plus per-command
-    # `--help`, not restated here — the preamble names the rule, the CLI owns the detail.
+    # The preamble points at the CLI's audience labels and `--help` rather than listing commands.
     assert "labeled **Worker:**" in out
     assert "--help" in out
 

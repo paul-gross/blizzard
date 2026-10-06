@@ -1,7 +1,7 @@
 """``jwt_jti_seen`` adapter over ``RunnerStoreConnections`` (package-private).
 
-The caller sees only :class:`~blizzard.runner.auth.jti_cache.IJtiCache`. ``IntegrityError``
-is the one ``sqlalchemy`` name held locally — that collision *is* the replay check.
+Implements :class:`~blizzard.runner.auth.jti_cache.IJtiCache`. ``IntegrityError`` is the one
+``sqlalchemy`` name held locally — a primary-key collision on ``jti`` *is* the replay check.
 """
 
 from __future__ import annotations

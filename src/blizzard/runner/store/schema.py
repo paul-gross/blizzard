@@ -694,9 +694,7 @@ credential_renewal_outcomes = Table(
 
 # --- Live session-context samples (the warn lane) ----------------------------
 # Append-only, one row per successful sample of a running lease's session context.
-# Observation only: nothing reads these to gate a spawn — `rotate.max_context_tokens`
-# measures the pool head at spawn time instead. What these add is the curve WITHIN an
-# invocation, which is what a future enforcement line would be set from.
+# Observation only — the curve within an invocation, never a spawn gate.
 
 context_samples = Table(
     "context_samples",

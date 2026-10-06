@@ -158,7 +158,7 @@ def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A hook must never break the worker's exit — no identity means a clean skip."""
+    """No identity means a clean skip: exit 0, and no post attempted."""
     posted = False
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
@@ -176,7 +176,7 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unreachable runner is reported and swallowed — exit 0, the worker's exit unbroken."""
+    """An unreachable runner is reported and swallowed — exit 0."""
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
         raise httpx.ConnectError("connection refused")

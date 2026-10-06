@@ -17,14 +17,12 @@ class IReadTokenRepository(Protocol):
 
     def route_token(self, chunk_id: str) -> str | None:
         """The chunk's stashed route capability token, or ``None`` if never claimed here.
-        Stamped onto every chunk-scoped outbound payload at enqueue.
-        ``None`` is presented as an absent field, never fabricated."""
+        Never fabricated: a chunk with no claim here has no token."""
         ...
 
     def lease_token_hash(self, lease_id: str) -> str | None:
         """The lease's minted capability token hash, or ``None`` if never minted
-        here — what an attach authorization check compares a
-        presented plaintext's hash against."""
+        here."""
         ...
 
     def lease_for_token_hash(self, token_hash: str) -> str | None:
@@ -39,13 +37,12 @@ class IWriteTokenRepository(IReadTokenRepository, Protocol):
     def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
         """Stash a won claim's plaintext route token (upsert).
 
-        Called on a won claim with the token the claim response returned once. A fresh
-        claim overwrites a prior row for the same chunk."""
+        A later call for the same chunk overwrites the prior row."""
         ...
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
         """Persist a lease's capability-token hash.
 
-        Overwrite-safe: the implementation replaces any prior row, invalidating the
-        previous token. The plaintext is never persisted, only this sha256 hash."""
+        Overwrite-safe: a later call for the same lease supersedes the prior hash, invalidating
+        the previous token. The plaintext is never persisted, only this sha256 hash."""
         ...

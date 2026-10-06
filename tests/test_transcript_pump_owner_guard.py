@@ -1,9 +1,6 @@
-"""``TranscriptPump``'s per-segment read never raises on an unresolvable session owner, and
-never escalates on its own either — a deliberate choice, not an oversight. ``_pump_one`` now
-catches ``UnknownHarnessError``/``UnavailableHarnessError`` with a named guard alongside its
-callers' blanket per-segment isolation, logged with the owner detail and costing only
-``_NOT_ATTEMPTED`` for THIS segment. The lease it belongs to escalates, if at all, through
-its own dispatch path — not this read-only side lane."""
+"""``TranscriptPump`` skips only the segment whose session owner is unresolvable: that
+segment ships nothing and keeps no cursor, its lease stays active, no escalation opens, and
+the other segments still pump."""
 
 from __future__ import annotations
 

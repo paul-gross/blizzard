@@ -801,13 +801,12 @@ def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, boun
 
 @pytest.mark.component
 def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  # type: ignore[no-untyped-def]
-    """The regression this bound was rebuilt for. A usage fact carries one invocation's
-    CUMULATIVE tokens, which on a long session runs orders of magnitude above the context
-    that session actually ends holding — a real head measured 246M against a true 680k.
-    Sourcing the bound from usage rotated a head whose context was nowhere near the line."""
+    """A usage fact carries one invocation's cumulative tokens, far above the context the
+    session holds; the bound reads the transcript's context size, so a head whose usage
+    is past the bound but whose context is under it still resumes."""
     store = _store(tmp_path)
     head = _seed_head(store)
-    _seed_usage(store, tokens=246_000_000)  # what the old signal would have compared
+    _seed_usage(store, tokens=246_000_000)  # over the bound, and must not be what is compared
     env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1_000_000))
     source = FakeTranscriptSource(context_tokens_by_session={head: 680_409})
 
@@ -822,9 +821,8 @@ def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  
     ids=["under", "at", "over"],
 )
 def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path, invocations, bound, resumed):  # type: ignore[no-untyped-def]
-    """Every `usage_facts` row counts — `spawn`, `resume`, `judge`, `nudge` alike — so one
-    node-step burns two or three. An author setting this from a node-step count bounds the
-    lineage roughly three times tighter than they intend."""
+    """Every `usage_facts` row counts toward the bound, whatever its kind — here `spawn`
+    and `judge` rows alike."""
     store = _store(tmp_path)
     head = _seed_head(store)
     for generation in range(1, invocations + 1):
@@ -878,9 +876,8 @@ def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  # type: ignor
 
 @pytest.mark.component
 def test_model_drift_rotates_even_with_every_threshold_under_bound(tmp_path):  # type: ignore[no-untyped-def]
-    """A graph edit changed the pool's model list mid-chunk. The head stays on what it was
-    minted with — a cross-model resume is structurally impossible — so the change takes
-    effect at the next mint, which is where a fresh context is being built anyway."""
+    """A resolved model differing from the head's stamped one rotates the head, with every
+    threshold still under bound — a resume never crosses models."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
     _seed_usage(store, tokens=1)

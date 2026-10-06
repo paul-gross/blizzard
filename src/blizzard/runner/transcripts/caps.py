@@ -1,9 +1,8 @@
 """The transcript lane's byte ceilings — the DEFAULTS a ``[transcripts]`` override falls
 back to.
 
-A leaf module on purpose: both the enforcement site (`transcripts.transcript_pump`) and the
-config that overrides it (`runner.config`, which renders each default into its scaffolded
-template) need these, and the pump imports the config, so the config cannot import the pump."""
+A leaf module on purpose: it imports nothing, so both the enforcing and the overriding side
+can import it without a cycle."""
 
 from __future__ import annotations
 

@@ -39,8 +39,7 @@ _NOT_SUPERSEDED_BY_RESET = Unsuperseded(
 )
 # `bzh:open-facts-declare-closure`: a hub-terminal chunk retires its lease (`lease_closures`)
 # without ever writing a reset or a later overload, so a fact outliving its own lease closes
-# here too — mirroring `ask_store.py`'s own anti-join rather than leaning on every caller
-# scoping its read to `list_active_leases()`.
+# here too, whatever lease set a read is scoped to.
 _NOT_SUPERSEDED_BY_LEASE_CLOSURE = Unclosed(overload_facts.c.lease_id, lease_closures.c.lease_id)
 
 
