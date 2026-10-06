@@ -24,12 +24,38 @@ describe('design tokens', () => {
       '--cyan': '#5cd1e5',
       '--red': '#f05c6c',
       '--green': '#4fc57e',
-      '--label': '#5c7089',
+      '--label': '#98a8bd',
+      '--label-dim': '#7f91a9',
       '--text': '#b8c6d8',
     };
     for (const [name, value] of Object.entries(expected)) {
       expect(tokensCss).toContain(`${name}: ${value}`);
     }
+  });
+
+  it('keeps the muted text tokens legible and ordered', () => {
+    const token = (name: string): string =>
+      new RegExp(`${name}: (#[0-9a-f]{6})`).exec(tokensCss)![1];
+    const luminance = (hex: string): number => {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a: string, b: string): number => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    for (const name of ['--label', '--label-dim']) {
+      for (const bg of ['--bg', '--panel', '--panel-deep']) {
+        expect(contrast(token(name), token(bg))).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrast(token(name), token('--panel-hi'))).toBeGreaterThanOrEqual(3);
+    }
+    const order = ['--label-dim', '--label', '--text', '--snow'].map((n) => luminance(token(n)));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(new Set(order).size).toBe(order.length);
   });
 
   it('carries the overlay opacity scale (issue #78) verbatim', () => {
