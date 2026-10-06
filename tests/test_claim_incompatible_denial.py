@@ -75,17 +75,17 @@ def test_claim_allowed_when_capabilities_satisfy_the_chunk(tmp_path: Path) -> No
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
 
 
-def test_registration_with_no_capabilities_is_never_revalidated(tmp_path: Path) -> None:
+def test_registration_with_no_capabilities_is_refused(tmp_path: Path) -> None:
     """A registration reporting no capabilities at all — the previous-minor / never
-    re-registered case — skips the check entirely rather than meeting a denial it has no
-    wire branch for."""
+    re-registered case — is eligible for nothing, so its claim meets the incompatibility denial."""
     hub = build_hub(tmp_path)
     _register(hub)  # no `capabilities` field at all
-    chunk_id = _ingest(hub, "1", default_harnesses=["special-harness"])
+    chunk_id = _ingest(hub, "1")
 
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
 
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["incompatible_runner_id"] == "r1"
 
 
 def test_claim_denied_when_the_only_satisfying_capability_is_unavailable(tmp_path: Path) -> None:

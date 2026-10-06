@@ -47,7 +47,10 @@ def _ingest_promote_claim(forge: httpx.Client, hub: httpx.Client, title: str) ->
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    registered = hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"})
+    registered = hub.post(
+        "/api/fleet/runners",
+        json={"runner_id": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+    )
     assert registered.status_code == 201, registered.text
     claim = hub.post(
         "/api/fleet/routes",

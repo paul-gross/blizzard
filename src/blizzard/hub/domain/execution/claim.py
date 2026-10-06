@@ -99,7 +99,7 @@ class ClaimDeniedIncompatible(Exception):
     """The claiming runner's stored capabilities can no longer run every statically
     reachable runner-owned lineage from the chunk's current node — refused outright,
     mirroring :class:`ClaimDeniedDependency`'s shape. A registration
-    reporting no capabilities never reaches this check (see ``_claim_locked``)."""
+    reporting no capabilities is refused here too."""
 
     def __init__(self, *, chunk_id: str, runner_id: str) -> None:
         super().__init__(f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}")
@@ -167,7 +167,7 @@ def first_unmet_prerequisite(
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
     each its own error: ended, held route, not ``ready``, unmet prerequisite, unregistered, retired, then
-    incapable runner (a registration reporting no capabilities is not checked). The runner-paused brake is
+    incapable runner (a registration reporting no capabilities is incapable of everything). The runner-paused brake is
     judged before the lock (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
@@ -200,10 +200,7 @@ class ClaimAdmission:
         if registration is None:
             raise ClaimDeniedUnregistered(runner_id=runner_id)
         registration.refuse_if_retired(action="claim")
-        if (
-            registration.capabilities
-            and not EligibilityCheck(self.chunk, self.graph, node, registration.capabilities).eligible
-        ):
+        if not EligibilityCheck(self.chunk, self.graph, node, registration.capabilities).eligible:
             raise ClaimDeniedIncompatible(chunk_id=chunk_id, runner_id=runner_id)
         return node
 

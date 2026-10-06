@@ -16,6 +16,7 @@ import pytest
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
@@ -155,7 +156,9 @@ def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
 
-        client.register_runner("runner-parity", "ws1")
+        client.register_runner(
+            "runner-parity", "ws1", capabilities=(HarnessCapability("claude", tiers=["blizzard:basic"], default=True),)
+        )
         outcome = client.claim_route(
             ClaimRequest(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
         )

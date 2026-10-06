@@ -87,7 +87,9 @@ value to the `TurnKind` vocabulary is therefore breaking against the skew window
 The capability-matched fleet peek sits on the additive side of that same window from two directions at once:
 `POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a previous-minor runner simply never
 calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty like every
-other optional field on that model, so a previous-minor runner parses and registers exactly as it always has.
+other optional field on that model, so a previous-minor runner still parses and registers. An empty snapshot matches no
+chunk, though, so a runner that predates capability reporting registers but is never matched and has every claim
+refused; [`docs/upgrade.md`](./upgrade.md) owns that boundary.
 
 A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a previous-minor runner that
 has never heard of a declared roster simply omits it, and the hub falls back to its pre-existing age-gated membership

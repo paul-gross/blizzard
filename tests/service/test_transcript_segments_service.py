@@ -104,7 +104,14 @@ def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: P
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "lease transcript read")
-        register = hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "ws-1"})
+        register = hub.post(
+            "/api/fleet/runners",
+            json={
+                "runner_id": "r1",
+                "workspace_id": "ws-1",
+                "capabilities": [{"harness_id": "claude", "default": True}],
+            },
+        )
         assert register.status_code == 201, register.text
         enroll = hub.post("/api/runners/r1/enrollments")
         assert enroll.status_code == 201, enroll.text

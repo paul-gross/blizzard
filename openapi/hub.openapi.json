@@ -8977,7 +8977,7 @@
         "type": "object"
       },
       "RunnerCapability": {
-        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a runner that asserts none is treated as available.",
+        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is\neligible for nothing.",
         "properties": {
           "available": {
             "default": true,

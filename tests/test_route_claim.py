@@ -28,7 +28,14 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
 
 
 def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:  # type: ignore[no-untyped-def]
-    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": runner_id,
+            "workspace_id": workspace_id,
+            "capabilities": [{"harness_id": "claude", "default": True}],
+        },
+    )
     assert resp.status_code == 201, resp.text
 
 

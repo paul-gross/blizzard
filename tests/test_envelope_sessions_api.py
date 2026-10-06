@@ -184,6 +184,16 @@ def test_the_declaration_reaches_the_claim_envelope_too(tmp_path: Path) -> None:
     promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert promoted.status_code == 202, promoted.text
 
+    registered = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": "r1",
+            "workspace_id": "w1",
+            "capabilities": [{"harness_id": "claude", "tiers": ["blizzard:basic"], "default": True}],
+        },
+    )
+    assert registered.status_code == 201, registered.text
+
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},

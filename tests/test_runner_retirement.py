@@ -38,7 +38,14 @@ nodes:
 
 
 def _register(hub, runner_id: str = "runner-a") -> None:  # type: ignore[no-untyped-def]
-    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": "ws-a"})
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": runner_id,
+            "workspace_id": "ws-a",
+            "capabilities": [{"harness_id": "claude", "default": True}],
+        },
+    )
     assert resp.status_code == 201, resp.text
 
 
@@ -260,7 +267,14 @@ def test_a_retired_id_is_refused_on_every_runner_contact_route_with_no_token_und
     before = _store_rows(hub)
 
     contact = {
-        "registration": hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}),
+        "registration": hub.client.post(
+            "/api/fleet/runners",
+            json={
+                "runner_id": "runner-a",
+                "workspace_id": "ws-a",
+                "capabilities": [{"harness_id": "claude", "default": True}],
+            },
+        ),
         "heartbeat": hub.client.post("/api/fleet/runners/runner-a/heartbeats"),
         "runner read": hub.client.get("/api/fleet/runners/runner-a"),
         "fact ingest": hub.client.post(

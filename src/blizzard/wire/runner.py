@@ -16,7 +16,8 @@ class RunnerCapability(BaseModel):
     """One harness binding this runner can execute — the id, its observed
     version (``None`` when the binding exposes none), the tier ids it can resolve, and
     whether it is this runner's default binding. ``available`` defaults
-    ``True``: a runner that asserts none is treated as available."""
+    ``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is
+    eligible for nothing."""
 
     harness_id: str
     version: str | None = None

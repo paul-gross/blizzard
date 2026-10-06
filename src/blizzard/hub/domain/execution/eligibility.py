@@ -1,7 +1,7 @@
 """Capability-matched acquisition (``bzh:domain-core``, ``bzh:domain-takes-objects``).
 A statically-reachable **runner-owned session lineage** is every :class:`EffectiveSession`
 a runner node along the graph from a given node could resolve to. A snapshot is eligible
-for a chunk iff every such lineage is satisfied by one of its reported bindings; one
+for a chunk iff it holds at least one binding and every such lineage is satisfied by one of its reported bindings; one
 unsatisfied lineage anywhere makes the whole snapshot ineligible — this module answers
 only that yes/no, never what to do with a ``False``."""
 
@@ -32,6 +32,8 @@ class EligibilityCheck:
 
     @property
     def eligible(self) -> bool:
+        if not self.capabilities:
+            return False
         return all(self._lineage_satisfied(runner_node) for runner_node in self._reachable_runner_nodes())
 
     @property

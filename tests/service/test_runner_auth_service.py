@@ -128,7 +128,17 @@ def test_a_running_hub_rejects_a_revoked_token_under_warn(tmp_path: Path) -> Non
     revoked hash: the same token that peeked fine before its revocation is refused after."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+        assert (
+            hub.post(
+                "/api/fleet/runners",
+                json={
+                    "runner_id": "r1",
+                    "workspace_id": "w1",
+                    "capabilities": [{"harness_id": "claude", "default": True}],
+                },
+            ).status_code
+            == 201
+        )
         enrolled = hub.post("/api/runners/r1/enrollments")
         assert enrolled.status_code == 201, enrolled.text
         auth = {"Authorization": f"Bearer {enrolled.json()['token']}"}

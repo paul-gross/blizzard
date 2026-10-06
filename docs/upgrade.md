@@ -54,6 +54,18 @@ blocks or its container environment keeps `BZ_FORGE_*` variables. Carry them int
 container — [`docs/deployment/install.md`](./deployment/install.md#work-sources-and-forge-settings-are-records) owns the
 step.
 
+### Capability-reporting boundary
+
+A runner that reports no capabilities is eligible for nothing. This is breaking on the hub↔runner wire, because the empty
+`capabilities` default used to mean "no filter".
+
+**Order.** Upgrade every runner to capability-reporting **before** deploying the hub.
+
+**If a runner is still pre-boundary.** It registers, but the matched peek never returns it an entry and every claim it
+makes is refused with a `409` naming it as `incompatible_runner_id`.
+
+**Getting back.** The condition clears the moment that runner is upgraded; there is nothing to repair on the hub.
+
 ## Pull and recreate
 
 From `packaging/docker/`, pull the tag:

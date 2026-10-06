@@ -33,7 +33,10 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
         assert sync.status_code == 200 and sync.json()["ok"], sync.text
         chunk_id = _ingest(forge, hub, "triage migration history")
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-        registered = hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"})
+        registered = hub.post(
+            "/api/fleet/runners",
+            json={"runner_id": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+        )
         assert registered.status_code == 201, registered.text
         claim = hub.post(
             "/api/fleet/routes",

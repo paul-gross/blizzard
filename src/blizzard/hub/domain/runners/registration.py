@@ -234,7 +234,7 @@ class RunnerCapability:
     """One harness binding a registered runner reported it can execute —
     the hub-domain mirror of the wire shape, kept import-free of it (``bzh:domain-core``).
     ``version`` is ``None`` when absent; ``default`` marks the runner's own default binding.
-    ``available`` defaults ``True`` so a runner asserting none still matches."""
+    ``available`` defaults ``True``: a binding that does not state otherwise is available."""
 
     harness_id: str
     version: str | None = None
