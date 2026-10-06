@@ -62,7 +62,13 @@ class TestHubShell {
     cache_read_tokens: 0,
     since: '2026-07-29T00:00:00.000Z',
   };
-  readonly spendYesterday: hubApi.FleetSpendView = { ...this.spendToday, cost_usd: 56.78, estimated_cost_usd: 0.11 };
+  // Partial, so the trailing `+` marker is part of the widest content the sweep fits.
+  readonly spendYesterday: hubApi.FleetSpendView = {
+    ...this.spendToday,
+    cost_usd: 56.78,
+    cost_partial: true,
+    estimated_cost_usd: 0.11,
+  };
 }
 
 // 1400 down to 320 — spans a wide monitor to the narrowest common phone,
@@ -87,6 +93,10 @@ describe('hub shell sweep (web:shell-sweep, issue #163/#171)', () => {
     await fixture.whenStable();
 
     try {
+      expect(
+        root.querySelector('[data-testid="spend-yesterday-value"]')?.textContent?.trim(),
+        'the partial-cost header cell renders its trailing + marker',
+      ).toBe('~$56.89+');
       for (const width of WIDTHS) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));

@@ -25,13 +25,9 @@ import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, t
  * follows. The dock provides room for the confirmation control.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`; the
- * mutations those events drive live in the container. The status chip renders
- * {@link renderedStatus} rather than `detail().status` directly, so a pending Pause or
- * Complete can show its predicted outcome before the server confirms it
- * (`bzh:frontend-pending-override`) — the merge itself is the container's
- * (`chunk-detail.ts`'s `overrideStatus`/`renderedStatus`), which names which of the
- * four controls that covers and why the other two do not qualify.
+ * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`. The status chip
+ * renders {@link renderedStatus} rather than `detail().status` directly
+ * (`bzh:frontend-pending-override`).
  */
 @Component({
   selector: 'app-chunk-detail-header',
@@ -44,9 +40,8 @@ export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** The chunk's status as the header's status chip renders it — which may be a
-   * pending action's predicted outcome rather than `detail().status`
-   * (`bzh:frontend-pending-override`). Never consulted by
+  /** The chunk's status as the header's status chip renders it, handed in by the
+   * caller (`bzh:frontend-pending-override`). Never consulted by
    * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
    * click is admissible to fire against the server-read status, which an in-flight
    * mutation's own predicted outcome must not perturb. */

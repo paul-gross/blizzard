@@ -94,8 +94,9 @@ export interface StepUsageTotal {
  * cross-graph migration, every bounce, and every restart, woven into one
  * chronological list by `recorded_at`. A cross-graph restart also records a
  * migration (`source: 'restart'`); that migration is folded into the restart's own
- * row rather than rendered as a second step for the one operator move. The single owner of this derivation (`canon:one-owner`, the same
- * precedent `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
+ * row rather than rendered as a second step for the one operator move. The single
+ * owner of this derivation (`canon:one-owner`, the same precedent
+ * `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
  * {@link ChunkTimeline} reads it rather than re-deriving it inline.
  */
 export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {

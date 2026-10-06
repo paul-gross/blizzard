@@ -261,6 +261,14 @@ describe('ChunkEscalation', () => {
       expect(sentence).toBe('Escalated: future-cause (epoch 3).');
     });
 
+    it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+      'renders the inherited object key %s as its raw value, not an inherited member',
+      async (cause) => {
+        const { sentence } = await causeOf(cause, null);
+        expect(sentence).toBe(`Escalated: ${cause} (epoch 3).`);
+      },
+    );
+
     it('renders the cause sentence in the raw-only and no-command branches too', async () => {
       for (const base of [RAW_ONLY_DETAIL, NO_COMMAND_DETAIL]) {
         TestBed.resetTestingModule();
