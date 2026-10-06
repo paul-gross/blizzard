@@ -34,6 +34,10 @@ export class BoardShell {
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
+  /** The all-time fleet counts each column head shows — `null` while the read is
+   * pending, when the heads withhold their numbers. */
+  readonly counts = input<ChunkCountsView | null>(null);
+
   /**
    * The ready chunk ids in hub dispatch order — the top of the list is what the
    * next acquire takes. The READY lane renders in exactly this order; a ready
@@ -41,10 +45,6 @@ export class BoardShell {
    * with yet) sorts after the ones it does, keeping its relative order, rather
    * than jumping the queue or vanishing.
    */
-  /** The all-time fleet counts each column head shows — `null` while the read is
-   * pending, when the heads withhold their numbers. */
-  readonly counts = input<ChunkCountsView | null>(null);
-
   readonly readyOrder = input<readonly string[]>([]);
 
   /**

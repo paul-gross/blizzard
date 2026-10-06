@@ -88,7 +88,7 @@ export class FleetScopePanel {
     this.editDescription.emit({ slug, description: trimmed });
   }
 
-  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `retire` once the operator confirms. */
   protected onRetire(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;
@@ -101,7 +101,7 @@ export class FleetScopePanel {
     });
   }
 
-  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `enable` once the operator confirms. */
   protected onEnable(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;

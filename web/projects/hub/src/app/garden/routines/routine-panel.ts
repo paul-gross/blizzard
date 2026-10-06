@@ -165,7 +165,7 @@ export class FleetRoutinePanel {
     ];
   }
 
-  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `retire` once the operator confirms. */
   protected onRetire(): void {
     const name = this.vm()?.record.name;
     if (name === undefined) return;
@@ -178,7 +178,7 @@ export class FleetRoutinePanel {
     });
   }
 
-  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `enable` once the operator confirms. */
   protected onEnable(): void {
     const name = this.vm()?.record.name;
     if (name === undefined) return;

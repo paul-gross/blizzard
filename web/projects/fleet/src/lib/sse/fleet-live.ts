@@ -217,7 +217,8 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
  * timestamp of their own). `type` stays a plain string: a backfilled row from a newer
  * hub may name a type this client does not know, and the feed renders it raw.
  *
- * `key` is `data.key` ({@link KeyedEvent}), lifted to the top level. Absent on a frame from a hub that predates this stamp.
+ * `key` is `data.key` ({@link KeyedEvent}), lifted to the top level. Absent on a frame
+ * from a hub that predates this stamp.
  */
 export interface LoggedEvent {
   readonly seq: number;
