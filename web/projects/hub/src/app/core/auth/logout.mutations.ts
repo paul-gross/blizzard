@@ -6,12 +6,8 @@ import { logoutMutationKey } from '../mutation-keys';
 
 /**
  * `POST /api/auth/logout` — revokes the session at the hub and clears the
- * cookie server-side, then drops the cached identity so the next `/api/me` read (the
- * app root's own gating query) resolves unauthenticated and the app renders the login
- * page. Under `auth.mode = "none"` this route still 204s (it always clears the
- * cookie) with nothing to revoke; the gating query still resolves to the implicit
- * operator afterward (no session to lose), matching "logout" having no visible effect
- * when there was never a login to begin with.
+ * cookie server-side, then invalidates the cached identity (`hubMeKey`) so the next
+ * `/api/me` read reflects the logout.
  */
 export function injectLogoutMutation() {
   const queryClient = inject(QueryClient);

@@ -11,8 +11,7 @@ export type { BoardCard, BoardReposition };
  * cards, filling the centre column above the chunk detail. The titlebar is not
  * here: it spans the whole window, so {@link BoardHeader} owns it.
  *
- * READY and BACKLOG are two of those columns (and the backlog
- * ranking work that followed), not a rail beside them: both are hub-ranked
+ * READY and BACKLOG are two of those columns: both are hub-ranked
  * lists (`bzh:ranking-is-per-list`), so each renders top-to-bottom in its own
  * hub order ({@link readyOrder}/{@link backlogOrder}) and is reshaped in place:
  * card drags leave as {@link reposition}, lane-tagged so a container with both

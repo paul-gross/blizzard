@@ -13,13 +13,10 @@ export interface ChunkPauseVars {
 
 /**
  * `POST /api/chunks/{id}/pause|resume` — routed to the pause or resume verb by the
- * desired `paused` state (mirrors `injectRunnerPauseMutation`), through the generated
- * client (bzh:generated-client). Server-refused for `{done, stopped, delivering}`
- * (`PauseService`); the chunk detail dock mirrors that refusal so it never offers a
- * 409, and surfaces one anyway if the race is lost — a refusal reaches the caller as a
- * thrown error, nothing here swallows it. On success it re-reads
- * the fleet list, the ready queue, and the chunk detail — the same three keys
- * `injectPromoteChunkMutation` invalidates. `by` defaults to `operator` server-side.
+ * desired `paused` state, through the generated client (bzh:generated-client).
+ * Server-refused for `{done, stopped, delivering}` (`PauseService`) — a refusal
+ * reaches the caller as a thrown error, nothing here swallows it. On success it
+ * re-reads the fleet list, the ready queue, and the chunk detail. `by` defaults to `operator` server-side.
  */
 export function injectChunkPauseMutation() {
   const queryClient = inject(QueryClient);

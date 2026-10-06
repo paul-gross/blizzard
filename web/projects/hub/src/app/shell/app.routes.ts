@@ -56,14 +56,13 @@ export const routes: Routes = [
   // panel inside any of them. Five deep-linkable children, one per noun the garden
   // machinery itself has: scopes, routines, runs, findings, proposals — every one of
   // them unrelated to its neighbors, so every one of them gets its own tab and its
-  // own list; none of the five shares a selection with another any more.
+  // own list.
   //
   // All five have one shape: the tab's list *is* the route, and its detail pane is a
   // child route under it — a bare child that selects nothing, and a `:param` child
   // naming the selection, both mounting the same detail component. Angular reuses a
-  // route's component only across the same route config, so the flat pair these grew
-  // from (two routes onto one component) tore the whole tab down and rebuilt it on
-  // every row click, silently discarding the filters the list held. Nested, only the
+  // route's component only across the same route config, so two flat routes onto one
+  // component would tear the whole tab down on every row click. Nested, only the
   // right-hand child is swapped; the list, its filters, and its scroll position all
   // survive. Filter state itself rides the query string (`route-state.ts`), which
   // makes a filtered view shareable by URL as well as durable.

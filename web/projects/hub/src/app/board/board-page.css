@@ -8,9 +8,8 @@
   min-height: 0;
   display: grid;
   /* One 330px rail, allowed to give ground on a narrow window: held rigid it
-     starves the board, which is the column that matters — and the board now
-     carries the READY lane the left rail used to, so it needs the width more
-     than before. */
+     starves the board, which is the column that matters — it carries the READY
+     lane, so it needs the width. */
   grid-template-columns: 1fr minmax(260px, 330px);
   gap: 6px;
   padding: 6px;
@@ -43,8 +42,7 @@
   min-width: 0;
 }
 /* A promote or reorder failure reads between the board and the dock, next to the
-   controls that fired it — the same slot and style `ChunkDetailPanel`'s own action
-   notice uses for its detach/pause/resume/complete failures. */
+   controls that fired it. */
 .notice {
   flex: none;
   margin: 0;

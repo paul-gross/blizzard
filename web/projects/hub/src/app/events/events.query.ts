@@ -28,9 +28,8 @@ export interface HubEventsFilters {
  * distinct filter combination rides in the query key, so it caches as its own
  * entry — same idiom as {@link injectHubFleetSpendQuery}'s `since` window.
  *
- * The live-update service re-reads this on `event-logged`, and on an
- * escalation-bearing `chunk-changed`; the poll is a backstop, not the
- * primary freshness path.
+ * Kept fresh by the live-update service (`fleet-live.ts`); the poll is a
+ * backstop, not the primary freshness path.
  */
 export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({})) {
   return injectQuery(() => {

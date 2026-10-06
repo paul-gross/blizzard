@@ -4,7 +4,7 @@ import { KitOption, KitPanel, type ScopeView } from 'fleet';
 
 /** The run dialog's own scope-field state — the chosen scope's slug, `''` for nothing
  * selected yet (the field offers only the routine's own related
- * set, so there is no longer a slug the operator can mint here). */
+ * set). */
 export type ScopeSelection = string;
 
 export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';

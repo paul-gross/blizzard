@@ -182,10 +182,7 @@ describe('Mobile chunk drill-down', () => {
   });
 
   it('names the chunk by its full id in the identity header, not the compact ref', async () => {
-    // The identity header (fleet's shared `ChunkPageHeader`, issue: the runner's own
-    // page never had one, and this page's own ref used to be `compactRef`'d down to
-    // `C-3YJ9`) — the user wants the full id on a page whose whole job is naming this
-    // one chunk.
+    // The full id, on a page whose whole job is naming this one chunk.
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     const ref = el.querySelector('[data-testid="mobile-chunk-ref"]');
@@ -476,9 +473,8 @@ describe('Mobile chunk drill-down', () => {
 
   it('states a terminal chunk\'s status once, not doubled with the unresolvable node sentinel', async () => {
     // A finished chunk's newest transition targets the graph's terminal `done`
-    // sentinel, which `current_node_name` cannot resolve — the
-    // header used to fall back to rendering the literal id "done" beside a
-    // status that also reads "done".
+    // sentinel, which `current_node_name` cannot resolve — the header must not
+    // render the literal id "done" beside a status that also reads "done".
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
@@ -529,8 +525,7 @@ describe('Mobile chunk drill-down', () => {
     await settle(harness.fixture);
 
     // Fire the edit the facts pane exposes for a not-ready chunk, through the
-    // same handler its output is bound to. The graph edit — the model
-    // edit that stood beside it went with `Chunk.model`.
+    // same handler its output is bound to.
     (page as unknown as { onEditGraph(e: { chunkId: string; graphId: string }): void }).onEditGraph({
       chunkId: CHUNK_ID,
       graphId: 'gr_alt',
@@ -654,8 +649,7 @@ describe('Mobile chunk drill-down', () => {
   });
 
   it('shows an answered question’s delivery trail on the phone too', async () => {
-    // AC 3 on mobile, which rides on ChunkAwaitingHuman being reused verbatim — pinned
-    // here so a future mobile-only fork of the asks region cannot drop it silently.
+    // Pinned on mobile so a mobile-only fork of the asks region cannot drop it silently.
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;

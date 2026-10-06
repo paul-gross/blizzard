@@ -4,9 +4,7 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost, hubGraphKey, hubGraphsKey } from 'fleet';
 import { graphLifecycleMutationKey } from '../core/mutation-keys';
 
-/** Retire or re-enable a graph's reversible lifecycle brake: a retired
- * graph is excluded from name resolution and refuses new re-pins, but the `graphs`
- * row itself is never touched — the immutable definition survives unchanged. */
+/** Retire or re-enable a graph's reversible lifecycle brake. */
 export interface GraphLifecycleVars {
   readonly graphId: string;
   readonly retired: boolean;

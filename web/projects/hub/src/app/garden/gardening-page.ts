@@ -13,11 +13,9 @@ import { KitCountBadge, KitTab, KitTabStrip } from 'fleet';
  * (`app.routes.ts`) so a sub-tab is a deep link, not this component's own selection
  * state. All five are unrelated concepts (a scope is where a routine sweeps, a
  * routine is a declared strategy, a run is a sweep, a finding is a durable record a
- * sweep may add to or resolve, a proposal is a suggestion waiting on a person) that
- * only used to share two combined surfaces; each gets its own tab and its own list
- * now. Landing the default redirect on Scopes (the first tab) rather than Routines
- * follows straight from the requested tab order — Scopes is the leftmost tab now,
- * so it is what the bare `/gardening` path lands on.
+ * sweep may add to or resolve, a proposal is a suggestion waiting on a person), so
+ * each gets its own tab and its own list. The bare `/gardening` path lands on
+ * Scopes, the leftmost tab.
  *
  * Only Proposals carries a waiting count, since only proposals are waiting on
  * somebody — Scopes, routines, runs, and findings accumulate, they do not wait. The

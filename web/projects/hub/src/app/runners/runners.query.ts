@@ -9,8 +9,7 @@ import { type RunnerView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_M
  * The live-update service re-reads this on `runner-changed`; the poll is a backstop,
  * not the primary freshness path.
  *
- * Retired runners are excluded unless `includeRetired()` is true, so every consumer
- * that passes nothing reads exactly what it did before. The include-retired read keys
+ * Retired runners are excluded unless `includeRetired()` is true. The include-retired read keys
  * under {@link hubRunnersKey}, so a `runner-changed` invalidation re-reads both.
  */
 export function injectHubRunnersQuery(includeRetired: () => boolean = () => false) {

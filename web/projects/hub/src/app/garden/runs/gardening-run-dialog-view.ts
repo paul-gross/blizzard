@@ -33,10 +33,7 @@ export interface RunSubmission {
  * (`bzh:frontend-container-presentational`).
  *
  * Owns every field's live value as local signals — `scopeSelection`/`mode`/`note` —
- * since the host page renders this component (and its container) with `@if`, tearing
- * it down between runs (the routine panel's own `run` output), so a stale value never
- * survives to a later open the way a container-held signal would need an explicit
- * reset to avoid.
+ * scoped to this instance's lifetime, so a fresh mount starts from fresh values.
  */
 @Component({
   selector: 'app-gardening-run-dialog-view',

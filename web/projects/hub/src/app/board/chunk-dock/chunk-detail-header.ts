@@ -50,13 +50,12 @@ export class ChunkDetailHeader {
   /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control`).
    * Withholds every one of those controls when `false` so a `guest`
    * never sees a write it cannot make; `null`/pending resolves to `false` (hidden
-   * until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
+   * until confirmed). */
   readonly canControl = input(false);
 
   /** The chunk detail route's own path segments, before the chunk id — lets a
    * consumer outside the desktop board point the longname link elsewhere without
-   * `fleet` hardcoding a hub route (`ChunkArtifacts`'s own `linkBase` follows the
-   * same convention). */
+   * `fleet` hardcoding a hub route. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** Whether the pause/resume mutation is in flight — disables whichever of

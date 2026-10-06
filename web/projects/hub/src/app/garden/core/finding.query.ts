@@ -7,8 +7,7 @@ import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
  * Every id in `findingIds()`, read live through its own `GET
  * /api/findings/{finding_id}` — evidence is read live, one finding
  * at a time: a garden proposal carries finding *ids* only
- * (`GardenProposalView.findings`), so the docket detail's evidence table reads each
- * one live rather than trusting a copy the proposal itself might carry
+ * (`GardenProposalView.findings`), so each is read here rather than from a copy
  * (`blizzard-product:/delivered/garden/user-interface.md` §The docket). One `injectQuery`
  * whose `queryFn` fans the id list out and joins it — the id list itself is reactive
  * (re-derived per selected proposal), and Angular's injection context cannot vary a

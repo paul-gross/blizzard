@@ -12,8 +12,7 @@ import { type MeResponse, meApiMeGet, hubMeKey } from 'fleet/shell';
  * state — "not authenticated" is a legitimate, expected value here, not a fault. Any
  * other failure still surfaces through TanStack's error state. `retry: false` so an
  * expired session settles in one round trip rather than TanStack's default backoff
- * retries — the interceptor (`auth.interceptor.ts`) reacts to the same 401 by routing
- * to `/login`, which a silent retry loop would only delay.
+ * retries (the 401 response itself is handled in `auth.interceptor.ts`).
  */
 export function injectMeQuery() {
   return injectQuery(() => ({

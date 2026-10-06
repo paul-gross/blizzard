@@ -553,8 +553,8 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       expect(unavailable.getAttribute('data-available')).toBe('false');
       expect(available.getAttribute('aria-label')).not.toBe(unavailable.getAttribute('aria-label'));
 
-      // The existing pause, capacity, and claim controls stay reachable alongside the
-      // new capability badges — nothing about this render displaces them.
+      // The pause, capacity, and claim controls stay reachable alongside the
+      // capability badges.
       expect(root.querySelector('[data-testid="runner-toggle"]')).not.toBeNull();
       expect(root.querySelector('[data-runner-slot-bar="rn_multi_harness"]')).not.toBeNull();
       expect(root.querySelector('[data-runner="rn_multi_harness"] [data-testid="runner-claim"]')).not.toBeNull();

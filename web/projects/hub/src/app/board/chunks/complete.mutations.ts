@@ -17,8 +17,7 @@ export interface CompleteVars {
  * chunk is a harmless no-op, never a thrown error; a 404 for an unknown chunk still
  * surfaces for the caller to report. On success it re-reads the fleet list, the ready
  * queue, and the chunk detail; the endpoint's `chunk_changed`/`queue_changed` SSE frames
- * corroborate for every other open view (no polling, no new hub surface). `by` is fixed
- * to `operator` here, the same convention `injectChunkPauseMutation` follows — the board
+ * corroborate for every other open view. `by` is fixed to `operator` here — the board
  * has no per-identity `by` field to send.
  */
 export function injectCompleteChunkMutation() {

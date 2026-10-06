@@ -10,18 +10,16 @@ import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, Viewp
  * `@if` (the same route-table-level fork `matchesMobileViewport` already
  * uses for the board route).
  *
- * A thin wrapper around the shared {@link FleetMobileTitlebar} —
- * the runner's `app-panel-mobile.ts` mounts the same fleet component. This
+ * A thin wrapper around the shared {@link FleetMobileTitlebar}. This
  * layer only supplies the hub's own live signal (`FleetLiveUpdates`, the same
  * connection state the desktop titlebar's own "Hub" cell derives from) and the
- * shell menu's panel — the appearance switcher (item 5), now the CDK-menu
- * submenu the shells share, declared here rather than projected
+ * shell menu's panel — the appearance switcher (a CDK-menu
+ * submenu), declared here rather than projected
  * because a `CdkMenu` cannot see items across an `<ng-content>` boundary.
  * Deliberately **no** board/graphs tabs: mobile navigation lives
  * in the bottom {@link MobileTabBar} instead (mock screen C's `.tabbar`),
- * never here. The fleet component defaults its own `testid` to
- * `'mobile-titlebar'`, so this wrapper needs no input to keep the hub's
- * existing `mobile-titlebar*` handles working unchanged.
+ * never here. The fleet component's default `testid`
+ * (`'mobile-titlebar'`) is used as-is.
  */
 @Component({
   selector: 'app-mobile-titlebar',

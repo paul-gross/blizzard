@@ -359,11 +359,8 @@ describe('GardeningProposalsPage', () => {
   });
 
   describe('a proposal with a pending Pass/Accept drops from the waiting docket (Part B)', () => {
-    /** `gardening-proposal-pass-dialog.ts`/`gardening-proposal-accept-dialog.ts` own
-     * and fire these mutations, not this page — a `mutationKey`-scoped read is
-     * exactly what lets the docket see another component's in-flight mutation
-     * without owning it, so this fires it from the same root injector rather than
-     * through `GardeningProposalsPage` itself (`board-page.spec.ts`'s own
+    /** Fires the mutation from the root injector rather than through
+     * `GardeningProposalsPage`, exercising the docket's `mutationKey`-scoped read (`board-page.spec.ts`'s own
      * `fireDeleteFrom` shape). */
     function firePassFrom(proposalId: string): { resolve: () => void } {
       const injector = TestBed.inject(EnvironmentInjector);

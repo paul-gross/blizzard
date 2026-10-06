@@ -230,7 +230,7 @@ describe('ChunkDetail container', () => {
 
   afterEach(() => stub.restore());
 
-  it('holds an empty rest state — not the detail panel — while no chunk is selected (issue #21)', async () => {
+  it('holds an empty rest state — not the detail panel — while no chunk is selected', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     // chunkId defaults to null: the dock stays mounted but empty.
     await settle(fixture);
@@ -320,7 +320,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
   });
 
-  it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {
+  it('fetches the chunk’s work items through the generated client and renders them in the work-item column', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);
@@ -573,7 +573,7 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toMatchObject({ by: 'operator' });
   });
 
-  it('fires the resume client call for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
+  it('fires the resume client call for a paused chunk whose status reads waiting_on_human', async () => {
     // The overlap, end to end through the generated client: the dock reads the pause
     // fact off ChunkDetail, so it offers Resume for a chunk whose status hides the pause.
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -608,16 +608,14 @@ describe('ChunkDetail container', () => {
   // --- Pending status override (`bzh:frontend-pending-override`) -------------
   //
   // Complete and Pause are the two controls whose outcome is predictable from the
-  // mutation's own variables (`domain/work/statuses.md`'s precedence, confirmed against `src/blizzard/hub/domain/`'s
-  // `chunk/model.py`/`operations/pause.py`/`execution/detach.py`/`operations/delete.py`) — Resume and Detach are not,
-  // so they render no override at all, only Part A's disabled-and-pending.
+  // mutation's own variables (`domain/work/statuses.md`'s precedence) — Resume and Detach
+  // are not, so they render no override at all, only the disabled-and-pending state.
   //
   // Every "held pending" assertion below spies on `queryClient.invalidateQueries` and
   // returns a promise it controls rather than letting the stub's fetch settle on its
   // own — a mutation stays `isPending()` true only until its own invalidations resolve
   // (`bzh:frontend-mutation-settles-on-refresh`), so holding that promise open is what
-  // keeps the window a real assertion can land in, the same idiom
-  // `runner-panel.spec.ts`'s own pending-scope spec uses.
+  // keeps the window a real assertion can land in.
 
   it('renders the paused override while pending on a chunk below the human-gated states, reverting to the real status on rejection', async () => {
     pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
@@ -634,8 +632,7 @@ describe('ChunkDetail container', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
     await confirmAction(fixture);
     // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
-    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in
-    // (`runner-panel.spec.ts`'s own idiom for the same reason).
+    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in.
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
@@ -664,7 +661,7 @@ describe('ChunkDetail container', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    // Part A alone: disabled and pending, no rendered status change.
+    // Disabled and pending alone, no rendered status change.
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
     expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
 
@@ -714,7 +711,7 @@ describe('ChunkDetail container', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    // Part A alone: disabled and pending, no rendered status change.
+    // Disabled and pending alone, no rendered status change.
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
     expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
 
@@ -740,8 +737,8 @@ describe('ChunkDetail container', () => {
 
     // No rendered status change while detach is pending…
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
-    // …only Part A's existing disabled state, reopening the menu the CDK closed on
-    // trigger (`kit-menu-item.ts`) to read it back off the item itself. A bare
+    // …only the item's disabled state, reopening the menu the CDK closed on
+    // trigger to read it back off the item itself. A bare
     // macrotask tick + `detectChanges()` stands in for `whenStable()` here, the same
     // idiom the pending window above already leans on — the held `invalidateQueries`
     // promise leaves the fixture never truly stable.
@@ -754,7 +751,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
   });
 
-  // --- Graph edit (the model edit beside it retired with `Chunk.model`)
+  // --- Graph edit
   // -------------------------------------------------------------
 
   it('fires the graph edit client call for a not_ready chunk', async () => {

@@ -5,9 +5,8 @@ import { type UserView, listUsersApiUsersGet, hubUsersKey } from 'fleet';
 /**
  * `GET /api/users` — the admin page's own user listing, gated on
  * `user:manage` hub-side (a `403` under this permission renders as this query's own
- * error state; the page itself is nav-gated before it ever mounts, `app-nav.ts`).
- * Not in the SSE event vocabulary — a role change is rare and the assignment
- * mutation invalidates this key directly, so no live-invalidation wiring is needed.
+ * error state). Not in the SSE event vocabulary, so it carries no live-invalidation
+ * wiring.
  */
 export function injectUsersQuery() {
   return injectQuery(() => ({

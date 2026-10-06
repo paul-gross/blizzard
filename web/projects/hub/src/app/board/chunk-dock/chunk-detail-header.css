@@ -68,12 +68,11 @@ a.iss:focus-visible {
   font-size: var(--fs-label);
 }
 /* A dependency edge named on the line: the label carries `.st`'s engraved style and the
-   neighbor it names reads gold, the same pairing the board card's own marking uses. */
+   neighbor it names reads gold. */
 .d-sub .edge {
   white-space: nowrap;
 }
-/* Only the ref is the link, and it reads as one — a plain underlined anchor, the same
-   shape the fact table's own edge rows use. */
+/* Only the ref is the link, and it reads as one — a plain underlined anchor. */
 a.edge-ref {
   color: var(--amber);
   text-decoration: underline;
@@ -126,9 +125,7 @@ a.edge-ref:focus-visible {
   gap: 6px;
   min-width: 0;
 }
-/* The non-interactive "Claimed by <runner>" fact — plain text, no
-   "Route" label, replacing the old tag + runner id + inline Detach button now
-   that Detach lives in the ⋯ menu. */
+/* The non-interactive "Claimed by <runner>" fact — plain text, no "Route" label. */
 .claimed {
   color: var(--cyan);
   font-size: var(--fs-xs);
@@ -138,17 +135,15 @@ a.edge-ref:focus-visible {
   white-space: nowrap;
 }
 /* The ⋯ menu panel's own divider between Detach and Complete/Delete — a hairline,
-   not a new kit divider component, the same `--line` token `.d-head`'s own border
-   uses. */
+   on the same `--line` token `.d-head`'s own border uses. */
 .menu-divider {
   border: none;
   border-top: 1px solid var(--line);
   margin: 4px 0;
 }
-/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant of
-   its own (`kit-menu-item.css`), so this caller applies the same `--red` token
-   `KitButton`'s own `.act.danger` rule uses (`kit-button.css`), scoped to this
-   header's own template. The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
+/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant, so
+   this caller applies the `--red` token, scoped to this header's own template.
+   The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
    `:host(:hover)` cyan (equal specificity, one more class) so the danger tint holds
    under a pointer too. */
 .danger {

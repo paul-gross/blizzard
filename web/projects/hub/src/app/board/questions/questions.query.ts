@@ -4,7 +4,7 @@ import { type QuestionView, listOpenQuestionsApiQuestionsGet, LIVE_COVERED_POLL_
 
 /**
  * Hub `GET /api/questions` read — every open (unanswered) question across the
- * fleet (MVP criterion 7), through TanStack Query and the generated hub
+ * fleet, through TanStack Query and the generated hub
  * client (bzh:generated-client). This is the fleet-wide ask list the right rail
  * shows, distinct from a single chunk's `questions` in its detail aggregate: the
  * rail must surface an ask on a chunk nobody has selected.

@@ -132,10 +132,8 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * here — the triage dialog that actually fires them (`gardening-finding-triage-
    * dialog.ts`) is a sibling surface this list never mounts.
    *
-   * The hub folds a finding's facts newest-wins into `FindingView.state`, and every one of these six verbs' own fact `kind` is exactly its
-   * resulting `state` (`reopened` folds to `"live"`, same as `add`/`observed`) — so
-   * each verb's resulting state is fixed and known ahead of the call settling, the
-   * same guarantee `chunk-detail.ts`'s `overrideStatus` documents for Pause/Complete.
+   * Each of these six verbs' resulting `FindingView.state` is fixed and known ahead
+   * of the call settling (`reopened` resolves to `"live"`).
    * {@link filteredBucket} decides which of these are hideable against the active
    * {@link stateFilter}. */
   const resolvePending = injectPendingMutationVariables<FindingExitVars>(resolveFindingsMutationKey);

@@ -27,8 +27,8 @@ import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, 
  *   selecting a card fills it (the work item, node history, artifacts, and the
  *   human-loop actions) and deselecting clears it to a rest state, so the board
  *   never resizes or reflows;
- * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
- *   (MVP criterion 11), then {@link QuestionsPanel}, the fleet's open agent asks —
+ * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume,
+ *   then {@link QuestionsPanel}, the fleet's open agent asks —
  *   clicking one opens its chunk in the dock, where it is answered — then
  *   {@link GatesPanel}, the fleet's open gates, opened the same way — then
  *   {@link ActivityPanel}'s live feed.
@@ -41,12 +41,12 @@ import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, 
  * `POST /api/backlog/position` (`bzh:ranking-is-per-list`).
  *
  * The titlebar, the {@link FleetLiveUpdates} spine, and the TanStack `QueryClient`
- * stay at the app root — none of them move here, so navigating away from and back
+ * stay at the app root, so navigating away from and back
  * to `/board` never restarts the SSE stream or drops the query cache.
  *
  * Which card is open is **the URL's**, not this component's: `?chunk=…` on
- * `/board`, read and written through the shared {@link injectChunkUrlSelection}
- * — the same contract the runner's local panel uses. Both selection
+ * `/board`, read and written through the shared {@link injectChunkUrlSelection}.
+ * Both selection
  * sources — a board card and an ask in the right rail — write the same param,
  * so a board is shareable, a reload keeps its place, and back/forward walk the
  * selection history.
@@ -141,7 +141,7 @@ export class BoardPage {
     () => gatedChunkIds(this.decisionsQuery.data() ?? []),
   );
 
-  /** The board's async state (AC 1, AC 2) — derived from the chunks query
+  /** The board's async state — derived from the chunks query
    * alone: the queue read only supplies the READY lane's order, so it never
    * gates the board's emptiness. */
   protected readonly boardState = computed<KitAsyncStateValue>(() =>

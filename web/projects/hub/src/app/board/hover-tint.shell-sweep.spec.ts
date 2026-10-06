@@ -101,10 +101,9 @@ const CARD: BoardCard = {
 };
 
 describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => {
-  // One case, not two: the resting/hovered readings a "selected" comparison needs were
-  // previously module-level state set by a sibling `it` and read by this one — isolate
-  // either case (`-t`, `.only`, reordering) and the second silently compared a real color
-  // against `''`, passing vacuously. Self-contained here instead.
+  // One case, not two: the "selected" comparison needs this case's own resting/hovered
+  // readings, so sharing them across `it`s would break under isolation (`-t`, `.only`,
+  // reordering) and compare a real color against `''`, passing vacuously.
   it('washes a hovered card with a genuinely perceptible step, and reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
     await loadDesignTokens();
 
@@ -239,7 +238,7 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
     }
   });
 
-  it('reads a selected row as distinct from a merely hovered one (blizzard#315)', async () => {
+  it('reads a selected row as distinct from a merely hovered one', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({

@@ -29,22 +29,19 @@ import { ChunkDetailPanel } from './chunk-detail-panel';
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
  * nothing is open, so no request fires for the empty board. Answering, resolving,
- * detaching, pausing/resuming, completing, or editing the graph/model invalidates the
+ * detaching, pausing/resuming, completing, or editing the graph invalidates the
  * chunk and the fleet list, and the SSE stream corroborates. Every operator action's
- * 404/409 (422 for a blank model) is read off its mutation's `onError` and held in the
- * shared `actionError` for the panel to show — the "report, don't swallow"
- * requirement, which pause/resume, graph/model edits, and complete all follow rather
- * than reinvent — and clears on the next attempt or the
- * moment a different chunk opens. Answering and resolving have a **second** channel alongside it,
+ * 404/409 is read off its mutation's `onError` and held in the
+ * shared `actionError` for the panel to show — report, don't swallow — and clears on
+ * the next attempt or the moment a different chunk opens. Answering and resolving have a **second** channel alongside it,
  * `actionOutcome`: a lost first-write-wins race is not a failure to retry
  * but news — someone else's answer or choice landed — so it reads as an outcome naming the winner.
  * Both clear together in `beginAction`.
  *
  * **Delete** breaks that shape: it makes the chunk cease to exist, so
  * `onDelete` doesn't just fold a failure into `actionError` — on success it emits
- * `dismiss` too, the same event the header's close button fires. The board binds
- * `dismiss` to clearing its own selection, so the dock closes instead of sitting on a
- * chunk id its own detail query would otherwise re-read into a 404.
+ * `dismiss` too, the same event the header's close button fires, so the dock closes
+ * instead of sitting on a chunk id its own detail query would otherwise re-read into a 404.
  */
 @Component({
   selector: 'app-chunk-detail',
@@ -81,7 +78,7 @@ export class ChunkDetail {
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
    * (`chunk:control`). Withholds those controls in the panel below so a
    * `guest` never sees a write it cannot make; `null`/pending resolves to `false`
-   * (hidden until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
+   * (hidden until confirmed). */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
   /** Whether the current identity may answer an open question (`question:answer`). */
@@ -94,8 +91,7 @@ export class ChunkDetail {
    * the mutation's own `.isPending()` and threaded to the header's Pause/Resume button,
    * so a double click cannot fire the request twice while the first still settles. This
    * dock shows exactly one chunk at a time, so there is no sibling row to distinguish
-   * pending mutations by variables — unlike the board's per-card filtering, a plain
-   * `.isPending()` read is the whole answer here. */
+   * pending mutations by variables — a plain `.isPending()` read is the whole answer. */
   protected readonly pausePending = computed(() => this.pauseMutation.isPending());
 
   /** Whether the detach mutation is in flight for this chunk, threaded to the header's
@@ -188,15 +184,14 @@ export class ChunkDetail {
   protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
 
   /**
-   * The detail read's async state (AC 5) — consulted only once the template's
+   * The detail read's async state — consulted only once the template's
    * own "nothing selected" branch has already ruled that case out. This
    * matters because the query is `enabled: false` while `chunkId()` is
    * `null` (`bzh:frontend-container-presentational`'s conditional-query
    * shape), and a disabled query reports `isPending()` as permanently `true`
    * — reading this triad before that branch would render the rest state as
    * an endless spinner instead. Never `'empty'`: a single chunk aggregate
-   * either resolves or the read errors, the same reasoning `graph-detail.ts`
-   * documents for its own single-resource read.
+   * either resolves or the read errors.
    */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
 
@@ -218,7 +213,7 @@ export class ChunkDetail {
   }
 
   /** Route an answer failure to the outcome or error channel — the fold is
-   * `readAnswerFailure`'s, shared with the mobile board so both read the same. */
+   * {@link readAnswerFailure}'s. */
   private reportAnswerFailure(error: unknown): void {
     this.reportFailure(readAnswerFailure(error));
   }
@@ -276,13 +271,11 @@ export class ChunkDetail {
 
   /** Delete an unacquired chunk — withdraws its hub item(s); there is
    * no undo. Unlike every other action here, success dismisses the dock: the chunk this
-   * query is keyed to no longer exists, and `deleteMutation`'s own `onSettled` already
-   * invalidates the fleet list, the ready queue, the backlog, and this chunk's own detail
-   * query, so leaving the dock open would have it re-read straight into a 404. Emitting
-   * `dismiss` before that re-read can render clears the board's selection (`chunkId()`
-   * flows to `null`), which disables the detail query for this component's next render
-   * — the same `enabled: false` gate the empty-dock rest state already leans on — rather
-   * than reacting to the now-orphaned response. */
+   * query is keyed to no longer exists, and the delete's invalidation would have an open
+   * dock re-read straight into a 404. Emitting `dismiss` before that re-read can render
+   * lets the host clear its selection (`chunkId()` flows to `null`), which disables the
+   * detail query for this component's next render — the same `enabled: false` gate the
+   * empty-dock rest state leans on — rather than reacting to the now-orphaned response. */
   protected onDelete(chunkId: string): void {
     this.beginAction();
     this.deleteMutation.mutate(

@@ -43,9 +43,8 @@ export interface FindingPanelVm {
   readonly facts: readonly FindingFactView[];
   readonly workItem: ProposalWorkItemVm | null;
   /** `FindingView.source` — `"routine"` or `"review"`. Drives
-   * whether {@link severity}/{@link raisedByChunkId} render at all: a `"routine"`
-   * finding renders exactly as it did before this field existed — additive, not a
-   * redesign (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
+   * whether {@link severity}/{@link raisedByChunkId} render at all
+   * (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
   readonly source: hubApi.FindingSource;
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
   readonly severity: hubApi.FindingSeverity | null;
@@ -105,8 +104,7 @@ export class FleetFindingPanel {
    * selected finding and the five `<ng-template>`s the view declares for the rows
    * whose value is markup rather than text, `routine-panel.ts`'s own `recordRows`
    * shape. `severity`/`raised by` append only for a `source ===
-   * 'review'` panel — a `'routine'` one renders exactly the five rows this grid
-   * always carried, additive rather than a redesign. */
+   * 'review'` panel. */
   protected factRows(
     panel: FindingPanelVm,
     introduced: TemplateRef<unknown>,

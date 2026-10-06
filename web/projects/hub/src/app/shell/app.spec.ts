@@ -39,8 +39,7 @@ class FakeEventSource {
  * gate (`authState`) depends on — plus every other route the app touches
  * (health/chunks/fleet-spend/queue/etc, all default to `{}` via `stubRequestClient`).
  * `me` defaults to the full-permission operator identity (`auth.mode = "none"`'s
- * shape), so a spec that does not care about auth exercises the app exactly as it
- * did before #93; a spec that does care overrides one or both. */
+ * shape); a spec that cares about auth overrides one or both. */
 function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: readonly ProviderSummary[] = []): RequestClientStub {
   return stubRequestClient(hubClient, (method, path) => {
     if (path === '/api/me') return me === null ? stubError(401, { detail: 'not authenticated' }) : me;
@@ -120,9 +119,7 @@ describe('hub App', () => {
     const nav = el.querySelector('[data-testid="app-nav"]');
     expect(header).toBeTruthy();
     expect(nav).toBeTruthy();
-    // The order AppShell enforces by construction — header above
-    // nav above routed content, the same fixed slot order the runner app root
-    // composes its own header/nav/content into.
+    // Header precedes nav.
     expect(Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
     expect(router.url).toBe('/board');

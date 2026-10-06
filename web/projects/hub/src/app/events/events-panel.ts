@@ -10,18 +10,14 @@ import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from '.
  * The Events tab's **container** — the board's operational
  * event feed (`GET /api/events`), distinct from the right rail's {@link ActivityPanel}:
  * this reads the hub's own persisted, filterable event log (severity/runner/chunk
- * filters, capped only by `limit`), where the rail is an unfiltered recent-activity
- * view that merges a `GET /api/activity` backfill on load with the live SSE tee,
- * deduped by fact identity — no filters, no independent query
- * of its own here.
+ * filters, capped only by `limit`).
  *
  * Owns the severity/runner filter state as signals, the chunk filter in the URL's
  * `?chunk=` (so a chunk's own page can deep-link its events, and the filtered view
  * survives a reload), and the reactive query over them, and renders the presentational {@link EventsView}. Follows
  * `questions-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
- * generated hub client (bzh:generated-client) via TanStack Query. The live-update
- * service re-reads this on `event-logged` and on an escalation-bearing
- * `chunk-changed`; the poll is a backstop, not the primary freshness path.
+ * generated hub client (bzh:generated-client) via TanStack Query (freshness:
+ * {@link injectHubEventsQuery}).
  *
  * The runner and chunk filter axes are open sets, so their chip **universe** is
  * derived here (`runnerIds`/`chunkIds`) rather than in the view. It comes from a

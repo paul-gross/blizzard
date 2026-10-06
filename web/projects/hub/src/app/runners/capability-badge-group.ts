@@ -6,9 +6,8 @@ import { type RunnerCapability, harnessName, KitBadge, type Tone } from 'fleet';
  * The runner registry's per-capability render — one distinct, labelled
  * badge per reported harness binding, so a multi-harness runner never collapses its
  * bindings into one undifferentiated row. A runner reporting none renders its own
- * settled empty branch rather than nothing at all — {@link RunnerPanelView}'s async
- * `state` already gates the loading/error cases, so an empty list here is always a
- * resolved "reported zero capabilities", never a spinner in disguise.
+ * settled empty branch rather than nothing at all — an empty list here means
+ * "reported zero capabilities" (loading/error are gated upstream, {@link RunnerPanelView}).
  *
  * Presentational only.
  */

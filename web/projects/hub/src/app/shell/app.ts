@@ -27,17 +27,14 @@ import { authState, connectionLabel } from './app.model';
  * The window is a full-width titlebar ({@link BoardHeader} — the brand, the live
  * fleet counts, the hub connection, and the profile menu ({@link AppNavMenu})
  * projected into its `[header-trailing]` slot) over a tab strip
- * ({@link AppNav} — routes only, since #132 moved `Log out` and the viewport
- * override up into the header's menu), with the active route rendered below via
+ * ({@link AppNav}), with the active route rendered below via
  * `<router-outlet>` — desktop mode. In mobile mode
  * (`ViewportService.mode`) both are replaced by {@link MobileTitlebar}, and a
  * persistent {@link MobileTabBar} renders below the routed content (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — the fork happens once, here, at the
  * app root, the same "pick it once" rule the route table already follows for the
- * `board` route itself (`app.routes.ts`). The shared {@link AppShell} (`fleet`)
- * is what enforces this ordering by construction — header above nav
- * above routed content — the same slot order the runner app root composes its
- * own header/nav/content into, so the two apps cannot drift apart.
+ * `board` route itself (`app.routes.ts`). Slot ordering is owned by the shared
+ * {@link AppShell} (`fleet`).
  *
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
  *   invalidates the reads on every hub fact, so the whole app streams live;
@@ -58,12 +55,9 @@ import { authState, connectionLabel } from './app.model';
  *   previous, now-ungated route. `/login` carries its own full-page chrome, so the
  *   header/nav/tab-bar are withheld here regardless;
  * - **`lobby`** (a resolved identity with an **empty** permission set — `pending`,
- *   before an admin grants a role, #94) renders {@link PendingLobby} instead of the
+ *   before an admin grants a role) renders {@link PendingLobby} instead of the
  *   board — "signed in, awaiting access", never a board silently 403ing every read;
- * - **`ready`** (at least one permission) renders the shell exactly as before. Under
- *   `auth.mode = "none"` `/api/me` always resolves the implicit operator (every
- *   permission), so this is the only branch that mode ever reaches — unchanged
- *   behavior, no login page, admin nav hidden (below).
+ * - **`ready`** (at least one permission) renders the shell.
  *
  * The SSE spine only starts once `ready` (a `pending`/unauthenticated stream would
  * just 401/403 immediately; `guest` is `ready` and reads the
