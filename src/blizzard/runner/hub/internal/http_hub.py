@@ -1,7 +1,9 @@
 """httpx adapter for the hub-client seam (package-private).
 
-The reference :class:`~blizzard.runner.hub.client.IHubClient` binding. All httpx usage is
-confined here; a transport failure or unexpected status is wrapped once into
+The reference :class:`~blizzard.runner.hub.client.IHubClient` and
+:class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, and the
+:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one. All httpx usage is confined here; a
+transport failure or unexpected status is wrapped once into
 :class:`~blizzard.runner.hub.client.HubClientError` (``bzh:structlog-logging``).
 """
 
@@ -25,15 +27,23 @@ from blizzard.runner.hub.client import (
     HubClientError,
     HubQuestion,
     IHubClient,
+    IHubRunnerAdmin,
     IncompatibleDenial,
+    IssuedIdentity,
+    ITokenIdentityReader,
     PausedDenial,
     PushedFact,
     QueueBlock,
     QueueEntry,
     QueueWorkRef,
+    RegistrationReply,
     RouteClaimOutcome,
+    RunnerAddRefusalReason,
+    RunnerAddRefused,
     SubscriptionDeclaration,
     TerminalDenial,
+    TokenIdentity,
+    TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
 )
@@ -62,8 +72,13 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import (
+    RunnerAddRequest,
+    RunnerAddResponse,
     RunnerCapability,
+    RunnerIdentityRefusal,
+    RunnerIdentityView,
     RunnerRegistrationRequest,
+    RunnerRegistrationResponse,
     RunnerSubscriptionDeclaration,
     RunnerView,
 )
@@ -80,6 +95,17 @@ _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 #: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count, bounding its URL length.
 _CHUNK_STATUSES_BATCH_LIMIT = 500
 
+#: The operator route adding a runner — the one call this module makes outside the fleet API.
+_RUNNERS_API = "/api/runners"
+
+#: The statuses an add is refused with, each a reason the caller acts on rather than retries.
+_ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
+    httpx.codes.UNAUTHORIZED: RunnerAddRefusalReason.SIGN_IN_REQUIRED,
+    httpx.codes.FORBIDDEN: RunnerAddRefusalReason.FORBIDDEN,
+    httpx.codes.NOT_FOUND: RunnerAddRefusalReason.UNSUPPORTED,
+    httpx.codes.METHOD_NOT_ALLOWED: RunnerAddRefusalReason.UNSUPPORTED,
+}
+
 
 class HttpHubClient:
     """The runner's hub API client over an injected ``httpx.Client``."""
@@ -88,23 +114,13 @@ class HttpHubClient:
         self._client = client
 
     def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
-        path = f"{_FLEET_API}/queue/peek"
         request = QueuePeekRequest(capabilities=[_capability(c) for c in capabilities], policy=policy)
-        try:
-            resp = self._client.post(path, json=request.model_dump(mode="json"))
-        except httpx.HTTPError as exc:
-            raise self._wrap(exc, f"POST {path}") from exc
-        if resp.status_code == httpx.codes.UNAUTHORIZED:
-            # No token, or the matched verb's own always-raising demand for a principal
-            # — the legacy verb serves this caller in every auth mode instead.
-            return _queue(QueuePeekResponse.model_validate(self._get(path).json()))
-        self._raise_for_status(resp, f"POST {path}")
+        resp = self._post(f"{_FLEET_API}/queue/peek", request.model_dump(mode="json"))
         return _queue(QueuePeekResponse.model_validate(resp.json()))
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         body = RouteClaim(
             chunk_id=claim.chunk_id,
-            runner_id=claim.runner_id,
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
         ).model_dump(mode="json")
@@ -141,10 +157,8 @@ class HttpHubClient:
         )
         return apply_reply_of(ApplyResponse.model_validate(resp.json()))
 
-    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
-        batch = RunnerFactBatch(
-            runner_id=runner_id, facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts]
-        )
+    def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
+        batch = RunnerFactBatch(facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts])
         resp = self._post(f"{_FLEET_API}/events", batch.model_dump(mode="json"))
         ack = RunnerFactAck.model_validate(resp.json())
         return FactPushAck(
@@ -155,9 +169,8 @@ class HttpHubClient:
             route_ended=ack.route_ended,
         )
 
-    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         batch = TranscriptSegmentBatch(
-            runner_id=runner_id,
             records=[TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records],
         )
         resp = self._post(
@@ -203,7 +216,7 @@ class HttpHubClient:
 
     def register_runner(
         self,
-        runner_id: str,
+        name: str,
         workspace_id: str,
         *,
         env_capacity: int | None = None,
@@ -212,11 +225,11 @@ class HttpHubClient:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
-    ) -> None:
-        self._post(
+    ) -> RegistrationReply:
+        resp = self._post(
             f"{_FLEET_API}/runners",
             RunnerRegistrationRequest(
-                runner_id=runner_id,
+                name=name,
                 workspace_id=workspace_id,
                 env_capacity=env_capacity,
                 url=url,
@@ -228,10 +241,35 @@ class HttpHubClient:
                 gates=list(gates),
             ).model_dump(mode="json"),
         )
+        reply = RunnerRegistrationResponse.model_validate(resp.json())
+        return RegistrationReply(
+            runner_id=reply.runner_id,
+            # A hub reply carrying no name leaves the one this registration declared.
+            runner_name=reply.runner_name if reply.runner_name is not None else name,
+            first_registration=reply.first_registration,
+        )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         resp = self._get(f"{_FLEET_API}/runners/{runner_id}")
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
+
+    def identity(self) -> TokenIdentity | TokenRefusal:
+        operation = f"GET {_FLEET_API}/identity"
+        try:
+            resp = self._client.get(f"{_FLEET_API}/identity")
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, operation) from exc
+        if resp.status_code == httpx.codes.UNAUTHORIZED:
+            refusal = _identity_refusal(resp)
+            if refusal is not None:
+                _log.info("hub call refused", operation=operation, status=resp.status_code, reason=refusal.reason)
+                return refusal
+        self._raise_for_status(resp, operation)
+        try:
+            view = RunnerIdentityView.model_validate(resp.json())
+        except ValueError as exc:
+            raise _malformed(operation, exc) from exc
+        return TokenIdentity(runner_id=view.runner_id, runner_name=view.runner_name)
 
     def rekey_route_token(self, chunk_id: str) -> str:
         resp = self._post(
@@ -309,8 +347,64 @@ class HttpHubClient:
         return HubClientError(f"{operation} failed: {exc}")
 
 
+class HttpHubRunnerAdmin:
+    """The operator-credentialed add over an injected ``httpx.Client``: it presents
+    ``operator_token`` — the operator's signed-in session for this hub — when there is one, and no
+    credential otherwise."""
+
+    def __init__(self, client: httpx.Client, *, operator_token: str | None) -> None:
+        self._client = client
+        self._operator_token = operator_token
+
+    def add_runner(self, name: str) -> IssuedIdentity:
+        operation = f"POST {_RUNNERS_API}"
+        headers = {"Authorization": f"Bearer {self._operator_token}"} if self._operator_token else {}
+        try:
+            resp = self._client.post(
+                _RUNNERS_API, json=RunnerAddRequest(name=name).model_dump(mode="json"), headers=headers
+            )
+        except httpx.HTTPError as exc:
+            _log.error("hub unreachable", operation=operation, detail=str(exc))
+            raise HubClientError(f"{operation} failed: {exc}") from exc
+        reason = _ADD_REFUSALS.get(resp.status_code)
+        if reason is not None:
+            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
+            raise RunnerAddRefused(f"{operation} -> {resp.status_code}", reason=reason, detail=_detail(resp))
+        if not resp.is_success:
+            _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+            raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+        try:
+            added = RunnerAddResponse.model_validate(resp.json())
+        except ValueError as exc:
+            raise _malformed(operation, exc) from exc
+        return IssuedIdentity(runner_id=added.runner_id, runner_name=added.runner_name, token=added.token)
+
+
 def _conforms_hub_client(x: HttpHubClient) -> IHubClient:
     return x
+
+
+def _conforms_token_identity_reader(x: HttpHubClient) -> ITokenIdentityReader:
+    return x
+
+
+def _conforms_hub_runner_admin(x: HttpHubRunnerAdmin) -> IHubRunnerAdmin:
+    return x
+
+
+def _identity_refusal(resp: httpx.Response) -> TokenRefusal | None:
+    """The identity route's typed ``401``, or ``None`` for a ``401`` that is not one — a proxy's,
+    say — which the caller treats as any other failed call."""
+    try:
+        refusal = RunnerIdentityRefusal.model_validate(resp.json())
+    except ValueError:
+        return None
+    return TokenRefusal(reason=refusal.reason, runner_id=refusal.runner_id)
+
+
+def _malformed(operation: str, exc: ValueError) -> HubClientError:
+    _log.error("hub call failed", operation=operation, detail=f"malformed reply: {exc}")
+    return HubClientError(f"{operation}: malformed reply: {exc}")
 
 
 def _detail(resp: httpx.Response) -> str:

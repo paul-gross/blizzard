@@ -44,6 +44,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.repository import (
     ClosingCandidates,
+    IReadRunnerNames,
     IReadTraceStatus,
     IWriteTraceCursor,
     TraceCheckpoint,
@@ -79,9 +80,12 @@ def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Colu
 class TraceStore:
     """The trace export's reads and its cursor's appends."""
 
-    def __init__(self, store: HubStoreConnections, *, graphs: IReadManyGraphs, label: WorkRefLabel) -> None:
+    def __init__(
+        self, store: HubStoreConnections, *, graphs: IReadManyGraphs, names: IReadRunnerNames, label: WorkRefLabel
+    ) -> None:
         self._store = store
         self._graphs = graphs
+        self._names = names
         self._label = label
 
     # --- candidates -----------------------------------------------------------------
@@ -128,7 +132,8 @@ class TraceStore:
             for batch in id_batches(list(chunk_ids)):
                 built.update(self._hydrate(conn, batch))
         graphs = self._graphs.get_many(sorted({g for facts in built.values() for g in _graph_ids(facts)}))
-        return {chunk_id: _with_graphs(facts, graphs) for chunk_id, facts in built.items()}
+        names = self._names.names_for(sorted({r for facts in built.values() for r in _runner_ids(facts)}))
+        return {chunk_id: _with_reads(facts, graphs, names) for chunk_id, facts in built.items()}
 
     def _hydrate(self, conn: Connection, batch: Sequence[str]) -> dict[str, StepFacts]:
         chunk_rows = {r.chunk_id: r for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(batch)))}
@@ -386,8 +391,18 @@ def _graph_ids(facts: StepFacts) -> set[str]:
     return ids
 
 
-def _with_graphs(facts: StepFacts, graphs: dict[str, Graph]) -> StepFacts:
-    return replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs})
+def _runner_ids(facts: StepFacts) -> set[str]:
+    """Every runner a chunk's facts name — each epoch's owner and each gate's imposing runner."""
+    ids = {o.runner_id for o in facts.epoch_owners if o.runner_id is not None}
+    return ids | {d.imposed_by_runner_id for d in facts.decisions if d.imposed_by_runner_id is not None}
+
+
+def _with_reads(facts: StepFacts, graphs: dict[str, Graph], names: dict[str, str]) -> StepFacts:
+    return replace(
+        facts,
+        graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
+        runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
+    )
 
 
 def _conforms_trace_store(x: TraceStore) -> tuple[IWriteTraceCursor, IReadTraceStatus]:

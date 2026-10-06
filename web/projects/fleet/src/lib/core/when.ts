@@ -149,7 +149,7 @@ function agoUnits(deltaMs: number): string {
  * or beyond {@link SKEW_TOLERANCE_MS} in the future — never a confident `0s`
  * for a stamp that far off.
  */
-export function formatSeenAgo(lastSeenAt: string, online: boolean, now: number = Date.now()): string {
+export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boolean, now: number = Date.now()): string {
   const delta = ageMs(lastSeenAt, now);
   if (delta === null) return online ? 'online' : 'offline';
   return `seen ${agoUnits(delta)} ago`;

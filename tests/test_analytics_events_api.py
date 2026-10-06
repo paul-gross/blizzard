@@ -11,7 +11,6 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from tests.support import build_hub, seed_session, seed_user
@@ -138,7 +137,7 @@ def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> 
 @pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
     token = _seed_enrolled(tmp_path, runner_id="runner-a")
-    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(path, headers=_bearer(token))
     assert resp.status_code == 403

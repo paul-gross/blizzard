@@ -83,6 +83,7 @@ _BEGIN = "<!-- egress-dictionary:begin -->"
 _END = "<!-- egress-dictionary:end -->"
 _TOKEN = "gold"
 _FIRST_PASS = datetime(2026, 1, 2, 0, 0, tzinfo=UTC)
+_RUNNER_NAMES = {"r-1": "runner-one", "r-9": "runner-nine"}
 _SECOND_PASS = datetime(2026, 1, 3, 0, 0, tzinfo=UTC)
 _SETTINGS = EgressWriterSettings(max_rows_per_file=1000, min_free_bytes=0)
 _CODE_SCHEMAS = {"steps": STEPS_SCHEMA, "invocations": INVOCATIONS_SCHEMA, "events": EVENTS_SCHEMA}
@@ -128,12 +129,13 @@ def _views() -> list[tuple[str, str]]:
 
 
 def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
-    """Every closed step and every usage fact of the shared tracing scenarios, as the first pass exports them."""
+    """Every closed step and every usage fact of the shared tracing scenarios, as the first pass exports them, with
+    every runner they name registered under a name."""
     steps: list[tuple[ExportedStep, CursorKey]] = []
     invocations: list[ExportedInvocation] = []
     usage_id = 0
     for name, scenario in fx.scenarios().items():
-        facts = replace(scenario, chunk_id=f"ch_{name}")
+        facts = replace(scenario, chunk_id=f"ch_{name}", runner_names=_RUNNER_NAMES)
         found = identify_steps(facts)
         for step in found:
             if step.close is None:

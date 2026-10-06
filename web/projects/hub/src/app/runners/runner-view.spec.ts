@@ -8,6 +8,9 @@ const NOW = new Date().toISOString();
 
 const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   runner_id: id,
+  runner_name: `${id}-name`,
+  added_at: NOW,
+  connection: over.online === false ? 'offline' : 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -47,6 +50,47 @@ describe('RunnerPanelView', () => {
     // The line ends with the chunk's status (#156); its tone is asserted in the container spec.
     expect(claims[0].textContent).toContain('running');
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+  });
+
+  it('names each runner beside its full id, keeping two runners that share a name apart', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', { runner_name: 'r-claude' }),
+      row('rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', { runner_name: 'r-claude' }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const id of ['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M']) {
+      expect(el.querySelector(`[data-runner="${id}"] [data-testid="runner-name"]`)?.textContent?.trim()).toBe('r-claude');
+      expect(el.querySelector(`[data-runner="${id}"] [data-testid="runner-id"]`)?.textContent?.trim()).toBe(id);
+    }
+  });
+
+  it('shows a never-connected runner as never connected, not offline, with no workspace yet', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_new', { connection: 'never_connected', online: false, workspace_id: null, registered_at: null, last_seen_at: null }),
+      row('rn_gone', { online: false }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const fresh = el.querySelector('[data-runner="rn_new"]') as HTMLElement;
+    expect(fresh.getAttribute('data-connection')).toBe('never_connected');
+    expect(fresh.classList.contains('offline')).toBe(false);
+    const badge = fresh.querySelector('[data-testid="runner-never-connected"]');
+    expect(badge?.textContent).toContain('NEVER CONNECTED');
+    // The kit's calm soft pill, as the mobile registry draws the same state.
+    expect(badge?.tagName.toLowerCase()).toBe('fleet-kit-badge');
+    expect(badge?.querySelector('.badge')?.classList.contains('soft')).toBe(true);
+    expect(fresh.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('never connected');
+    expect(fresh.querySelector('.wid')?.textContent).toBe('—');
+    const gone = el.querySelector('[data-runner="rn_gone"]') as HTMLElement;
+    expect(gone.classList.contains('offline')).toBe(true);
+    expect(gone.querySelector('[data-testid="runner-never-connected"]')).toBeNull();
   });
 
   it('shows the empty state for no rows once loaded', async () => {

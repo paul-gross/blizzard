@@ -1,4 +1,4 @@
-import { type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerView } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -29,13 +29,22 @@ const question = (chunkId: string, text: string, runnerId: string | null = null)
 
 const decision = (chunkId: string, nodeName: string): DecisionView => ({ chunk_id: chunkId, node_name: nodeName }) as DecisionView;
 
-const runner = (id: string, fields: Partial<RunnerView>): RunnerView => ({ runner_id: id, ...fields }) as RunnerView;
+const runner = (id: string, fields: Partial<RunnerRegistryView>): RunnerRegistryView => ({ runner_id: id, ...fields }) as RunnerRegistryView;
 
 const queued = (chunkId: string): QueuePeekEntry => ({ chunk_id: chunkId }) as QueuePeekEntry;
 
 describe('liveRunners', () => {
   it('drops retired runners and keeps the rest in order', () => {
     const rows = liveRunners([runner('r1', { retired: false }), runner('r2', { retired: true }), runner('r3', {})]);
+    expect(rows.map((r) => r.runner_id)).toEqual(['r1', 'r3']);
+  });
+
+  it('drops a never-connected runner: added but never started, it is not down', () => {
+    const rows = liveRunners([
+      runner('r1', { connection: 'online' }),
+      runner('r2', { connection: 'never_connected' }),
+      runner('r3', { connection: 'offline' }),
+    ]);
     expect(rows.map((r) => r.runner_id)).toEqual(['r1', 'r3']);
   });
 });
@@ -54,15 +63,31 @@ describe('needsYouRows', () => {
       ],
     );
     expect(rows).toEqual([
-      { chunkId: 'ch_ask', shortId: expect.any(String), runnerId: 'r1', tone: 'waiting', pillLabel: 'ask', sub: 'Which branch?' },
-      { chunkId: 'ch_gate', shortId: expect.any(String), runnerId: 'r2', tone: 'waiting', pillLabel: 'gate', sub: 'approve' },
-      { chunkId: 'ch_needs', shortId: expect.any(String), runnerId: null, tone: 'needs', pillLabel: 'needs human', sub: 'Build' },
-      { chunkId: 'ch_waiting', shortId: expect.any(String), runnerId: null, tone: 'waiting', pillLabel: 'waiting', sub: '—' },
+      { chunkId: 'ch_ask', shortId: expect.any(String), runner: 'r1', tone: 'waiting', pillLabel: 'ask', sub: 'Which branch?' },
+      { chunkId: 'ch_gate', shortId: expect.any(String), runner: 'r2', tone: 'waiting', pillLabel: 'gate', sub: 'approve' },
+      { chunkId: 'ch_needs', shortId: expect.any(String), runner: null, tone: 'needs', pillLabel: 'needs human', sub: 'Build' },
+      { chunkId: 'ch_waiting', shortId: expect.any(String), runner: null, tone: 'waiting', pillLabel: 'waiting', sub: '—' },
     ]);
   });
 
   it('leaves a gate on an unlisted chunk unrouted', () => {
-    expect(needsYouRows([], [decision('ch_gone', 'approve')], [])[0]?.runnerId).toBeNull();
+    expect(needsYouRows([], [decision('ch_gone', 'approve')], [])[0]?.runner).toBeNull();
+  });
+
+  it("names each row's runner by display name, a runner with no name by its compact id", () => {
+    const rows = needsYouRows(
+      [{ ...question('ch_ask', 'Which branch?', 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3'), runner_name: 'r-claude' }],
+      [decision('ch_gate', 'approve')],
+      [
+        chunk('ch_gate', 'waiting_on_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
+        chunk('ch_needs', 'needs_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
+      ],
+    );
+    expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
+      ['ch_ask', 'R-ABF3.r-claude'],
+      ['ch_gate', 'R-ABF3.r-claude'],
+      ['ch_needs', 'R-7Q2M'],
+    ]);
   });
 });
 
@@ -78,8 +103,19 @@ describe('inMotionRows', () => {
       chunk('ch_ready', 'ready'),
     ]);
     expect(rows).toEqual([
-      expect.objectContaining({ chunkId: 'ch_run', runnerId: 'r1', node: 'Build', pillLabel: 'run', costUsd: 1.5, costPartial: true, estimatedCostUsd: 2 }),
-      expect.objectContaining({ chunkId: 'ch_deliver', runnerId: null, node: 'nd_build', pillLabel: 'deliver', costUsd: 0, costPartial: false, estimatedCostUsd: null }),
+      expect.objectContaining({ chunkId: 'ch_run', runner: 'r1', node: 'Build', pillLabel: 'run', costUsd: 1.5, costPartial: true, estimatedCostUsd: 2 }),
+      expect.objectContaining({ chunkId: 'ch_deliver', runner: null, node: 'nd_build', pillLabel: 'deliver', costUsd: 0, costPartial: false, estimatedCostUsd: null }),
+    ]);
+  });
+
+  it("names each row's runner by display name, a runner with no name by its compact id", () => {
+    const rows = inMotionRows([
+      chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
+      chunk('ch_deliver', 'delivering', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
+    ]);
+    expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
+      ['ch_run', 'R-ABF3.r-claude'],
+      ['ch_deliver', 'R-7Q2M'],
     ]);
   });
 });
@@ -146,6 +182,15 @@ describe('glanceVitals', () => {
       live: true,
       liveLabel: 'live',
     });
+  });
+
+  it('counts neither up nor total a runner that has never connected', () => {
+    const fleet = [
+      runner('r1', { online: true, connection: 'online' }),
+      runner('r2', { online: false, connection: 'offline' }),
+      runner('r3', { online: false, connection: 'never_connected' }),
+    ];
+    expect(glanceVitals(liveRunners(fleet), 'open', false, 0, 0).runnersUpLabel).toBe('1/2');
   });
 
   it('labels each non-open connection state', () => {

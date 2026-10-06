@@ -21,6 +21,7 @@ from blizzard.runner.harness.harness_telemetry_plan import (
     CLAUDE_CODE_SERVICE_NAME,
     CLAUDE_CODE_TRACING_SCOPE,
 )
+from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.receiver import (
@@ -40,8 +41,11 @@ from blizzard.runner.tracing.replay import ReplayWindow, ReplayWindowRefused
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint, LeaseTraceExportFailure
 from blizzard.runner.tracing.status import cursor_lag, export_failure_ongoing
 from blizzard.runner.tracing.sweep import cursor_after, rejected_tracing_report, skipped_window_report
+from tests.runner_fakes import REGISTERED_AT
 
 pytestmark = pytest.mark.unit
+
+_RUNNER = RunnerIdentity(runner_id="r1", runner_name="r-claude", registered_at=REGISTERED_AT)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -54,7 +58,6 @@ def _lease() -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=1,
-        runner_id="r1",
         retries_max=2,
         created_at=_T0,
     )
@@ -161,13 +164,17 @@ def test_bucket_refill_and_take_with_explicit_now() -> None:
 
 
 def test_route_spans_keeps_the_cli_and_refuses_other_programs_by_default() -> None:
-    routing = route_spans([_span(CLI_SCOPE), _span("some.library")], _lease(), programs=False, harness=False)
+    routing = route_spans(
+        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False
+    )
     assert ([s.scope_name for s in routing.cli], routing.others) == ([CLI_SCOPE], [])
     assert (routing.accepted, routing.dropped, routing.kept, routing.refused, routing.rest_received) == (1, 1, 1, 1, 2)
 
 
 def test_route_spans_admits_other_programs_under_worker_programs() -> None:
-    routing = route_spans([_span(CLI_SCOPE), _span("some.library")], _lease(), programs=True, harness=False)
+    routing = route_spans(
+        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=True, harness=False
+    )
     assert [s.scope_name for s in routing.cli] == [CLI_SCOPE]
     assert [s.scope_name for s in routing.others] == ["some.library"]
     assert (routing.accepted, routing.dropped) == (2, 0)
@@ -175,9 +182,9 @@ def test_route_spans_admits_other_programs_under_worker_programs() -> None:
 
 def test_route_spans_keeps_claude_codes_scope_only_under_harness_telemetry() -> None:
     claude = _span(CLAUDE_CODE_TRACING_SCOPE)
-    on = route_spans([claude], _lease(), programs=False, harness=True)
+    on = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=True)
     assert (len(on.claude.kept), on.claude_received, on.rest_received) == (1, 1, 0)
-    off = route_spans([claude], _lease(), programs=False, harness=False)
+    off = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=False)
     assert (off.claude_received, off.rest_received, off.dropped) == (0, 1, 1)
 
 
@@ -212,6 +219,7 @@ def _receiver(*, enabled: bool, harness: bool = True, capacity: int = 1000) -> T
         metric_bounds=ReceiverBounds(SpanRateLimiter(clock, capacity=capacity), ReceiverCounter()),
         log_bounds=ReceiverBounds.fresh(clock),
         clock=clock,
+        identity=RunnerIdentityHolder(_RUNNER),
         harness_telemetry=harness,
     )
 

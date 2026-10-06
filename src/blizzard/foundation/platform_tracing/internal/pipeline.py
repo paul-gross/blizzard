@@ -24,7 +24,7 @@ from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
 from sqlalchemy import Engine
 
-from blizzard.foundation.platform_tracing.handle import ScopeFilter
+from blizzard.foundation.platform_tracing.handle import ScopeFilter, SpanStamp
 from blizzard.foundation.platform_tracing.internal.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.internal.sampling import sampler
 from blizzard.foundation.platform_tracing.internal.semconv import pin_stable_semconv
@@ -39,11 +39,34 @@ _SQLALCHEMY_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
 
 
 class _Stamping(SpanProcessor):
-    def __init__(self, attributes: Mapping[str, str]) -> None:
-        self._attributes = dict(attributes)
+    """Stamps each span with what ``stamp`` answers as it starts, then hands it on to ``export``; a span
+    started while ``stamp`` answers ``None`` never reaches ``export``, so it is never exported."""
+
+    def __init__(self, stamp: SpanStamp, export: SpanProcessor) -> None:
+        self._stamp = stamp
+        self._export = export
+        self._withheld: set[int] = set()
 
     def on_start(self, span: Span, parent_context: Context | None = None) -> None:
-        span.set_attributes(self._attributes)
+        attributes = self._stamp()
+        if attributes is None:
+            self._withheld.add(span.get_span_context().span_id)
+            return
+        span.set_attributes(attributes)
+        self._export.on_start(span, parent_context)
+
+    def on_end(self, span: ReadableSpan) -> None:
+        context = span.context
+        if context is not None and context.span_id in self._withheld:
+            self._withheld.discard(context.span_id)
+            return
+        self._export.on_end(span)
+
+    def shutdown(self) -> None:
+        self._export.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._export.force_flush(timeout_millis)
 
 
 class _SdkTracer:
@@ -128,17 +151,15 @@ class EnabledPlatformTracing:
         resource: Mapping[str, str],
         scope: str,
         scope_version: str,
-        stamped: Mapping[str, str],
+        stamp: SpanStamp | None,
         exporter: SpanExporter | None,
     ) -> EnabledPlatformTracing:
         pin_stable_semconv()
         provider = TracerProvider(
             sampler=sampler(ratio, environ), resource=Resource.create(dict(resource)), shutdown_on_exit=False
         )
-        if stamped:
-            provider.add_span_processor(_Stamping(stamped))
         processor = BatchSpanProcessor(RedactingExporter(exporter or OTLPSpanExporter()))
-        provider.add_span_processor(processor)
+        provider.add_span_processor(processor if stamp is None else _Stamping(stamp, processor))
         return cls(provider, _SdkTracer(provider.get_tracer(scope, scope_version)), processor)
 
     @property

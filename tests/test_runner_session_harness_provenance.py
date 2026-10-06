@@ -136,7 +136,6 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
                 node_id="node_1",
                 node_name="build",
                 epoch=ordinal,
-                runner_id="runner_1",
                 retries_max=1,
                 created_at=at,
                 session_name="shared-pool",
@@ -232,7 +231,6 @@ def test_transcript_segment_freezes_the_leases_own_resolved_model_and_effort(tmp
             node_id="node_1",
             node_name="build",
             epoch=1,
-            runner_id="runner_1",
             retries_max=1,
             created_at=_NOW,
             resolved_model="claude-sonnet-5",
@@ -265,7 +263,6 @@ def test_transcript_segment_leaves_model_and_effort_unset_when_unresolved(tmp_pa
             node_id="node_1",
             node_name="build",
             epoch=1,
-            runner_id="runner_1",
             retries_max=1,
             created_at=_NOW,
         )
@@ -295,7 +292,6 @@ def test_identified_spawn_freezes_the_spawn_cwd_onto_its_segment(tmp_path: Path)
             node_id="node_1",
             node_name="build",
             epoch=1,
-            runner_id="runner_1",
             retries_max=1,
             created_at=_NOW,
         )

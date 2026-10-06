@@ -38,6 +38,9 @@ const NOW = new Date().toISOString();
 const ROWS: readonly RunnerRow[] = [
   {
     runner_id: 'rn_online',
+    runner_name: 'online',
+    added_at: NOW,
+    connection: 'online',
     workspace_id: 'ws_a',
     registered_at: NOW,
     last_seen_at: NOW,
@@ -68,6 +71,9 @@ const ROWS: readonly RunnerRow[] = [
   },
   {
     runner_id: 'rn_paused',
+    runner_name: 'paused',
+    added_at: NOW,
+    connection: 'offline',
     workspace_id: 'ws_a',
     registered_at: NOW,
     last_seen_at: NOW,
@@ -93,6 +99,9 @@ const ROWS: readonly RunnerRow[] = [
   },
   {
     runner_id: 'rn_retired',
+    runner_name: 'retired',
+    added_at: NOW,
+    connection: 'offline',
     workspace_id: 'ws_a',
     registered_at: NOW,
     last_seen_at: NOW,
@@ -109,6 +118,9 @@ const ROWS: readonly RunnerRow[] = [
   },
   {
     runner_id: 'rn_freshness',
+    runner_name: 'freshness',
+    added_at: NOW,
+    connection: 'online',
     workspace_id: 'ws_a',
     registered_at: NOW,
     last_seen_at: NOW,
@@ -153,6 +165,40 @@ const ROWS: readonly RunnerRow[] = [
       },
     ],
   },
+  // Added at the hub but never started: no workspace, contact, or capabilities yet.
+  {
+    runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNNEW1',
+    runner_name: 'runner-with-a-genuinely-long-operator-chosen-name',
+    added_at: NOW,
+    connection: 'never_connected',
+    workspace_id: null,
+    registered_at: null,
+    last_seen_at: null,
+    nowMs: Date.parse(NOW),
+    online: false,
+    hub_paused: false,
+    locally_paused: false,
+    used: 0,
+    claims: [],
+    subscriptionPaces: [],
+  },
+  // The same long name on a second runner: each card keeps its own full id.
+  {
+    runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M',
+    runner_name: 'runner-with-a-genuinely-long-operator-chosen-name',
+    added_at: NOW,
+    connection: 'online',
+    workspace_id: 'ws_a',
+    registered_at: NOW,
+    last_seen_at: NOW,
+    nowMs: Date.parse(NOW),
+    online: true,
+    hub_paused: false,
+    locally_paused: false,
+    used: 0,
+    claims: [],
+    subscriptionPaces: [],
+  },
 ];
 
 async function render() {
@@ -170,7 +216,7 @@ async function render() {
 }
 
 describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
-  it.each([390, 320])('stacks every runner card with no horizontal overflow at %ipx', async (width) => {
+  it.each([1280, 390, 320])('stacks every runner card with no horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
@@ -191,7 +237,7 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       expect(panel).not.toBeNull();
 
       const cards = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="mobile-fleet-runner"]'));
-      expect(cards).toHaveLength(4);
+      expect(cards).toHaveLength(6);
 
       const rects = cards.map((c) => c.getBoundingClientRect());
       for (let i = 1; i < rects.length; i++) {

@@ -40,6 +40,7 @@ class ExportedStep:
     decision_id: str | None
     visit: int
     runner_id: str | None
+    runner_name: str | None
     harness_id: str | None
     models: tuple[str, ...]
     started_at: datetime
@@ -96,6 +97,7 @@ class ExportedInvocation:
     node_id: str
     node_name: str
     runner_id: str
+    runner_name: str | None
     kind: str
     model: str
     harness_id: str | None
@@ -120,7 +122,7 @@ def trace_id_text(key: StepKey) -> str:
 
 
 def step_row(summary: StepSummary, exported_at: datetime) -> ExportedStep:
-    """The ``steps`` row of a closed step. ``runner_id`` is the holder of a runner step only."""
+    """The ``steps`` row of a closed step. ``runner_id`` and ``runner_name`` name the holder of a runner step only."""
     return ExportedStep(
         step_key=summary.step_key.text(),
         trace_id=trace_id_text(summary.step_key),
@@ -136,6 +138,7 @@ def step_row(summary: StepSummary, exported_at: datetime) -> ExportedStep:
         decision_id=summary.decision_id,
         visit=summary.visit,
         runner_id=summary.runner_id if summary.kind is StepKind.RUNNER else None,
+        runner_name=summary.runner_name if summary.kind is StepKind.RUNNER else None,
         harness_id=summary.harness_id,
         models=summary.models,
         started_at=summary.started_at,
@@ -171,7 +174,8 @@ def invocation_row(
     facts: StepFacts, step: NodeStep, usage: AttributedUsage, exported_at: datetime
 ) -> ExportedInvocation:
     """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
-    open or closed."""
+    open or closed. Its runner's name comes from ``facts``, which name every epoch's owner, and a runner reports
+    usage only for the epochs it held."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact
@@ -186,6 +190,7 @@ def invocation_row(
         node_id=step.position.node_id,
         node_name=step.position.node_name,
         runner_id=usage.runner_id,
+        runner_name=facts.runner_names.get(usage.runner_id),
         kind=fact.kind,
         model=fact.model,
         harness_id=fact.harness_id,

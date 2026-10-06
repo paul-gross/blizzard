@@ -34,6 +34,7 @@ from blizzard.runner.lifecycle.model import (
     restart_disposition,
     unpause_move,
 )
+from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
@@ -166,7 +167,10 @@ class DormantSession:
             # Hub unreachable — the intent is durable and the envs stay held. Resuming blind
             # would risk re-asserting authority over a chunk that may have been reassigned.
             return
-        disposition = restart_disposition(view, self.ctx.config.runner_id, fenced=fenced.out(view, lease))
+        runner_id = registered_runner_id(self.ctx.identity)
+        if runner_id is None:
+            return  # whether the route is still ours waits for the first registration; the intent is durable
+        disposition = restart_disposition(view, runner_id, fenced=fenced.out(view, lease))
         if disposition is RestartDisposition.PARK:
             Attempt(self.ctx, lease).park_paused(via="resume")
         elif disposition is RestartDisposition.PREEMPT:
@@ -239,9 +243,12 @@ class DormantSession:
         # Read fresh, not the tick's hoisted read: settling above may have just cleared it.
         standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        runner_id = registered_runner_id(self.ctx.identity)
+        if runner_id is None:
+            return  # stays parked: whether the route is still ours waits for the first registration
         move = unpause_move(
             view,
-            self.ctx.config.runner_id,
+            runner_id,
             braked=Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id),
             ask_parked=lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids(),
             judge_parked=standing is not None,

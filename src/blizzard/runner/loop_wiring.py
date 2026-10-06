@@ -150,7 +150,7 @@ class LoopWiring:
             # directory's `ensure` and its owning lease's row landing.
             _worker_scratch.sweep_orphans(lease.lease_id for lease in stores.lease_record.list_active_leases())
         loop_config = LoopConfig(
-            runner_id=config.runner_id,
+            runner_name=config.name,
             workspace_id=config.workspace_id,
             max_agents=config.max_agents,
             base_branch=config.base_branch,
@@ -184,6 +184,7 @@ class LoopWiring:
             stores=stores,
             clock=clock,
             hub=hub,
+            identity=graph.identity,
             # The non-memoizing default — only `tick()` itself upgrades this per call.
             chunk_views=ReadThroughChunkViews(hub),
             provider=provider,
@@ -357,7 +358,7 @@ class PeriodicDriver:
                 sweep_worker_scratch=True,
                 tracer=self._graph.platform_tracing.tracer,
             )
-            _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
+            _log.info("reconciliation loop started", runner_name=config.name, interval=self._interval)
             while not self._stop.is_set():
                 try:
                     tick(ctx)
@@ -368,4 +369,4 @@ class PeriodicDriver:
             if ctx is not None:
                 ctx.usage_http_client.close()
             self._client.close()
-            _log.info("reconciliation loop stopped", runner_id=config.runner_id)
+            _log.info("reconciliation loop stopped", runner_name=config.name)

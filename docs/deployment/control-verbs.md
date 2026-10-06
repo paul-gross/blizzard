@@ -176,12 +176,13 @@ other spawn site (restart-resume, answer-resume, requeue respawn) but never a wo
 ### Retire and reinstate
 
 `blizzard hub runner retire <runner_id>` takes a runner out of service for good: it revokes the runner's token, hides it
-from `runner list` and the board's fleet views, and refuses every call the runner makes to the hub with a `403`,
-whatever `runner_auth_mode` is — a claim gets the same `403` denial a paused runner gets. Federation through the runner
+from `runner list` and the board's fleet views, and refuses every call the runner makes to the hub. With its token
+revoked, each call gets a `401`. Only a token an enroll minted in a race with the retire still resolves, and the hub
+refuses its calls with a `403` — a claim gets the same `403` denial a paused runner gets. Federation through the runner
 stops too: `/api/auth/authorize` with the runner's client and a redirect URI it registered returns a `403`. The runner's
-registration and every fact attributed to it stay, so chunk history, transcripts, and events keep naming it.
-`runner list --all` (and the board's "show retired" chip) shows retired runners marked with when and by whom. `--by`
-records who retired it.
+registration and every fact attributed to it stay, so chunk history, transcripts, and events keep naming it by its id
+and latest name. `runner list --all` (and the board's "show retired" chip) shows retired runners marked with when and by
+whom. `--by` records who retired it.
 
 A runner still holding chunks refuses the retire with a `409` naming each held chunk and its environments. `--force`
 records the retirement and then releases every held route through the same path `chunk detach` uses, so each chunk
@@ -214,8 +215,8 @@ An open gate decision shows wherever a waiting chunk does, derived from the deci
 
 - the board rail's Open gates section, which lists every open gate fleet-wide with its node, origin, and choices;
 - a `gate` marker on the board card of a chunk with an open gate, and a `gate` pill in the mobile "Needs you" list;
-- the Gate panel of a waiting chunk, which reads "gated by runner `<id>` (runner config)", or "declared by the graph"
-  when the graph made the node human-judged;
+- the Gate panel of a waiting chunk, which reads "gated by runner `R-XXXX.<name>` (runner config)" — the runner's
+  compact id and name — or "declared by the graph" when the graph made the node human-judged;
 - the resolved line that replaces the Gate panel's choices once someone resolves it, "`<choice>` by `<who>`, `<when>`",
   until the runner records the transition. A resolve that loses the race to another person shows the same line.
 

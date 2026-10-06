@@ -33,9 +33,10 @@ CALLBACK_PATH = "/api/auth/callback"
 @domain_model
 @dataclass(frozen=True)
 class CookieNames:
-    """The runner's cookie names, namespaced by ``runner_id``. Browsers scope cookies by host and
-    ignore the port, so two same-host runners would otherwise share one jar and overwrite each
-    other's session. Characters outside the RFC 6265 cookie-name ``token`` set become ``_``."""
+    """The runner's cookie names, namespaced by its hub id — browsers scope cookies by host and ignore
+    the port, and two same-host runners may share a name, so nothing else keeps them from sharing one
+    jar and overwriting each other's session. A character outside RFC 6265's cookie-name ``token`` set
+    becomes ``_``."""
 
     runner_id: str
 

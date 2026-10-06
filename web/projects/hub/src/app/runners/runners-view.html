@@ -32,8 +32,10 @@
         <li
           class="runner"
           data-testid="mobile-fleet-runner"
-          [class.offline]="!row.online"
+          [class.offline]="row.connection === connection.OFFLINE"
+          [class.never]="row.connection === connection.NEVER_CONNECTED"
           [attr.data-runner]="row.runner_id"
+          [attr.data-connection]="row.connection"
           [attr.data-online]="row.online"
           [attr.data-hub-paused]="row.hub_paused"
           [attr.data-locally-paused]="row.locally_paused"
@@ -43,13 +45,16 @@
             <span
               class="dot"
               [class.online]="row.online"
-              [class.offline]="!row.online"
+              [class.offline]="row.connection === connection.OFFLINE"
+              [class.never]="row.connection === connection.NEVER_CONNECTED"
               aria-hidden="true"
             ></span>
-            <span class="id" data-testid="mobile-fleet-runner-id">{{ row.runner_id }}</span>
-            <span class="seen" data-testid="mobile-fleet-runner-seen">{{ formatSeenAgo(row.last_seen_at, row.online, row.nowMs) }}</span>
+            <span class="name" data-testid="mobile-fleet-runner-name">{{ row.runner_name }}</span>
+            <span class="seen" data-testid="mobile-fleet-runner-seen">{{ seenLabel(row) }}</span>
           </div>
-          <div class="ws" data-testid="mobile-fleet-runner-workspace">{{ row.workspace_id }}</div>
+          <!-- The full id: names are not unique, so two runners sharing one stay apart. -->
+          <div class="rid" data-testid="mobile-fleet-runner-id">{{ row.runner_id }}</div>
+          <div class="ws" data-testid="mobile-fleet-runner-workspace">{{ row.workspace_id ?? '—' }}</div>
 
           <!-- Current work: the chunks this runner currently holds a route on. -->
           @if (row.claims.length > 0) {
@@ -107,6 +112,11 @@
                   >LOCALLY PAUSED</fleet-kit-badge
                 >
               }
+              @if (row.connection === connection.NEVER_CONNECTED) {
+                <fleet-kit-badge data-testid="mobile-fleet-runner-never-connected" tone="idle" variant="soft"
+                  >NEVER CONNECTED</fleet-kit-badge
+                >
+              }
               @if (row.retired) {
                 <fleet-kit-badge
                   data-testid="mobile-fleet-runner-retired"
@@ -128,7 +138,7 @@
             @if (canPause()) {
               <fleet-kit-button
                 testid="mobile-fleet-runner-toggle"
-                [ariaLabel]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
+                [ariaLabel]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_name + ' (' + row.runner_id + ') at the hub'"
                 [title]="toggleHint(row)"
                 [disabled]="isPausePending(row)"
                 (click)="togglePause.emit(row)"

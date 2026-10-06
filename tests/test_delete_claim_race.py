@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.store.internal import work_item_store as work_item_store_module
-from tests.support import build_hub, ingest
+from tests.support import added_runner, build_hub, ingest, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,8 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])  # promote=True by default -> ready
     # Registered up front, so the claim's only wait is the delete's lock, not a registration write.
-    hub.services.fleet.register("r1", "w1")
+    seed_runner(hub, "r1", register=False)
+    hub.services.fleet.register(added_runner(hub, "r1"), "w1")
 
     entered_write = threading.Event()
     release_write = threading.Event()

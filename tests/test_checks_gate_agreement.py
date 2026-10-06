@@ -130,7 +130,6 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=clock.now(),
         )

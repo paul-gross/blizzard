@@ -21,6 +21,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerRegistration,
+    declared_name,
 )
 from blizzard.hub.domain.runners.route import Route
 
@@ -34,6 +35,16 @@ class ReleasedRoute:
 
     chunk_id: str
     released_id: int
+
+
+@domain_model
+@dataclass(frozen=True)
+class Registered:
+    """What one registration recorded: whether it was the runner's first since it was added, and
+    the name the runner now holds — the one it declared, else the one it already held."""
+
+    first: bool
+    name: str
 
 
 @domain_model
@@ -74,24 +85,28 @@ class FleetService:
 
     def register(
         self,
-        runner_id: str,
+        held: RunnerRegistration,
         workspace_id: str,
         *,
+        name: str | None = None,
         env_capacity: int | None = None,
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
-    ) -> bool:
-        """Register (or refresh) a runner; returns True on a first registration.
+    ) -> Registered:
+        """Register (or refresh) ``held``, a runner the hub added — the one its bearer token names.
 
-        The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
-        ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
-        values store as null/empty. A retired runner raises :class:`RunnerRetired` before any write."""
-        self._retired.refuse_if_retired(runner_id, action="registration")
-        created = self._registry.upsert_registration(
+        The runner's reported facts are overwritten on every registration; absent values store as
+        null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A
+        retired runner raises :class:`RunnerRetired` before any write."""
+        held.refuse_if_retired(action="registration")
+        runner_id = held.runner_id
+        recorded_name = declared_name(name)
+        created = self._registry.record_registration(
             runner_id,
+            name=recorded_name,
             workspace_id=workspace_id,
             env_capacity=env_capacity,
             public_url=public_url,
@@ -104,6 +119,7 @@ class FleetService:
         _log.info(
             "runner registered",
             runner_id=runner_id,
+            name=recorded_name or held.name,
             workspace_id=workspace_id,
             env_capacity=env_capacity,
             public_url=public_url,
@@ -111,7 +127,7 @@ class FleetService:
             subscriptions=None if subscriptions is None else [s.slug for s in subscriptions],
             first_time=created,
         )
-        return created
+        return Registered(first=created, name=recorded_name or held.name)
 
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered. A retired runner
@@ -169,7 +185,7 @@ class FleetService:
         return fact_id
 
     def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
-        """Revoke the runner's current token, leaving it registered; returns the revocation id.
+        """Revoke the runner's current token, leaving it added; returns the revocation id.
         Refuses with :class:`RunnerNotEnrolled` when it holds none."""
         revocation = registration.revoke_token(by=by, at=self._clock.now())
         revocation_id = self._registry.revoke_token(revocation.runner_id, at=revocation.at, by=revocation.by)
@@ -179,7 +195,7 @@ class FleetService:
         return revocation_id
 
     def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
-        """Flip the fleet's brake for a registered runner, returning the freshly-written
+        """Flip the fleet's brake for an added runner, connected or not, returning the freshly-written
         ``runner_pause_facts.id`` (the activity-feed's key). Takes the loaded
         registration (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to
         it (404 if unknown) before calling this."""
@@ -237,8 +253,8 @@ class FleetService:
         return self._liveness(registration)
 
     def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:
-        """Every registered runner with its derived liveness — the ``GET /runners`` view;
-        retired runners only when ``include_retired``."""
+        """Every added runner, oldest first and never-connected ones included, with its derived
+        liveness — the ``GET /runners`` view; retired runners only when ``include_retired``."""
         return [self._liveness(r) for r in self._registry.list_runners(include_retired=include_retired)]
 
     def _liveness(self, registration: RunnerRegistration) -> RunnerLiveness:

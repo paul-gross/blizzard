@@ -50,6 +50,7 @@ from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import router as fleet_router
+from blizzard.hub.api.fleet_identity import router as fleet_identity_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
 from blizzard.hub.api.garden_runs import router as garden_runs_router
 from blizzard.hub.api.graphs import router as graphs_router
@@ -374,6 +375,9 @@ def create_app(
     app.include_router(egress_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
+    # The identity route is the one `/api/fleet` path outside the fleet router's gate: it is how a
+    # runner learns its token is refused, so it answers the refusal itself — mounted first.
+    app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)

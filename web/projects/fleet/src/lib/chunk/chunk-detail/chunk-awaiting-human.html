@@ -51,7 +51,7 @@
              the graph's declaration otherwise. -->
         <p class="gate-origin" data-testid="decision-origin">
           @if (d.imposed_by_runner_id; as runnerId) {
-            gated by runner <span class="gate-runner" data-testid="decision-origin-runner">{{ runnerId }}</span> (runner config)
+            gated by runner <span class="gate-runner" data-testid="decision-origin-runner" [attr.title]="runnerId">{{ runnerDisplayName(runnerId, d.imposed_by_runner_name) }}</span> (runner config)
           } @else {
             declared by the graph
           }

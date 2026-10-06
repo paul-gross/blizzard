@@ -1,3 +1,13 @@
+<!-- The runner's own identity: its name, then its full hub-minted id kept whole, or its configured
+     name and `not registered` before its first registration gives it an id. -->
+<ng-template #identityValue>
+  {{ view().runner_name ?? '—' }} ·
+  @if (view().runner_id; as id) {
+    <span class="rid" [title]="id">{{ id }}</span>
+  } @else {
+    <span>not registered</span>
+  }
+</ng-template>
 <ng-template #endpointValue>
   <span class="path" data-testid="hub-endpoint">{{ view().hub.endpoint }}</span>
 </ng-template>
@@ -10,7 +20,7 @@
   <span [class.paused]="view().pause.effective">{{ view().pause.effective ? 'PAUSED' : 'FILLING' }}</span>
   <small class="tick">· tick {{ lastTickLabel() }}</small>
 </ng-template>
-<fleet-kit-fact-list class="li-facts" [rows]="factRows(endpointValue, linkValue, loopValue)" />
+<fleet-kit-fact-list class="li-facts" [rows]="factRows(identityValue, endpointValue, linkValue, loopValue)" />
 <div class="fleet-strip" [class.stale]="fleetStale()" data-testid="fleet-strip">
   <div class="fs-head">
     <span class="fs-lbl">Fleet</span>

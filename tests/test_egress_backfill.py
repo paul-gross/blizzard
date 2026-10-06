@@ -43,7 +43,7 @@ def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object
 def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter) -> EgressBackfill:
     connections = hub_store_connections(hub.engine)
     return EgressBackfill(
-        steps=TraceStore(connections, graphs=hub.services.graphs, label=label),
+        steps=TraceStore(connections, graphs=hub.services.graphs, names=hub.services.registry, label=label),
         egress=_store(hub),
         event_reads=EgressEventStore(connections),
         paths=FilePathPolicy("absolute"),

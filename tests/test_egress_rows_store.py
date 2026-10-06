@@ -132,9 +132,9 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
     hub.clock.advance(timedelta(seconds=5))
     pass_build(hub, chunk_id, graph)
 
-    facts = TraceStore(hub_store_connections(hub.engine), graphs=hub.services.graphs, label=label).step_facts_for(
-        [chunk_id]
-    )[chunk_id]
+    facts = TraceStore(
+        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+    ).step_facts_for([chunk_id])[chunk_id]
     steps = identify_steps(facts)
     closed = [st for st in steps if st.close is not None]
     assert {st.kind for st in closed} == {StepKind.RUNNER, StepKind.GATE}

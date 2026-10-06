@@ -96,9 +96,9 @@ class TranscriptSegmentRecord(BaseModel):
 class TranscriptSegmentBatch(BaseModel):
     """A runner's push of one-or-more buffered transcript records, ordered by ``seq`` —
     the transcript lane's own store-and-forward batch, distinct from the fact lane's
-    ``RunnerFactBatch``."""
+    ``RunnerFactBatch``. Attributed to the runner its bearer token names; the body carries no
+    runner id."""
 
-    runner_id: str
     records: list[TranscriptSegmentRecord]
 
 

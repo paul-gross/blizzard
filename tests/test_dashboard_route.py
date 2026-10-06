@@ -25,7 +25,14 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.status.view import RunnerStatusService
-from tests.runner_fakes import FakeHarness, FakeHarnessHealth, make_store, make_stores, no_retry_clock
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHarnessHealth,
+    make_store,
+    make_stores,
+    no_retry_clock,
+    registered_identity,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -49,7 +56,8 @@ def _app_with_status(
         asks=store,
         takeover=store,
         escalations=store,
-        runner_id=config.runner_id,
+        identity=registered_identity("rn_status", config.name),
+        runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
@@ -76,7 +84,6 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 1,
-        "runner_id": "runner-local",
         "retries_max": 2,
         "created_at": _NOW,
     }
@@ -138,7 +145,7 @@ def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["runner"]["runner_id"] == "runner-local"
+    assert (body["runner"]["runner_id"], body["runner"]["runner_name"]) == ("rn_status", "runner-local")
     assert [e["chunk_id"] for e in body["environments"]["items"]] == ["ch_1", "ch_2"]
     assert [a["question_id"] for a in body["asks"]["items"]] == ["qn_1"]
     assert [e["chunk_id"] for e in body["escalations"]["items"]] == ["ch_2"]

@@ -21,6 +21,7 @@ from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     http_hub_client,
     mint_fixture,
@@ -72,7 +73,6 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
         chunk_id = _seed(hub)
 
         ack = client.push_facts(
-            "runner-parity",
             [
                 PushedFact(
                     seq=1,
@@ -88,7 +88,7 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
         )
         assert 1 in ack.applied, ack
 
-        detail = hub.get(f"/api/fleet/chunks/{chunk_id}")
+        detail = hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub))
         assert detail.status_code == 200, detail.text
         escalation = detail.json()["escalation"]
         assert escalation is not None, detail.text
@@ -108,7 +108,6 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
         question_id = f"parity-question-{uuid.uuid4().hex[:24]}"
 
         ack = client.push_facts(
-            "runner-parity",
             [
                 PushedFact(
                     seq=1,
@@ -159,9 +158,7 @@ def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -
         client.register_runner(
             "runner-parity", "ws1", capabilities=(HarnessCapability("claude", tiers=["blizzard:basic"], default=True),)
         )
-        outcome = client.claim_route(
-            ClaimRequest(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
-        )
+        outcome = client.claim_route(ClaimRequest(chunk_id=chunk_id, workspace_id="ws1", environment_ids=["e1"]))
 
         assert outcome.claimed is not None, outcome
         assert outcome.claimed.envelope.node.session_harnesses == ["claude", "codex"]
@@ -239,7 +236,7 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
 
         # Self-expiring (remaining=1, consumed above); the chunk's seeded state was never
         # deleted — it reads normally again, proof the 404 was manufactured.
-        still_seeded = hub.get(f"/api/fleet/chunks/{chunk_id}")
+        still_seeded = hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub))
         assert still_seeded.status_code == 200, still_seeded.text
 
 

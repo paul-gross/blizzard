@@ -23,6 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
+from tests.runner_join import join_runner, runner_spawn_env
 from tests.support import (
     create_repositories,
     create_work_sources,
@@ -839,8 +840,14 @@ def start_hub(
     return proc
 
 
-def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_port: int, port: int) -> RunnerConfig:
-    """Scaffold + persist a runner config pointed at the fixture workspace and mock harness."""
+def write_runner_config(
+    runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_port: int, port: int, join: bool = True
+) -> RunnerConfig:
+    """Scaffold + persist a runner config pointed at the fixture workspace and mock harness. ``join``
+    first adds the runner at the hub on ``hub_port`` through ``runner init``, which writes its token to
+    ``runner_dir/.env``; a scenario with no hub listening passes ``join=False``."""
+    if join:
+        join_runner(runner_dir, f"http://127.0.0.1:{hub_port}")
     base = init_runner_environment(runner_dir)
     claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     config = dataclasses.replace(
@@ -886,7 +893,10 @@ def start_runner(
 ) -> subprocess.Popen[str]:
     """Start (or restart) the runner daemon; arm ``crash_point`` for a runner-side point."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})}
+    env = runner_spawn_env(
+        RunnerConfig.load(runner_dir).hub_url,
+        {"BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
+    )
     _apply_crash_env(env, crash_point)
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir)],

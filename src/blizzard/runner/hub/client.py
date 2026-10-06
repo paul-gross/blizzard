@@ -1,12 +1,18 @@
-"""The hub-client seam — the runner's outbound-only edge to the hub HTTP API."""
+"""The hub-client seam — the runner's outbound-only edge to the hub HTTP API.
+
+Every fleet call presents the runner's own bearer token, and the hub takes the runner's identity
+from that token alone. The one call made under an operator's credential instead — adding a runner
+— has its own narrow port, :class:`IHubRunnerAdmin`."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
@@ -35,6 +41,26 @@ class ChunkEndedError(HubClientError):
 
     def __init__(self, message: str, *, detail: str) -> None:
         super().__init__(message)
+        self.detail = detail
+
+
+class RunnerAddRefusalReason(StrEnum):
+    """Why the hub refused to add a runner: ``SIGN_IN_REQUIRED``, the hub requires an operator
+    session and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator
+    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405)."""
+
+    SIGN_IN_REQUIRED = "sign_in_required"
+    FORBIDDEN = "forbidden"
+    UNSUPPORTED = "unsupported"
+
+
+class RunnerAddRefused(HubClientError):
+    """The hub answered an add with a refusal — terminal for the caller, never retried. ``reason``
+    says which; ``detail`` is the hub's refusal text. Still a :class:`HubClientError`."""
+
+    def __init__(self, message: str, *, reason: RunnerAddRefusalReason, detail: str) -> None:
+        super().__init__(message)
+        self.reason = reason
         self.detail = detail
 
 
@@ -106,11 +132,10 @@ class HubQuestion:
 @domain_model
 @dataclass(frozen=True)
 class ClaimRequest:
-    """A complete route the claiming runner asks the hub for: the chunk, this runner, its
-    workspace, and the environments it already bound."""
+    """A complete route the claiming runner asks the hub for: the chunk, its workspace, and the
+    environments it already bound. The hub knows the claimant from its token."""
 
     chunk_id: str
-    runner_id: str
     workspace_id: str
     environment_ids: list[str]
 
@@ -264,6 +289,47 @@ class TranscriptPushAck:
     refused: list[int] = field(default_factory=list)
 
 
+@domain_model
+@dataclass(frozen=True)
+class RegistrationReply:
+    """The hub's reply to a successful registration: the runner's hub-minted id, the name the hub
+    now holds for it, and whether this was its first registration since it was added."""
+
+    runner_id: str
+    runner_name: str
+    first_registration: bool
+
+
+@domain_model
+@dataclass(frozen=True)
+class TokenIdentity:
+    """The runner the hub says a presented bearer token belongs to — its id and current name."""
+
+    runner_id: str
+    runner_name: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class TokenRefusal:
+    """The hub's refusal of a presented bearer token. ``runner_id`` names the runner a ``revoked``
+    or ``retired`` token was issued to; ``None`` for a ``missing`` or ``unknown`` one."""
+
+    reason: RunnerTokenRefusalReason
+    runner_id: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class IssuedIdentity:
+    """A runner the hub just added: its minted id, its initial name, and the plaintext bearer token
+    minted with the id — shown by the hub this once."""
+
+    runner_id: str
+    runner_name: str
+    token: str
+
+
 class IChunkStatusReader(Protocol):
     """The chunk-status read alone, narrowed from :class:`IHubClient` (``bzh:seam-size-ceiling``)."""
 
@@ -279,8 +345,8 @@ class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
-        """The FILL read — the queue entries matching ``capabilities`` under ``policy``; at most
-        one while this runner holds a token."""
+        """The FILL read (``POST /api/fleet/queue/peek``) — at most one queue entry matching ``capabilities``
+        under ``policy``; a refusal raises ``HubClientError``."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
@@ -297,11 +363,11 @@ class IHubClient(IChunkStatusReader, Protocol):
         """``POST /api/fleet/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
         ...
 
-    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
+    def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
         ...
 
-    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
         push, seq-idempotent against its own high-water mark. Structurally independent
         of :meth:`push_facts`: a wedged or slow
@@ -328,7 +394,7 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def register_runner(
         self,
-        runner_id: str,
+        name: str,
         workspace_id: str,
         *,
         env_capacity: int | None = None,
@@ -337,12 +403,13 @@ class IHubClient(IChunkStatusReader, Protocol):
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
-    ) -> None:
-        """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
-        upsert and the liveness heartbeat, called before the paused read. Every optional
-        field, ``subscriptions`` included, is unconditionally overwritten each call;
-        ``subscriptions`` is always a list, never omitted. ``gates`` is the runner's own configured
-        human-gate node names — reported for display, never read back to enforce."""
+    ) -> RegistrationReply:
+        """``POST /api/fleet/runners`` — register the runner this client's token names under its
+        declared ``name``, and learn its hub-minted id from the reply. Idempotent, and the liveness
+        heartbeat, called before the paused read. Every optional field, ``subscriptions`` included,
+        is unconditionally overwritten each call; ``subscriptions`` is always a list, never omitted.
+        ``gates`` is the runner's own configured human-gate node names — reported for display, never
+        read back to enforce. A refused token raises :class:`HubClientError`."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -356,4 +423,28 @@ class IHubClient(IChunkStatusReader, Protocol):
         capability token. Why it exists: `src/blizzard/hub/domain/execution/claim.py`'s
         ``ClaimService.rekey``. Raises :class:`ChunkEndedError` when the live route sits on an
         ended chunk (409) or the chunk has no live route (404)."""
+        ...
+
+
+class ITokenIdentityReader(Protocol):
+    """Ask the hub who this client's runner bearer token belongs to — narrowed from the hub
+    client's binding (``bzh:seam-size-ceiling``), since only the runner's setup asks it."""
+
+    def identity(self) -> TokenIdentity | TokenRefusal:
+        """``GET /api/fleet/identity`` — the token's runner, or the hub's typed ``401`` refusal
+        telling a missing, unknown, revoked, and retired token apart. Side-effect free at the hub:
+        it registers nothing and records no liveness. Any other answer — unreachable, a 5xx, or a
+        hub without the route (404) — raises :class:`HubClientError`."""
+        ...
+
+
+class IHubRunnerAdmin(Protocol):
+    """The one runner-side call made under an operator's credential rather than a runner token:
+    adding a runner. The binding presents the operator's signed-in session for the hub when one is
+    held, and no credential otherwise — a hub without sign-in admits that, any other answers 401."""
+
+    def add_runner(self, name: str) -> IssuedIdentity:
+        """``POST /api/runners`` — add a runner under the initial ``name``; the hub mints its id and
+        bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable hub or a
+        5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
         ...

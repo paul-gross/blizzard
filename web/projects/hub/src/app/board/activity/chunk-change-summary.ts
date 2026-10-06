@@ -1,4 +1,4 @@
-import { compactRef, hubApi, type LoggedEvent } from 'fleet';
+import { compactRef, hubApi, type LoggedEvent, runnerDisplayName } from 'fleet';
 
 const { ChunkChangeCause } = hubApi;
 
@@ -6,7 +6,7 @@ const { ChunkChangeCause } = hubApi;
 export interface ChunkChangeSummary {
   /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
   readonly transition: string;
-  /** Line 2 — the runner shortname, e.g. `runner-local`, when the frame names one.
+  /** Line 2 — the runner's display name, e.g. `R-ABF3.r-claude`, when the frame names one.
    * Falls back to the deleting actor (`data.by`) when the frame carries no runner and
    * its `cause` is `'deleted'`: an unacquired chunk has no runner to
    * name, but who deleted it is still worth the same line. Omitted on every other
@@ -24,7 +24,7 @@ export interface ChunkChangeSummary {
  * a backfilled row (`ActivityView`) can structurally carry no status — so a frame carrying neither node
  * degrades to `C-1NWW → running`, and a frame carrying a node but no
  * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
- * build`. `runner` is the compact runner ref when the frame names one, else omitted —
+ * build`. `runner` is the runner's display name when the frame names one, else omitted —
  * an unclaimed transition (e.g. a promote or a stop past the point the route
  * released) renders no runner line at all rather than an empty one.
  *
@@ -40,7 +40,7 @@ export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSumm
   if (data.cause === ChunkChangeCause.CLAIMED) {
     return {
       transition: `${compactRef(data.chunk_id ?? '—')} claimed`,
-      ...(data.runner_id ? { runner: compactRef(data.runner_id) } : {}),
+      ...(data.runner_id ? { runner: runnerDisplayName(data.runner_id, data.runner_name) } : {}),
     };
   }
   const segments: string[] = [compactRef(data.chunk_id ?? '—')];
@@ -48,7 +48,7 @@ export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSumm
   if (data.status) segments.push('→', data.status);
   if (data.node) segments.push('→', data.node);
   const summary: ChunkChangeSummary = { transition: segments.join(' ') };
-  if (data.runner_id) return { ...summary, runner: compactRef(data.runner_id) };
+  if (data.runner_id) return { ...summary, runner: runnerDisplayName(data.runner_id, data.runner_name) };
   if (data.cause === ChunkChangeCause.DELETED && data.by) return { ...summary, runner: data.by };
   return summary;
 }

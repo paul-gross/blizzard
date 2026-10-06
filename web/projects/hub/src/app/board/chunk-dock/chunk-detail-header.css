@@ -125,11 +125,14 @@ a.edge-ref:focus-visible {
   gap: 6px;
   min-width: 0;
 }
-/* The non-interactive "Claimed by <runner>" fact — plain text, no "Route" label. */
+/* The non-interactive "Claimed by <runner>" fact — plain text, no "Route" label. 31ch holds
+   `Claimed by R-XXXX.` and a name of up to 13 characters whole; a longer name clips from its
+   end, never the compact id leading it — what tells two runners sharing a name apart — and
+   the title carries the whole display name and the full id. */
 .claimed {
   color: var(--cyan);
   font-size: var(--fs-xs);
-  max-width: 20ch;
+  max-width: 31ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

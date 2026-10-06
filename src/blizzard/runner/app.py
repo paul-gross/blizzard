@@ -74,7 +74,6 @@ from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -82,6 +81,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -221,17 +221,20 @@ def create_app(
     clock: IClock | None = None,
     process: LinuxProcessProbe | None = None,
     platform_tracing: IPlatformTracing | None = None,
+    identity: ICurrentRunnerIdentity | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
     Every store-backed seam is optional, so a store-free build is possible; those routes
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
     wired; ``events`` defaults absent, leaving the route silent. ``platform_tracing`` is off unless the
-    composition root passes a handle."""
+    composition root passes a handle. ``identity`` is the process's holder; absent, the runner reads as
+    never registered, and sign-in waits."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
     platform_tracing = platform_tracing or DisabledPlatformTracing()
+    identity = identity or RunnerIdentityHolder()
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
@@ -245,7 +248,7 @@ def create_app(
     app.state.federation = FederationSettings(
         public_origins=config.public_origins,
         hub_url=config.hub_url,
-        runner_id=config.runner_id,
+        identity=identity,
         role_policy=config.role_policy,
     )
     app.state.readiness = readiness
@@ -268,6 +271,7 @@ def create_app(
     app.state.trace_status = trace_status
     app.state.trace_replay = trace_replay
     app.state.platform_tracing = platform_tracing
+    app.state.identity = identity
     # The OTLP receivers' bounds and tallies and the received-telemetry export, process-scoped:
     # the host passes the graph's own.
     app.state.span_limiter = span_limiter or SpanRateLimiter(clock)
@@ -336,7 +340,6 @@ def create_app(
             env_var=config.session_secret_env,
         )
         app.state.session_secret = secrets.token_bytes(32)
-    app.state.cookie_names = CookieNames(config.runner_id)
 
     @app.exception_handler(NeedsFederationBounce)
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:
@@ -473,7 +476,8 @@ def _wire_hosted_app(
         asks=read_stores.asks,
         takeover=read_stores.takeover,
         escalations=read_stores.escalations,
-        runner_id=config.runner_id,
+        identity=graph.identity,
+        runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
@@ -514,6 +518,7 @@ def _wire_hosted_app(
     app = create_app(
         config,
         platform_tracing=platform_tracing,
+        identity=graph.identity,
         readiness=readiness,
         workspace_provider=workspace_provider,
         harnesses=harnesses,

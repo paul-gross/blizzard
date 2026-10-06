@@ -87,6 +87,18 @@ describe('activityRows', () => {
     expect(paused.message).toMatch(/^runner \S+ paused by op — why$/);
     expect(unrecognized.message).toMatch(/^runner \S+ mystery$/);
   });
+
+  it('names a runner by display name, a runner with no name by its compact id', () => {
+    const named = { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' };
+    const [logged, nameless, added] = activityRows([
+      event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { ...named, kind: 'added', by: 'alice' } }),
+      event(2, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', kind: 'paused', by: 'op' } }),
+      event(3, 0, { type: HubEventType.EVENT_LOGGED, data: { ...named, severity: 'warning', kind: 'attempt-failed' } }),
+    ]);
+    expect(added.message).toBe('runner R-ABF3.r-claude added to the fleet by alice');
+    expect(nameless.message).toBe('runner R-7Q2M paused by op');
+    expect(logged.message).toBe('R-ABF3.r-claude · warning attempt-failed');
+  });
 });
 
 describe('activityPanelState', () => {

@@ -101,6 +101,12 @@
           "meaning": "The runner that held a runner step; null for hub and gate steps"
         },
         {
+          "name": "runner_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That runner's name as it last registered; null for hub and gate steps or a runner the hub holds no record of"
+        },
+        {
           "name": "harness_id",
           "type": "string",
           "nullable": true,
@@ -372,6 +378,12 @@
           "type": "string",
           "nullable": false,
           "meaning": "The runner that reported it"
+        },
+        {
+          "name": "runner_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That runner's name as it last registered; null for a runner the hub holds no record of"
         },
         {
           "name": "kind",

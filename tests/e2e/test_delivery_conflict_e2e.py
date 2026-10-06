@@ -26,7 +26,6 @@ from tests.e2e.fleet_traces import (
     StepExpect,
     assert_platform_nesting,
     assert_skeleton,
-    enroll_runner,
     planted_lease_tokens,
     runner_sweep,
     stashed_route_tokens,
@@ -218,8 +217,6 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        if fleet_traces.available:
-            config = enroll_runner(hub, config)
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)

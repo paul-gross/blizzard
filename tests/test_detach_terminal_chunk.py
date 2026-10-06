@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, pointer_token, report_lease, runner_token
 
 pytestmark = pytest.mark.component
 
@@ -92,7 +92,9 @@ def test_rekey_of_a_done_chunk_still_carrying_its_finishers_route_is_refused(tmp
     chunk_id = _done_chunk(hub)
     assert hub.services.chunks.route.route_of(chunk_id) is not None
 
-    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/route-token")
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/route-token", headers={"Authorization": f"Bearer {runner_token('runner-a')}"}
+    )
 
     assert resp.status_code == 409, resp.text
     assert resp.json()["detail"] == f"chunk {chunk_id} is done, its route confers no tenure"

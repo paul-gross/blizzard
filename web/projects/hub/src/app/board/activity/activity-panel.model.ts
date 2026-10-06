@@ -1,14 +1,15 @@
-import { type ActivityView, asyncState, type AsyncStateQuery, compactRef, formatClockTime, hubApi, type KitAsyncStateValue, type LoggedEvent, type RunnerChangeKind } from 'fleet';
+import { type ActivityView, asyncState, type AsyncStateQuery, compactRef, formatClockTime, hubApi, type KitAsyncStateValue, type LoggedEvent, type RunnerChangeKind, runnerDisplayName } from 'fleet';
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
 const { HubEventType, RunnerChangeKind: Kind } = hubApi;
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
- * as one. Only the pause and retirement families need an entry: the registration and heartbeat kinds
+ * as one. Only the add, pause and retirement families need an entry: the registration and heartbeat kinds
  * never reach the feed (`FleetLiveUpdates` mutes them), and the fallback below
  * renders any kind absent here — including one from a newer hub — as itself. */
 const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
+  [Kind.ADDED, 'added to the fleet'],
   [Kind.PAUSED, 'paused'],
   [Kind.RESUMED, 'resumed'],
   [Kind.LOCALLY_PAUSED, 'locally paused'],
@@ -19,14 +20,14 @@ const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind
 ]);
 
 /**
- * A `runner-changed` frame as prose — e.g. `runner runner-local paused by
- * operator`, or `runner runner-local locally paused by runner-ceiling — spend ceiling
+ * A `runner-changed` frame as prose, naming the runner by display name — e.g.
+ * `runner R-ABF3.r-claude paused by operator`, or `runner R-ABF3.r-claude locally paused by runner-ceiling — spend ceiling
  * reached`. A kind with no phrasing above renders as the raw kind — pinned by
  * `activity-panel.spec.ts`'s "renders a runner-changed frame of an unrecognized kind as
  * its raw kind, keeping the row".
  */
 function summarizeRunnerChange(data: LoggedEvent['data']): string {
-  const runner = `runner ${compactRef(data.runner_id ?? '—')}`;
+  const runner = `runner ${data.runner_id ? runnerDisplayName(data.runner_id, data.runner_name) : '—'}`;
   const verb = data.kind ? (RUNNER_CHANGE_VERB.get(data.kind) ?? data.kind) : 'changed';
   const by = data.by ? ` by ${data.by}` : '';
   const reason = data.reason ? ` — ${data.reason}` : '';
@@ -66,7 +67,7 @@ function summarize(event: LoggedEvent): RowSummary {
       return { message: summarizeRunnerChange(event.data) };
     case HubEventType.EVENT_LOGGED:
       return {
-        message: `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
+        message: `${chunk || (event.data.runner_id ? runnerDisplayName(event.data.runner_id, event.data.runner_name) : '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
       };
     default:
       return { message: event.type };

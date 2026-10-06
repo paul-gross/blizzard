@@ -8,35 +8,35 @@ export interface ChunkActionCopy {
   readonly text: string;
 }
 
-/** Pause's copy. `runnerId` is `null` for the still-unclaimed `ready` chunk Pause also
+/** Pause's copy. `runner` is the claimant's display name, `null` for the still-unclaimed `ready` chunk Pause also
  * reaches, which the base table's `<runner>` slot has nothing to name. */
-export function pauseCopy(runnerId: string | null): ChunkActionCopy {
+export function pauseCopy(runner: string | null): ChunkActionCopy {
   return {
     label: 'Pause',
     subtitle: null,
-    text: runnerId
-      ? `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. ${runnerId} keeps the claim and its environment. Resume continues the same session.`
+    text: runner
+      ? `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. ${runner} keeps the claim and its environment. Resume continues the same session.`
       : `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. No runner has claimed it yet, so pausing just holds it out of the queue. Resume continues the same session.`,
   };
 }
 
-/** Resume's copy. `runnerId` is `null` for a chunk paused before any runner claimed it. */
-export function resumeCopy(runnerId: string | null): ChunkActionCopy {
+/** Resume's copy. `runner` is `null` for a chunk paused before any runner claimed it. */
+export function resumeCopy(runner: string | null): ChunkActionCopy {
   return {
     label: 'Resume',
     subtitle: null,
-    text: runnerId
-      ? `Clears the pause. ${runnerId} continues the parked session within ~30s. If the chunk is also waiting on an answer, it stays parked until answered.`
+    text: runner
+      ? `Clears the pause. ${runner} continues the parked session within ~30s. If the chunk is also waiting on an answer, it stays parked until answered.`
       : `Clears the pause. With no runner holding it yet, clearing the pause simply lets it rejoin the queue. If the chunk is also waiting on an answer, it stays parked until answered.`,
   };
 }
 
-/** Detach's copy. Only ever rendered while a live route names a real `runnerId`/`nodeName`. */
-export function detachCopy(runnerId: string, nodeName: string): ChunkActionCopy {
+/** Detach's copy. Only ever rendered while a live route names a real `runner`/`nodeName`. */
+export function detachCopy(runner: string, nodeName: string): ChunkActionCopy {
   return {
-    label: `Detach from ${runnerId}`,
+    label: `Detach from ${runner}`,
     subtitle: 'End the agent, release the claim',
-    text: `Releases ${runnerId}'s claim: ends the agent's session and releases its environment, so uncommitted work is lost. The chunk stays at node ${nodeName} and returns to READY for any runner to claim, unless an open escalation or question still holds it.`,
+    text: `Releases ${runner}'s claim: ends the agent's session and releases its environment, so uncommitted work is lost. The chunk stays at node ${nodeName} and returns to READY for any runner to claim, unless an open escalation or question still holds it.`,
   };
 }
 

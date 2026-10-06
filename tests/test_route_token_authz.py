@@ -1,7 +1,7 @@
-"""Route-token authorization at the wired hub (component tier).
+"""Route-token authorization at the wired hub.
 
-Proves the check — completions, decisions, and buffered facts are rejected under
-``route_token_mode=enforce`` on a mismatched token or runner_id; release invalidates
+Completions, decisions, and buffered facts are rejected under ``route_token_mode=enforce`` on a mismatched
+token or from a runner other than the route's; a body ``runner_id`` is never the caller; release invalidates
 the old token, re-key rotates it, ``usage.recorded`` stays ungated, ``warn`` only logs.
 """
 
@@ -12,8 +12,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import ROUTE_TOKEN_ENFORCE, RUNNER_AUTH_ENFORCE
-from tests.support import build_hub, pointer_token, report_lease
+from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
+from tests.support import build_hub, pointer_token, report_lease, runner_token
 
 pytestmark = pytest.mark.component
 
@@ -124,8 +124,8 @@ def test_completion_with_a_wrong_token_is_rejected_under_enforce(tmp_path: Path)
     assert resp.json()["outcome"] == "failure"
 
 
-def test_completion_with_the_wrong_runner_id_is_rejected_under_enforce(tmp_path: Path) -> None:
-    """The token is right, but the declared runner_id is not the token's route (AC 4)."""
+def test_completion_from_a_runner_not_holding_the_route_is_rejected_under_enforce(tmp_path: Path) -> None:
+    """The route token is right, but another runner's bearer token presents it."""
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
     chunk_id, node_id = _ingest(hub)
     token = _claim(hub, chunk_id, runner_id="r1")
@@ -134,6 +134,26 @@ def test_completion_with_the_wrong_runner_id_is_rejected_under_enforce(tmp_path:
     resp = _submit(hub, chunk_id, node_id=node_id, epoch=1, runner_id="r2", route_token=token)
 
     assert resp.json()["outcome"] == "failure"
+
+
+def test_completion_whose_body_names_another_runner_applies_as_the_tokens_runner_under_enforce(
+    tmp_path: Path,
+) -> None:
+    """The bearer token alone names the caller: a body ``runner_id`` naming any other runner is
+    ignored, never a refusal."""
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, node_id = _ingest(hub)
+    token = _claim(hub, chunk_id, runner_id="r1")
+    report_lease(hub, chunk_id, epoch=1, seq=1, runner_id="r1", route_token=token)
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion(node_id, epoch=1, runner_id="runner-local", route_token=token),
+        headers={"Authorization": f"Bearer {runner_token('r1')}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] != "failure"
 
 
 def test_completion_without_a_token_proceeds_under_warn(tmp_path: Path) -> None:
@@ -304,12 +324,12 @@ def test_rekey_on_a_chunk_with_no_live_route_is_404(tmp_path: Path) -> None:
 
 
 def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None:
-    """``assert_owns`` against the live route's runner (runner_auth_mode=enforce) —
-    a different runner's own valid bearer token cannot re-key someone else's route."""
-    warn_hub = build_hub(tmp_path)
+    """``assert_owns`` against the live route's runner — a different runner's own valid
+    bearer token cannot re-key someone else's route."""
+    seed_hub = build_hub(tmp_path)
     for runner_id in ("r1", "r2"):
         assert (
-            warn_hub.client.post(
+            seed_hub.client.post(
                 "/api/fleet/runners",
                 json={
                     "runner_id": runner_id,
@@ -319,10 +339,10 @@ def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None
             ).status_code
             == 201
         )
-    token_r1 = warn_hub.client.post("/api/runners/r1/enrollments").json()["token"]
-    token_r2 = warn_hub.client.post("/api/runners/r2/enrollments").json()["token"]
+    token_r1 = seed_hub.client.post("/api/runners/r1/enrollments").json()["token"]
+    token_r2 = seed_hub.client.post("/api/runners/r2/enrollments").json()["token"]
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
     chunk_id, _node_id = _ingest(hub)
     _claim(hub, chunk_id, runner_id="r1", headers={"Authorization": f"Bearer {token_r1}"})
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import click
 
+from blizzard.foundation.operator_sessions.service import SessionService
 from blizzard.hub.cli import login as cli_login
 from blizzard.hub.cli.command import AuthCommand, SessionServiceCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.sessions.service import SessionService
 
 
 @click.command("rotate-signing-key", cls=AuthCommand)

@@ -36,7 +36,6 @@ def _seed_all_local_sections(store: SqlAlchemyRunnerStore) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )
@@ -69,7 +68,6 @@ def _seed_all_local_sections(store: SqlAlchemyRunnerStore) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )

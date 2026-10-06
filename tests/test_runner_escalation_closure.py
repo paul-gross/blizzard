@@ -46,7 +46,6 @@ def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW): 
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=at,
         )

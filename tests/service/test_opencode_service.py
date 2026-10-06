@@ -21,6 +21,7 @@ from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     mint_fixture,
@@ -56,7 +57,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
+    return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
 def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:

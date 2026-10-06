@@ -40,7 +40,6 @@ def _seed_spawned_lease(store):  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -193,7 +192,7 @@ def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type
     scan must not re-detect a pause-parked lease as a crash to resume."""
     store = _store(tmp_path)
     _seed_spawned_lease(store)
-    store.record_daemon_liveness(runner_id="r1", alive_at=_NOW)
+    store.record_daemon_liveness(alive_at=_NOW)
     probe = FakeProbe()  # the worker's process is gone — a crash to resume
     later = _NOW + timedelta(seconds=1)
 

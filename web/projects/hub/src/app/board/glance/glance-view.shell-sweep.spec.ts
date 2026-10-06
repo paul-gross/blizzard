@@ -38,12 +38,12 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
     const fixture = TestBed.createComponent(GlanceView);
     fixture.componentRef.setInput('vitals', VITALS);
     fixture.componentRef.setInput('needsYou', [
-      { chunkId: 'ch_needs', shortId: 'ch_needs', runnerId: 'runner-with-a-long-name', tone: 'needs', pillLabel: 'needs human', sub: 'Review the delivery.' },
-      { chunkId: 'ch_gate', shortId: 'ch_gate', runnerId: 'runner-with-a-long-name', tone: 'waiting', pillLabel: 'gate', sub: 'approve-a-very-long-gate-node-name-that-must-wrap-inside-the-panel' },
+      { chunkId: 'ch_needs', shortId: 'ch_needs', runner: 'runner-with-a-long-name', tone: 'needs', pillLabel: 'needs human', sub: 'Review the delivery.' },
+      { chunkId: 'ch_gate', shortId: 'ch_gate', runner: 'runner-with-a-long-name', tone: 'waiting', pillLabel: 'gate', sub: 'approve-a-very-long-gate-node-name-that-must-wrap-inside-the-panel' },
     ]);
     fixture.componentRef.setInput('needsYouState', 'ready');
     fixture.componentRef.setInput('inMotion', [
-      { chunkId: 'ch_motion', shortId: 'ch_motion', runnerId: 'runner-with-a-long-name', node: 'deliver', pillLabel: 'deliver', costUsd: 1.25, costPartial: false },
+      { chunkId: 'ch_motion', shortId: 'ch_motion', runner: 'runner-with-a-long-name', node: 'deliver', pillLabel: 'deliver', costUsd: 1.25, costPartial: false },
     ]);
     fixture.componentRef.setInput('inMotionState', 'ready');
     fixture.componentRef.setInput('upNext', [

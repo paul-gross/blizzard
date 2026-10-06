@@ -63,7 +63,7 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_id="r1", workspace_id="ws1", transcripts_ship=False, transcript_record_max_bytes=record_max_bytes
+            runner_name="r1", workspace_id="ws1", transcripts_ship=False, transcript_record_max_bytes=record_max_bytes
         ),
         clock=clock,
     )
@@ -79,7 +79,6 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
             resolved_model="claude-sonnet-5",
@@ -171,7 +170,7 @@ def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shippin
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -435,7 +434,7 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     # The hub side of a first delivery attempt completing durably, with no local
     # post-ack work ever running — the exact window `_CP_AFTER_SUBMIT` names.
     delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
-    hub.push_transcripts("r1", [TranscriptPush(seq=delta.seq, body=json.loads(delta.payload))])
+    hub.push_transcripts([TranscriptPush(seq=delta.seq, body=json.loads(delta.payload))])
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
@@ -584,8 +583,8 @@ def test_drain_makes_one_request_against_a_slow_hub_and_stays_within_the_tick_bu
             self._clock = clock
             self._step = step
 
-        def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
-            ack = super().push_transcripts(runner_id, records)
+        def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+            ack = super().push_transcripts(records)
             self._clock.advance(self._step)
             return ack
 
@@ -715,7 +714,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
     # A buffered record with nothing to do with this tick's own (failing) pump read.
@@ -858,7 +857,6 @@ def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() ->
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -904,10 +902,10 @@ def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -
     batches: list[TranscriptSegmentBatch] = []
     push = hub.push_transcripts
 
-    def capture(runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+    def capture(records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
-        batches.append(TranscriptSegmentBatch(runner_id=runner_id, records=shipped))
-        return push(runner_id, records)
+        batches.append(TranscriptSegmentBatch(records=shipped))
+        return push(records)
 
     hub.push_transcripts = capture  # type: ignore[method-assign]
     ctx = _ctx(hub)

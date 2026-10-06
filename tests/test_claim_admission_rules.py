@@ -63,6 +63,8 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
 _READY = ChunkFacts(minted=True, promoted=True)
 _REGISTERED = RunnerRegistration(
     runner_id="runner-a",
+    name="runner-a",
+    added_at=_T0,
     workspace_id="ws-a",
     registered_at=_T0,
     last_seen_at=_T0,

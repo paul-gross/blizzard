@@ -174,7 +174,6 @@ def _seed_exited_lease(
             node_id=node_id,
             node_name="review",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             resolved_model=resolved_model,
             created_at=_NOW,

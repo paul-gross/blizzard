@@ -6,8 +6,8 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
-from blizzard.hub.cli.sessions import IReadSessionStore
 
 
 class HubCommand(click.Command):

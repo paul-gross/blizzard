@@ -41,10 +41,12 @@ fleet-kit-panel.fill {
    runner cells render one step down at --fs-xs, so those two carry ~8% slack
    for free. Kind and runner are open sets, so each is sized for its longest
    known value and ellipsized past it — the full string stays in the title
-   attribute, so a truncation costs nothing. */
+   attribute, so a truncation costs nothing. A runner's value is its display
+   name, `R-XXXX.` then its name: 20ch holds a name of up to 13 characters
+   (runner-local, r-chatgpt) whole, and its title adds the full id. */
 .ev {
   display: grid;
-  grid-template-columns: 15ch 8ch 10ch 18ch 12ch 1fr auto;
+  grid-template-columns: 15ch 8ch 10ch 18ch 20ch 1fr auto;
   align-items: baseline;
   gap: 6px;
   padding: 4px 8px;

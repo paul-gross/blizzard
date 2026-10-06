@@ -12,9 +12,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli import login as cli_login
-from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 
 pytestmark = pytest.mark.unit
 

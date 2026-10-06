@@ -44,6 +44,7 @@ pytestmark = pytest.mark.unit
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _RUNNER_ID = "blizzard.runner.id"
+_RUNNER_NAME = "blizzard.runner.name"
 _RESOURCE = {"service.name": "blizzard-test"}
 
 
@@ -231,7 +232,7 @@ def test_the_enabled_pipeline_exports_roots_children_queries_and_client_calls() 
         resource=_RESOURCE,
         scope="blizzard.test",
         scope_version="1",
-        stamped={_RUNNER_ID: "r-1"},
+        stamp=lambda: {_RUNNER_ID: "r-1"},
         exporter=exporter,
     )
     engine = create_engine("sqlite://")
@@ -258,6 +259,35 @@ def test_the_enabled_pipeline_exports_roots_children_queries_and_client_calls() 
     assert len(spans) == 4
     dumped = json.dumps([dict(s.attributes or {}) for s in spans.values()])
     assert "planted" not in dumped and "bound-secret" not in dumped
+
+
+def test_a_span_started_before_the_stamp_answers_is_never_exported_and_later_spans_carry_its_latest() -> None:
+    exporter = InMemorySpanExporter()
+    stamped: list[dict[str, str] | None] = [None]
+    handle = build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=1.0),
+        _ENDPOINT,
+        resource=_RESOURCE,
+        scope="blizzard.test",
+        scope_version="1",
+        stamp=lambda: stamped[0],
+        exporter=exporter,
+    )
+    with handle.tracer.root("before"), handle.tracer.child("before-child"):
+        pass
+    with handle.tracer.root("straddling"):
+        stamped[0] = {_RUNNER_ID: "rn_1", _RUNNER_NAME: "runner-a"}
+    with handle.tracer.root("registered"):
+        pass
+    stamped[0] = {_RUNNER_ID: "rn_1", _RUNNER_NAME: "runner-b"}
+    with handle.tracer.root("renamed"):
+        pass
+    handle.shutdown(5)
+
+    spans = {span.name: dict(span.attributes or {}) for span in exporter.get_finished_spans()}
+    assert set(spans) == {"registered", "renamed"}
+    assert (spans["registered"][_RUNNER_ID], spans["registered"][_RUNNER_NAME]) == ("rn_1", "runner-a")
+    assert (spans["renamed"][_RUNNER_ID], spans["renamed"][_RUNNER_NAME]) == ("rn_1", "runner-b")
 
 
 def test_importing_the_package_with_tracing_off_loads_no_sdk_or_instrumentation() -> None:

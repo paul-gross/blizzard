@@ -38,9 +38,10 @@ _ENCODINGS = (JSON_CONTENT_TYPE, PROTOBUF_CONTENT_TYPE)
 @router.post("/v1/traces")
 async def receive_traces(request: Request) -> Response:
     """Receive one OTLP trace export. 403 for a missing, unknown or closed-lease token; 404 while platform
-    tracing is off; 415 for any encoding but identity and any body but OTLP JSON or protobuf; 413 past the
-    size cap; 400 for a malformed body; 429 when the spans kept exceed the lease's span rate. Otherwise 200,
-    naming the spans refused. Under ``harness_telemetry`` Claude Code's tracing scope is kept too."""
+    tracing is off or before the runner's first registration; 415 for any encoding but identity and any body
+    but OTLP JSON or protobuf; 413 past the size cap; 400 for a malformed body; 429 when the spans kept exceed
+    the lease's span rate. Otherwise 200, naming the spans refused. Under ``harness_telemetry`` Claude Code's
+    tracing scope is kept too."""
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
     receiver = wiring.telemetry_receiver()
@@ -90,6 +91,8 @@ def _on(require: Callable[[], None]) -> None:
 async def _received[T](receive: Callable[[Lease, T], int], lease: Lease, items: T) -> int:
     try:
         return await run_in_threadpool(receive, lease, items)
+    except ReceiverOff as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
     except RateExceeded as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=exc.detail, headers={"Retry-After": "1"}

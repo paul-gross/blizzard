@@ -29,6 +29,8 @@ from blizzard.foundation.platform_tracing.received_export import (
     build_received_telemetry_export,
 )
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -48,7 +50,9 @@ from blizzard.runner.harness.wiring import (
     claude_code_section,
     configured_tiers,
 )
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -58,6 +62,7 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
@@ -80,12 +85,12 @@ from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import S
 from blizzard.runner.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
-    RUNNER_ID,
     resource_attributes,
 )
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+    identity_stamp,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.replay import LeaseTraceReplay
@@ -125,6 +130,8 @@ class RunnerProcess:
     #: The metrics and logs receivers' own bound and tally, counted in data points and log records.
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
+    #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
+    identity: RunnerIdentityHolder
     #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — off unless the host passed a handle.
@@ -169,9 +176,12 @@ def _credential_renewal_pass(
 PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
 
 
-def build_runner_platform_tracing(config: RunnerConfig, environ: Mapping[str, str] | None = None) -> IPlatformTracing:
-    """The handle ``[tracing]`` and the OTLP environment decide for this runner; every span it
-    records carries the runner's id. Only the ``host`` daemon builds one."""
+def build_runner_platform_tracing(
+    config: RunnerConfig, environ: Mapping[str, str] | None = None, *, identity: ICurrentRunnerIdentity
+) -> IPlatformTracing:
+    """The handle ``[tracing]`` and the OTLP environment decide for this runner; every span it records
+    carries the id and name ``identity`` answers as it starts, and none is exported before the runner's
+    first registration. Only the ``host`` daemon builds one."""
     env = os.environ if environ is None else environ
     return build_platform_tracing(
         config.tracing,
@@ -179,7 +189,7 @@ def build_runner_platform_tracing(config: RunnerConfig, environ: Mapping[str, st
         resource=resource_attributes(env, __version__),
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        stamped={RUNNER_ID: config.runner_id},
+        stamp=identity_stamp(identity),
     )
 
 
@@ -201,13 +211,15 @@ def build_runner_process(
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
+    identity: RunnerIdentityHolder | None = None,
 ) -> RunnerProcess:
     """Construct the process-scoped graph; dispose partial resources on failure.
 
-    ``environ`` (default ``os.environ``) decides whether tracing is enabled; ``trace_exporter``
-    replaces the OTLP binding an enabled sweep would otherwise build. ``platform_tracing`` is off
-    unless the daemon host passes a handle; the engine is instrumented through it."""
+    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an
+    enabled sweep would otherwise build. ``identity`` is the holder a host-built tracing handle stamps
+    from; the graph seeds it from the store's identity row either way."""
     platform_tracing = platform_tracing or DisabledPlatformTracing()
+    identity = identity or RunnerIdentityHolder()
     engine = create_engine_from_url(config.db_url)
     platform_tracing.instrument_engine(engine)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
@@ -215,6 +227,13 @@ def build_runner_process(
         stores, connections = build_stores_and_connections(
             engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
         )
+        readiness = ReadinessService(
+            reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
+        )
+        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
+        registered = stores.identity.runner_identity() if readiness.evaluate().ready else None
+        if registered is not None:
+            identity.hold(registered)
         clock = SystemClock()
         process = LinuxProcessProbe()
         provider = build_workspace_provider(
@@ -246,6 +265,7 @@ def build_runner_process(
                 leases=stores.lease_traces,
                 outbound=stores.outbound,
                 exporter=exporter,
+                identity=identity,
                 clock=clock,
                 config=config.tracing,
             )
@@ -253,7 +273,9 @@ def build_runner_process(
             else None
         )
         credential_renewal = _credential_renewal_pass(config, stores, clock)
-        trace_replay = LeaseTraceReplay(leases=stores.lease_traces, exporter=exporter, config=config.tracing)
+        trace_replay = LeaseTraceReplay(
+            leases=stores.lease_traces, exporter=exporter, identity=identity, config=config.tracing
+        )
         return RunnerProcess(
             engine,
             stores,
@@ -273,6 +295,7 @@ def build_runner_process(
             claude_trace_counter=ReceiverCounter(),
             metric_bounds=ReceiverBounds.fresh(clock),
             log_bounds=ReceiverBounds.fresh(clock),
+            identity=identity,
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry or DisabledReceivedTelemetryExport(),
             harness_telemetry=plan,
@@ -323,6 +346,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         overload=OverloadStore(connections),
         asks=AskStore(connections),
         pause=PauseStore(connections),
+        identity=RunnerIdentityStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),
         escalations=EscalationStore(connections),

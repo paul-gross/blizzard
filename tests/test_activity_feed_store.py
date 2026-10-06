@@ -22,7 +22,7 @@ from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
@@ -434,12 +434,14 @@ def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
 def _registry_store(tmp_path: Path) -> RunnerRegistryStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
-    return RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
+    store = RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
+    store.add(RunnerAddition("runner-a", "runner-a", "hash-runner-a", at=_T0, by="test"))
+    return store
 
 
 def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> None:
     store = _registry_store(tmp_path)
-    store.upsert_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
+    store.record_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
     store.record_pause("runner-a", paused=True, at=_at(1), by="alice")
     store.record_local_pause("runner-a", paused=True, at=_at(2), by="operator", reason="spend cap hit")
 
@@ -463,7 +465,7 @@ def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> No
 def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> None:
     """Pause family only — ``registered``/``heartbeat`` carry no fact table."""
     store = _registry_store(tmp_path)
-    store.upsert_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
+    store.record_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
     store.touch_last_seen("runner-a", at=_at(1))
     rows = store.list_pause_facts_since(_T0, limit=50)
     assert rows == []

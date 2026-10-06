@@ -17,6 +17,7 @@
       "blizzard.node.id": "g1-build",
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
+      "blizzard.runner.name": "r-claude",
       "blizzard.step.epoch": 1
     },
     "end": "2026-01-01T00:01:40Z",
@@ -56,6 +57,7 @@
       "blizzard.node.id": "g1-build",
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
+      "blizzard.runner.name": "r-claude",
       "blizzard.step.epoch": 1,
       "gen_ai.conversation.id": "sess-1",
       "gen_ai.operation.name": "invoke_agent",
@@ -107,6 +109,7 @@
       "blizzard.node.id": "g1-build",
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
+      "blizzard.runner.name": "r-claude",
       "blizzard.step.epoch": 1,
       "gen_ai.operation.name": "invoke_agent",
       "gen_ai.request.model": "opus",

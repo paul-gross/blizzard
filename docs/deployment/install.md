@@ -7,12 +7,18 @@
 2. Install the single blizzard wheel into a dedicated node-free virtualenv at `/opt/blizzard/venv`, the path the
    packaged units' `ExecStart` expects. If the wheel lives anywhere else, edit the units' `ExecStart` and `ExecStartPre`
    to the real binary path — systemd requires an absolute path there.
-3. Seed each daemon's runtime directory once, as the service account: `blizzard-hub init /var/lib/blizzard/hub` and
-   `blizzard-runner init /var/lib/blizzard/runner`; `init` writes the config scaffold, the data directory, and a store
-   migrated to head, and is idempotent.
+3. Seed the hub's runtime directory once, as the service account: `blizzard-hub init /var/lib/blizzard/hub` writes the
+   config scaffold, the data directory, and a store migrated to head, and is idempotent.
 4. Install the units by copying [packaging/systemd/blizzard-hub.service](../../packaging/systemd/blizzard-hub.service)
    and [blizzard-runner.service](../../packaging/systemd/blizzard-runner.service) into `/etc/systemd/system`, then
-   `systemctl daemon-reload` and `systemctl enable --now` on both; `enable` is what starts them at boot.
+   `systemctl daemon-reload` and `systemctl enable --now blizzard-hub`; `enable` is what starts it at boot.
+5. With the hub answering, seed the runner's runtime directory as the service account:
+   `blizzard-runner init /var/lib/blizzard/runner` scaffolds it the same way, then adds the runner at the hub its config
+   names and writes the runner's token to `/var/lib/blizzard/runner/.env`. Against a hub that requires sign-in, first
+   run `blizzard hub runner add <name>` as an operator and put the `BZ_HUB_TOKEN=…` line it prints in that `.env`,
+   created owner-only (`0600`) as the service account ([remote-runner.md](../remote-runner.md#add)); init then keeps the
+   token ([runner-auth.md](./runner-auth.md#adding-a-runner)). Re-running init adds nothing while the hub still knows
+   the token. Then `systemctl enable --now blizzard-runner`.
 
 ## Configuration and credentials
 

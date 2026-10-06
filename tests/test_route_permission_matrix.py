@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -41,16 +41,16 @@ def _cookie(token: str) -> dict[str, str]:
 def _seed_fixture(hub: HubHarness) -> dict[str, str]:
     """One graph, one ingested (not-yet-promoted) chunk, and one registered runner —
     just enough live data for each ``FLEET_VIEW`` router's detail read to return 200
-    rather than 404. The runner is registered straight through the domain service,
-    bypassing HTTP entirely, since registration needs no permission of its own to
-    seed."""
+    rather than 404. The runner is added and registered straight through the hub's
+    own services, bypassing HTTP entirely, since neither needs a permission of its own
+    to seed."""
     admin = seed_user(hub, username="root", role=Role.SUPERUSER)
     admin_token = seed_session(hub, admin)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token))
     assert graph.status_code == 201, graph.text
     chunk = hub.client.post("/api/chunks", json={"tokens": ["default:210"]}, headers=_cookie(admin_token))
     assert chunk.status_code == 201, chunk.text
-    hub.services.fleet.register("runner-a", "workspace-1")
+    seed_runner(hub, "runner-a", workspace_id="workspace-1")
     routine = hub.client.post(
         "/api/routines",
         json={
@@ -114,6 +114,8 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
             },
         ),  # QUESTION_ANSWER
         ("POST", "/api/decisions/dc_missing/resolutions", {"choice": "approve", "resolved_by": "x"}),  # GATE_RESOLVE
+        ("POST", "/api/runners", {"name": "matrix-runner"}),  # RUNNER_ADD
+        ("POST", "/api/runners/runner-a/enrollments", {}),  # RUNNER_ADD
         ("POST", "/api/runners/runner-a/pause", {"by": "x"}),  # RUNNER_PAUSE
         ("POST", "/api/runners/runner-a/retire", {"by": "x"}),  # RUNNER_RETIRE
         ("POST", "/api/runners/runner-a/reinstate", {"by": "x"}),  # RUNNER_RETIRE

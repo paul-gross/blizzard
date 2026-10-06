@@ -75,7 +75,7 @@ class OutboundDrain:
         try:
             self._run_unsafe()
         except Exception:
-            _log.exception("outbound drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
+            _log.exception("outbound drain failed — continuing the tick", runner_name=self.ctx.config.runner_name)
 
     def _run_unsafe(self) -> None:
         """Walk this tick's own bounded slice in seq order, batching every contiguous
@@ -101,7 +101,7 @@ class OutboundDrain:
         request, then ack every seq the run carried."""
         pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run]
         try:
-            ack = self.ctx.hub.push_facts(self.ctx.config.runner_id, pushed)
+            ack = self.ctx.hub.push_facts(pushed)
         except HubClientError:
             return False  # hub unreachable — the whole run stays buffered, retried next tick
         # Every chunk this run named a fact for, so a later get() this tick sees the push.

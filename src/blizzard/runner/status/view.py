@@ -20,6 +20,7 @@ from blizzard.runner.environments.repository import (
 )
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
 from blizzard.runner.leases.escalations import IReadEscalationRepository, resume_workdir
@@ -121,7 +122,10 @@ class HubConnectivity:
 class RunnerStatusSummary:
     """Identity, pause state, capacities, hub connectivity, and last tick — ``GET /runner``."""
 
-    runner_id: str
+    #: The hub-minted id of the latest registration; ``None`` before the first.
+    runner_id: str | None
+    #: The name the hub recorded at that registration, else the configured name.
+    runner_name: str
     workspace_id: str
     pause: PauseState
     capacities: Capacities
@@ -230,7 +234,8 @@ class RunnerStatusService:
         asks: IReadAskRepository,
         takeover: IReadTakeoverRepository,
         escalations: IReadEscalationRepository,
-        runner_id: str,
+        identity: ICurrentRunnerIdentity,
+        runner_name: str,
         workspace_id: str,
         max_agents: int,
         hub_url: str,
@@ -251,7 +256,8 @@ class RunnerStatusService:
         self._workspace_root = workspace_root
         self._clock = clock
         self._harnesses = harnesses
-        self._runner_id = runner_id
+        self._identity = identity
+        self._runner_name = runner_name
         self._workspace_id = workspace_id
         self._max_agents = max_agents
         self._hub_url = hub_url
@@ -261,17 +267,19 @@ class RunnerStatusService:
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
-        local_paused = self._pause.local_paused(self._runner_id)
-        hub_paused = self._pause.hub_paused(self._runner_id)
-        local_reason = self._pause.local_pause_reason(self._runner_id) if local_paused else None
+        local_paused = self._pause.local_paused()
+        hub_paused = self._pause.hub_paused()
+        local_reason = self._pause.local_pause_reason() if local_paused else None
+        identity = self._identity.current()
         return RunnerStatusSummary(
-            runner_id=self._runner_id,
+            runner_id=identity.runner_id if identity is not None else None,
+            runner_name=identity.runner_name if identity is not None else self._runner_name,
             workspace_id=self._workspace_id,
             pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
             capacities=Capacities.of(max_agents=self._max_agents, used=len(self._lease_record.list_active_leases())),
             hub=HubConnectivity.of(
                 endpoint=self._hub_url,
-                contact_at=self._pause.hub_contact_at(self._runner_id),
+                contact_at=self._pause.hub_contact_at(),
                 buffer_depth=self._outbound.pending_outbound_count(),
                 now=self._clock.now(),
                 threshold=self._contact_staleness,

@@ -74,7 +74,7 @@ def _scaled_batch(chunk_ids: list[str]) -> RunnerFactBatch:
             )
         )
         seq += 1
-    return RunnerFactBatch(runner_id="counter", facts=facts)
+    return RunnerFactBatch(facts=facts)
 
 
 def test_before_ingest_and_publish_query_counts_are_independent_of_batch_size(tmp_path: Path) -> None:
@@ -93,7 +93,7 @@ def test_before_ingest_and_publish_query_counts_are_independent_of_batch_size(tm
     def before(hub, ids: list[str], key: str) -> None:  # type: ignore[no-untyped-def]
         batch = _scaled_batch(ids)
         holder[f"{key}_batch"] = batch
-        holder[f"{key}_broadcast"] = IngestBroadcast.before_ingest(hub.services, batch)
+        holder[f"{key}_broadcast"] = IngestBroadcast.before_ingest(hub.services, "counter", batch)
 
     small_before_count = count_queries(small.engine, lambda: before(small, small_ids, "small"))
     large_before_count = count_queries(large.engine, lambda: before(large, large_ids, "large"))

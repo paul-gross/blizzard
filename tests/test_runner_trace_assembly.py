@@ -609,7 +609,7 @@ def test_no_facts_row_declares_a_content_column() -> None:
         for t in vars(facts_module).values()
         if isinstance(t, type) and dataclasses.is_dataclass(t) and t.__module__ == facts_module.__name__
     ]
-    assert len(row_types) == 19
+    assert len(row_types) == 20
     for row_type in row_types:
         assert not _CONTENT_COLUMNS & {f.name for f in dataclasses.fields(row_type)}, row_type.__name__
 

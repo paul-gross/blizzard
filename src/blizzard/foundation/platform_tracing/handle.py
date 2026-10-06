@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from sqlalchemy import Engine
 
 ScopeFilter = Callable[[MutableMapping[str, Any]], bool]
+#: The attributes a span carries, asked as it starts; a span started while this answers ``None`` is never exported.
+SpanStamp = Callable[[], Mapping[str, str] | None]
 
 
 def platform_tracing_enabled(config: TracingConfig, environ: Mapping[str, str]) -> bool:
@@ -97,11 +99,12 @@ def build_platform_tracing(
     resource: Mapping[str, str],
     scope: str,
     scope_version: str,
-    stamped: Mapping[str, str] | None = None,
+    stamp: SpanStamp | None = None,
     exporter: SpanExporter | None = None,
 ) -> IPlatformTracing:
-    """The process's handle. ``stamped`` attributes go on every span; ``exporter`` replaces the
-    OTLP exporter — tests pass an in-memory one."""
+    """The process's handle. ``stamp`` is asked for each span's attributes as the span starts, and a
+    span started while it answers ``None`` is never exported; ``exporter`` replaces the OTLP exporter —
+    tests pass an in-memory one."""
     if not platform_tracing_enabled(config, environ):
         return DisabledPlatformTracing()
     from blizzard.foundation.platform_tracing.internal.pipeline import EnabledPlatformTracing
@@ -112,6 +115,6 @@ def build_platform_tracing(
         resource=resource,
         scope=scope,
         scope_version=scope_version,
-        stamped=stamped or {},
+        stamp=stamp,
         exporter=exporter,
     )

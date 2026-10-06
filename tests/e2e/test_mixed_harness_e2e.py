@@ -62,6 +62,7 @@ from tests.crash.support import (
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_join import runner_spawn_env
 from tests.support import (
     create_repositories,
     create_work_sources,
@@ -155,7 +156,10 @@ def _start_runner(
     divergence from that helper's needs (see the module docstring). Never arms a
     crash point: every restart here is a clean operator-style SIGTERM, not a kill -9."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1", **(extra_env or {})}
+    env = runner_spawn_env(
+        RunnerConfig.load(runner_dir).hub_url,
+        {"BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
+    )
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir)],
         env=env,

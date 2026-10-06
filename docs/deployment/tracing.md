@@ -142,6 +142,7 @@ absent rather than empty when there is nothing to say.
 | `blizzard.step.preceded_by`                | `string`   | What sits between this step and the previous one: `restart`, `requeue` or `released-claim`.                                                                                                                   |
 | `blizzard.step.kind`                       | `string`   | Whether the step was a `step` or a `gate`.                                                                                                                                                                    |
 | `blizzard.runner.id`                       | `string`   | The runner that held the step or ran the lease.                                                                                                                                                               |
+| `blizzard.runner.name`                     | `string`   | The latest registered name of the runner that held the step or ran the lease, as of when the span was told.                                                                                                   |
 | `blizzard.harness.id`                      | `string`   | The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.                                                                 |
 | `blizzard.harness.version`                 | `string`   | The version of that harness.                                                                                                                                                                                  |
 | `blizzard.step.models`                     | `string[]` | The distinct models the step's invocations used, in first-use order.                                                                                                                                          |
@@ -303,6 +304,10 @@ them beside the hub's.
 - **Where it runs.** Only `blizzard runner host` sweeps, on a thread of its own, so a slow or hung backend never delays
   a tick. `blizzard runner tick` never tells anything. At shutdown the runner waits a few seconds for an export in
   flight, then exits without it; the lease is told again on the next start.
+- **Which runner.** Each span carries the id and name of the runner's latest registration with its hub, read from its
+  store as the lease is told, so a lease told after a rename by restart carries the new name, whenever it was minted.
+  Until its first registration the runner tells nothing: the sweep holds its cursor, so the leases that close meanwhile
+  are told once it registers.
 - **Events.** The runner reports `trace-export-failed`, `trace-export-recovered`, `trace-window-skipped` and
   `trace-config-rejected` the same way the hub does. They reach the hub's event log attributed to the runner, carrying
   no chunk or lease. A rejected setting is reported once each time the runner starts, and the runner keeps working with
@@ -355,9 +360,13 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
     trace backend then shows the poll's spans under a missing parent.
 - **Continuing an incoming trace.** The hub continues an incoming `traceparent` only for a caller it authenticates: a
   runner bearer that resolves to a registered, unrevoked runner, or a human session or operator bearer under the
-  configured auth mode. For any other request, including every request under `auth.mode = none` and an unknown or absent
-  bearer under `runner_auth_mode = warn`, the hub drops `traceparent`, `tracestate` and `baggage` and the request starts
-  a new root. The runner continues an incoming `traceparent` as before.
+  configured auth mode. For any other request, including an unknown or absent bearer and every human request under
+  `auth.mode = none`, the hub drops `traceparent`, `tracestate` and `baggage` and the request starts a new root. The
+  runner continues an incoming `traceparent` as before.
+- **Which runner.** The runner stamps each of its platform spans with the id and name of its latest registration, read
+  as the span starts, so a rename by restart shows from the first span after it; a span started before the runner's
+  first registration is never exported. The hub stamps a request a runner bearer authenticated with that runner's id
+  and the name the hub holds for it.
 - **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
   the store queries they run.
 - **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry
@@ -407,7 +416,8 @@ parent that is never exported, so a backend shows them grouped under a root that
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
 `POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
 pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
-only while platform tracing is on; with it off the path answers `404`, and a sender is expected to carry on.
+only while platform tracing is on and the runner has registered with its hub; otherwise the path answers `404`, and a
+sender is expected to carry on.
 [Harness telemetry](#harness-telemetry) adds `POST /v1/metrics` and `POST /v1/logs`, which follow the same
 authentication, encodings and caps, with the exceptions listed there.
 
@@ -488,7 +498,7 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
 - **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,
   `.tracing` for traces. Each span, data point and log record is stamped with `blizzard.caller=worker`,
-  `blizzard.chunk.id`, `blizzard.lease.id` and `blizzard.runner.id`.
+  `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`.
 - **Where it goes.** Under `service.name` `blizzard-claude-code` through the runner's own OpenTelemetry settings for
   that signal. Claude Code's own resource name is `claude-code`; `[tracing.worker_program_services]` renames by scope.
 - **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on
@@ -530,8 +540,9 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`, which the runner sets with it; you need both in your settings `env` only
   when the runner captures nothing, such as when every signal is yielded.
 - **Receivers.** `POST /v1/metrics` and `POST /v1/logs` take the trace receiver's authentication, encodings and 1 MiB
-  cap, but answer `404` unless platform tracing and `harness_telemetry` are both on. Each signal has its own per-lease
-  rate, the same burst and sustained rates as the trace receiver's caps, counted in data points or log records,
+  cap, but answer `404` unless platform tracing and `harness_telemetry` are both on and the runner has registered. Each
+  signal has its own per-lease rate, the same burst and sustained rates as the trace receiver's caps, counted in data
+  points or log records,
   charged only for what is kept. A summary
   metric point is refused and counted. Exponential histograms are carried, without their `zero_threshold`. Metrics leave
   through a bounded background queue that drops its oldest batch when full, and logs through the SDK's batch log
@@ -586,6 +597,7 @@ configures, with no daemon in between.
 | `blizzard.hub.run_step.name`      | `string` | A hub node's `run:` step's authored name, never its command line; absent when the step authors none.         |
 | `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
 | `blizzard.runner.id`              | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.runner.name`            | `string` | The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.   |
 | `blizzard.tick.step`              | `string` | The tick step a child span covers.                                                                           |
 | `error.type`                      | `string` | The error class when the CLI's request failed.                                                               |
 | `http.request.method`             | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
@@ -645,8 +657,27 @@ event's `since` and `until` paste straight in.
   id.
 - **`--dry-run` sends nothing.** It reports the steps, chunks, spans and batches the window would tell, and works with
   tracing off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay.
+  A runner refuses any replay, a dry run too, until its first registration with its hub.
 
 If the exporter refuses a batch, the replay stops and reports what it had told by then.
+
+## Upgrading to hub-minted runner ids
+
+The hub mints each runner's id, `rn_` and a ULID, when an operator adds the runner, and the runner's name becomes a
+label beside it. Trace and span ids derive from the chunk, epoch and span role, never from a runner, so none changes,
+and the trace schema and scope versions stay `3`. From the upgrade on:
+
+- **`blizzard.runner.id` carries the `rn_` id.** Spans told before the upgrade carry the runner's name there, and a
+  backend keeps them as they were told; no replay is needed, and none rewrites them.
+- **`blizzard.runner.name` rides beside it** on every span that carries the id: the hub's step spans, the runner's
+  lease spans, the harness spans, data points and log records it forwards, and both daemons' platform spans.
+
+To select one runner across the upgrade, match its name in `blizzard.runner.name`, or in `blizzard.runner.id` on a span
+that has no `blizzard.runner.name`. A hub replay of a window from before the upgrade tells its steps again under the
+same span ids, now with the `rn_` id and the name, and a runner replay tells a lease minted before the upgrade under
+the id of the runner's current registration, the one the hub's spans carry; a backend that dedupes on span ids keeps
+whichever it was told first. An upgraded runner tells nothing until its first registration with the upgraded hub, then
+tells the leases that closed meanwhile.
 
 ## Upgrading from trace schema 2
 

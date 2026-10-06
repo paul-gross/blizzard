@@ -7,19 +7,26 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.domain.runners.registration import (
     RUNNER_VERBS,
+    STALE_AFTER,
     LifecycleFact,
     RunnerHoldsRoutes,
+    RunnerLiveness,
     RunnerNotEnrolled,
     RunnerNotRetired,
     RunnerRegistration,
     RunnerRetired,
     RunnerState,
+    RunnerTokenRefused,
     RunnerVerb,
     TokenRevocation,
     TokenRotation,
     UnregisteredRedirect,
+    declared_name,
+    refuse_runner_token,
 )
 from blizzard.hub.domain.runners.route import Route
 
@@ -30,6 +37,8 @@ _AT = datetime(2026, 2, 1, tzinfo=UTC)
 
 _UNENROLLED = RunnerRegistration(
     runner_id="runner-a",
+    name="runner-a",
+    added_at=_T0,
     workspace_id="ws-a",
     registered_at=_T0,
     last_seen_at=_T0,
@@ -38,6 +47,11 @@ _UNENROLLED = RunnerRegistration(
 )
 _ENROLLED = replace(_UNENROLLED, token_hash="hash-old")
 _RETIRED = replace(_UNENROLLED, retired=True, retired_at=_T0, retired_by="op")
+#: An enroll that raced the retire left a current token on a retired runner.
+_RETIRED_WITH_TOKEN = replace(_RETIRED, token_hash="hash-old")
+_NEVER_CONNECTED = RunnerRegistration(
+    runner_id="runner-a", name="runner-a", added_at=_T0, hub_paused=False, token_hash="hash-old"
+)
 
 _HELD = Route(chunk_id="chk_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=["e1"], created_at=_T0)
 
@@ -181,3 +195,57 @@ def test_federation_to_an_unregistered_redirect_is_refused_before_retirement(
 def test_federation_of_a_retired_runner_to_a_registered_redirect_is_refused_as_retired() -> None:
     with pytest.raises(RunnerRetired, match="federation refused"):
         _RETIRED.refuse_federation("https://runner-a.example/callback")
+
+
+# a presented token
+
+
+@pytest.mark.parametrize("current", [_ENROLLED, _NEVER_CONNECTED])
+def test_a_current_token_of_a_runner_not_retired_names_that_runner(current: RunnerRegistration) -> None:
+    assert refuse_runner_token(current, revoked_for=None) is current
+
+
+@pytest.mark.parametrize(
+    ("current", "revoked_for", "reason"),
+    [
+        (_RETIRED_WITH_TOKEN, None, RunnerTokenRefusalReason.RETIRED),
+        (None, _RETIRED, RunnerTokenRefusalReason.RETIRED),
+        (None, _UNENROLLED, RunnerTokenRefusalReason.REVOKED),
+    ],
+)
+def test_a_refused_token_names_its_runner_and_reads_retired_before_revoked(
+    current: RunnerRegistration | None, revoked_for: RunnerRegistration | None, reason: RunnerTokenRefusalReason
+) -> None:
+    with pytest.raises(RunnerTokenRefused) as refused:
+        refuse_runner_token(current, revoked_for=revoked_for)
+    assert (refused.value.reason, refused.value.runner_id) == (reason, "runner-a")
+
+
+def test_a_token_neither_current_nor_revoked_is_unknown_and_names_no_runner() -> None:
+    with pytest.raises(RunnerTokenRefused) as refused:
+        refuse_runner_token(None, revoked_for=None)
+    assert (refused.value.reason, refused.value.runner_id) == (RunnerTokenRefusalReason.UNKNOWN, None)
+
+
+# names and connection
+
+
+@pytest.mark.parametrize(
+    ("declared", "recorded"),
+    [("r-claude", "r-claude"), ("  r-claude ", "r-claude"), ("", None), ("  ", None), (None, None)],
+)
+def test_a_registration_records_its_stripped_name_and_keeps_the_held_one_for_a_blank(
+    declared: str | None, recorded: str | None
+) -> None:
+    assert declared_name(declared) == recorded
+
+
+def test_a_never_connected_runner_is_offline_even_with_a_last_seen_instant() -> None:
+    liveness = RunnerLiveness.of(replace(_NEVER_CONNECTED, last_seen_at=_AT), now=_AT, threshold=STALE_AFTER)
+    assert (liveness.online, liveness.connection()) == (False, RunnerConnection.NEVER_CONNECTED)
+
+
+@pytest.mark.parametrize(("seen", "connection"), [(_AT, RunnerConnection.ONLINE), (_T0, RunnerConnection.OFFLINE)])
+def test_a_registered_runner_is_online_or_offline_by_its_liveness(seen: datetime, connection: RunnerConnection) -> None:
+    liveness = RunnerLiveness.of(replace(_ENROLLED, last_seen_at=seen), now=_AT, threshold=STALE_AFTER)
+    assert liveness.connection() is connection

@@ -72,7 +72,6 @@ class CompletionSubmission(BaseModel):
 
     choice: str  # the `<Choice>{name}</Choice>` the worker emitted
     epoch: int  # the executing lease's fence, checked against the chunk's latest
-    runner_id: str
     from_node_id: str
     # Runner-executed checks; empty when no checks are declared.
     check_results: list[CheckResult] = []

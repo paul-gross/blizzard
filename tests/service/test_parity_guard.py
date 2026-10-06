@@ -1,9 +1,9 @@
 """The mechanical parity guard — the service tier's own
 sentinel against the real wire growing a mock counterpart forgets to serve.
 
-Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock
-hub serves every ``IHubClient`` endpoint, verb-and-path-exact; the mock runner's
-``/_drive/*`` routes match a declared verb set (``bzh:sweep-release-only-tiers``)."""
+Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock hub serves
+every ``IHubClient`` endpoint and every endpoint of the runner's setup ports, verb-and-path-exact; the
+mock runner's ``/_drive/*`` routes match a declared verb set (``bzh:sweep-release-only-tiers``)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.hub.client import IHubClient, IHubRunnerAdmin, ITokenIdentityReader
 from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import mock_hub, mock_runner, require_mock_fleet, service_gate
 
@@ -38,6 +38,12 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "rekey_route_token": ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
 }
 
+#: One table per runner setup port, rows verbatim from the same reference binding.
+_SETUP_PORT_ENDPOINTS: dict[type, dict[str, tuple[str, str]]] = {
+    ITokenIdentityReader: {"identity": ("GET", "/api/fleet/identity")},
+    IHubRunnerAdmin: {"add_runner": ("POST", "/api/runners")},
+}
+
 _PATH_PARAM = re.compile(r"\{[^{}]+\}")
 
 
@@ -59,6 +65,14 @@ def _protocol_method_names(proto: type) -> set[str]:
         for name in vars(klass)
         if not name.startswith("_") and callable(getattr(klass, name))
     }
+
+
+def _wire_endpoints() -> dict[str, tuple[str, str]]:
+    """Every runner-to-hub endpoint the mock hub must serve, keyed ``method`` or ``Port.method``."""
+    setup = {
+        f"{proto.__name__}.{name}": row for proto, table in _SETUP_PORT_ENDPOINTS.items() for name, row in table.items()
+    }
+    return {**_IHUBCLIENT_ENDPOINTS, **setup}
 
 
 def _assert_ihubclient_endpoint_table_matches_protocol() -> None:
@@ -89,9 +103,20 @@ def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
     _assert_ihubclient_endpoint_table_matches_protocol()
 
 
+def test_each_setup_port_table_matches_its_protocol_method_set() -> None:
+    """Each runner setup port's table names exactly that port's method set, so a method added to
+    ``ITokenIdentityReader`` or ``IHubRunnerAdmin`` cannot go unserved by the mock hub unnoticed."""
+    for proto, table in _SETUP_PORT_ENDPOINTS.items():
+        actual = _protocol_method_names(proto)
+        assert actual == set(table), (
+            f"{proto.__name__} declares {sorted(actual)} but the guard maps {sorted(table)} — "
+            "update _SETUP_PORT_ENDPOINTS in this file AND serve any new endpoint on the mock hub"
+        )
+
+
 def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
-    """The mock hub's ``GET /openapi.json`` serves every ``IHubClient`` endpoint,
-    verb-and-path-exact (path params normalized); one-sided, mock ⊇ real."""
+    """The mock hub's ``GET /openapi.json`` serves every ``IHubClient`` endpoint and every
+    setup-port endpoint, verb-and-path-exact (path params normalized); one-sided, mock ⊇ real."""
     bin_dir = require_mock_fleet()
     port = _free_port()
     with mock_hub(bin_dir, port) as hub:
@@ -103,11 +128,11 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
 
     missing = [
         f"{method_name} -> {verb} {path} (normalized {_normalize(path)!r})"
-        for method_name, (verb, path) in sorted(_IHUBCLIENT_ENDPOINTS.items())
+        for method_name, (verb, path) in sorted(_wire_endpoints().items())
         if (verb, _normalize(path)) not in served
     ]
     assert not missing, (
-        "the mock hub does not serve the following IHubClient endpoint(s) — add the "
+        "the mock hub does not serve the following runner-to-hub endpoint(s) — add the "
         "route to src/blizzard_mock/mock_hub/api/routes.py:\n" + "\n".join(missing)
     )
 
@@ -119,11 +144,8 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
 #: IHubClient operation (or fact kind) it exercises — ``research-mock.md`` §4c.
 _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "register": "IHubClient.register_runner — POST /api/fleet/runners",
-    "peek": "IHubClient.peek_queue — GET /api/fleet/queue/peek",
-    "peek-matched": (
-        "IHubClient.peek_queue — POST /api/fleet/queue/peek (blizzard#433 Phase 3) — the "
-        "capability-matched verb, falling back to the legacy GET on a 401"
-    ),
+    "peek": "GET /api/fleet/queue/peek — the hub's unmatched peek, which no IHubClient operation calls",
+    "peek-matched": "IHubClient.peek_queue — POST /api/fleet/queue/peek — the capability-matched verb",
     "claim": "IHubClient.claim_route — POST /api/fleet/routes (+ the lease-minted fact's /events push)",
     "claim-next": (
         "IHubClient.peek_queue + IHubClient.claim_route (blizzard#459) — peek, select, and "
@@ -168,7 +190,8 @@ def test_mock_runner_drive_plane_matches_the_expected_verb_set() -> None:
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     runner_port = _free_port()
-    with mock_runner(bin_dir, runner_port, hub_port) as runner:
+    # A held token keeps the driver from adding itself at start, at a hub this read never starts.
+    with mock_runner(bin_dir, runner_port, hub_port, token="drive-plane-read") as runner:
         resp = runner.get("/openapi.json")
         assert resp.status_code == 200, resp.text
         actual = {

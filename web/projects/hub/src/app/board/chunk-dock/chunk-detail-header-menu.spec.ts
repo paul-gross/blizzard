@@ -37,7 +37,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+  route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
 const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
@@ -109,7 +109,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     const el = fixture.nativeElement as HTMLElement;
     await openMenu(fixture, el);
 
-    expect(inOverlay('[data-testid="detach-chunk"]')?.textContent).toContain('rn_01');
+    expect(inOverlay('[data-testid="detach-chunk"]')?.textContent).toContain('R-01.r-claude');
   });
 
   it('emits detach with the chunk id once the operator confirms', async () => {

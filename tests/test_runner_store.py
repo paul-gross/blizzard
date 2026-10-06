@@ -38,7 +38,6 @@ def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, leas
             node_id=node,
             node_name=node_name,
             epoch=epoch,
-            runner_id="r1",
             retries_max=retries_max,
             created_at=_NOW,
         )
@@ -168,7 +167,6 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  # 
             node_id="nd_review",
             node_name="review",
             epoch=2,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW + timedelta(minutes=5),
         )
@@ -195,7 +193,6 @@ def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", nod
             node_id=node,
             node_name=node_name,
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             session_name=session_name,
             created_at=at,
@@ -329,7 +326,6 @@ def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path):  # type: i
             node_id="nd_build",
             node_name="build",
             epoch=2,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

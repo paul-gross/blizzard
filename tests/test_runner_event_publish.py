@@ -84,7 +84,6 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=retries_max,
             created_at=_NOW,
         )
@@ -471,7 +470,6 @@ def test_pull_reconcile_escalations_publishes_escalation_closed(tmp_path: Path) 
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -673,7 +671,7 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_ceiling_usd=5.0),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, runner_ceiling_usd=5.0),
         events=events,
     )
 
@@ -757,7 +755,7 @@ def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         config=LoopConfig(
-            runner_id="r1",
+            runner_name="r1",
             workspace_id="ws1",
             max_agents=1,
             context_warn_tokens=300_000,
@@ -802,7 +800,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
         events=events,
         subscriptions=(resolved,),
     )
@@ -835,7 +833,7 @@ def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
         events=events,
         subscriptions=(resolved,),
     )

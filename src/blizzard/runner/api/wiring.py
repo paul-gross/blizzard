@@ -27,6 +27,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases import Lease, LocalLeaseService, WorkerLease
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -117,6 +118,10 @@ class RunnerWiring:
         """The process's platform-tracing handle; the disabled one where the composer wired none."""
         return getattr(self.state, "platform_tracing", None) or DisabledPlatformTracing()
 
+    def identity(self) -> ICurrentRunnerIdentity:
+        """The process's identity holder; a never-registered one where the composer wired none."""
+        return getattr(self.state, "identity", None) or RunnerIdentityHolder()
+
     def span_limiter(self) -> SpanRateLimiter:
         limiter: SpanRateLimiter | None = getattr(self.state, "span_limiter", None)
         return limiter if limiter is not None else self._refuse("span rate limiter")
@@ -154,6 +159,7 @@ class RunnerWiring:
             metric_bounds=self.metric_bounds(),
             log_bounds=self.log_bounds(),
             clock=getattr(self.state, "clock", None),
+            identity=self.identity(),
             worker_programs=config is not None and config.tracing.worker_programs,
             harness_telemetry=config is not None and config.tracing.harness_telemetry,
             mapped_services=config.tracing.worker_program_services if config is not None else {},

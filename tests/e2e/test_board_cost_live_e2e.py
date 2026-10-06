@@ -25,6 +25,7 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _winter_source,
 )
+from tests.runner_join import fleet_headers
 
 pytestmark = [
     pytest.mark.e2e,
@@ -49,12 +50,14 @@ def _ingest_promote_claim(forge: httpx.Client, hub: httpx.Client, title: str) ->
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     registered = hub.post(
         "/api/fleet/runners",
-        json={"runner_id": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+        json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+        headers=fleet_headers(hub),
     )
     assert registered.status_code == 201, registered.text
     claim = hub.post(
         "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+        json={"chunk_id": chunk_id, "workspace_id": "w1", "environment_ids": ["e"]},
+        headers=fleet_headers(hub),
     )
     assert claim.status_code == 201, claim.text
     node_id = claim.json()["envelope"]["node"]["node_id"]
@@ -93,7 +96,8 @@ def _push_usage(
         payload["estimated_cost_usd"] = estimated_cost_usd
     resp = hub.post(
         "/api/fleet/events",
-        json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
+        headers=fleet_headers(hub),
     )
     assert resp.status_code == 200, resp.text
 

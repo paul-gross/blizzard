@@ -49,7 +49,9 @@ export const ENTITY_DISPLAY: Readonly<Partial<Record<IdPrefix, EntityDisplay>>> 
   fins: { sigil: 'FS', tailLength: 4 },
   /* `gprop` (a garden proposal) would default to `G`, colliding with the registered `gr` (graphs). */
   gprop: { sigil: 'GP', tailLength: 4 },
-  rtn: { sigil: 'R', tailLength: 4 },
+  /* `rtn` (a routine) and `rn` (a runner) would both default to `R`; the runner keeps the bare letter. */
+  rtn: { sigil: 'RTN', tailLength: 4 },
+  rn: { sigil: 'R', tailLength: 4 },
 };
 
 const DEFAULT_TAIL_LENGTH = 4;
@@ -62,7 +64,7 @@ function isIdPrefix(prefix: string): prefix is IdPrefix {
 
 /**
  * `ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9` → `C-3YJ9`. An id with no underscore (env
- * pool names like `e1`, `runner-local`) is not a prefixed ULID and passes
+ * pool names like `e1`) is not a prefixed ULID and passes
  * through unchanged — those names are already human-scale.
  */
 export function compactRef(id: string): string {

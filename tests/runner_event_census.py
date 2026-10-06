@@ -179,6 +179,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "mirrors the hub's pause brake locally; no kind in the vocabulary represents it — "
         "backstop-bounded staleness, `polling.ts`'s own claim to state (`bzh:one-prose-home`)."
     ),
+    "record_runner_identity": Silent(
+        "records the id and name of a registration the PULL already made; no kind in the vocabulary "
+        "represents it — the panel reads it on its next poll, as it reads the mirrored hub pause."
+    ),
     "record_local_pause": Published(
         RunnerEventType.FACT_CHANGED,
         "SpendCeiling.run and patch_runner (runner/loop/steps.py, runner/api/control.py) — kind is "

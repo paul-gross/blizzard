@@ -10,6 +10,7 @@ import pytest
 
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _mock_bin_dir, _winter_source
 from tests.e2e.test_transcript_tab_browser_e2e import _ingest, _mint
+from tests.runner_join import fleet_headers
 
 pytestmark = [
     pytest.mark.e2e,
@@ -35,12 +36,14 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         registered = hub.post(
             "/api/fleet/runners",
-            json={"runner_id": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+            json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
+            headers=fleet_headers(hub),
         )
         assert registered.status_code == 201, registered.text
         claim = hub.post(
             "/api/fleet/routes",
-            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+            json={"chunk_id": chunk_id, "workspace_id": "w1", "environment_ids": ["e"]},
+            headers=fleet_headers(hub),
         )
         assert claim.status_code == 201, claim.text
         node_id = claim.json()["envelope"]["node"]["node_id"]
@@ -48,9 +51,9 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
         lease = hub.post(
             "/api/fleet/events",
             json={
-                "runner_id": "r1",
                 "facts": [{"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
             },
+            headers=fleet_headers(hub),
         )
         assert lease.status_code == 200, lease.text
         completed = hub.post(
@@ -58,17 +61,16 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
             json={
                 "choice": "basic",
                 "epoch": 1,
-                "runner_id": "r1",
                 "from_node_id": node_id,
                 "artifacts": [{"name": "triage-findings", "kind": "asset", "content": "basic lane rationale"}],
             },
+            headers=fleet_headers(hub),
         )
         assert completed.status_code == 200, completed.text
         assert completed.json()["outcome"] == "migrated"
         shipped = hub.post(
             "/api/fleet/transcripts",
             json={
-                "runner_id": "r1",
                 "records": [
                     {
                         "seq": 1,
@@ -97,6 +99,7 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
                     }
                 ],
             },
+            headers=fleet_headers(hub),
         )
         assert shipped.status_code == 200, shipped.text
         assert shipped.json()["applied"] == [1]

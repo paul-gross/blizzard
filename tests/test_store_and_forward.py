@@ -21,7 +21,15 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_store,
+    registered_identity,
+)
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -298,9 +306,15 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
         provider=FakeProvider({"e": "/ws/e"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="w1"),
+        config=LoopConfig(runner_name="r1", workspace_id="w1"),
         clock=FixedClock(now),
+        registered=False,
     )
+    # The real hub client carries no fake's default id: hold the id its fleet client's token resolves to.
+    identity = registered_identity("r1", "r1").current()
+    assert identity is not None
+    store.record_runner_identity(identity)
+    ctx.identity.hold(identity)
     submission = {**_completion(build_node_id, epoch=1), "check_results": [], "proposals": []}
     ctx.stores.outbound.enqueue_outbound(
         kind=COMPLETION_KIND,

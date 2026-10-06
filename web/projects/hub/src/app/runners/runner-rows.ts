@@ -1,6 +1,6 @@
 import { computed } from '@angular/core';
 
-import { type RunnerView, type KitAsyncStateValue, injectNowSignal, asyncState } from 'fleet';
+import { type RunnerRegistryView, type KitAsyncStateValue, injectNowSignal, asyncState } from 'fleet';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { foldRunnerRows, type RunnerRow } from './runner-rows.model';
 import { injectHubRunnersQuery } from './runners.query';
@@ -23,7 +23,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   const runnersQuery = injectHubRunnersQuery(includeRetired);
   const chunksQuery = injectHubBoardChunksQuery();
 
-  const runners = computed<readonly RunnerView[]>(() => runnersQuery.data() ?? []);
+  const runners = computed<readonly RunnerRegistryView[]>(() => runnersQuery.data() ?? []);
 
   const state = computed<KitAsyncStateValue>(() => asyncState(runnersQuery, runners().length === 0));
 

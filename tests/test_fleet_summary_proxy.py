@@ -63,7 +63,7 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_
 
 @pytest.mark.component
 def test_proxy_sends_no_authorization_header_when_no_token_is_configured(tmp_path: Path) -> None:
-    """No ``hub_token`` (unenrolled runner) is a valid warn-mode state: no header at all."""
+    """A runner holding no ``hub_token`` sends no ``Authorization`` header at all."""
     seen_headers: list[httpx.Headers] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

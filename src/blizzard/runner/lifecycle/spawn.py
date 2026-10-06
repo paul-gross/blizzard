@@ -32,6 +32,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import (
     IWriteLeaseLivenessRepository,
@@ -57,6 +58,7 @@ from blizzard.runner.lifecycle.model import (
     next_lease_epoch,
     resolved_retries_max,
 )
+from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
@@ -152,7 +154,7 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
     @property
     def runner_dir(self) -> str: ...
     @property
-    def runner_id(self) -> str: ...
+    def runner_name(self) -> str: ...
     @property
     def runner_prompt(self) -> str: ...
     @property
@@ -190,6 +192,8 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     @property
     def hub(self) -> IHubClient: ...
     @property
+    def identity(self) -> ICurrentRunnerIdentity: ...
+    @property
     def sessions(self) -> SessionResolver: ...
     @property
     def tracer(self) -> IPlatformTracer: ...
@@ -208,9 +212,8 @@ class Spawner:
 
     def brakes(self) -> RunnerBrakes:
         """This runner's two brakes, read together."""
-        runner_id = self.ctx.config.runner_id
         pause = self.ctx.stores.pause
-        return RunnerBrakes(local=pause.local_paused(runner_id), hub=pause.hub_paused(runner_id))
+        return RunnerBrakes(local=pause.local_paused(), hub=pause.hub_paused())
 
     def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
         """True — and logged once — when the runner's brakes block this start.
@@ -221,7 +224,7 @@ class Spawner:
             return False
         _log.info(
             "spawn suppressed — locally paused",
-            runner_id=self.ctx.config.runner_id,
+            runner_name=self.ctx.config.runner_name,
             via=via,
             chunk_id=chunk_id,
             lease_id=lease_id,
@@ -550,7 +553,6 @@ class Spawner:
                 node_id=node.node_id,
                 node_name=node.node_name,
                 epoch=epoch,
-                runner_id=self.ctx.config.runner_id,
                 retries_max=budget,
                 session_name=node.session_name,
                 resolved_model=model,
@@ -597,7 +599,7 @@ class Spawner:
             workspace_prompt=override if override is not None else self.ctx.config.workspace_prompt,
             environments=environments,
             lease_id=lease_id,
-            runner_id=self.ctx.config.runner_id,
+            runner_id=registered_runner_id(self.ctx.identity),
             chunk_id=chunk_id,
             prior=self.ctx.stores.session.session_preamble_fingerprint(resume.session) if resume else None,
             node=node_name,

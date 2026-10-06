@@ -45,7 +45,6 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -146,7 +145,6 @@ def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past
     _hub, ctx = _ctx(store, harness, clock=clock)
     Advance(ctx).run()  # records, backs off
     store.record_local_pause(
-        "r1",
         paused=True,
         at=clock.now(),
         by="operator",

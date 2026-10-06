@@ -51,7 +51,6 @@ def _open_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -107,7 +106,7 @@ def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() ->
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     _open_segment(ctx)
@@ -189,7 +188,7 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -201,7 +200,6 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -255,7 +253,7 @@ def test_a_live_capture_ships_a_timestamp_on_every_turn_and_sidechain_turn() -> 
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     _open_segment(ctx)

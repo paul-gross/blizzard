@@ -46,10 +46,12 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (
     HubHarness,
     InMemoryEgressWriter,
+    added_runner,
     count_queries,
     count_rows_read,
     hub_store_connections,
     ingest,
+    seed_runner,
 )
 from tests.trace_hub import claim, label, pass_build, trace_hub
 
@@ -85,7 +87,7 @@ def _sweep(
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
     return EgressSweep(
-        steps=TraceStore(connections, graphs=hub.services.graphs, label=label),
+        steps=TraceStore(connections, graphs=hub.services.graphs, names=hub.services.registry, label=label),
         egress=store or EgressStore(connections),
         event_reads=EgressEventStore(connections),
         paths=_PATHS,
@@ -301,6 +303,25 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
     assert newest["cost_billed_usd"] == sum((r["cost_billed_usd"] for r in invoked), Decimal(0))  # type: ignore[misc]
     # The rewrite is partitioned by the step's own end, not by when the usage landed.
     assert {str(b.partition) for b in writer.batches if b.schema.name == "steps"} == {"2026-07-13"}
+
+
+def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    seed_runner(hub, "r1", name="night-runner")
+    chunk_id = _closed_step(hub, graph, 1)
+    _sweep(hub, writer).sweep()
+
+    # A rename by restart: same id, new name.
+    hub.services.fleet.register(added_runner(hub, "r1"), "w1", name="day-runner")
+    hub.clock.advance(timedelta(hours=3))
+    _push_usage(hub, chunk_id, _node_id(graph))
+    _sweep(hub, writer).sweep()
+
+    named = [("r1", "night-runner"), ("r1", "day-runner")]
+    assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "steps")] == named
+    assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "invocations")] == named
 
 
 def test_usage_for_a_step_that_is_still_open_only_moves_the_position(tmp_path: Path) -> None:

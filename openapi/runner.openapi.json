@@ -1215,6 +1215,17 @@
             ],
             "title": "Runner Id"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
+          },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
           },
@@ -1537,6 +1548,17 @@
               }
             ],
             "title": "Imposed By Runner Id"
+          },
+          "imposed_by_runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imposed By Runner Name"
           },
           "node_id": {
             "title": "Node Id",
@@ -3551,6 +3573,17 @@
             "title": "Runner Id",
             "type": "string"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -3807,6 +3840,17 @@
             "title": "Runner Id",
             "type": "string"
           },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
+          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -3880,12 +3924,24 @@
             "type": "boolean"
           },
           "runner_id": {
-            "title": "Runner Id",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "runner_name": {
+            "title": "Runner Name",
             "type": "string"
           }
         },
         "required": [
           "runner_id",
+          "runner_name",
           "local_paused",
           "hub_paused",
           "paused"
@@ -3938,8 +3994,26 @@
             "$ref": "#/components/schemas/PauseStateView"
           },
           "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -5173,7 +5247,7 @@
         "type": "object"
       },
       "WorkItemAuthorView": {
-        "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``.",
+        "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``, with\n``runner_name`` the proposing runner's latest registered name when the registry holds it.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -5222,6 +5296,17 @@
               }
             ],
             "title": "Runner Id"
+          },
+          "runner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Name"
           },
           "user_id": {
             "anyOf": [
@@ -7879,7 +7964,7 @@
     },
     "/api/traces/replay": {
       "post": {
-        "description": "Tell every lease closed in ``[since, until)`` again, inside the request, without moving the live cursor.\nA bad window is 422, a replay that must export while tracing is off is 409, and an exporter that\nrefuses is 502 with the counts it accepted before.",
+        "description": "Tell every lease closed in ``[since, until)`` again, inside the request, without moving the live cursor.\nA bad window is 422; a replay that must export while tracing is off, or any replay before the runner's first\nregistration, is 409; and an exporter that refuses is 502 with the counts it accepted before.",
         "operationId": "trace_replay_api_traces_replay_post",
         "requestBody": {
           "content": {

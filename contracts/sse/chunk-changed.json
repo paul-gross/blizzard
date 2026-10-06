@@ -20,5 +20,16 @@
     "cause": "deleted",
     "by": "operator",
     "key": "chunk_deleted:1"
+  },
+  "named-runner": {
+    "chunk_id": "ch_1",
+    "status": "running",
+    "prev_status": "ready",
+    "node": "build",
+    "runner_id": "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "runner_name": "r-claude",
+    "cause": "claimed",
+    "graph_id": "adv-dwf",
+    "key": "route_created:rt_1"
   }
 }

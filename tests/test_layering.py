@@ -534,15 +534,15 @@ def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> lis
 
 
 def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
-    """Only `hub/cli/sessions/` (the Protocol's own package) may name
-    `IWriteSessionStore` — every other hub CLI module, including `auth.py`'s
-    login/logout, takes the `SessionService` application service instead, never the raw
-    write seam (``bzh:controller-read-only``)."""
-    hub_cli_dir = _HUB_DIR / "cli"
-    sessions_dir = hub_cli_dir / "sessions"
+    """Only `foundation/operator_sessions/` (the Protocol's own package) may name `IWriteSessionStore` — every
+    CLI module, the hub's login/logout included, takes the `SessionService` application service instead, never
+    the raw write seam (``bzh:controller-read-only``)."""
+    sessions_dir = _FOUNDATION_DIR / "operator_sessions"
     exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py"))
-    violations = _write_session_store_accesses(hub_cli_dir, exempt=exempt)
-    assert not violations, f"D4 — IWriteSessionStore must be named only inside sessions/: {violations}"
+    violations = _write_session_store_accesses(_SRC_DIR, exempt=exempt)
+    assert not violations, (
+        f"D4 — IWriteSessionStore must be named only inside foundation/operator_sessions/: {violations}"
+    )
 
 
 _RUNNER_API_DIR = _RUNNER_DIR / "api"

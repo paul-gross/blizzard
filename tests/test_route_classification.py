@@ -24,6 +24,7 @@ from blizzard.auth_core import (
     GRAPH_EDIT,
     QUESTION_ANSWER,
     QUEUE_REORDER,
+    RUNNER_ADD,
     RUNNER_PAUSE,
     RUNNER_RETIRE,
     TRANSCRIPT_READ,
@@ -52,6 +53,9 @@ _PUBLIC: set[tuple[str, str]] = {
     # The CLI's PKCE code exchange — there is no session yet at this
     # point, that is what this route mints.
     ("POST", "/api/auth/cli/token"),
+    # The runner identity route — under `/api/fleet` but outside the fleet gate: it
+    # reads the bearer token itself, so it can answer why the hub refuses one.
+    ("GET", "/api/fleet/identity"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
@@ -168,7 +172,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/questions"): QUESTION_ANSWER,
     ("POST", "/api/questions/{question_id}/answers"): QUESTION_ANSWER,
     ("GET", "/api/questions"): FLEET_VIEW,
-    ("POST", "/api/runners/{runner_id}/enrollments"): RUNNER_PAUSE,
+    # Adding a runner and rotating its token both mint a credential.
+    ("POST", "/api/runners"): RUNNER_ADD,
+    ("POST", "/api/runners/{runner_id}/enrollments"): RUNNER_ADD,
     ("GET", "/api/runners"): FLEET_VIEW,
     ("GET", "/api/runners/{runner_id}"): FLEET_VIEW,
     ("POST", "/api/runners/{runner_id}/pause"): RUNNER_PAUSE,
@@ -241,7 +247,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("DELETE", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
 }
 
-#: Fleet plane — every route mounted under ``/api/fleet/*`` carries its own
+#: Fleet plane — every route mounted under ``/api/fleet/*`` but the identity route carries its own
 #: ``require_runner_principal``-at-router-level confinement; no per-route permission.
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),

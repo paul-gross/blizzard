@@ -25,7 +25,7 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases import NewLease
 from blizzard.runner.status.view import RunnerStatusService
-from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores
+from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores, registered_identity
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -56,7 +56,8 @@ def _app_with_status(
         asks=store,
         takeover=store,
         escalations=store,
-        runner_id=config.runner_id,
+        identity=registered_identity("rn_status", config.name),
+        runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
@@ -77,7 +78,6 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 1,
-        "runner_id": "runner-local",
         "retries_max": 2,
         "created_at": _NOW,
     }
@@ -96,7 +96,7 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["runner_id"] == "runner-local"
+    assert (body["runner_id"], body["runner_name"]) == ("rn_status", "runner-local")
     assert body["workspace_id"] == "workspace-local"
     assert body["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
     assert body["capacities"] == {"max_agents": 3, "used": 0, "free": 3}
@@ -143,7 +143,7 @@ def test_capacities_reflect_active_leases_the_same_way_fill_counts_them(tmp_path
 def test_hub_reachable_when_last_contact_is_within_the_staleness_threshold(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     app, store = _app_with_status(tmp_path, clock=clock)
-    store.set_hub_paused("runner-local", paused=False, at=_NOW - timedelta(minutes=1))
+    store.set_hub_paused(paused=False, at=_NOW - timedelta(minutes=1))
 
     with TestClient(app) as client:
         resp = client.get("/api/runner")
@@ -158,7 +158,7 @@ def test_hub_unreachable_when_last_contact_is_stale(tmp_path: Path) -> None:
     """The hub-down path: an old contact fact reads honestly as unreachable, not stale-true."""
     clock = FixedClock(_NOW)
     app, store = _app_with_status(tmp_path, clock=clock)
-    store.set_hub_paused("runner-local", paused=False, at=_NOW - timedelta(hours=1))
+    store.set_hub_paused(paused=False, at=_NOW - timedelta(hours=1))
 
     with TestClient(app) as client:
         resp = client.get("/api/runner")
@@ -171,9 +171,7 @@ def test_hub_unreachable_when_last_contact_is_stale(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
-    store.record_local_pause(
-        "runner-local", paused=True, at=_NOW, by="alice", report_kind="runner.locally_paused", report_payload="{}"
-    )
+    store.record_local_pause(paused=True, at=_NOW, by="alice", report_kind="runner.locally_paused", report_payload="{}")
 
     with TestClient(app) as client:
         resp = client.get("/api/runner")
@@ -187,7 +185,6 @@ def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path
     runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`."""
     app, store = _app_with_status(tmp_path)
     store.record_local_pause(
-        "runner-local",
         paused=True,
         at=_NOW,
         by="usage-limit",
@@ -209,7 +206,6 @@ def test_pause_local_reason_is_none_when_not_locally_paused(tmp_path: Path) -> N
     bare newest-row lookup."""
     app, store = _app_with_status(tmp_path)
     store.record_local_pause(
-        "runner-local",
         paused=True,
         at=_NOW,
         by="usage-limit",
@@ -218,7 +214,7 @@ def test_pause_local_reason_is_none_when_not_locally_paused(tmp_path: Path) -> N
         reason="usage limit: claude_code",
     )
     store.record_local_pause(
-        "runner-local", paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+        paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
 
     with TestClient(app) as client:
@@ -260,7 +256,7 @@ def test_buffer_depth_reports_the_true_depth_above_the_drains_own_per_run_limit(
 @pytest.mark.component
 def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
-    store.record_daemon_liveness(runner_id="runner-local", alive_at=_NOW)
+    store.record_daemon_liveness(alive_at=_NOW)
 
     with TestClient(app) as client:
         resp = client.get("/api/runner")
@@ -667,7 +663,8 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         asks=store,
         takeover=store,
         escalations=store,
-        runner_id="runner-local",
+        identity=registered_identity("rn_status"),
+        runner_name="runner-local",
         workspace_id="workspace-local",
         max_agents=2,
         hub_url="http://hub",

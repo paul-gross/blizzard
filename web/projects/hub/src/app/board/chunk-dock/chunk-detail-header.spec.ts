@@ -31,7 +31,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+  route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
 /** A chunk carrying an open pause fact, whatever its derived status reads. */
@@ -132,7 +132,18 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const chip = el.querySelector('[data-testid="route-info"]');
-    expect(chip?.textContent?.trim()).toBe('Claimed by rn_01');
+    expect(chip?.textContent?.trim()).toBe('Claimed by R-01.r-claude');
+  });
+
+  it('titles the "Claimed by" chip with the whole display name and the full runner id', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The chip may clip a long name, so its tooltip carries what the clip hides.
+    expect(el.querySelector('[data-testid="route-info"]')?.getAttribute('title')).toBe('R-01.r-claude · rn_01');
   });
 
   it('withholds Pause without chunk:control, even with a live route', async () => {
@@ -142,7 +153,7 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="route-info"]')?.textContent).toContain('rn_01');
+    expect(el.querySelector('[data-testid="route-info"]')?.textContent).toContain('R-01.r-claude');
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
     expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
   });

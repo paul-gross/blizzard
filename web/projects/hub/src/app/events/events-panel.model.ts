@@ -18,6 +18,15 @@ export function eventRunnerIds(
   );
 }
 
+/** Each runner's name as `events` carry it, by id — the runner filter chips' labels. */
+export function eventRunnerNames(
+  events: readonly { readonly runner_id?: string | null; readonly runner_name?: string | null }[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const e of events) if (e.runner_id && e.runner_name) names.set(e.runner_id, e.runner_name);
+  return names;
+}
+
 /** The chunk-id chip universe over `events`, falsy ids stripped, with `selected` kept in it ({@link filterUniverse}). */
 export function eventChunkIds(
   events: readonly { readonly chunk_id?: string | null }[],

@@ -216,10 +216,16 @@ class FactIngestService:
         self._clock = clock
 
     def ingest(
-        self, runner_id: str, pushed: Sequence[PushedFact], *, route_token_mode: str = ROUTE_TOKEN_WARN
+        self,
+        runner_id: str,
+        pushed: Sequence[PushedFact],
+        *,
+        route_token_mode: str = ROUTE_TOKEN_WARN,
+        runner_name: str | None = None,
     ) -> FactIngestResult:
         """Apply one push of ``runner_id``'s facts. A retired runner is refused with
-        :class:`RunnerRetired` before its high-water mark is read, so nothing in the push lands."""
+        :class:`RunnerRetired` before its high-water mark is read, so nothing in the push lands.
+        ``runner_name`` is the pusher's registered name, carried onto the events the push records."""
         self._retired.refuse_if_retired(runner_id, action="fact ingest")
         mark = self._route.runner_high_water(runner_id)
         applied: list[int] = []
@@ -232,7 +238,9 @@ class FactIngestService:
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            ok, row_id = self._apply(runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
+            ok, row_id = self._apply(
+                runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode, runner_name=runner_name
+            )
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
@@ -283,7 +291,13 @@ class FactIngestService:
         return False, None
 
     def _apply(
-        self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str
+        self,
+        runner_id: str,
+        kind: str,
+        payload: dict[str, object],
+        *,
+        route_token_mode: str,
+        runner_name: str | None = None,
     ) -> tuple[bool, int | None]:
         """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
         row's own id only for a kind whose id is not already in its own
@@ -371,6 +385,7 @@ class FactIngestService:
             event_id = self._events.record(
                 kind=wire_kind,
                 runner_id=runner_id,
+                runner_name=runner_name,
                 chunk_id=fact.text("chunk_id"),
                 lease_id=fact.text("lease_id"),
                 node_name=fact.text("node_name"),

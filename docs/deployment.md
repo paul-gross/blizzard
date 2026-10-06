@@ -12,9 +12,10 @@ runtime. Colocation is a choice, not a constraint — a runner on another machin
 
 The hub, `blizzard-hub host`, serves the fleet's HTTP API, SSE, and the embedded mission-control board, and alone holds
 the forge base URL and work-source credentials — never the runner. The supervisor, `blizzard-runner host`, is the
-stateless `REAP → PULL → FILL → ADVANCE` loop behind a machine-local API; it reaches the hub outbound-only with its
-enrolled bearer token ([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md)), so it keeps working while the
-hub is briefly unreachable. Each daemon owns its own embedded store; neither opens the other's.
+stateless `REAP → PULL → FILL → ADVANCE` loop behind a machine-local API; it reaches the hub outbound-only with the
+bearer token the hub issued when it added the runner ([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md)),
+so it keeps working while the hub is briefly unreachable. Each daemon owns its own embedded store; neither opens the
+other's.
 
 The units are [`packaging/systemd/`](../packaging/systemd/)'s `blizzard-hub.service` and `blizzard-runner.service`;
 under them both daemons survive a crash or reboot with nothing lost and nothing worked twice.
@@ -31,7 +32,7 @@ owns what that assumption still costs.
 | File                                                       | When to read                                                                                                                                                |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`deployment/install.md`](./deployment/install.md)         | You are installing the wheel, seeding each daemon's runtime directory, and dropping the units — plus the config renames and migration notes an upgrade owes |
-| [`deployment/runner-auth.md`](./deployment/runner-auth.md) | You are enrolling a runner and rolling the fleet from `warn` to `enforce` — machine identity, not human login                                               |
+| [`deployment/runner-auth.md`](./deployment/runner-auth.md) | You are adding a runner, rotating or revoking its token, or re-running `runner init` — machine identity, not human login                                    |
 | [`deployment/human-auth.md`](./deployment/human-auth.md)   | You are putting operators behind SSO: the `[auth]` table, the superuser bootstrap, roles, runner-side federation, and what a TLS-terminating proxy changes  |
 | [`deployment/secrets.md`](./deployment/secrets.md)         | You are storing a credential in the hub, choosing where its encryption key lives, or rotating that key                                                      |
 

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.status.view import PauseState, RunnerStatusService
 from blizzard.runner.throttle.pause import IReadPauseRepository
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
@@ -22,7 +23,8 @@ router = APIRouter(prefix="/api", tags=["runner"])
 class RunnerControlView(BaseModel):
     """The runner singleton's derived pause state."""
 
-    runner_id: str
+    runner_id: str | None  # the hub-minted id of the latest registration; None before the first
+    runner_name: str  # the name the hub recorded then, else the configured one
     local_paused: bool  # this runner's own brake
     hub_paused: bool  # the hub's brake, as last mirrored
     paused: bool  # effective: the OR of the two
@@ -43,8 +45,9 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     writes the hub's flag. Not a drain: a live worker is left running."""
     wiring = RunnerWiring.of(request)
     config = wiring.config()
-    wiring.pause().set_local_pause(config.runner_id, paused=request_body.paused, by=request_body.by)
-    return _view(wiring.read_stores().pause, config.runner_id)
+    wiring.pause().set_local_pause(paused=request_body.paused, by=request_body.by)
+    stores = wiring.read_stores()
+    return _view(stores.pause, stores.identity.runner_identity(), configured_name=config.name)
 
 
 @router.get("/runner", response_model=RunnerStatusView)
@@ -61,6 +64,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     summary = service.summary()
     return RunnerStatusView(
         runner_id=summary.runner_id,
+        runner_name=summary.runner_name,
         workspace_id=summary.workspace_id,
         pause=PauseStateView(
             local=summary.pause.local,
@@ -82,10 +86,11 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     )
 
 
-def _view(pause: IReadPauseRepository, runner_id: str) -> RunnerControlView:
-    state = PauseState.of(local=pause.local_paused(runner_id), hub=pause.hub_paused(runner_id), local_reason=None)
+def _view(pause: IReadPauseRepository, identity: RunnerIdentity | None, *, configured_name: str) -> RunnerControlView:
+    state = PauseState.of(local=pause.local_paused(), hub=pause.hub_paused(), local_reason=None)
     return RunnerControlView(
-        runner_id=runner_id,
+        runner_id=identity.runner_id if identity is not None else None,
+        runner_name=identity.runner_name if identity is not None else configured_name,
         local_paused=state.local,
         hub_paused=state.hub,
         paused=state.effective,

@@ -24,6 +24,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.listeners import Listeners, Uds
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
@@ -641,8 +642,8 @@ def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: py
     assert result.exit_code == 0, result.output
     assert "locally paused" in result.output
     store = _store(root)
-    assert store.local_paused("runner-local") is True
-    assert store.hub_paused("runner-local") is False  # the hub's brake is a separate concept
+    assert store.local_paused() is True
+    assert store.hub_paused() is False  # the hub's brake is a separate concept
 
 
 @pytest.mark.component
@@ -655,7 +656,7 @@ def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: py
         result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert _store(root).local_paused("runner-local") is True
+    assert _store(root).local_paused() is True
 
 
 @pytest.mark.component
@@ -669,7 +670,7 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
 
     assert result.exit_code == 0, result.output
     assert "no longer locally paused" in result.output
-    assert _store(root).local_paused("runner-local") is False
+    assert _store(root).local_paused() is False
 
 
 @pytest.mark.component
@@ -682,7 +683,7 @@ def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pyt
         assert CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--by", "alice"]).exit_code == 0
 
     store = _store(root)
-    assert store.local_paused("runner-local") is True
+    assert store.local_paused() is True
     pending = store.pending_outbound()
     assert [f.kind for f in pending] == ["runner.locally_paused"]
     # Runner-scoped: it is about the runner, so it correlates to no chunk or lease.
@@ -701,6 +702,51 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
 
     kinds = [f.kind for f in _store(root).pending_outbound()]
     assert kinds == ["runner.locally_paused", "runner.locally_resumed"]
+
+
+def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) -> None:
+    """Every verb's local API answers ``PATCH /api/runner`` with ``view`` — no daemon behind it."""
+
+    def reach(_cls: type[RunnerDaemon], verb: str, _directory: str, _runner_url: str | None) -> RunnerDaemon:
+        transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=view))
+        return RunnerDaemon(verb, httpx.Client(transport=transport, base_url="http://runner"), "runner.sock")
+
+    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("verb", "stance"), [("pause", "is also"), ("start", "stays")])
+def test_a_hub_pause_note_names_the_resume_verb_by_the_registered_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verb: str, stance: str
+) -> None:
+    view = {"runner_id": "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A", "runner_name": "r-claude", "hub_paused": True}
+    _daemon_answering(monkeypatch, view)
+
+    result = CliRunner().invoke(runner_group, [verb, "--dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[-1] == (
+        f"note: it {stance} paused at the hub — clear that with"
+        " `blizzard hub runner resume rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A`"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("verb", "stance"), [("pause", "is also"), ("start", "stays")])
+def test_a_hub_pause_note_before_the_first_registration_says_so_rather_than_a_placeholder_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verb: str, stance: str
+) -> None:
+    """A runner learns its id at its first registration; before it, the note says the runner
+    has not registered yet and where to find the id, never a stand-in for one."""
+    _daemon_answering(monkeypatch, {"runner_id": None, "runner_name": "runner-local", "hub_paused": True})
+
+    result = CliRunner().invoke(runner_group, [verb, "--dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[-1] == (
+        f"note: it {stance} paused at the hub — this runner has not registered yet, so find its id in"
+        " `blizzard hub runner list` to resume it there"
+    )
 
 
 @pytest.mark.unit
@@ -722,7 +768,7 @@ def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: py
         result = CliRunner().invoke(runner_group, ["pause", "--runner-url", tcp_url])
 
     assert result.exit_code == 0, result.output
-    assert _store(root).local_paused("runner-local") is True
+    assert _store(root).local_paused() is True
 
 
 @pytest.mark.unit

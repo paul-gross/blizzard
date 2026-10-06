@@ -276,7 +276,7 @@ def _ctx(  # type: ignore[no-untyped-def]
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_id="r1",
+            runner_name="r1",
             workspace_id="ws1",
             transcripts_ship=ship,
             transcript_record_max_bytes=record_max_bytes,
@@ -296,7 +296,6 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
             resolved_model="claude-sonnet-5",
@@ -1159,7 +1158,7 @@ def test_lease_close_survives_a_raising_transcript_source() -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
@@ -1190,7 +1189,6 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -1263,7 +1261,7 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
@@ -1274,7 +1272,6 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -1295,7 +1292,6 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -1579,7 +1575,7 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
@@ -1660,7 +1656,7 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
         clock=clock,
     )
     segment_id = _spawn_one_segment(ctx)
@@ -1759,7 +1755,7 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
         clock=clock,
     )
     segment_a_id = _spawn_one_segment(ctx)
@@ -2042,7 +2038,7 @@ def test_pump_lease_marks_incomplete_when_the_source_raises_at_closure() -> None
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")

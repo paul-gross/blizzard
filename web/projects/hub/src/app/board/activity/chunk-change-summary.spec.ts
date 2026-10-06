@@ -11,13 +11,22 @@ describe('summarizeChunkChange', () => {
       prev_status: 'running',
       prev_node: 'review',
       node: 'build',
-      runner_id: 'runner-local',
+      runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+      runner_name: 'r-claude',
       cause: 'node-completed',
       graph_id: 'gr_01KXKVVF1J3D6H6VYZ3XYN0001',
     };
     const summary = summarizeChunkChange(data);
     expect(summary.transition).toBe('C-1RJ1 review → failed → build');
-    expect(summary.runner).toBe('runner-local');
+    expect(summary.runner).toBe('R-ABF3.r-claude');
+  });
+
+  it('names the claiming runner by display name, a runner with no name by its compact id', () => {
+    const claimed: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', cause: 'claimed', status: 'running' };
+    expect(
+      summarizeChunkChange({ ...claimed, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
+    ).toEqual({ transition: 'C-1RJ1 claimed', runner: 'R-ABF3.r-claude' });
+    expect(summarizeChunkChange({ ...claimed, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }).runner).toBe('R-7Q2M');
   });
 
   it('omits the runner line entirely when the frame names no runner', () => {

@@ -215,7 +215,7 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
     assert resp.json()["applied"] == [1]
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "runner-changed"]
-    assert frames == [{"runner_id": "r1", "kind": "external-usage"}]
+    assert frames == [{"runner_id": "r1", "runner_name": "r1", "kind": "external-usage"}]
 
     replay_since = hub.events.latest_id()
     replay = hub.client.post(
@@ -801,7 +801,7 @@ def test_posted_missed_fact_publishes_runner_changed_once_and_a_replay_publishes
     assert resp.json()["applied"] == [1]
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "runner-changed"]
-    assert frames == [{"runner_id": "r1", "kind": "external-usage"}]
+    assert frames == [{"runner_id": "r1", "runner_name": "r1", "kind": "external-usage"}]
 
 
 def test_get_runners_renders_a_lapsed_credential_as_a_miss_only_condition_row(tmp_path: Path) -> None:

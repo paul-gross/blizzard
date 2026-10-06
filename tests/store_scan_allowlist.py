@@ -63,6 +63,12 @@ _RARE_OPERATOR_EVENT_REASON = (
     "hub-resolved escalation) — sparse by the event's own nature, not by retention."
 )
 
+# Points at schema.py's own "A singleton row" comments beside `hub_control` and `runner_identity`.
+_RUNNER_SINGLETON_REASON = (
+    "schema.py's own 'A singleton row' comments beside `hub_control` and `runner_identity`: "
+    "every write replaces the one row in place, so a scan reads at most one row."
+)
+
 RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     # --- the #520-named six (schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
@@ -95,6 +101,9 @@ RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("pause_parks", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("pause_park_resumes", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("local_pause_facts", 50, _RARE_OPERATOR_EVENT_REASON),
+    # --- singletons ---------------------------------------------------------------------
+    TableWideAllowance("hub_control", 1, _RUNNER_SINGLETON_REASON),
+    TableWideAllowance("runner_identity", 1, _RUNNER_SINGLETON_REASON),
     # --- the transcript lane's own pending-delivery buffer ------------------------------
     TableWideAllowance(
         "transcript_outbound_buffer",

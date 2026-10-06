@@ -105,7 +105,6 @@ def _seed_lease(
             node_id=node_id,
             node_name=node_name,
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             session_name=session_name,
             resolved_model=resolved_model,
@@ -213,7 +212,6 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

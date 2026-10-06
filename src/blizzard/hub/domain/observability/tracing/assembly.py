@@ -63,6 +63,7 @@ def step_dimensions(summary: StepSummary) -> dict[str, AttributeValue]:
         attr.STEP_TO_NODE_NAME: summary.to_node_name,
         attr.STEP_PRECEDED_BY: summary.preceded_by.value if summary.preceded_by is not None else None,
         attr.RUNNER_ID: summary.runner_id,
+        attr.RUNNER_NAME: summary.runner_name,
         shared.HARNESS_ID: summary.harness_id,
         attr.BOUNCE_CAUSE: summary.bounce_cause,
     }

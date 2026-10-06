@@ -5,7 +5,8 @@ import type { runnerApi } from 'fleet';
 import { LocalInfoView } from './app-info-view';
 
 const RUNNER_STATUS: runnerApi.RunnerStatusView = {
-  runner_id: 'runner-local',
+  runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+  runner_name: 'runner-local',
   workspace_id: 'workspace-local',
   pause: { local: false, hub: false, effective: false },
   capacities: { max_agents: 4, used: 1, free: 3 },
@@ -19,14 +20,19 @@ const RUNNER_STATUS: runnerApi.RunnerStatusView = {
 };
 
 async function render(
-  overrides: Partial<{ fleet: runnerApi.FleetSummaryView | null; fleetStale: boolean; gates: string[] }> = {},
+  overrides: Partial<{
+    fleet: runnerApi.FleetSummaryView | null;
+    fleetStale: boolean;
+    gates: string[];
+    identity: Pick<runnerApi.RunnerStatusView, 'runner_id' | 'runner_name'>;
+  }> = {},
 ) {
   await TestBed.configureTestingModule({
     imports: [LocalInfoView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalInfoView);
-  fixture.componentRef.setInput('view', { ...RUNNER_STATUS, gates: overrides.gates ?? [] });
+  fixture.componentRef.setInput('view', { ...RUNNER_STATUS, ...overrides.identity, gates: overrides.gates ?? [] });
   fixture.componentRef.setInput('lastFlushLabel', '-30s');
   fixture.componentRef.setInput('lastTickLabel', '-15s');
   if (overrides.fleet !== undefined) fixture.componentRef.setInput('fleet', overrides.fleet);
@@ -45,6 +51,31 @@ describe('LocalInfoView', () => {
     expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');
     expect(el.querySelector('.tick')?.textContent).toContain('-15s');
     expect(el.querySelector('[data-testid="hub-buffered"]')?.textContent).toContain('2 events');
+  });
+
+  it('names the runner beside its full hub-minted id', async () => {
+    const { el } = await render();
+
+    expect(el.querySelector('[data-testid="runner-identity"]')?.textContent?.trim()).toBe(
+      'runner-local · rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+    );
+  });
+
+  it('keeps the full id whole in its own nowrap element, out of the value column\'s anywhere-wrap', async () => {
+    const { el } = await render();
+
+    // jsdom lays nothing out; the shell sweep proves the id stays on one line in a real column.
+    const id = el.querySelector<HTMLElement>('[data-testid="runner-identity"] .rid')!;
+    expect(id.textContent).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
+    expect(id.getAttribute('title')).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
+    expect(getComputedStyle(id).whiteSpace).toBe('nowrap');
+  });
+
+  it('shows its configured name as not registered before the first registration', async () => {
+    const { el } = await render({ identity: { runner_id: null, runner_name: 'runner-local' } });
+
+    expect(el.querySelector('[data-testid="runner-identity"]')?.textContent?.trim()).toBe('runner-local · not registered');
+    expect(el.querySelector('[data-testid="runner-identity"] .rid')).toBeNull();
   });
 
   it('renders none when the runner imposes no gate', async () => {

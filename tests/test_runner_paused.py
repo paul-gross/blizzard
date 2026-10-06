@@ -88,12 +88,11 @@ class _BlipOnceHub(FakeHub):
 def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write."""
     store.record_local_pause(
-        "r1",
         paused=paused,
         at=ctx.clock.now(),
         by="operator",
         report_kind=RUNNER_LOCALLY_PAUSED if paused else RUNNER_LOCALLY_RESUMED,
-        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+        report_payload=json.dumps({"by": "operator"}),
     )
 
 
@@ -119,7 +118,7 @@ def test_pull_mirrors_the_hub_pause_brake_and_registers(tmp_path):  # type: igno
     Pull(ctx).run()
     # PULL registered the runner (liveness heartbeat) and mirrored the brake locally.
     assert hub.registered == [("r1", "ws1")]
-    assert store.hub_paused("r1") is True
+    assert store.hub_paused() is True
 
 
 def test_pull_reports_the_configured_env_capacity(tmp_path):  # type: ignore[no-untyped-def]
@@ -176,12 +175,12 @@ def test_in_flight_chunk_runs_on_while_paused(tmp_path):  # type: ignore[no-unty
 def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no-untyped-def]
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()  # mirror paused=True
-    assert store.hub_paused("r1") is True
+    assert store.hub_paused() is True
 
     # The hub goes unreachable; PULL cannot refresh, so the last-known brake holds.
     hub.down = True
     Pull(ctx).run()
-    assert store.hub_paused("r1") is True
+    assert store.hub_paused() is True
     Fill(ctx).run()
     assert hub.claims == []  # still adhering to the last directive
 
@@ -220,8 +219,8 @@ def test_a_local_start_does_not_clear_the_hubs_brake(tmp_path):  # type: ignore[
     _pause_locally(store, ctx, paused=False)
     Fill(ctx).run()
     # Locally started, but the hub still says paused — so nothing is claimed.
-    assert store.local_paused("r1") is False
-    assert store.hub_paused("r1") is True
+    assert store.local_paused() is False
+    assert store.hub_paused() is True
     assert hub.claims == []
 
 
@@ -267,7 +266,6 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -302,7 +300,6 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -536,8 +533,8 @@ def test_hub_paused_only_restart_resume_still_spawns(tmp_path):  # type: ignore[
     probe = FakeProbe(alive={(4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
     Pull(ctx).run()  # mirror the hub brake on; the local brake stays untouched
-    assert store.hub_paused("r1") is True
-    assert store.local_paused("r1") is False
+    assert store.hub_paused() is True
+    assert store.local_paused() is False
 
     Resume(ctx).run()
 
@@ -560,8 +557,8 @@ def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-unty
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
     Pull(ctx).run()  # mirror the hub brake on; the local brake stays untouched
-    assert store.hub_paused("r1") is True
-    assert store.local_paused("r1") is False
+    assert store.hub_paused() is True
+    assert store.local_paused() is False
 
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — no parseable verdict -> failure -> requeue in place
@@ -595,7 +592,7 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type:
     assert by_lease.keys() == {"lease_1", "lease_2"}
     for entry in suppressed:
         assert entry["via"] == "resume"
-        assert entry["runner_id"] == "r1"
+        assert entry["runner_name"] == "r1"
         assert entry["chunk_id"] == by_lease[entry["lease_id"]]["chunk_id"]
 
 
@@ -613,7 +610,6 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, e
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=retries_max,
             created_at=_NOW,
         )
@@ -664,9 +660,9 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
         handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
-    store.set_hub_paused("r1", paused=True, at=_NOW)  # mirrors what PULL would mirror
-    assert store.hub_paused("r1") is True
-    assert store.local_paused("r1") is False
+    store.set_hub_paused(paused=True, at=_NOW)  # mirrors what PULL would mirror
+    assert store.hub_paused() is True
+    assert store.local_paused() is False
 
     Reap(ctx).run()
 
@@ -749,7 +745,7 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     # many leases it held off on this tick.
     deferred = [entry for entry in logs if entry["event"] == "reap deferred — locally paused"]
     assert len(deferred) == 1
-    assert deferred[0]["runner_id"] == "r1"
+    assert deferred[0]["runner_name"] == "r1"
     assert deferred[0]["count"] == 1
 
 
@@ -785,7 +781,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=2),
     )
     _pause_locally(store, ctx, paused=True)
 
@@ -876,7 +872,6 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=0,  # exhausted on the first attempt — a rejection escalates
             created_at=_NOW,
         )
@@ -1003,7 +998,7 @@ def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ig
     ``paused=False`` but before FILL's claim lands, and the hub refuses it anyway."""
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()  # mirrors paused=False — the runner has not yet observed the pause
-    assert store.hub_paused("r1") is False
+    assert store.hub_paused() is False
 
     # The pause lands at the hub in the window between this PULL and FILL's claim.
     hub.claim_outcome = RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id="r1"))
@@ -1027,7 +1022,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     lost_race = [e for e in logs if e["event"] == "route claim lost the race"]
     assert len(denied) == 1
     assert denied[0]["chunk_id"] == "ch_1"
-    assert denied[0]["runner_id"] == "r1"
+    assert denied[0]["runner_name"] == "r1"
     assert denied[0]["detail"] == "runner is paused at the hub"
     assert lost_race == []  # the two outcomes are logged legibly apart, not conflated
 
@@ -1082,7 +1077,7 @@ def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields)
 
 def _ceiling_config(cap, *, window_hours=24.0, max_agents=1):  # type: ignore[no-untyped-def]
     return LoopConfig(
-        runner_id="r1",
+        runner_name="r1",
         workspace_id="ws1",
         max_agents=max_agents,
         runner_ceiling_usd=cap,
@@ -1132,11 +1127,11 @@ def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp
         config=_ceiling_config(5.0),
     )
 
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
     with capture_logs() as logs:
         SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1
     payload = json.loads(reports[0].payload)
@@ -1165,7 +1160,7 @@ def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  # type: ig
 
     SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
     assert [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED] == []
 
 
@@ -1185,7 +1180,7 @@ def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped
 
     SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
 
 
 @pytest.mark.unit
@@ -1207,7 +1202,7 @@ def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path)
     with capture_logs() as logs:
         SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     warnings = [e for e in logs if "runner locally paused" in e["event"]]
     assert warnings[0]["cost_partial"] is True
     assert "PARTIAL" in warnings[0]["event"]
@@ -1233,7 +1228,7 @@ def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignor
     )
 
     SpendCeiling(ctx).run()
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
 
     with capture_logs() as logs:
@@ -1264,7 +1259,7 @@ def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_c
     )
 
     SpendCeiling(ctx).run()
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
 
     # Move the clock two hours on — the 1h window now excludes the tripping fact entirely,
     # so a fresh, unpaused check of the same config would find $0 spend, well under cap.
@@ -1273,7 +1268,7 @@ def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_c
 
     SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is True  # still engaged — nothing lifts it automatically
+    assert store.local_paused() is True  # still engaged — nothing lifts it automatically
 
 
 @pytest.mark.unit
@@ -1304,7 +1299,7 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
 
     tick(ctx)
 
-    assert store.local_paused("r1") is True  # the ceiling engaged this very tick
+    assert store.local_paused() is True  # the ceiling engaged this very tick
     assert probe.killed == []  # not a drain — the live worker was left alone
     assert harness.spawns == []  # and nothing new was spawned into the free second env either
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
@@ -1335,24 +1330,24 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
     )
 
     SpendCeiling(ctx).run()
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     Fill(ctx).run()
     assert hub.claims == []  # suppressed while engaged
 
     # `blizzard runner start` — the exact `record_local_pause(paused=False)` write
     # `PATCH /api/runner` makes, with no ceiling-aware code anywhere in that path.
     _pause_locally(store, ctx, paused=False)
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
 
     # The window has since moved past the tripping fact, so a fresh ceiling check does not
     # immediately re-engage the brake out from under the operator's own clear.
     clock.advance(timedelta(hours=2))
     SpendCeiling(ctx).run()
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
 
     Fill(ctx).run()
 
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
     assert len(hub.claims) == 1  # FILL claims again — work resumed
 
 
@@ -1379,7 +1374,7 @@ def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no
 
     Advance(ctx).run()
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1
     payload = json.loads(reports[0].payload)
@@ -1441,11 +1436,11 @@ def test_usage_limited_judge_elicitation_engages_the_brake_and_parks(tmp_path): 
 
     Advance(ctx).run()  # launches the detached elicitation — not usage-limited yet
     assert store.in_flight_elicitation("lease_1", 1) is not None
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False
 
     Advance(ctx).run()  # collects it — the fake judge pid reads dead by default
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1
     payload = json.loads(reports[0].payload)
@@ -1477,7 +1472,7 @@ def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(t
 
     Advance(ctx).run()  # launches the detached elicitation — not usage-limited yet
     Advance(ctx).run()  # collects it — usage-limited, parks with the record left standing
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     assert len(harness.judged) == 1  # the first (limited) elicitation launch
 
     Advance(ctx).run()  # still paused — re-polled, nothing changes
@@ -1557,7 +1552,7 @@ def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_pat
     )
 
     Advance(ctx).run()
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
     Advance(ctx).run()  # still paused — re-polled, nothing changes
@@ -1739,13 +1734,13 @@ def test_a_usage_limit_brake_is_not_lifted_by_the_reset_time_passing(tmp_path): 
         store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), clock=clock
     )
     Advance(ctx).run()
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
 
     clock.advance(timedelta(hours=3))
     harness.usage_limit = None
     tick(ctx)
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     assert harness.resumed == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
@@ -1767,7 +1762,7 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: 
 
     SpendCeiling(ctx).run()
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1
     payload = json.loads(reports[0].payload)
@@ -1852,12 +1847,12 @@ def test_an_operator_pause_over_a_reasoned_brake_keeps_the_reason_and_reports_no
     survives locally and no second report reaches the hub."""
     store = _store(tmp_path)
     service = PauseService(store, FixedClock(_NOW))
-    service.engage("r1", by="usage-limit", reason="usage limit: claude-code")
+    service.engage(by="usage-limit", reason="usage limit: claude-code")
 
-    service.set_local_pause("r1", paused=True, by="operator")
+    service.set_local_pause(paused=True, by="operator")
 
-    assert store.local_paused("r1") is True
-    assert store.local_pause_reason("r1") == "usage limit: claude-code"
+    assert store.local_paused() is True
+    assert store.local_pause_reason() == "usage limit: claude-code"
     reports = _local_pause_reports(store)
     assert len(reports) == 1
     assert json.loads(reports[0].payload)["reason"] == "usage limit: claude-code"
@@ -1868,14 +1863,14 @@ def test_a_repause_and_a_start_when_released_write_nothing(tmp_path):  # type: i
     store = _store(tmp_path)
     service = PauseService(store, FixedClock(_NOW))
 
-    service.set_local_pause("r1", paused=False, by="operator")
+    service.set_local_pause(paused=False, by="operator")
     assert _local_pause_reports(store) == []
 
-    service.set_local_pause("r1", paused=True, by="operator")
-    service.set_local_pause("r1", paused=True, by="operator")
+    service.set_local_pause(paused=True, by="operator")
+    service.set_local_pause(paused=True, by="operator")
     assert [f.kind for f in _local_pause_reports(store)] == [RUNNER_LOCALLY_PAUSED]
 
-    service.set_local_pause("r1", paused=False, by="operator")
-    service.set_local_pause("r1", paused=False, by="operator")
+    service.set_local_pause(paused=False, by="operator")
+    service.set_local_pause(paused=False, by="operator")
     assert [f.kind for f in _local_pause_reports(store)] == [RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED]
-    assert store.local_paused("r1") is False
+    assert store.local_paused() is False

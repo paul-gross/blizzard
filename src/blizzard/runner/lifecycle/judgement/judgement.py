@@ -517,7 +517,6 @@ class Judgement:
         submission = GateSubmission(
             from_node_id=lease.node_id,
             epoch=lease.epoch,
-            runner_id=self.ctx.config.runner_id,
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
             lease_id=lease.lease_id,
@@ -532,7 +531,6 @@ class Judgement:
         submission = Completion(
             choice=choice,
             epoch=lease.epoch,
-            runner_id=self.ctx.config.runner_id,
             from_node_id=lease.node_id,
             # `(command, passed)` only — `output_tail` stays runner-local, off the wire.
             check_results=[CheckVerdict(command=r.command, passed=r.passed) for r in checks],

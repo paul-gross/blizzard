@@ -55,10 +55,24 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
-from tests.runner_fakes import FakeHub, FakeProbe, loop_context, loop_graph, make_store, make_stores
+from tests.runner_fakes import (
+    FakeHub,
+    FakeProbe,
+    loop_context,
+    loop_graph,
+    make_store,
+    make_stores,
+    migrated_store_at,
+)
 from tests.support import InMemoryTraceExporter
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _migrated_default_store(tmp_path: Path) -> None:
+    """Every graph a case builds over ``RunnerConfig.default_db_url(tmp_path)`` boots over a migrated store."""
+    migrated_store_at(RunnerConfig.default_db_url(tmp_path))
 
 
 @pytest.mark.unit
@@ -111,7 +125,6 @@ def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -378,6 +391,7 @@ def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -
     unresolved_root = tmp_path / "nested" / ".." / "runner"
 
     config = RunnerConfig.load(unresolved_root)
+    migrated_store_at(config.db_url)
     with loop_context(config) as ctx:
         assert ".." not in ctx.config.runner_dir
         assert ctx.config.runner_dir == str(real_root.resolve())
@@ -800,6 +814,7 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         workspace_root="scratch",
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
     )
+    migrated_store_at(config.db_url)
     hosted = build_hosted_app(config)
     try:
         store = make_store(config.db_url)
@@ -811,7 +826,6 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
                 node_id="nd_build",
                 node_name="build",
                 epoch=1,
-                runner_id=config.runner_id,
                 retries_max=2,
                 created_at=_NOW,
             )

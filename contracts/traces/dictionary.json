@@ -322,6 +322,29 @@
       "type": "string"
     },
     {
+      "meaning": "The latest registered name of the runner that held the step or ran the lease, as of when the span was told.",
+      "name": "blizzard.runner.name",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec",
+        "chunk/step",
+        "runner/worker",
+        "runner/invocation",
+        "runner/ask-park",
+        "runner/pause-park",
+        "runner/overload",
+        "runner/takeover"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
       "meaning": "The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.",
       "name": "blizzard.harness.id",
       "on": [
@@ -1208,6 +1231,11 @@
       {
         "meaning": "The runner the span belongs to, or the runner a request authenticated as.",
         "name": "blizzard.runner.id",
+        "type": "string"
+      },
+      {
+        "meaning": "The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.",
+        "name": "blizzard.runner.name",
         "type": "string"
       },
       {

@@ -24,11 +24,12 @@ from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, registered_identity, runner_store_errors
 
 pytestmark = pytest.mark.component
 
@@ -83,13 +84,17 @@ def _build_app(
     extra_public_urls: tuple[str, ...] = (),
     canonical_url: str = "https://runner-a.example",
     runner_id: str = _RUNNER_ID,
+    runner_name: str | None = None,
+    registered: bool = True,
 ) -> TestClient:
+    name = runner_name or runner_id
+    identity = registered_identity(runner_id, name) if registered else RunnerIdentityHolder()
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
-        runner_id=runner_id,
+        name=name,
         hub_url="http://hub.example",
         public_urls=tuple(url for url in (canonical_url, *extra_public_urls) if url),
         trusted_proxies=trusted_proxies,
@@ -104,7 +109,8 @@ def _build_app(
         asks=store,
         takeover=store,
         escalations=store,
-        runner_id=_RUNNER_ID,
+        identity=identity,
+        runner_name=name,
         workspace_id="workspace-1",
         max_agents=1,
         hub_url=config.hub_url,
@@ -116,6 +122,7 @@ def _build_app(
         config,
         runner_stores=make_stores(store),
         runner_status=runner_status,
+        identity=identity,
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
         jti_cache=JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), SystemClock()),
     )
@@ -263,13 +270,14 @@ def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
     assert _NAMES.session not in resp.cookies
 
 
-def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
+def _bounce_in(client: TestClient, private_key: object, *, jti: str, runner_id: str = _RUNNER_ID) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
+    names = CookieNames(runner_id)
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
-    state = login_resp.cookies[_NAMES.bounce_state]
-    client.cookies.set(_NAMES.bounce_state, state)
-    client.cookies.set(_NAMES.bounce_return, "/")
-    token = _sign(private_key, jti=jti)
+    state = login_resp.cookies[names.bounce_state]
+    client.cookies.set(names.bounce_state, state)
+    client.cookies.set(names.bounce_return, "/")
+    token = _sign(private_key, jti=jti, aud=runner_id)
     callback_resp = client.post(
         "/api/auth/callback",
         content=f"token={token}&state={state}",
@@ -277,7 +285,7 @@ def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
         follow_redirects=False,
     )
     assert callback_resp.status_code == 303
-    client.cookies.set(_NAMES.session, callback_resp.cookies[_NAMES.session])
+    client.cookies.set(names.session, callback_resp.cookies[names.session])
 
 
 def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) -> None:
@@ -614,3 +622,33 @@ def test_two_runners_mint_differently_named_session_cookies_and_ignore_each_othe
     client_b.cookies.clear()
     client_b.cookies.set(names_b.session, cookie_a)
     assert client_b.get("/api/environments").status_code == 401
+
+
+def test_two_same_host_runners_sharing_a_name_stay_signed_in_through_one_cookie_jar(tmp_path: Path) -> None:
+    """A browser keys a host's cookies by name alone, ignoring the port: a later cookie of the same
+    name replaces the earlier one, so each runner's cookies must be named apart by its id."""
+    private_key, jwk = _keypair()
+    ids = ("rn_01AAAAAAAAAAAAAAAAAAAAAAAA", "rn_01BBBBBBBBBBBBBBBBBBBBBBBB")
+    clients = []
+    for runner_id in ids:
+        (tmp_path / runner_id).mkdir()
+        client = _build_app(
+            tmp_path / runner_id, oauth_enabled=True, jwk=jwk, runner_id=runner_id, runner_name="runner-local"
+        )
+        _bounce_in(client, private_key, jti=f"jti-{runner_id}", runner_id=runner_id)
+        clients.append(client)
+    jar = {cookie.name: cookie.value for client in clients for cookie in client.cookies.jar}
+    for client in clients:
+        client.cookies.clear()
+        for name, value in jar.items():
+            client.cookies.set(name, value)
+    assert [client.get("/api/environments").status_code for client in clients] == [200, 200]
+
+
+def test_before_its_first_registration_a_runner_reads_no_session_and_sign_in_waits(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, registered=False)
+    client.cookies.set(_NAMES.session, "any")
+    assert client.get("/api/environments").status_code == 401
+    assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
+    assert client.post("/api/auth/logout").status_code == 204

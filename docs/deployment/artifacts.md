@@ -31,22 +31,23 @@ a shared name would be ambiguous rather than a legal shadow.
 Blizzard itself publishes a small, global set of read-only documents — a slash-bearing namespace of its own, not a
 per-graph one — that every graph and every chunk reads the identical copy of; no graph declares it, and no worker ever
 produces it. `garden/finding-format` and `garden/proposal-format` are the shipped examples: the shapes a garden
-routine's finding and proposal artifacts are meant to conform to, held in lockstep with the `blizzard.wire.finding`
-and `blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them. `review/finding-format`
-is a third: the shape a delivery lane's review round publishes as its `review-finding-delta` artifact, read by the
+routine's finding and proposal artifacts are meant to conform to, held in lockstep with the `blizzard.wire.finding` and
+`blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them. `review/finding-format` is a
+third: the shape a delivery lane's review round publishes as its `review-finding-delta` artifact, read by the
 `record-findings` node — see [findings-and-proposals.md](./findings-and-proposals.md).
 
-A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read: `artifact get
-<name> --scope system` and `artifact list --scope system` never answer from a runner-local pin or cache, so if the hub
-is unreachable when a worker makes the call, the read fails outright rather than answering from a stale or absent
-local copy.
+A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read:
+`artifact get
+<name> --scope system` and `artifact list --scope system` never answer from a runner-local pin or cache,
+so if the hub is unreachable when a worker makes the call, the read fails outright rather than answering from a stale or
+absent local copy.
 
 The read-only rule matches graph scope: `create`, `commit`, and `staged` all refuse `--scope system`. `artifact list`
-and `artifact get --scope system` otherwise serve system scope much the way they serve graph scope — `get` resolves
-one artifact by name (`--content` for raw text), and `list` includes it in the unfiltered read alongside node and
-graph scope — with one difference: a system name colliding with a node's `produces:` name is not rejected at mint the
-way a graph-scope collision is, since blizzard's own global namespace and a deployment's per-graph declarations are
-authored by different parties with no shared mint to reject at. The collision surfaces instead at read: a bare
+and `artifact get --scope system` otherwise serve system scope much the way they serve graph scope — `get` resolves one
+artifact by name (`--content` for raw text), and `list` includes it in the unfiltered read alongside node and graph
+scope — with one difference: a system name colliding with a node's `produces:` name is not rejected at mint the way a
+graph-scope collision is, since blizzard's own global namespace and a deployment's per-graph declarations are authored
+by different parties with no shared mint to reject at. The collision surfaces instead at read: a bare
 `artifact get <name>` matching both a node output and a system artifact is a `409` naming both, resolved by adding
 `--node` (which only a node-scoped candidate has) or `--scope`.
 
@@ -73,9 +74,9 @@ separator, and no slash, since it is percent-encoded into a URL path segment.
 
 ## The `produces_mode` rollout flag
 
-`produces_mode` is a third warn-default rollout flag scaffolded into `blizzard-hub.toml` by `hub init`, beside
-`runner_auth_mode` and `route_token_mode` ([runner-auth.md](./runner-auth.md)), guarding whether every `produces:` entry
-on a node has an explicit declaration matching its kind. `warn` logs the missing names and lets a completion proceed on
-the judgement-assessment fallback; `enforce` rejects the completion as a semantic failure. It is independent of the auth
-flags and no part of that rollout; a hub accepts assessment-fallback completions until an operator sets `enforce` and
-restarts it.
+`produces_mode` is a second warn-default rollout flag scaffolded into `blizzard-hub.toml` by `hub init`, beside
+`route_token_mode` ([runner-auth.md](./runner-auth.md)), guarding whether every `produces:` entry on a node has an
+explicit declaration matching its kind. `warn` logs the missing names and lets a completion proceed on the
+judgement-assessment fallback; `enforce` rejects the completion as a semantic failure. It is independent of
+`route_token_mode` and no part of that rollout; a hub accepts assessment-fallback completions until an operator sets
+`enforce` and restarts it.

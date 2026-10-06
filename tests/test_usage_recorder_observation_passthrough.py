@@ -37,7 +37,6 @@ def _lease(store: SqlAlchemyRunnerStore, *, resolved_model: str | None) -> Lease
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
             resolved_model=resolved_model,

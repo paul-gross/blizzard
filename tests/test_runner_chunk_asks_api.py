@@ -221,7 +221,6 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         "node_id": "nd_build",
         "node_name": "build",
         "epoch": 3,
-        "runner_id": "runner-local",
         "retries_max": 2,
         "created_at": _NOW,
     }

@@ -1,9 +1,9 @@
 """Runner enrollment + the registration auth check (component tier).
 
-Drives the real hub over a tmp store: enrollment mints/rotates a bearer token
-(plaintext returned once, only its sha256 hash stored); registration applies the auth
-check in ``warn`` (default) or ``enforce`` mode. ``build_hub`` runs twice per enforce
-test — once under ``warn`` to seed a token, once under ``enforce`` to check it."""
+Drives the real hub over a tmp store: enrollment rotates an added runner's bearer token
+(plaintext returned once, only its sha256 hash stored); registration admits only a token the
+hub issued, under every configuration, and records the runner that token names whatever the
+request body declares."""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -42,12 +42,9 @@ def _token_hash_column(hub: HubHarness, runner_id: str) -> str | None:
         return row.token_hash
 
 
-def _seed_enrolled(tmp_path: Path, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
-    """Register + enroll ``runner_id`` under a throwaway ``warn`` hub; return its token."""
-    warn_hub = build_hub(tmp_path)
-    _register(warn_hub, runner_id=runner_id, workspace_id=workspace_id)
-    resp = _enroll(warn_hub, runner_id)
-    return str(resp.json()["token"])
+def _registrations(hub: HubHarness) -> int:
+    with hub.engine.connect() as conn:
+        return int(conn.execute(select(func.count()).select_from(s.runner_registrations)).scalar_one())
 
 
 # Enrollment itself
@@ -83,78 +80,66 @@ def test_re_enroll_rotates_the_old_token_dead(tmp_path: Path) -> None:
     assert new_token != old_token
 
     # The old token no longer resolves; the new one does — both asserted the same way,
-    # by presenting each on a second registration call under `enforce`.
-    enforce_hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    stale = _register(enforce_hub, runner_id="runner-a", workspace_id="ws-a", token=old_token)
+    # by presenting each on a registration call.
+    stale = _register(hub, runner_id="runner-a", workspace_id="ws-a", token=old_token)
     assert stale.status_code == 401
 
-    fresh = _register(enforce_hub, runner_id="runner-a", workspace_id="ws-a", token=new_token)
+    fresh = _register(hub, runner_id="runner-a", workspace_id="ws-a", token=new_token)
     assert fresh.status_code == 201
 
 
-# `POST /runners` under `warn` (the default)
+# `POST /runners` — the token decides, under every configuration
 
 
-def test_registration_under_warn_with_no_token_proceeds(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    assert _register(hub).status_code == 201
+@pytest.mark.parametrize("auth_mode", ["none", "oauth"])
+def test_registration_with_no_token_is_refused_under_every_configuration(tmp_path: Path, auth_mode: str) -> None:
+    hub = build_hub(tmp_path, auth_mode=auth_mode)
+    assert hub.app is not None
+    before = _registrations(hub)
 
+    resp = TestClient(hub.app).post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"})
 
-def test_registration_under_warn_with_an_invalid_token_proceeds(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    resp = _register(hub, token="not-a-real-token")
-    assert resp.status_code == 201
-
-
-def test_registration_under_warn_with_a_mismatched_token_proceeds(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    _register(hub, runner_id="runner-a", workspace_id="ws-a")
-    token = _enroll(hub, "runner-a").json()["token"]
-
-    # runner-a's token presented while declaring runner-b — a mismatch, still let through.
-    resp = _register(hub, runner_id="runner-b", workspace_id="ws-b", token=token)
-    assert resp.status_code == 201
-
-
-# `POST /runners` under `enforce`
-
-
-def test_registration_under_enforce_with_no_token_is_rejected(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    assert _register(hub).status_code == 401
-
-
-def test_registration_under_enforce_with_an_invalid_token_is_rejected(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    resp = _register(hub, token="not-a-real-token")
     assert resp.status_code == 401
+    assert _registrations(hub) == before
 
 
-def test_registration_under_enforce_with_a_valid_token_succeeds(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path, "runner-a", "ws-a")
+def test_registration_with_a_token_the_hub_never_issued_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    before = _registrations(hub)
+    assert _register(hub, token="not-a-real-token").status_code == 401
+    assert _registrations(hub) == before
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+
+def test_registration_with_an_issued_token_succeeds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = seed_runner(hub, "runner-a", register=False)
+
     resp = _register(hub, runner_id="runner-a", workspace_id="ws-a", token=token)
+
     assert resp.status_code == 201
+    assert resp.json()["runner_id"] == "runner-a"
 
 
-def test_registration_under_enforce_with_a_mismatched_token_is_rejected(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path, "runner-a", "ws-a")
+def test_registration_records_the_tokens_runner_whatever_the_body_declares(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = seed_runner(hub, "runner-a", register=False)
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
     resp = _register(hub, runner_id="runner-b", workspace_id="ws-b", token=token)
-    assert resp.status_code == 403
+
+    assert resp.status_code == 201
+    assert resp.json()["runner_id"] == "runner-a"
+    assert hub.services.registry.get_runner("runner-b") is None
+    registered = hub.services.registry.get_runner("runner-a")
+    assert registered is not None and registered.workspace_id == "ws-b"
 
 
 # `registration_for_token_hash` resolves the right row among several
 
 
 def test_each_runners_token_resolves_only_its_own_registration(tmp_path: Path) -> None:
-    token_a = _seed_enrolled(tmp_path, "runner-a", "ws-a")
-    token_b = _seed_enrolled(tmp_path, "runner-b", "ws-b")
+    hub = build_hub(tmp_path)
+    token_a = seed_runner(hub, "runner-a", register=False)
+    token_b = seed_runner(hub, "runner-b", register=False)
 
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    assert _register(hub, runner_id="runner-a", workspace_id="ws-a", token=token_a).status_code == 201
-    assert _register(hub, runner_id="runner-b", workspace_id="ws-b", token=token_b).status_code == 201
-    # Cross-presented tokens are a mismatch, not a resolution failure — 403, not 401.
-    assert _register(hub, runner_id="runner-b", workspace_id="ws-b", token=token_a).status_code == 403
+    assert _register(hub, runner_id="runner-a", token=token_a).json()["runner_id"] == "runner-a"
+    assert _register(hub, runner_id="runner-a", token=token_b).json()["runner_id"] == "runner-b"

@@ -19,7 +19,8 @@ import {
 export interface AttentionRow {
   readonly chunkId: string;
   readonly shortId: string;
-  readonly runnerId: string | null;
+  /** The holding runner's display name, or `null` when no runner holds the chunk. */
+  readonly runner: string | null;
   /** The row's badge color — `chunk-lanes.ts`'s `STATUS_TONE` vocabulary
    * (`waiting` or `needs`), never a parallel color table. */
   readonly tone: Tone;
@@ -36,7 +37,8 @@ export interface AttentionRow {
 export interface MotionRow {
   readonly chunkId: string;
   readonly shortId: string;
-  readonly runnerId: string | null;
+  /** The holding runner's display name, or `null` when no runner holds the chunk. */
+  readonly runner: string | null;
   readonly node: string;
   readonly pillLabel: 'run' | 'deliver';
   readonly costUsd: number;

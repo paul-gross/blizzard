@@ -22,7 +22,6 @@ from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
-from blizzard.foundation.roles import dto
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
@@ -35,6 +34,7 @@ from blizzard.runner.auth.session import (
     resolve_human_session,
 )
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 
 _log = get_logger("blizzard.runner.auth")
 
@@ -46,17 +46,33 @@ _BOUNCE_COOKIE_MAX_AGE = 600  # 10 minutes — generous for a slow hub/provider 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
-@dto
 @dataclass(frozen=True)
 class FederationSettings:
     """What the bounce and its callback read off this runner's config: the declared browser
-    origins, the hub it federates with, its own client id, and the role policy a federated
+    origins, the hub it federates with, its own identity there, and the role policy a federated
     identity resolves against. The composition root sets it as ``app.state.federation``."""
 
     public_origins: PublicOrigins
     hub_url: str
-    runner_id: str
+    identity: ICurrentRunnerIdentity
     role_policy: RolePolicy
+
+    def client_id(self) -> str:
+        """This runner's client id at its hub — the id of its latest registration. Sign-in waits
+        for the first one: the hub knows no client before it."""
+        current = self.identity.current()
+        if current is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="this runner has not registered at its hub yet — sign-in waits for its first registration",
+            )
+        return current.runner_id
+
+    def cookie_names(self) -> CookieNames | None:
+        """This runner's cookie names, keyed by its client id; ``None`` before its first registration,
+        when sign-in has minted no cookie."""
+        current = self.identity.current()
+        return CookieNames(current.runner_id) if current is not None else None
 
 
 class NeedsFederationBounce(Exception):
@@ -111,7 +127,9 @@ class HumanLane:
         )
 
     def _presented(self) -> RunnerSession | None:
-        cookie = self.request.cookies.get(self.request.app.state.cookie_names.session)
+        settings: FederationSettings = self.request.app.state.federation
+        names = settings.cookie_names()
+        cookie = self.request.cookies.get(names.session) if names is not None else None
         if cookie is None:
             return None
         clock: IClock = self.request.app.state.clock
@@ -142,14 +160,11 @@ class Bounce:
     validates against, and where to land once it succeeds."""
 
     request: Request
+    names: CookieNames
 
     @property
     def origin(self) -> Origin:
         return Origin(self.request, self.request.app.state.trusted_proxies)
-
-    @property
-    def names(self) -> CookieNames:
-        return self.request.app.state.cookie_names
 
     @property
     def state(self) -> str | None:
@@ -240,17 +255,18 @@ def login(
         )
         safe_return = quote(ReturnTo(return_to).safe, safe="")
         return RedirectResponse(f"{origins.canonical}/api/auth/login?return_to={safe_return}&rehomed=true")
+    client = settings.client_id()
     state = secrets.token_urlsafe(24)
     callback_url = _callback_url(request, settings)
     target = (
         f"{settings.hub_url.rstrip('/')}/api/auth/authorize"
-        f"?client={quote(settings.runner_id, safe='')}"
+        f"?client={quote(client, safe='')}"
         f"&redirect_uri={quote(callback_url, safe='')}"
         f"&state={quote(state, safe='')}"
         "&response_mode=form_post"
     )
     response = RedirectResponse(target)
-    Bounce(request).issue(response, state=state, return_to=return_to)
+    Bounce(request, CookieNames(client)).issue(response, state=state, return_to=return_to)
     return response
 
 
@@ -261,18 +277,17 @@ async def callback(request: Request) -> Response:
     token = (parsed.get("token") or [None])[0]
     state = (parsed.get("state") or [None])[0]
 
-    bounce = Bounce(request)
+    settings: FederationSettings = request.app.state.federation
+    client = settings.client_id()
+    bounce = Bounce(request, CookieNames(client))
     if not token or not bounce.matches(state):
         return bounce.refuse("bad or expired state")
 
-    settings: FederationSettings = request.app.state.federation
     jwks: IJwksCache = request.app.state.jwks_cache
     jti_cache: IJtiCache = request.app.state.jti_cache
     clock: IClock = request.app.state.clock
     try:
-        identity = FederationToken(
-            token, runner_id=settings.runner_id, jwks=jwks, jti_cache=jti_cache, clock=clock
-        ).identity()
+        identity = FederationToken(token, runner_id=client, jwks=jwks, jti_cache=jti_cache, clock=clock).identity()
     except FederationTokenError as exc:
         _log.warning("federation token refused", detail=str(exc))
         return bounce.refuse("token refused")
@@ -301,7 +316,9 @@ def logout(request: Request, response: Response) -> Response:
     logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
     The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
     it *is* the logout. It ends this runner's session only, not any hub-side session."""
-    response.delete_cookie(request.app.state.cookie_names.session)
+    names = request.app.state.federation.cookie_names()
+    if names is not None:
+        response.delete_cookie(names.session)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

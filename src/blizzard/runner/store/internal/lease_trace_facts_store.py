@@ -1,9 +1,9 @@
 """SQLAlchemy adapter for the lease trace seam (package-private).
 
 Hydrates :class:`~blizzard.runner.tracing.facts.LeaseTraceFacts` for closed leases only,
-selecting the columns the bundle declares and never a content column. The plural read issues a
-fixed set of statements per :func:`~blizzard.foundation.store.batching.id_batches` slice — one
-lease/context/closure read, then one read per fact table — however many leases the slice holds."""
+selecting the columns the bundle declares and never a content column. Each read takes the runner's
+id from the identity row once, then issues a fixed set of statements per
+:func:`~blizzard.foundation.store.batching.id_batches` slice, however many leases the slice holds."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ from blizzard.runner.store.schema import (
     park_resumes,
     pause_park_resumes,
     pause_parks,
+    runner_identity,
     session_ends,
     takeover_ends,
     takeovers,
@@ -59,6 +60,7 @@ from blizzard.runner.tracing.facts import (
     ParkResumeFact,
     PauseParkFact,
     PauseResumeFact,
+    RunnerFact,
     SessionEndFact,
     SpawnFact,
     TakeoverEndFact,
@@ -268,7 +270,6 @@ def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
             leases.c.lease_id,
             leases.c.chunk_id,
             leases.c.epoch,
-            leases.c.runner_id,
             leases.c.created_at,
             lease_context.c.graph_id,
             lease_context.c.node_id,
@@ -289,7 +290,15 @@ def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
     return list(conn.execute(stmt))
 
 
-def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
+def _registered_runner(conn: Connection) -> RunnerFact | None:
+    """The id and name of the runner's latest registration, which a lease's spans carry, never one stamped
+    at mint — ``None`` while the runner has never registered, so it has nothing to tell."""
+    c = runner_identity.c
+    row = conn.execute(select(c.runner_id, c.runner_name).order_by(c.id.desc()).limit(1)).first()
+    return None if row is None else RunnerFact(runner_id=str(row.runner_id), runner_name=str(row.runner_name))
+
+
+def _facts(conn: Connection, ids: Sequence[str], runner: RunnerFact) -> dict[str, LeaseTraceFacts]:
     closed = _closed_leases(conn, ids)
     if not closed:
         return {}
@@ -304,7 +313,6 @@ def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
                 lease_id=str(r.lease_id),
                 chunk_id=str(r.chunk_id),
                 epoch=int(r.epoch),
-                runner_id=str(r.runner_id),
                 created_at=r.created_at,
             ),
             context=LeaseContextFact(
@@ -318,6 +326,7 @@ def _facts(conn: Connection, ids: Sequence[str]) -> dict[str, LeaseTraceFacts]:
                 resolved_effort=r.resolved_effort,
             ),
             closure=LeaseClosureFact(reason=str(r.reason), closed_at=r.closed_at),
+            runner=runner,
             **{field: tuple(found) for field, found in rows[str(r.lease_id)].items()},
         )
         for r in closed
@@ -335,13 +344,17 @@ class LeaseTraceFactsStore:
 
     def lease_trace_facts(self, lease_id: str) -> LeaseTraceFacts | None:
         with self._store.connect() as conn:
-            return _facts(conn, [lease_id]).get(lease_id)
+            runner = _registered_runner(conn)
+            return None if runner is None else _facts(conn, [lease_id], runner).get(lease_id)
 
     def lease_trace_facts_for(self, lease_ids: Collection[str]) -> dict[str, LeaseTraceFacts]:
         result: dict[str, LeaseTraceFacts] = {}
         with self._store.connect() as conn:
+            runner = _registered_runner(conn)
+            if runner is None:
+                return result
             for batch in id_batches(sorted(set(lease_ids))):
-                result.update(_facts(conn, batch))
+                result.update(_facts(conn, batch, runner))
         return result
 
     def closed_leases_after(self, since: LeaseCursorKey, until: datetime, limit: int) -> tuple[LeaseCursorKey, ...]:

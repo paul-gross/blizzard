@@ -19,8 +19,9 @@ from blizzard.runner.harness.harness_telemetry_plan import (
     CLAUDE_CODE_SERVICE_NAME,
     CLAUDE_CODE_TRACING_SCOPE,
 )
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import Lease
-from blizzard.runner.tracing.attributes import RUNNER_ID
+from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
 
 __all__ = [
     "CLI_SERVICE_NAME",
@@ -55,7 +56,7 @@ _WORKER = "worker"
 class Allowlist:
     """The one scope a span may arrive under and the attributes it may carry, each with its declared value
     type: ``string``, ``int`` or ``double``. ``None`` for either admits any scope, or any attribute, the
-    caps still holding. ``stamp_runner`` also stamps the runner's id on each kept span."""
+    caps still holding. ``stamp_runner`` also stamps the runner's id and name on each kept span."""
 
     scope: str | None
     attributes: Mapping[str, str] | None
@@ -76,7 +77,9 @@ def lease_trace_id(lease: Lease) -> int:
     return chunk_trace_id(lease.chunk_id)
 
 
-def admit(spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist) -> Admission[ReceivedSpan]:
+def admit(
+    spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist, *, runner: RunnerIdentity
+) -> Admission[ReceivedSpan]:
     expected = lease_trace_id(lease)
     chunk_span = chunk_span_id(lease.chunk_id)
     keys = [StepKey.attempt(lease.chunk_id, e) for e in range(lease.epoch + 1)]
@@ -85,7 +88,7 @@ def admit(spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist) -> Admi
         reserved.add(step_root(key).span_id)
         reserved.update(DerivedContext.of(key, role).span_id for role in (SpanRole.QUEUE, SpanRole.CLAIM))
     kept = [
-        _rebuilt(span, lease, allowlist)
+        _rebuilt(span, lease, allowlist, runner)
         for span in spans
         if span.trace_id == expected
         and span.span_id not in reserved
@@ -95,7 +98,7 @@ def admit(spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist) -> Admi
     return Admission(kept=kept, dropped=len(spans) - len(kept))
 
 
-def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist) -> ReceivedSpan:
+def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist, runner: RunnerIdentity) -> ReceivedSpan:
     attributes: dict[str, Scalar] = {}
     for key, value in span.attributes.items():
         if len(attributes) >= MAX_ATTRIBUTES:
@@ -108,7 +111,7 @@ def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist) -> Received
             attributes[key] = _truncated(value)
     _stamp(attributes, lease)
     if allowlist.stamp_runner:
-        attributes[RUNNER_ID] = lease.runner_id
+        _stamp_runner(attributes, runner)
     return replace(
         span,
         name=span.name[:MAX_STRING_CHARS],
@@ -117,9 +120,11 @@ def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist) -> Received
     )
 
 
-def admit_data_points(points: list[ReceivedDataPoint], lease: Lease, scope: str) -> Admission[ReceivedDataPoint]:
+def admit_data_points(
+    points: list[ReceivedDataPoint], lease: Lease, scope: str, *, runner: RunnerIdentity
+) -> Admission[ReceivedDataPoint]:
     """The data points under ``scope``, each rebuilt: its sender's attributes capped, then the lease's stamps —
-    chunk, lease, caller and runner — replacing any the sender set."""
+    chunk, lease, caller, and the runner's id and name — replacing any the sender set."""
     kept = [
         replace(
             point,
@@ -127,7 +132,7 @@ def admit_data_points(points: list[ReceivedDataPoint], lease: Lease, scope: str)
             description=point.description[:MAX_STRING_CHARS],
             unit=point.unit[:MAX_STRING_CHARS],
             scope_version=point.scope_version[:MAX_STRING_CHARS],
-            attributes=_stamped_attributes(point.attributes, lease),
+            attributes=_stamped_attributes(point.attributes, lease, runner),
         )
         for point in points
         if point.scope_name == scope
@@ -135,19 +140,23 @@ def admit_data_points(points: list[ReceivedDataPoint], lease: Lease, scope: str)
     return Admission(kept=kept, dropped=len(points) - len(kept))
 
 
-def admit_log_records(records: list[ReceivedLogRecord], lease: Lease, scope: str) -> Admission[ReceivedLogRecord]:
+def admit_log_records(
+    records: list[ReceivedLogRecord], lease: Lease, scope: str, *, runner: RunnerIdentity
+) -> Admission[ReceivedLogRecord]:
     """The log records under ``scope``, each rebuilt as :func:`admit_data_points` does, with its body capped and
     its trace context kept only when it names the lease's work trace."""
     expected = lease_trace_id(lease)
     kept = [
-        _log_rebuilt(record, lease, in_trace=record.trace_id == expected)
+        _log_rebuilt(record, lease, runner, in_trace=record.trace_id == expected)
         for record in records
         if record.scope_name == scope
     ]
     return Admission(kept=kept, dropped=len(records) - len(kept))
 
 
-def _log_rebuilt(record: ReceivedLogRecord, lease: Lease, *, in_trace: bool) -> ReceivedLogRecord:
+def _log_rebuilt(
+    record: ReceivedLogRecord, lease: Lease, runner: RunnerIdentity, *, in_trace: bool
+) -> ReceivedLogRecord:
     return replace(
         record,
         body=_truncated(record.body) if record.body is not None else None,
@@ -156,14 +165,14 @@ def _log_rebuilt(record: ReceivedLogRecord, lease: Lease, *, in_trace: bool) -> 
         trace_id=record.trace_id if in_trace else None,
         span_id=record.span_id if in_trace else None,
         trace_flags=record.trace_flags if in_trace else 0,
-        attributes=_stamped_attributes(record.attributes, lease),
+        attributes=_stamped_attributes(record.attributes, lease, runner),
     )
 
 
-def _stamped_attributes(sent: Mapping[str, Scalar], lease: Lease) -> dict[str, Scalar]:
+def _stamped_attributes(sent: Mapping[str, Scalar], lease: Lease, runner: RunnerIdentity) -> dict[str, Scalar]:
     attributes = {key: _truncated(value) for key, value in list(sent.items())[:MAX_ATTRIBUTES]}
     _stamp(attributes, lease)
-    attributes[RUNNER_ID] = lease.runner_id
+    _stamp_runner(attributes, runner)
     return attributes
 
 
@@ -171,6 +180,11 @@ def _stamp(attributes: dict[str, Scalar], lease: Lease) -> None:
     attributes[CALLER] = _WORKER
     attributes[CHUNK_ID] = lease.chunk_id
     attributes[LEASE_ID] = lease.lease_id
+
+
+def _stamp_runner(attributes: dict[str, Scalar], runner: RunnerIdentity) -> None:
+    attributes[RUNNER_ID] = runner.runner_id
+    attributes[RUNNER_NAME] = runner.runner_name
 
 
 def _is_type(value: Scalar, declared: str) -> bool:
@@ -224,18 +238,20 @@ class SpanRouting:
         return self.claude.dropped + self.dropped
 
 
-def route_spans(spans: list[ReceivedSpan], lease: Lease, *, programs: bool, harness: bool) -> SpanRouting:
+def route_spans(
+    spans: list[ReceivedSpan], lease: Lease, *, runner: RunnerIdentity, programs: bool, harness: bool
+) -> SpanRouting:
     """Route each span to the one allowlist it is admitted against, exactly once: Claude Code's
     tracing scope under ``harness``; the CLI's scope against its declared attributes; everything
     else against the wildcard under ``programs``, or the CLI allowlist (refusing it) otherwise —
     so a CLI span's declared attributes are never cut by the wildcard's cap first."""
     claude = [span for span in spans if harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE]
     rest = [span for span in spans if not (harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE)]
-    claude_admission = admit(claude, lease, _CLAUDE_CODE_ALLOWLIST)
+    claude_admission = admit(claude, lease, _CLAUDE_CODE_ALLOWLIST, runner=runner)
     cli_spans = [span for span in rest if programs and span.scope_name == CLI_SCOPE]
     program_spans = [span for span in rest if not (programs and span.scope_name == CLI_SCOPE)]
-    admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
-    cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST)
+    admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST, runner=runner)
+    cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST, runner=runner)
     cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == CLI_SCOPE)]
     return SpanRouting(
         claude=claude_admission,

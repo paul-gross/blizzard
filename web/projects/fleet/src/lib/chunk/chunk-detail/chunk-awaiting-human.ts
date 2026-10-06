@@ -4,6 +4,7 @@ import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { KitButton } from '../../kit/kit-button';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
+import { runnerDisplayName } from '../../core/runner-display-name';
 import { ChunkEscalation } from './chunk-escalation';
 import { ChunkGateDocket } from './chunk-gate-docket';
 
@@ -90,6 +91,9 @@ export class ChunkAwaitingHuman {
    * `<input>`'s `.value` at submit time, one draft per question since several can be
    * open at once. */
   private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
+
+  /** A gate-imposing runner's display name. */
+  protected readonly runnerDisplayName = runnerDisplayName;
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>

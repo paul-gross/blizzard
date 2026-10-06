@@ -21,6 +21,7 @@ from blizzard.foundation.platform_tracing.received import (
 )
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.receiver import MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
 from blizzard.runner.tracing.receiver_limits import (
@@ -28,11 +29,13 @@ from blizzard.runner.tracing.receiver_limits import (
     ReceiverCounter,
     SpanRateLimiter,
 )
+from tests.runner_fakes import REGISTERED_AT
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
+_RUNNER = RunnerIdentity(runner_id="rn_01J9ZRUNNER", runner_name="r-claude", registered_at=REGISTERED_AT)
 _SPAN_ID = 0x00F067AA0BA902B7
 
 
@@ -44,7 +47,6 @@ def _lease(chunk_id: str = "ch_1", epoch: int = 1) -> Lease:
         node_id="nd_build",
         node_name="build",
         epoch=epoch,
-        runner_id="r1",
         retries_max=2,
         created_at=_NOW,
     )
@@ -194,10 +196,10 @@ def test_a_protobuf_span_with_a_short_id_is_a_decode_error() -> None:
 def test_admit_checks_each_declared_value_type() -> None:
     allowlist = Allowlist(scope=CLI_SCOPE, attributes={"i": "int", "d": "double", "s": "string", "u": "other"})
     attributes = {"i": True, "d": 1, "s": 1, "u": "x"}
-    (kept,) = admit([_span(attributes=attributes)], _lease(), allowlist).kept
+    (kept,) = admit([_span(attributes=attributes)], _lease(), allowlist, runner=_RUNNER).kept
     assert set(kept.attributes) == {"blizzard.caller", "blizzard.chunk.id", "blizzard.lease.id"}
     good = {"i": 3, "d": 1.5, "s": "x"}
-    (kept,) = admit([_span(attributes=good)], _lease(), allowlist).kept
+    (kept,) = admit([_span(attributes=good)], _lease(), allowlist, runner=_RUNNER).kept
     assert {k: kept.attributes[k] for k in good} == good
 
 
@@ -242,7 +244,7 @@ def test_admit_keeps_an_in_step_cli_span_and_drops_the_rest() -> None:
         _span(trace_id=_trace("ch_2")),
         _span(scope_name="evil"),
     ]
-    admission = admit(spans, _lease(), _ALLOWLIST)
+    admission = admit(spans, _lease(), _ALLOWLIST, runner=_RUNNER)
     assert [s.trace_id for s in admission.kept] == [_trace()]
     assert admission.dropped == 2
 
@@ -250,7 +252,7 @@ def test_admit_keeps_an_in_step_cli_span_and_drops_the_rest() -> None:
 def test_admit_drops_a_span_forging_or_hanging_under_the_chunk_span() -> None:
     chunk_span = chunk_span_id("ch_1")
     spans = [_span(), _span(span_id=chunk_span), _span(parent_span_id=chunk_span)]
-    admission = admit(spans, _lease(), _ALLOWLIST)
+    admission = admit(spans, _lease(), _ALLOWLIST, runner=_RUNNER)
     assert [s.span_id for s in admission.kept] == [_SPAN_ID]
     assert admission.dropped == 2
 
@@ -258,7 +260,7 @@ def test_admit_drops_a_span_forging_or_hanging_under_the_chunk_span() -> None:
 @pytest.mark.parametrize("epoch", [0, 1, 2])
 def test_admit_drops_a_span_forging_a_step_root_of_the_lease_epochs(epoch: int) -> None:
     forged = step_root(StepKey.attempt("ch_1", epoch)).span_id
-    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST)
+    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST, runner=_RUNNER)
     assert [s.span_id for s in admission.kept] == [_SPAN_ID]
     assert admission.dropped == 1
 
@@ -267,14 +269,14 @@ def test_admit_drops_a_span_forging_a_step_root_of_the_lease_epochs(epoch: int) 
 @pytest.mark.parametrize("epoch", [0, 2])
 def test_admit_drops_a_span_forging_a_queue_or_claim_wait_of_the_lease_epochs(epoch: int, role: SpanRole) -> None:
     forged = DerivedContext.of(StepKey.attempt("ch_1", epoch), role).span_id
-    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST)
+    admission = admit([_span(), _span(span_id=forged)], _lease(epoch=2), _ALLOWLIST, runner=_RUNNER)
     assert [s.span_id for s in admission.kept] == [_SPAN_ID]
     assert admission.dropped == 1
 
 
 def test_admit_keeps_a_span_with_the_root_id_of_a_later_epoch() -> None:
     later = step_root(StepKey.attempt("ch_1", 3)).span_id
-    assert admit([_span(span_id=later)], _lease(epoch=2), _ALLOWLIST).dropped == 0
+    assert admit([_span(span_id=later)], _lease(epoch=2), _ALLOWLIST, runner=_RUNNER).dropped == 0
 
 
 def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> None:
@@ -285,7 +287,7 @@ def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> Non
         "secret": "s3cret",
         "server.port": True,
     }
-    (kept,) = admit([_span(attributes=attributes)], _lease(), _ALLOWLIST).kept
+    (kept,) = admit([_span(attributes=attributes)], _lease(), _ALLOWLIST, runner=_RUNNER).kept
     assert kept.attributes == {
         "blizzard.cli.command": "x",
         "url.full": "http://runner/api",
@@ -298,7 +300,7 @@ def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> Non
 def test_admit_overwrites_a_planted_caller_chunk_and_lease() -> None:
     planted = {"blizzard.caller": "operator", "blizzard.chunk.id": "ch_9", "blizzard.lease.id": "lease_9"}
     allowlist = Allowlist(scope=CLI_SCOPE, attributes={**CLI_ATTRIBUTES, **dict.fromkeys(planted, "string")})
-    (kept,) = admit([_span(attributes=planted)], _lease(), allowlist).kept
+    (kept,) = admit([_span(attributes=planted)], _lease(), allowlist, runner=_RUNNER).kept
     assert kept.attributes == {"blizzard.caller": "worker", "blizzard.chunk.id": "ch_1", "blizzard.lease.id": "lease_1"}
 
 
@@ -306,10 +308,10 @@ def test_admit_truncates_long_strings_and_caps_the_attribute_count() -> None:
     many = {f"k{i}": "v" for i in range(MAX_ATTRIBUTES + 10)}
     allowlist = Allowlist(scope=CLI_SCOPE, attributes=dict.fromkeys(many, "string"))
     long = "x" * (MAX_STRING_CHARS + 5)
-    (kept,) = admit([_span(name=long, scope_version=long, attributes=many)], _lease(), allowlist).kept
+    (kept,) = admit([_span(name=long, scope_version=long, attributes=many)], _lease(), allowlist, runner=_RUNNER).kept
     assert len(kept.name) == len(kept.scope_version) == MAX_STRING_CHARS
     assert len(kept.attributes) == MAX_ATTRIBUTES + 3
-    (clipped,) = admit([_span(attributes={"url.full": long})], _lease(), _ALLOWLIST).kept
+    (clipped,) = admit([_span(attributes={"url.full": long})], _lease(), _ALLOWLIST, runner=_RUNNER).kept
     assert clipped.attributes["url.full"] == "x" * MAX_STRING_CHARS
 
 
@@ -355,7 +357,10 @@ def test_a_forwarded_span_reaches_the_exporter_rebuilt_and_redacted() -> None:
         exporter=exporter,
     )
     (kept,) = admit(
-        [_span(parent_span_id=7, attributes={"url.full": "http://runner/api?token=abc#frag"})], _lease(), _ALLOWLIST
+        [_span(parent_span_id=7, attributes={"url.full": "http://runner/api?token=abc#frag"})],
+        _lease(),
+        _ALLOWLIST,
+        runner=_RUNNER,
     ).kept
     kept.attributes["url.query"] = "token=abc"
     handle.forward([kept], "blizzard-cli")
@@ -381,7 +386,7 @@ def test_an_open_allowlist_keeps_another_scope_and_its_attributes_but_only_insid
     lease = _lease()
     other = _span(trace_id=_trace(), scope_name="third.party", attributes={"db.statement": "x"})
     foreign = _span(trace_id=_trace("ch_2"), scope_name="third.party")
-    admission = admit([other, foreign], lease, Allowlist(scope=None, attributes=None))
+    admission = admit([other, foreign], lease, Allowlist(scope=None, attributes=None), runner=_RUNNER)
     assert admission.dropped == 1
     (kept,) = admission.kept
     assert kept.scope_name == "third.party"

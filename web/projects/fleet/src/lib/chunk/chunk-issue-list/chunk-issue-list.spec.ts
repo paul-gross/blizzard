@@ -51,7 +51,8 @@ describe('ChunkIssueList', () => {
     kind: 'fleet',
     user_id: null,
     login: null,
-    runner_id: 'runner-local',
+    runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+    runner_name: 'r-claude',
     chunk_id: 'ch_proposer',
     node_name: 'triage',
   };
@@ -173,11 +174,20 @@ describe('ChunkIssueList', () => {
     const { el } = await render([hubItem({ ref: '2', author: FLEET_AUTHOR })]);
 
     const author = el.querySelector('[data-testid="issue-author"]');
-    expect(author?.textContent).toContain('runner-local');
+    expect(author?.textContent?.replace(/\s+/g, ' ')).toContain('Proposed by runner R-ABF3.r-claude, chunk');
     expect(author?.textContent).toContain('triage');
     const chunkLink = el.querySelector<HTMLAnchorElement>('[data-testid="issue-author-chunk"]');
     expect(chunkLink?.textContent?.trim()).toBe('ch_proposer');
     expect(chunkLink?.getAttribute('href')).toBe('/board/chunk/ch_proposer');
+  });
+
+  it('a fleet-authored entry whose runner carries no name names it by its compact id', async () => {
+    const author: WorkItemAuthorView = { ...FLEET_AUTHOR, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runner_name: null };
+    const { el } = await render([hubItem({ ref: '2', author })]);
+
+    expect(el.querySelector('[data-testid="issue-author"]')?.textContent?.replace(/\s+/g, ' ')).toContain(
+      'Proposed by runner R-7Q2M, chunk',
+    );
   });
 
   it('a successfully fetched hub entry on a terminal chunk still renders the hub idiom — author alone is enough', async () => {

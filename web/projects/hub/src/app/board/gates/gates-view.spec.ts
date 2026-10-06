@@ -24,7 +24,8 @@ const GATES: DecisionView[] = [
     node_name: 'deploy-gate',
     epoch: 2,
     submitted_at: '2026-07-16T00:00:02Z',
-    imposed_by_runner_id: 'r-x',
+    imposed_by_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+    imposed_by_runner_name: 'r-claude',
     choices: [],
   },
 ];
@@ -62,7 +63,7 @@ describe('GatesPanelView', () => {
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="rail-gate"]');
 
     expect(rows[0].querySelector('[data-testid="rail-gate-origin"]')?.textContent?.trim()).toBe('graph');
-    expect(rows[1].querySelector('[data-testid="rail-gate-origin"]')?.textContent?.trim()).toBe('runner r-x');
+    expect(rows[1].querySelector('[data-testid="rail-gate-origin"]')?.textContent?.trim()).toBe('runner R-ABF3.r-claude');
   });
 
   it('omits the choices line for a gate that offers none', async () => {

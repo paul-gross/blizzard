@@ -31,7 +31,6 @@ def _seed_lease(store, *, lease_id: str = "lease_a", chunk_id: str = "ch_1") -> 
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r",
             retries_max=2,
             created_at=_NOW,
         )

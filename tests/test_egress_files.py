@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import json
 import sys
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -17,13 +18,16 @@ import pyarrow.parquet as pq
 import pytest
 
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
-from blizzard.hub.egress.internal.files import DirectoryEgressWriter
+from blizzard.hub.egress.internal.files import DirectoryEgressWriter, schema_document
 from blizzard.hub.egress.writer import (
+    ColumnSpec,
+    ColumnType,
     DatasetSchema,
     EgressBatch,
     EgressFailure,
     EgressFailureCause,
     EgressPass,
+    EgressValues,
     EgressWriterSettings,
     FilesWritten,
     IEgressWriter,
@@ -247,6 +251,53 @@ def test_a_different_existing_schema_fails_with_schema_conflict_and_is_untouched
     assert files_outside_staging(tmp_path) == {"_schema/things.v1.json"}
 
 
+_ID, _N, _OK, _AT, _COST, _TAGS = SCHEMA.columns
+
+
+def _with_columns(*columns: ColumnSpec) -> DatasetSchema:
+    return replace(SCHEMA, columns=columns)
+
+
+def _plant_schema(directory: Path, schema: DatasetSchema) -> bytes:
+    """``schema``'s document where an earlier writer of ``things`` v1 left one."""
+    document = schema_document(schema)
+    (directory / "_schema").mkdir()
+    (directory / "_schema" / "things.v1.json").write_bytes(document)
+    return document
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_an_existing_schema_the_current_one_only_adds_nullable_columns_to_is_replaced(fmt: str, tmp_path: Path) -> None:
+    _plant_schema(tmp_path, _with_columns(_ID, _OK, _AT, _COST))
+    written = make(fmt, tmp_path).write(batch(row()))
+    assert isinstance(written, FilesWritten) and len(written.files) == 1
+    assert (tmp_path / "_schema" / "things.v1.json").read_bytes() == schema_document(SCHEMA)
+    assert files_outside_staging(tmp_path) == {"_schema/things.v1.json", written.files[0].path}
+    assert list((tmp_path / ".staging").iterdir()) == []
+
+
+_MORE_THAN_NULLABLE_COLUMNS_ADDED = {
+    "a non-nullable column added": _with_columns(_N, _OK, _AT, _COST, _TAGS),
+    "a column removed": _with_columns(*SCHEMA.columns, ColumnSpec("gone", ColumnType.STRING, True, "removed")),
+    "a column retyped": _with_columns(_ID, replace(_N, type=ColumnType.STRING), _OK, _AT, _COST, _TAGS),
+    "a meaning changed": _with_columns(_ID, replace(_N, meaning="another count"), _OK, _AT, _COST, _TAGS),
+    "a column made nullable": _with_columns(_ID, replace(_N, nullable=False), _OK, _AT, _COST, _TAGS),
+    "columns reordered": _with_columns(_ID, _OK, _N, _AT, _COST, _TAGS),
+    "another major version": replace(SCHEMA, major_version=0),
+}
+
+
+@pytest.mark.parametrize("older", _MORE_THAN_NULLABLE_COLUMNS_ADDED.values(), ids=_MORE_THAN_NULLABLE_COLUMNS_ADDED)
+def test_an_existing_schema_differing_by_more_than_added_nullable_columns_is_a_conflict(
+    older: DatasetSchema, tmp_path: Path
+) -> None:
+    planted = _plant_schema(tmp_path, older)
+    result = make("ndjson", tmp_path).write(batch(row()))
+    assert isinstance(result, EgressFailure) and result.cause is EgressFailureCause.SCHEMA_CONFLICT
+    assert (tmp_path / "_schema" / "things.v1.json").read_bytes() == planted
+    assert files_outside_staging(tmp_path) == {"_schema/things.v1.json"}
+
+
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_below_min_free_bytes_nothing_is_written(fmt: str, tmp_path: Path) -> None:
     settings = EgressWriterSettings(max_rows_per_file=2, min_free_bytes=2**62)
@@ -302,3 +353,23 @@ def test_parquet_is_unavailable_without_pyarrow_and_never_raises(
     assert isinstance(result, EgressUnavailable)
     assert "blizzard[egress]" in result.reason
     assert not isinstance(build_egress_writer("ndjson", tmp_path, SETTINGS, "k7q2"), EgressUnavailable)
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_the_docs_load_recipe_reads_files_from_before_a_nullable_column_was_added_as_null_in_it(
+    fmt: str, tmp_path: Path
+) -> None:
+    older = _with_columns(_ID, _N, _OK, _AT, _COST)
+    for token, schema, minute, id_ in (("aaaa", older, 15, "before"), ("bbbb", SCHEMA, 16, "after")):
+        values = {column.name: row().values[column.name] for column in schema.columns} | {"id": id_}
+        egress_pass = EgressPass(datetime(2026, 10, 1, 6, minute, tzinfo=UTC))
+        writer = make(fmt, tmp_path, token)
+        written = writer.write(EgressBatch(schema, date(2026, 10, 1), egress_pass, (EgressValues(id_, values),)))
+        assert isinstance(written, FilesWritten)
+        assert isinstance(writer.commit_pass(egress_pass, written.files), ManifestCommitted)
+
+    connection = duckdb.connect()
+    load(connection, LOAD_NDJSON if fmt == "ndjson" else LOAD_PARQUET, tmp_path, SCHEMA.name)
+
+    rows = connection.execute(f"SELECT id, tags FROM {SCHEMA.name} ORDER BY id").fetchall()
+    assert rows == [("after", ["x"]), ("before", None)]

@@ -56,8 +56,8 @@ step.
 
 ### Capability-reporting boundary
 
-A runner that reports no capabilities is eligible for nothing. This is breaking on the hub↔runner wire, because the empty
-`capabilities` default used to mean "no filter".
+A runner that reports no capabilities is eligible for nothing. This is breaking on the hub↔runner wire, because the
+empty `capabilities` default used to mean "no filter".
 
 **Order.** Upgrade every runner to capability-reporting **before** deploying the hub.
 
@@ -65,6 +65,41 @@ A runner that reports no capabilities is eligible for nothing. This is breaking 
 makes is refused with a `409` naming it as `incompatible_runner_id`.
 
 **Getting back.** The condition clears the moment that runner is upgraded; there is nothing to repair on the hub.
+
+### Runner identity boundary
+
+One release keys every runner by an id the hub mints, and retires `runner_auth_mode`. From that release on:
+
+- **Every runner authenticates.** A fleet call without a token the hub issued is refused with a `401` under every
+  configuration. A `blizzard-hub.toml` that still sets `runner_auth_mode` boots with the key ignored; delete it whenever
+  convenient.
+- **Ids are hub-minted.** The hub's migration gives every runner an `rn_` id and keeps its old id as its name. Each
+  enrolled token resolves to its runner's new id, so no runner re-enrolls. Operator verbs and `/api/runners/{id}` take
+  the `rn_` id, which `hub runner list` shows beside each name, so a script that passed an old id passes the new one.
+- **A runner that held no token** — one a `warn` hub admitted — keeps its history under its new id, but is refused until
+  `blizzard hub runner enroll <id>` mints its token. Put the line `enroll` prints in the runner's runtime-dir `.env`.
+- **The name is the runner's own.** A `blizzard-runner.toml` that declares a `runner_id` and no `name` reads that value
+  as the name, so no config needs editing; a runner renames itself by changing `name` and restarting
+  ([remote-runner.md](./remote-runner.md#point-it-at-the-hub)).
+- **`runner init` adds the runner** at the hub its config names and writes its token
+  ([runner-auth.md](./deployment/runner-auth.md#adding-a-runner)). Anything that re-runs init on a runner directory that
+  outlives its hub's data passes `--allow-readd`.
+- **Exported and traced runner ids change.** The egress `steps` and `invocations` rows and the `blizzard.runner.id` span
+  attribute carry the `rn_` id from the upgrade on, each with the runner's name beside it.
+  [egress.md](./deployment/egress.md#upgrading-to-hub-minted-runner-ids) owns re-exporting history under the new ids,
+  and [tracing.md](./deployment/tracing.md#upgrading-to-hub-minted-runner-ids) owns querying across the upgrade.
+
+**Order.** Across this boundary a runner may not lag its hub, the second exception
+[`docs/versioning.md`](./versioning.md#the-hubrunner-skew-window) records. Let the chunks in flight finish, stop every
+runner, and take a hub store backup ([`docs/backup.md`](./backup.md)). Upgrade the hub, which migrates on boot. Then
+upgrade each runner: its store migration runs offline before the daemon starts, as the packaged unit's `ExecStartPre`
+runs it. Start the runners; each registers with the token it already holds and keeps the id the hub minted for it.
+
+**If a runner is still pre-boundary.** It is not supported against the upgraded hub; keep it stopped until it is
+upgraded.
+
+**Getting back.** A rollback across this boundary is lossy for runner ids;
+[`docs/rollback.md`](./rollback.md#what-a-rollback-does-not-undo) names what does not come back.
 
 ## Pull and recreate
 

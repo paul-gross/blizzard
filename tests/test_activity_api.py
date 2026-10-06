@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
 from tests.test_fleet_auth import _bearer, _seed_enrolled
@@ -213,7 +212,7 @@ def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kind
 
 def test_runner_bearer_token_is_rejected(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
+    hub = build_hub(tmp_path)
 
     resp = hub.client.get("/api/activity", headers=_bearer(token))
     assert resp.status_code == 403

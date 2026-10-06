@@ -22,25 +22,26 @@ from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.cli import operator_trace
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.cli.sessions.internal.session_file import SessionFile
-from blizzard.hub.config import AUTH_MODE_OAUTH, RUNNER_AUTH_ENFORCE, AuthConfig, HubConfig
+from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from tests.support import seed_user
+from tests.support import RunnerFleetClient, seed_runner, seed_user
 
 pytestmark = pytest.mark.component
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _CALLER = "blizzard.caller"
 _RUNNER_ID = "blizzard.runner.id"
+_RUNNER_NAME = "blizzard.runner.name"
 _CHUNK_ID = "blizzard.chunk.id"
 
 
@@ -102,27 +103,14 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     assert all(s.parent is None for s in roots)
 
 
-def test_a_runner_bearer_stamps_caller_and_runner_id_and_a_forged_caller_header_changes_nothing(
+def test_a_runner_bearer_stamps_caller_runner_id_and_name_and_a_forged_caller_header_changes_nothing(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
-    warn = TestClient(hub_app.build_hosted_app(config))
-    assert (
-        warn.post(
-            "/api/fleet/runners",
-            json={
-                "runner_id": "runner-a",
-                "workspace_id": "ws-a",
-                "capabilities": [{"harness_id": "claude", "default": True}],
-            },
-        ).status_code
-        == 201
-    )
-    token = warn.post("/api/runners/runner-a/enrollments").json()["token"]
+    token = _registered_runner_token(config, "rn_01JRUNNERA", name="runner-a")
     exporter = InMemorySpanExporter()
-    enforced = replace(config, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    handle = _handle(enforced, exporter)
-    app = hub_app.build_hosted_app(enforced, platform_tracing=handle)
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         resp = client.get(
             "/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", "blizzard.caller": "operator"}
@@ -131,7 +119,7 @@ def test_a_runner_bearer_stamps_caller_and_runner_id_and_a_forged_caller_header_
     server = [s for s in _spans(handle, exporter) if s.name.startswith("GET /api/fleet/queue/peek")]
     assert len(server) == 1
     assert server[0].attributes[_CALLER] == "runner"
-    assert server[0].attributes[_RUNNER_ID] == "runner-a"
+    assert (server[0].attributes[_RUNNER_ID], server[0].attributes[_RUNNER_NAME]) == ("rn_01JRUNNERA", "runner-a")
     assert "operator" not in {s.attributes.get(_CALLER) for s in server}
 
 
@@ -177,19 +165,10 @@ _PLANTED_SPAN = 0x00F067AA0BA902B7
 _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-01"}
 
 
-def _enrolled_token(client: TestClient, runner_id: str) -> str:
-    assert (
-        client.post(
-            "/api/fleet/runners",
-            json={
-                "runner_id": runner_id,
-                "workspace_id": "ws-a",
-                "capabilities": [{"harness_id": "claude", "default": True}],
-            },
-        ).status_code
-        == 201
-    )
-    return client.post(f"/api/runners/{runner_id}/enrollments").json()["token"]
+def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | None = None) -> str:
+    """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
+    leaves no spans behind."""
+    return seed_runner(hub_app.build_hosted_app(config).state.services, runner_id, name=name, workspace_id="ws-a")
 
 
 def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
@@ -207,7 +186,7 @@ def test_a_registered_runner_bearer_continues_an_incoming_trace(tmp_path: Path) 
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
-        token = _enrolled_token(client, "runner-a")
+        token = _registered_runner_token(config, "runner-a")
         client.get("/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", **_TRACEPARENT})
     spans = _spans(handle, exporter)
     assert _continues_planted(_server_span(spans, "GET /api/fleet/queue/peek"))
@@ -224,7 +203,7 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
-        token = _enrolled_token(client, "runner-a")
+        token = _registered_runner_token(config, "runner-a")
         registry = client.app.state.services.registry  # type: ignore[attr-defined]
         resolutions: list[str] = []
         original = registry.registration_for_token_hash
@@ -245,7 +224,7 @@ def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, cre
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
-        token = _enrolled_token(client, "runner-a")
+        token = _registered_runner_token(config, "runner-a")
         if credential == "revoked":
             assert client.post("/api/runners/runner-a/token-revocations", json={}).status_code == 201
         headers = dict(_TRACEPARENT)
@@ -320,7 +299,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     app = hub_app.build_hosted_app(config, platform_tracing=handle)
-    with TestClient(app) as client:
+    with RunnerFleetClient(app, services=app.state.services) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202

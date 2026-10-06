@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub
+from tests.runner_join import fleet_headers
 from tests.service.support import mock_runner, service_gate, sse_tap
 from tests.service.test_hub_service import _graph_yaml, _ingest, _stack
 
@@ -90,8 +91,8 @@ def test_a_replayed_event_seq_folds_exactly_once(tmp_path: Path) -> None:
                 }
             ],
         }
-        assert hub.post("/api/fleet/events", json=batch).status_code == 200
-        assert hub.post("/api/fleet/events", json=batch).status_code == 200  # replay
+        assert hub.post("/api/fleet/events", json=batch, headers=fleet_headers(hub)).status_code == 200
+        assert hub.post("/api/fleet/events", json=batch, headers=fleet_headers(hub)).status_code == 200  # replay
 
         feed = _events(hub)
         failed = [e for e in feed if e["kind"] == "command-failed"]
@@ -158,6 +159,7 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
                 "node",
                 "prev_node",
                 "runner_id",
+                "runner_name",
                 "cause",
                 "graph_id",
                 "severity",

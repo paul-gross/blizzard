@@ -83,6 +83,26 @@ def test_auth_federation_routes_are_on_the_surface() -> None:
     assert any("surface path removed" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
+def test_the_runner_add_call_is_on_the_surface() -> None:
+    base = _spec({"/api/runners": {"get": _op(), "post": _op()}})
+    head = _spec({"/api/runners": {"get": _op()}})
+    assert _violation_texts(classify_spec_diff(base, head)) == ["POST /api/runners: surface method removed"]
+
+
+def test_the_runner_add_call_s_response_is_held_to_the_surface_rules() -> None:
+    added = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
+    base = _spec({"/api/runners": {"post": _op(response_schema=_ref("Added"))}}, {"Added": added})
+    head = _spec({"/api/runners": {"post": _op(response_schema=_ref("Added"))}}, {"Added": {"type": "object"}})
+    assert any("Added.token" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_the_operator_runner_list_beside_the_add_call_stays_off_the_surface() -> None:
+    listed = {"type": "object", "properties": {"runners": {"type": "array"}}, "required": ["runners"]}
+    base = _spec({"/api/runners": {"get": _op(response_schema=_ref("Listed")), "post": _op()}}, {"Listed": listed})
+    head = _spec({"/api/runners": {"post": _op()}}, {"Listed": {"type": "object"}})
+    assert classify_spec_diff(base, head) == []
+
+
 # --- response-reached schema classes --------------------------------------------------
 
 

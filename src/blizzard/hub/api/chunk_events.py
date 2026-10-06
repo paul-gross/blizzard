@@ -19,13 +19,15 @@ from blizzard.hub.domain.runners.route import Route
 class ChunkFrameState:
     """One chunk's fully-loaded post-write state — everything a ``chunk-changed`` frame's
     enrichment reads. A missing chunk or graph leaves ``from_graph`` as ``None``;
-    ``route`` reflects the loader's route read."""
+    ``route`` reflects the loader's route read, and ``runner_name`` is its runner's registered
+    name — ``None`` with no route, or when the registry holds no such runner."""
 
     facts: ChunkFacts
     chunk: Chunk | None
     graph: Graph | None
     from_graph: Graph | None
     route: Route | None
+    runner_name: str | None = None
 
     @classmethod
     def load(cls, services: HubServices, chunk_id: str) -> ChunkFrameState:
@@ -40,15 +42,16 @@ class ChunkFrameState:
         from_graph = services.graphs.get(off_pin) if off_pin is not None else None
 
         route = services.chunks.route.route_of(chunk_id)
-        return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route)
+        runner_name = services.registry.names_for([route.runner_id]).get(route.runner_id) if route is not None else None
+        return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route, runner_name=runner_name)
 
 
 def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
     """`ChunkFrameState.load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
     requested id, through the four plurals. Reads every distinct chunk's facts and
     record once, then the union of pinned and cross-graph newest-transition graph ids
-    once, then every chunk's route once — a bounded number of statements regardless of
-    how many ids or facts the batch names."""
+    once, then every chunk's route once, then the routed runners' names once — a bounded
+    number of statements regardless of how many ids or facts the batch names."""
     ids = list(dict.fromkeys(chunk_ids))
     facts_by_id = services.chunks.facts.load_facts_for(ids)
     chunks_by_id = services.chunks.record.get_many(ids)
@@ -61,6 +64,7 @@ def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[s
             graph_ids.add(transition.graph_id)
     graphs_by_id = services.graphs.get_many(list(graph_ids))
     routes_by_id = services.chunks.route.routes_for(ids)
+    runner_names = services.registry.names_for(route.runner_id for route in routes_by_id.values())
 
     states: dict[str, ChunkFrameState] = {}
     for chunk_id in ids:
@@ -71,8 +75,14 @@ def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[s
         if chunk is not None and graph is not None:
             off_pin = facts.transition_graph_off_pin(graph.graph_id)
             from_graph = graphs_by_id.get(off_pin) if off_pin is not None else None
+        route = routes_by_id.get(chunk_id)
         states[chunk_id] = ChunkFrameState(
-            facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=routes_by_id.get(chunk_id)
+            facts=facts,
+            chunk=chunk,
+            graph=graph,
+            from_graph=from_graph,
+            route=route,
+            runner_name=runner_names.get(route.runner_id) if route is not None else None,
         )
     return states
 
@@ -168,6 +178,7 @@ class ChunkChanged:
             prev_node=change.prev_node,
             node=change.node,
             runner_id=change.runner_id,
+            runner_name=state.runner_name if change.runner_id is not None else None,
             cause=cause,  # change.cause is a widened `str | None` (`bzh:domain-core` — the
             # domain stays events-layer-free); this module already holds the typed value.
             graph_id=change.graph_id,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
@@ -54,7 +54,6 @@ from blizzard.wire.chunk import (
     TransitionView,
     WorkRefView,
 )
-from blizzard.wire.decision import DecisionView
 
 
 class _RouteNotInjected(Enum):
@@ -142,6 +141,8 @@ class ChunkView:
     #: already-derived value, the same shape ``blocked`` takes.
     neighborhood: ChunkNeighborhoodView | None = None
     delivery: DeliveryRead | None = None
+    #: Runner names by id — the caller's own batched read; ``None`` makes each render read the names it shows.
+    runner_names: Mapping[str, str] | None = None
 
     @classmethod
     def of(
@@ -178,11 +179,12 @@ class ChunkView:
         live_holders: dict[WorkRef, str],
         blocked: BlockedView | None = None,
         delivery: DeliveryRead | None = None,
+        runner_names: Mapping[str, str] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
-        already-fetched facts, route and pointer live-holders, skipping a per-chunk
-        ``load_facts``/``route_of``/``live_holders`` call. ``route=None`` means "no live
-        route"; :meth:`of` leaves both uninjected."""
+        already-fetched facts, route, pointer live-holders and runner names, skipping a
+        per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for`` call.
+        ``route=None`` means "no live route"; :meth:`of` leaves both uninjected."""
         return cls(
             services=services,
             chunk=chunk,
@@ -192,6 +194,7 @@ class ChunkView:
             live_holders=live_holders,
             blocked=blocked,
             delivery=delivery,
+            runner_names=runner_names,
         )
 
     def _delivery(self) -> DeliveryRead:
@@ -219,6 +222,13 @@ class ChunkView:
             return self.route
         return self.services.chunks.route.route_of(self.chunk.chunk_id)
 
+    def _runner_names(self, runner_ids: Iterable[str | None]) -> Mapping[str, str]:
+        """The registered names of the runners this render shows: the injected map, else one
+        ``names_for`` read over just ``runner_ids`` (none at all when every id is ``None``)."""
+        if self.runner_names is not None:
+            return self.runner_names
+        return self.services.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
+
     def _resolved_live_holders(self) -> dict[WorkRef, str]:
         if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
             return self.live_holders
@@ -237,6 +247,7 @@ class ChunkView:
             route = self.route
         else:
             route = self.services.chunks.route.route_of(self.chunk.chunk_id)
+        runner_id = route.runner_id if route is not None else None
         completed_at = self.facts.completed_at()
         return ChunkSummary(
             chunk_id=self.chunk.chunk_id,
@@ -249,7 +260,8 @@ class ChunkView:
             default_model=list(self.chunk.default_model),
             default_effort=self.chunk.default_effort,
             default_harnesses=list(self.chunk.default_harnesses),
-            runner_id=route.runner_id if route is not None else None,
+            runner_id=runner_id,
+            runner_name=self._runner_names([runner_id]).get(runner_id) if runner_id is not None else None,
             environment_count=len(route.environment_ids) if route is not None else 0,
             cost=self.usage_total(),
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
@@ -292,6 +304,17 @@ class ChunkView:
         artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         status = self.facts.status()
+        route = self._resolved_route()
+        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk.chunk_id)
+        questions = self.services.chunks.questions.load_questions(self.chunk.chunk_id)
+        # One read names every runner the detail shows: the route's, the gate's, each asker's.
+        runner_names = self._runner_names(
+            [
+                route.runner_id if route is not None else None,
+                decision.imposed_by_runner_id if decision is not None else None,
+                *(question.runner_id for question in questions),
+            ]
+        )
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
@@ -313,19 +336,19 @@ class ChunkView:
             default_effort=self.chunk.default_effort,
             default_harnesses=list(self.chunk.default_harnesses),
             intended_migration=self.intended_migration(),
-            route=self._route(),
+            route=self._route(route, runner_names),
             escalation=self._escalation(),
             pause=self._pause(),
             blocked=self.blocked,
             neighborhood=self.neighborhood
             if self.neighborhood is not None
             else ChunkNeighborhoodView(prerequisites=[], dependents=[]),
-            decision=self._decision(),
+            decision=to_decision_view(decision, runner_names) if decision is not None else None,
             history=history.transitions(),
             migrations=history.migrations(),
             restarts=history.restarts(),
             artifacts=self._artifacts(artifacts),
-            questions=[question_view(q) for q in self.services.chunks.questions.load_questions(self.chunk.chunk_id)],
+            questions=[question_view(question, runner_names) for question in questions],
             **self._delivery_fields(self._delivery()),
             cost=self.usage_total(),
             usage=self._usage_history(),
@@ -333,12 +356,15 @@ class ChunkView:
             bounces=self._bounces(),
         )
 
-    def _route(self) -> RouteView | None:
-        route = self._resolved_route()
+    @staticmethod
+    def _route(route: Route | None, runner_names: Mapping[str, str]) -> RouteView | None:
         if route is None:
             return None
         return RouteView(
-            runner_id=route.runner_id, workspace_id=route.workspace_id, environment_ids=route.environment_ids
+            runner_id=route.runner_id,
+            runner_name=runner_names.get(route.runner_id),
+            workspace_id=route.workspace_id,
+            environment_ids=route.environment_ids,
         )
 
     def _escalation(self) -> ChunkEscalationView | None:
@@ -355,10 +381,6 @@ class ChunkView:
 
     def _pause(self) -> PauseView | None:
         return pause_view(self.facts.open_pause())
-
-    def _decision(self) -> DecisionView | None:
-        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk.chunk_id)
-        return to_decision_view(decision) if decision is not None else None
 
     def _pending(self) -> PendingView | None:
         """Reifies a full :class:`Graph` because the poll policy it needs lives only on a

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { type RunnerView, errorMessage, injectPendingMutationVariables } from 'fleet';
+import { type RunnerRegistryView, errorMessage, injectPendingMutationVariables } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { RunnerPanelView } from './runner-view';
@@ -74,7 +74,7 @@ export class RunnerPanel {
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
 
-  protected toggle(runner: RunnerView): void {
+  protected toggle(runner: RunnerRegistryView): void {
     this.actionError.set(null);
     this.pauseMutation.mutate(
       { runnerId: runner.runner_id, paused: !runner.hub_paused },

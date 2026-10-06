@@ -295,11 +295,11 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     """One chunk's card in the READY lane, by its full id."""
                     return col("ready").locator(f'[data-chunk="{chunk_id}"]')
 
-                # All three chunks rest NOT READY in the BACKLOG column; no runner has
-                # registered yet.
+                # All three chunks rest NOT READY in the BACKLOG column; the runner `runner init`
+                # added is listed but has not connected yet.
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
                 expect(col_cards("notready")).to_have_count(3)
-                expect(page.get_by_test_id("runners-empty")).to_be_visible()
+                expect(page.get_by_test_id("runner")).to_have_attribute("data-connection", "never_connected")
                 expect(col_cards("ready")).to_have_count(0)
                 backlog_grips = col("notready").get_by_test_id("board-reorder-grip")
                 expect(backlog_grips).to_have_count(3)

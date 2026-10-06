@@ -72,8 +72,8 @@ def trace_status(request: Request) -> RunnerTraceStatusResponse:
 )
 def trace_replay(body: TraceReplayRequest, request: Request) -> RunnerTraceReplayResponse | JSONResponse:
     """Tell every lease closed in ``[since, until)`` again, inside the request, without moving the live cursor.
-    A bad window is 422, a replay that must export while tracing is off is 409, and an exporter that
-    refuses is 502 with the counts it accepted before."""
+    A bad window is 422; a replay that must export while tracing is off, or any replay before the runner's first
+    registration, is 409; and an exporter that refuses is 502 with the counts it accepted before."""
     try:
         result = (
             RunnerWiring.of(request).trace_replay().replay(as_utc(body.since), as_utc(body.until), dry_run=body.dry_run)

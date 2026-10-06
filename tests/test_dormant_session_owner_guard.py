@@ -88,7 +88,6 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, un
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -152,7 +151,6 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, u
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -211,7 +209,6 @@ def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_pla
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -289,7 +286,6 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

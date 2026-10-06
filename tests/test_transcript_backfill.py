@@ -84,7 +84,7 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
             transcript_source=source,
         ),
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
     )
     return ctx, source
 
@@ -114,7 +114,6 @@ def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_i
             node_id=node_id,
             node_name=node_id.removeprefix("nd_"),
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=at,
         )
@@ -141,7 +140,6 @@ def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=at,
         )
@@ -337,7 +335,6 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -627,7 +624,6 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
             node_id="nd_build",
             node_name="build",
             epoch=9,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

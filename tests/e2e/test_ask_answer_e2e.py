@@ -30,7 +30,6 @@ from tests.e2e.fleet_traces import (
     assert_invocations,
     assert_platform_nesting,
     assert_skeleton,
-    enroll_runner,
     planted_lease_tokens,
     runner_sweep,
     stashed_route_tokens,
@@ -49,6 +48,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
+from tests.runner_join import fleet_headers
 
 pytestmark = [
     pytest.mark.e2e,
@@ -232,8 +232,6 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         # A free local-API port the worker's `blizzard runner ask` will POST to.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), max_agents=1)
-        if fleet_traces.available:
-            config = enroll_runner(hub, config)
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)
@@ -292,7 +290,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
 
         # `delivered` derives from the real runner's `answer.delivered` fact on resume
         # — the one tier where that fact isn't hand-pushed.
-        closed = hub.get(f"/api/fleet/questions/{question_id}").json()
+        closed = hub.get(f"/api/fleet/questions/{question_id}", headers=fleet_headers(hub)).json()
         assert closed["answered"] is True
         assert closed["delivered"] is True, f"the resume-with-answer left no delivery fact: {closed}"
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()

@@ -55,7 +55,6 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=retries_max,
             created_at=_NOW,
         )
@@ -129,7 +128,7 @@ def test_locally_paused_defer_emits_nothing(tmp_path):  # type: ignore[no-untype
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # would escalate...
     store.record_local_pause(
-        "r1", paused=True, at=_NOW, by="operator", report_kind="runner.locally_paused", report_payload="{}"
+        paused=True, at=_NOW, by="operator", report_kind="runner.locally_paused", report_payload="{}"
     )
     Advance(_dead_worker_ctx(store)).run()
 

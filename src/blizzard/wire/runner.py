@@ -1,14 +1,18 @@
 """Fleet-registry wire bodies.
 
-``online`` and ``paused`` are **derived** — liveness from ``last_seen_at`` against the
-staleness threshold, paused from the newest pause fact.
-:class:`RunnerEnrollmentResponse` is the one body that ever carries a
-runner's plaintext bearer token."""
+A runner's ``runner_id`` is the hub-minted ``rn_`` id, its one identity; ``runner_name`` is the
+display name the runner declares, which nothing keys on. ``online``, ``connection`` and ``paused``
+are **derived**. :class:`RunnerAddResponse` and :class:`RunnerEnrollmentResponse` are the only
+bodies that ever carry a runner's plaintext bearer token."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Annotated
 
+from pydantic import BaseModel, StringConstraints
+
+from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.subscription_miss import SampleMissReason
 
 
@@ -36,12 +40,12 @@ class RunnerSubscriptionDeclaration(BaseModel):
 
 
 class RunnerRegistrationRequest(BaseModel):
-    """Register a runner into the fleet — runner id + workspace binding.
+    """Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
+    in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
+    ``None`` when the client reports none, never a guessed total."""
 
-    ``env_capacity`` is the runner's configured environment-pool size; ``None`` when the
-    client reports none, never a guessed total. Re-registration overwrites it."""
-
-    runner_id: str
+    #: The runner's display name — not unique, never a key; ``None`` or blank keeps the one the registry holds.
+    name: str | None = None
     workspace_id: str
     env_capacity: int | None = None
     #: The runner's own browser-reachable base URL — optional; a runner that
@@ -59,20 +63,59 @@ class RunnerRegistrationRequest(BaseModel):
 
 
 class RunnerRegistrationResponse(BaseModel):
-    """The registered runner's id, and whether this call first created its row."""
+    """The registered runner's hub-minted id and current name, and whether this call was its
+    first registration since it was added."""
 
     runner_id: str
+    #: The name the registry now holds for this runner.
+    runner_name: str | None = None
     first_registration: bool
 
 
 class RunnerEnrollmentResponse(BaseModel):
-    """A freshly minted (or rotated) bearer token.
+    """A rotated bearer token for an existing runner id.
 
-    ``token`` is the plaintext, visible only here — only its sha256 hash is kept. A
-    re-enroll rotates: the old token stops resolving the moment this response lands."""
+    ``token`` is the plaintext, visible only here — only its sha256 hash is kept. The old
+    token stops resolving the moment this response lands."""
 
     runner_id: str
     token: str
+
+
+class RunnerAddRequest(BaseModel):
+    """Add a runner under an initial display name. The hub mints the runner's id and bearer
+    token together; the runner's own registrations set its name from then on."""
+
+    #: A blank name is refused (422): it would render as nothing beside the runner's id.
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class RunnerAddResponse(BaseModel):
+    """The added runner — its hub-minted id, its initial name, and its plaintext bearer token.
+
+    ``token`` is visible only here, once — only its sha256 hash is kept. The runner is added but
+    never connected until it first registers with this token."""
+
+    runner_id: str
+    runner_name: str
+    token: str
+
+
+class RunnerIdentityView(BaseModel):
+    """Who the presented runner bearer token belongs to — its hub-minted id and current name.
+    Answering records nothing: no registration, no liveness."""
+
+    runner_id: str
+    runner_name: str
+
+
+class RunnerIdentityRefusal(BaseModel):
+    """Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names
+    the runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``
+    or ``unknown`` one."""
+
+    reason: RunnerTokenRefusalReason
+    runner_id: str | None = None
 
 
 class ExternalSubscriptionUsageWindowView(BaseModel):
@@ -105,12 +148,14 @@ class SubscriptionUsageView(BaseModel):
 
 
 class RunnerView(BaseModel):
-    """One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
+    """A registered runner's own view of its registration.
 
     The two brakes stay separate: ``hub_paused`` is claims-only, while
     ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory."""
 
     runner_id: str
+    # The runner's latest registered display name — not unique, never a key.
+    runner_name: str | None = None
     workspace_id: str
     registered_at: str
     last_seen_at: str
@@ -135,10 +180,47 @@ class RunnerView(BaseModel):
     gates: list[str] = []
 
 
-class RunnerListResponse(BaseModel):
-    """The fleet registry — every registered runner with its liveness."""
+class RunnerRegistryView(BaseModel):
+    """One runner as an operator sees the registry — including one that has never connected.
 
-    runners: list[RunnerView] = []
+    A ``never_connected`` runner has no ``workspace_id``, ``registered_at`` or ``last_seen_at``, no
+    capabilities, and is not ``online``."""
+
+    runner_id: str
+    # The runner's latest display name — not unique, never a key.
+    runner_name: str
+    connection: RunnerConnection
+    online: bool
+    # When the runner was added, and by whom; `added_by` is `None` when the hub did not record one.
+    added_at: str
+    added_by: str | None = None
+    workspace_id: str | None = None
+    registered_at: str | None = None
+    last_seen_at: str | None = None
+    hub_paused: bool  # the fleet paused it — `blizzard hub runner pause`, cleared by `hub runner resume`
+    locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
+    # The local pause's own cause; `reason` is `None` for a manual pause.
+    locally_paused_by: str | None = None
+    locally_paused_reason: str | None = None
+    # The configured environment-pool size — ``None`` when none was reported, never zero.
+    env_capacity: int | None = None
+    # One member per declared subscription; the age-gated fallback without a roster.
+    subscriptions: list[SubscriptionUsageView] = []
+    # The runner's reported capability snapshot — every harness/tier it can execute right now.
+    capabilities: list[RunnerCapability] = []
+    # Whether the runner is retired; when and by whom only while retired.
+    retired: bool = False
+    retired_at: str | None = None
+    retired_by: str | None = None
+    # The node names the runner declared it holds for a human decision; empty when it imposes none.
+    gates: list[str] = []
+
+
+class RunnerRegistryListResponse(BaseModel):
+    """The fleet registry as operators list it — every added runner, oldest first, each with its
+    connection condition. Two runners may share a name; each is listed under its own id."""
+
+    runners: list[RunnerRegistryView] = []
 
 
 class RunnerPauseRequest(BaseModel):
@@ -163,11 +245,11 @@ class RunnerLifecycleRequest(BaseModel):
 class RunnerRetireResponse(BaseModel):
     """The retired runner, plus every chunk the retire released."""
 
-    runner: RunnerView
+    runner: RunnerRegistryView
     released_chunk_ids: list[str] = []
 
 
 class RunnerTokenRevocationResponse(BaseModel):
-    """The runner after its token was revoked — still registered, now unenrolled."""
+    """The runner after its token was revoked — still added, now unenrolled."""
 
-    runner: RunnerView
+    runner: RunnerRegistryView

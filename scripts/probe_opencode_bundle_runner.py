@@ -136,12 +136,20 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     _worker(worker)
     env.update(BZ_RUNNER_DIR=str(root), BZ_RUNNER_TICK_SECONDS="0.75", BLIZZARD_MOCK_HARNESS_FENCE="1")
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
-    subprocess.run(["uv", "run", "blizzard", "runner", "init", str(root)], env=env, check=True, capture_output=True)
+    # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
+    # standing runner's from the shell exports.
+    env.pop("BZ_HUB_TOKEN", None)
+    subprocess.run(
+        ["uv", "run", "blizzard", "runner", "init", str(root), "--hub", env["BZ_HUB_URL"]],
+        env=env,
+        check=True,
+        capture_output=True,
+    )
     auth = root / "auth.json"
     auth.write_text('{"mock":"present"}')
     config = root / "blizzard-runner.toml"
     text = config.read_text()
-    text = text.replace('runner_id = "runner-local"', 'runner_id = "runner-bundle-probe"')
+    text = text.replace('name = "runner-local"', 'name = "runner-bundle-probe"')
     text = text.replace("[claude_code]\nenabled = true", "[claude_code]\nenabled = false")
     text = text.replace(
         '[opencode]\nenabled = true\nbinary = "opencode"',
@@ -174,7 +182,8 @@ def main() -> None:
         raise RuntimeError(f"disposable runner runtime already exists: {root}")
     root.mkdir()
     base = f"http://127.0.0.1:{args.port}"
-    env = dict(os.environ)
+    # The runner presents the token `runner init` adds it with at the env-local hub, never one from this shell.
+    env = {name: value for name, value in os.environ.items() if name != "BZ_HUB_TOKEN"}
     proxy = _guarded_hub(hub_url, args.chunk_id)
     proxy_url = f"http://127.0.0.1:{proxy.server_port}"
     proxy_thread = threading.Thread(target=proxy.serve_forever, name="bundle-probe-hub", daemon=True)

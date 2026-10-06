@@ -46,7 +46,10 @@ class HubConnectivityView(BaseModel):
 class RunnerStatusView(BaseModel):
     """``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick."""
 
-    runner_id: str
+    #: The hub-minted id of the runner's latest successful registration; ``None`` until it first registers.
+    runner_id: str | None
+    #: The runner's name — its latest registered one, or its configured one before it first registers.
+    runner_name: str | None = None
     workspace_id: str
     pause: PauseStateView
     capacities: CapacitiesView

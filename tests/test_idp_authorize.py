@@ -15,7 +15,7 @@ from jwt.algorithms import RSAAlgorithm
 from blizzard.auth_core import Role
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.support import HubHarness, added_runner, build_hub, seed_runner, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -25,8 +25,9 @@ _DEFAULT_REDIRECT_URIS = ("https://runner-a.example/api/auth/callback",)
 def _register_runner(
     hub: HubHarness, *, runner_id: str = "runner-a", redirect_uris: tuple[str, ...] = _DEFAULT_REDIRECT_URIS
 ) -> None:
+    seed_runner(hub, runner_id, register=False)
     hub.services.fleet.register(
-        runner_id, "workspace-1", public_url="https://runner-a.example", redirect_uris=redirect_uris
+        added_runner(hub, runner_id), "workspace-1", public_url="https://runner-a.example", redirect_uris=redirect_uris
     )
 
 

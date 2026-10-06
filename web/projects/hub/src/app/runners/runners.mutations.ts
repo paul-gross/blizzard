@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type RunnerView, pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost, hubRunnersKey } from 'fleet';
+import { type RunnerRegistryView, pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost, hubRunnersKey } from 'fleet';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 
 /** Toggle a runner's operator brake: pause stops new leases, resume clears it. */
@@ -20,7 +20,7 @@ export function injectRunnerPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: runnerPauseMutationKey,
-    mutationFn: async (vars: RunnerPauseVars): Promise<RunnerView> => {
+    mutationFn: async (vars: RunnerPauseVars): Promise<RunnerRegistryView> => {
       const call = vars.paused ? pauseRunnerApiRunnersRunnerIdPausePost : resumeRunnerApiRunnersRunnerIdResumePost;
       const { data, error } = await call({
         path: { runner_id: vars.runnerId },

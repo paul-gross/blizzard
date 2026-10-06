@@ -18,5 +18,13 @@
     "chunk_id": "ch_1",
     "runner_id": null,
     "key": "event_log:ev_2"
+  },
+  "named-runner": {
+    "severity": "warning",
+    "kind": "attempt-failed",
+    "chunk_id": "ch_1",
+    "runner_id": "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "runner_name": "r-claude",
+    "key": "event_log:ev_3"
   }
 }

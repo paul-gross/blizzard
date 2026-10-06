@@ -214,29 +214,29 @@ class PausePark:
 class IReadPauseRepository(Protocol):
     """Read-only pause-brake and daemon-liveness queries (held by read-path edges)."""
 
-    def hub_contact_at(self, runner_id: str) -> datetime | None:
+    def hub_contact_at(self) -> datetime | None:
         """When the runner last **successfully** reached the hub, or ``None`` if never.
 
         :meth:`~IWritePauseRepository.set_hub_paused` is only called after a successful hub
-        round trip (``runner/loop/steps.py``), so its ``updated_at`` **is** the last-successful-
+        round trip (``runner/lifecycle/registration.py``), so its ``updated_at`` **is** the last-successful-
         contact instant — no separate fact needed (``bzh:facts-not-status``)."""
         ...
 
-    def hub_paused(self, runner_id: str) -> bool:
+    def hub_paused(self) -> bool:
         """The last hub pause brake value mirrored locally — consulted before claiming new work.
 
-        Defaults False when it has never been synced (a fresh runner claims freely until it
-        first hears otherwise)."""
+        Defaults False when it has never been synced. A runner claims nothing before its first
+        registration, so the default holds only from then until its first successful pause fetch."""
         ...
 
-    def local_paused(self, runner_id: str) -> bool:
+    def local_paused(self) -> bool:
         """This runner's own brake, derived from the newest local pause fact.
 
         Distinct from ``hub_paused``: it blocks every spawn site, not claims alone.
         Defaults False when the operator has never set it."""
         ...
 
-    def local_pause_reason(self, runner_id: str) -> str | None:
+    def local_pause_reason(self) -> str | None:
         """The newest local pause fact's own reason — ``None`` on a plain
         operator pause, or when the brake has never been set. Read independently of
         :meth:`local_paused` so a caller decides for itself whether to consult it."""
@@ -272,20 +272,19 @@ class IReadPauseRepository(Protocol):
 class IWritePauseRepository(IReadPauseRepository, Protocol):
     """Read-write pause-brake and daemon-liveness store — held only by the domain."""
 
-    def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
+    def record_daemon_liveness(self, *, alive_at: datetime) -> None:
         """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat.
 
-        Upserted, one row per runner: only the newest instant matters, and it is the crash-time
+        Upserted, one row: only the newest instant matters, and it is the crash-time
         reference startup recovery reads back via :meth:`last_daemon_liveness`."""
         ...
 
-    def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
+    def set_hub_paused(self, *, paused: bool, at: datetime) -> None:
         """Mirror the hub's pause brake locally (upsert) — read back before claiming new work."""
         ...
 
     def record_local_pause(
         self,
-        runner_id: str,
         *,
         paused: bool,
         at: datetime,
@@ -327,33 +326,33 @@ class PauseService:
         self._clock = clock
         self._events = events
 
-    def set_local_pause(self, runner_id: str, *, paused: bool, by: str) -> None:
+    def set_local_pause(self, *, paused: bool, by: str) -> None:
         """Set this runner's own pause brake and its upward report, atomically — or write
         nothing when :meth:`LocalBrake.set_by_operator` finds it already in the requested state.
 
         The brake and its hub-bound report are one write: mirroring runs hub→runner only, so a brake
         never reported up would never be repaired (``tests/test_ingest_and_pause_verbs.py``)."""
-        fact = self._brake(runner_id).set_by_operator(paused=paused, by=by, at=self._clock.now())
+        fact = self._brake().set_by_operator(paused=paused, by=by, at=self._clock.now())
         if fact is not None:
-            self._write(runner_id, fact)
+            self._write(fact)
 
-    def engage(self, runner_id: str, *, by: str, reason: str) -> None:
+    def engage(self, *, by: str, reason: str) -> None:
         """Engage the local brake with a durable reason — once (:meth:`LocalBrake.engage`).
         The operator's clear (:meth:`set_local_pause` with ``paused=False``) is the only lift."""
-        fact = self._brake(runner_id).engage(by=by, reason=reason, at=self._clock.now())
+        fact = self._brake().engage(by=by, reason=reason, at=self._clock.now())
         if fact is not None:
-            self._write(runner_id, fact)
+            self._write(fact)
 
-    def _brake(self, runner_id: str) -> LocalBrake:
-        paused = self._store.local_paused(runner_id)
-        return LocalBrake(paused=paused, reason=self._store.local_pause_reason(runner_id) if paused else None)
+    def _brake(self) -> LocalBrake:
+        paused = self._store.local_paused()
+        return LocalBrake(paused=paused, reason=self._store.local_pause_reason() if paused else None)
 
-    def _write(self, runner_id: str, fact: LocalPauseFact) -> None:
-        payload: dict[str, object] = {"runner_id": runner_id, "by": fact.by, "at": iso_utc(fact.at)}
+    def _write(self, fact: LocalPauseFact) -> None:
+        # The hub attributes the report to the runner whose token pushes it, so it names no runner.
+        payload: dict[str, object] = {"by": fact.by, "at": iso_utc(fact.at)}
         if fact.reason is not None:
             payload["reason"] = fact.reason
         seq = self._store.record_local_pause(
-            runner_id,
             paused=fact.paused,
             at=fact.at,
             by=fact.by,

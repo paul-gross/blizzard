@@ -7,6 +7,7 @@ import pytest
 
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -37,10 +38,15 @@ pytestmark = pytest.mark.component
 
 _NODE_ID = "g1-build"
 _HARNESS = "claude-code"
+# Registered under the id the hand-built fixture's grant carries.
+_REGISTERED = RunnerIdentity(fx.REGISTERED.runner_id, fx.REGISTERED.runner_name, fx.at(0))
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
-    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+def _store(tmp_path, *, registered: bool = True) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    if registered:
+        store.record_runner_identity(_REGISTERED)
+    return store
 
 
 def _reader(store: SqlAlchemyRunnerStore) -> LeaseTraceFactsStore:
@@ -62,7 +68,6 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
             node_id=_NODE_ID,
             node_name="build",
             epoch=fx.EPOCH,
-            runner_id="r-1",
             retries_max=2,
             created_at=fx.at(0),
             session_name="builder",
@@ -211,6 +216,22 @@ def test_an_open_or_unknown_lease_is_absent_from_both_forms(tmp_path) -> None:  
     assert reader.lease_trace_facts("lease_unknown") is None
     assert set(reader.lease_trace_facts_for(["lease_open", "lease_unknown", fx.LEASE_ID])) == {fx.LEASE_ID}
     assert reader.lease_trace_facts_for([]) == {}
+
+
+def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path, registered=False)
+    _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
+    reader = _reader(store)
+
+    assert reader.lease_trace_facts(fx.LEASE_ID) is None
+    assert reader.lease_trace_facts_for([fx.LEASE_ID]) == {}
+
+    store.record_runner_identity(RunnerIdentity("rn_01JREGISTERED", "r-claude", fx.at(200)))
+
+    read = reader.lease_trace_facts(fx.LEASE_ID)
+    assert read is not None
+    assert (read.runner.runner_id, read.runner.runner_name) == ("rn_01JREGISTERED", "r-claude")
+    assert reader.lease_trace_facts_for([fx.LEASE_ID])[fx.LEASE_ID].lease == read.lease
 
 
 def test_each_lease_keeps_only_its_own_rows(tmp_path) -> None:  # type: ignore[no-untyped-def]

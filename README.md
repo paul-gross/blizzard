@@ -76,8 +76,8 @@ engineer's agents show up on the same board.
   alongside it, so what a worker actually saw is readable fleet-wide rather than only on the machine that ran it.
 - **Gardening.** Point packaged routines at your projects to track findings and raise proposals that answer them, so the
   codebase is tended by autonomous routine maintenance rather than by remembering to.
-- **Authentication.** Humans log in over SSO (GitHub or OIDC) with per-role permissions; runners authenticate separately
-  with an enrolled token. Both are off by default and enabled in config:
+- **Authentication.** Humans log in over SSO (GitHub or OIDC) with per-role permissions, off by default and enabled in
+  config; runners always authenticate, with the token the hub issues when it adds them:
   [`human-auth.md`](./docs/deployment/human-auth.md), [`runner-auth.md`](./docs/deployment/runner-auth.md).
 - **One box or a whole team.** Hub and runner colocated on your own machine, over the default sqlite store, is a
   complete deployment rather than a demo mode. The same two daemons become a shared hub on a server with a runner on
@@ -130,18 +130,20 @@ The packaged graphs ship in the wheel but are not minted until you say so. With 
 blizzard hub graph sync     # mint the packaged graphs; idempotent, re-run after every upgrade
 ```
 
-Set up a runner on the machine that will run the agents. The same wheel carries it:
+Set up a runner on the machine that will run the agents. The same wheel carries it, and with the hub still up:
 
 ```bash
-blizzard runner init .      # scaffold blizzard-runner.toml + its own sqlite store
+blizzard runner init .      # scaffold blizzard-runner.toml + its own sqlite store, then add this runner at the hub
 ```
+
+`init` adds the runner at the local hub above and writes the token the hub issues to `.env`; for a hub elsewhere, pass
+`--hub <url>`.
 
 Edit `blizzard-runner.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
 repos into `workspace/projects/` under the runner directory and creates one worktree per repo under each chunk's folder.
-No winter installation is needed. Set the hub URL and add a `[[workspace_repo]]` at the **end** of the config:
+No winter installation is needed. Add a `[[workspace_repo]]` at the **end** of the config:
 
 ```toml
-hub_url = "http://127.0.0.1:8421"
 workspace_provider = "basic"
 workspace_root = "workspace"           # relative to blizzard-runner.toml; empty uses this default
 max_environments = 10
@@ -170,7 +172,7 @@ blizzard hub item create --title "One-shot a TODO MVC application in Rust." --bo
 blizzard hub chunk promote 01JT…   # a minted chunk rests not_ready until promoted
 ```
 
-Local blizzard instances have no authentication by default.
+Local blizzard instances need no sign-in by default.
 
 ## 🧩 How it works
 

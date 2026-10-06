@@ -7,6 +7,7 @@ rather than read as anonymous-plus-credential."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -68,8 +69,9 @@ def _docket_entry_view(entry: DocketEntry) -> DocketEntryView:
     )
 
 
-def to_decision_view(row: GateDecision) -> DecisionView:
-    """Map a :class:`GateDecision` to its wire view (shared with the chunk detail)."""
+def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> DecisionView:
+    """Map a :class:`GateDecision` to its wire view (shared with the chunk detail), naming the
+    imposing runner out of ``runner_names``, the caller's one batched read."""
     return DecisionView(
         decision_id=row.decision_id,
         chunk_id=row.chunk_id,
@@ -84,15 +86,20 @@ def to_decision_view(row: GateDecision) -> DecisionView:
         transitioned=row.transitioned,
         docket=[_docket_entry_view(e) for e in row.docket],
         imposed_by_runner_id=row.imposed_by_runner_id,
+        imposed_by_runner_name=runner_names.get(row.imposed_by_runner_id)
+        if row.imposed_by_runner_id is not None
+        else None,
     )
 
 
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
     """The fleet's open (unresolved) decisions — gate surfacing."""
-    return OpenDecisionsResponse(
-        decisions=[to_decision_view(d) for d in services.chunks.decisions.list_open_decisions()]
+    rows = services.chunks.decisions.list_open_decisions()
+    runner_names = services.registry.names_for(
+        d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None
     )
+    return OpenDecisionsResponse(decisions=[to_decision_view(d, runner_names) for d in rows])
 
 
 @router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)

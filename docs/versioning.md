@@ -5,14 +5,14 @@ project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump m
 
 ## What counts as breaking
 
-| Surface         | A release breaks it when it…                                                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP API        | removes a route, adds a required field to a request, or removes a response field or changes its meaning                                                         |
+| Surface         | A release breaks it when it…                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP API        | removes a route, adds a required field to a request, or removes a response field or changes its meaning                                                           |
 | hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on |
-| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                               |
-| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                              |
-| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                  |
-| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                      |
+| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                                 |
+| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                |
+| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                    |
+| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                        |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
@@ -45,14 +45,14 @@ the shape for operators. A raised schema version comes with an upgrade note; sch
 
 [`contracts/egress/`](../contracts/egress/README.md) pins the shape of the `steps`, `invocations` and `events` datasets
 and the views over them that the hub exports: `dictionary.json` is the authored contract, and `golden/` and `_schema/`
-are generated from it.
-`blizzard:egress-contract` fails when the code, the writer's output, `_schema/` or the published dictionary in
-[`docs/deployment/egress.md`](./deployment/egress.md) drift from it, so a shape change is always a deliberate edit to
-the dictionary.
+are generated from it. `blizzard:egress-contract` fails when the code, the writer's output, `_schema/` or the published
+dictionary in [`docs/deployment/egress.md`](./deployment/egress.md) drift from it, so a shape change is always a
+deliberate edit to the dictionary.
 
 - **Additive.** A new nullable column, or a new value of an enumerated column, keeps the major version. A consumer must
-  tolerate values an open column does not list. The writer does not yet exercise this rule: it refuses an existing
-  `_schema/` document whose bytes differ, so the first additive column needs the writer to replace that document first.
+  tolerate values an open column does not list, and older files that lack a column added since. The export keeps writing
+  under the same major version and widens the dataset's `_schema/` document in place
+  ([The directory](./deployment/egress.md#the-directory)).
 - **Breaking.** Removing, renaming or retyping a column, or changing a meaning, writes a new major version beside the
   old (`steps/v2/`). Both are written for at least one minor release before the old one stops, as with a trace rename.
   Stopping the old major is the breaking change, and carries the `!` marker.
@@ -64,18 +64,24 @@ with runners at `0.4.x` or `0.5.x`, but not `0.3.x`.
 
 There is still no version negotiation and no minimum-runner rejection to catch a runner that has fallen outside the
 window at runtime. What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
-(`bzh:fleet-wire-additive`) diffs the declared hub↔runner surface — every `/api/fleet/...` route plus the auth
-federation routes the runner calls — between consecutive commits, and fails on a breaking change unless a
-commit the step lands carries a Conventional Commits `!` marker, in which case it reports the break rather than failing. A
-merge-base-mode run gates every pull request against its own merge-base; a deployed-mode run gates every push to
-`master` against the last commit `edge` was published from, so a hand-redeployed runner from any earlier commit keeps
-working until the next acknowledged break. [`docs/ci.md`](./ci.md) owns where each mode runs.
+(`bzh:fleet-wire-additive`) diffs the declared hub↔runner surface — every `/api/fleet/...` route, the
+`POST /api/runners` call `runner init` adds its runner through, and the auth federation routes the runner calls —
+between consecutive commits, and fails on a breaking change unless a commit the step lands carries a Conventional
+Commits `!` marker, in which case it reports the break rather than failing. A merge-base-mode run gates every pull
+request against its own merge-base; a deployed-mode run gates every push to `master` against the last commit `edge` was
+published from, so a hand-redeployed runner from any earlier commit keeps working until the next acknowledged break.
+[`docs/ci.md`](./ci.md) owns where each mode runs.
 
-One user-approved exception has been taken against it: the release that removes `RunnerView.external_subscription_usage`
-requires every runner to report slug-carrying per-subscription usage **before** the hub is deployed, so across that one
-boundary a previous-minor runner is not supported. The hub rejects a slug-less usage sample rather than defaulting it,
-and [`docs/upgrade.md`](./upgrade.md) owns the operator-facing ordering and recovery detail. The exception is scoped to
-that boundary and does not widen the policy.
+Two user-approved exceptions have been taken against it, each scoped to its own boundary; neither widens the policy. The
+release that removes `RunnerView.external_subscription_usage` requires every runner to report slug-carrying
+per-subscription usage **before** the hub is deployed, so across that boundary a previous-minor runner is not supported.
+The hub rejects a slug-less usage sample rather than defaulting it.
+
+The release that keys runners by a hub-minted id is the second. The hub takes every runner's identity from its bearer
+token, refuses a fleet call without one, and answers with the `rn_` ids its migration mints, which a previous-minor
+runner, knowing itself only by the id its config declares, cannot follow. Across that boundary the hub is upgraded first
+and every runner after it, each staying stopped until it runs the new release. [`docs/upgrade.md`](./upgrade.md) owns
+the operator-facing ordering and recovery detail of both boundaries.
 
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed

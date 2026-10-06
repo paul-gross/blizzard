@@ -64,9 +64,10 @@ class ClaimDeniedPaused(Exception):
 
 
 class ClaimDeniedUnregistered(Exception):
-    """The claiming runner holds no registration at the hub — refused before any race, in the
-    runner-refusal shape of :class:`ClaimDeniedPaused`. Neither runner brake nor its capabilities
-    can be judged without a registration, and a live runner re-registers every tick."""
+    """The claiming runner has never registered at the hub — added but never connected — refused
+    before any race, in the runner-refusal shape of :class:`ClaimDeniedPaused`. Neither runner brake
+    nor its capabilities can be judged without a registration, and a live runner re-registers every
+    tick."""
 
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is not registered at the hub")
@@ -129,9 +130,9 @@ class RekeyDeniedTerminal(Exception):
 
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
-    """Refuse a claim from a runner unregistered, retired, or paused at the hub registry, ahead of
-    any race; the registration the claim stands on otherwise."""
-    if registration is None:
+    """Refuse a claim from a runner unregistered (never connected included), retired, or paused at
+    the hub registry, ahead of any race; the registration the claim stands on otherwise."""
+    if registration is None or registration.never_connected():
         raise ClaimDeniedUnregistered(runner_id=runner_id)
     registration.refuse_if_retired(action="claim")
     if registration.hub_paused:
@@ -166,9 +167,9 @@ def first_unmet_prerequisite(
 @dataclass(frozen=True)
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
-    each its own error: ended, held route, not ``ready``, unmet prerequisite, unregistered, retired, then
-    incapable runner (a registration reporting no capabilities is incapable of everything). The runner-paused brake is
-    judged before the lock (:func:`refuse_paused_runner`)."""
+    each its own error: ended, held route, not ``ready``, unmet prerequisite, unregistered (never connected
+    included), retired, then incapable runner (a registration reporting no capabilities is incapable of
+    everything). The runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
     graph: Graph
@@ -197,7 +198,7 @@ class ClaimAdmission:
         node = facts.current_node(self.graph)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)
-        if registration is None:
+        if registration is None or registration.never_connected():
             raise ClaimDeniedUnregistered(runner_id=runner_id)
         registration.refuse_if_retired(action="claim")
         if not EligibilityCheck(self.chunk, self.graph, node, registration.capabilities).eligible:

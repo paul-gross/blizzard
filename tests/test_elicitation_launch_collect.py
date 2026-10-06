@@ -61,7 +61,6 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             node_id="nd_build",
             node_name="build",
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -238,7 +237,7 @@ def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_no
     clock.advance(ELICITATION_STALENESS_THRESHOLD + timedelta(seconds=1))
     Advance(ctx).run()  # collect — exited long ago, but classified before the staleness check
 
-    assert store.local_paused("r1") is True
+    assert store.local_paused() is True
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing for on_unpause
     lease = store.active_lease("lease_1")

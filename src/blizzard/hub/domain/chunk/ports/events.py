@@ -81,7 +81,8 @@ class IEventLogPublisher(Protocol):
         kind: str,
         chunk_id: str | None,
         runner_id: str | None,
+        runner_name: str | None = None,
         key: str | None = None,
     ) -> int:
-        """Fan out one ``event-logged`` SSE frame."""
+        """Fan out one ``event-logged`` SSE frame; ``runner_name`` is omitted from it when ``None``."""
         ...

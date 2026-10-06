@@ -55,7 +55,7 @@ describe('FleetRoutineList', () => {
     // `margin-left: auto`, the trailing-element pattern `chunk-timeline-
     // selection.css`'s `.line2 .ts` already uses).
     const ref = el.querySelector('[data-testid="gardening-routine-row-nightly"] .rt-ref');
-    expect(ref?.textContent).toBe('R-0123');
+    expect(ref?.textContent).toBe('RTN-0123');
     expect(ref?.getAttribute('title')).toBe('rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123');
   });
 

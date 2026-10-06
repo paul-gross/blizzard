@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -34,6 +34,15 @@ class ClosingCandidates:
     chunk_ids: tuple[str, ...]
     frontier: datetime | None = None
     newest: datetime | None = None
+
+
+class IReadRunnerNames(Protocol):
+    """The runners' names, for the spans that carry their ids."""
+
+    def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:
+        """Each runner's latest registered name, keyed by its id, in one batched read; an id with no
+        registration is absent."""
+        ...
 
 
 @domain_model

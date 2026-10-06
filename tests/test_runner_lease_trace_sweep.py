@@ -15,6 +15,7 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKey
+from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
@@ -35,8 +36,15 @@ class _Runner:
         self.store: SqlAlchemyRunnerStore = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
         self.clock = clock or FixedClock(fx.at(1000))
         self.exporter = InMemoryTraceExporter()
+        self.store.record_runner_identity(fx.REGISTERED)
+        self.identity = RunnerIdentityHolder(fx.REGISTERED)
         self.sweep = LeaseTraceSweep(
-            leases=self.store, outbound=self.store, exporter=self.exporter, clock=self.clock, config=config
+            leases=self.store,
+            outbound=self.store,
+            exporter=self.exporter,
+            identity=self.identity,
+            clock=self.clock,
+            config=config,
         )
         self._leases = 0
 

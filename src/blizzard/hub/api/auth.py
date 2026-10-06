@@ -13,13 +13,14 @@ from fastapi import Depends, HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
-from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.roles import dto
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID
+from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
+from blizzard.hub.domain.runners.registration import RunnerRegistration, RunnerTokenRefused, refuse_runner_token
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -31,50 +32,31 @@ _PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
 @dto
 @dataclass(frozen=True)
 class RunnerPrincipal:
-    """A bearer token resolved to the runner it belongs to."""
+    """A bearer token resolved to the runner it belongs to: its id, the name it holds, and its
+    workspace — ``None`` until the runner first registers."""
 
     runner_id: str
-    workspace_id: str
-
-
-@collaborator
-@dataclass(frozen=True)
-class AuthMode:
-    """The runner-auth rollout brake — the one place a refusal decides raise vs. log."""
-
-    value: str
-
-    @classmethod
-    def of(cls, request: Request) -> AuthMode:
-        return cls(request.app.state.config.runner_auth_mode)
-
-    @property
-    def enforcing(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
-        return self.value == RUNNER_AUTH_ENFORCE
-
-    def refuse(self, *, status_code: int, detail: str, event: str, **fields: object) -> None:
-        if self.enforcing:
-            raise HTTPException(status_code=status_code, detail=detail)
-        _log.warning(event, **fields)
+    runner_name: str
+    workspace_id: str | None
 
 
 @dataclass(frozen=True)
 class RunnerAuth:
     """One request's runner-bearer decision — resolution stays separate from what each
-    router does with it: the fleet router demands a principal, the operator routers refuse one."""
+    router does with it: the fleet router demands a principal, the operator routers refuse one,
+    and the identity route answers the verdict itself."""
 
     request: Request
     services: HubServices
-    mode: AuthMode
 
     @classmethod
     def of(cls, request: Request, services: HubServices) -> RunnerAuth:
-        return cls(request, services, AuthMode.of(request))
+        return cls(request, services)
 
     @property
     def principal(self) -> RunnerPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
         """The presented token resolved to its runner, or ``None`` when the header is
-        missing/malformed or the token does not resolve — no mode logic, no rejection."""
+        missing/malformed or the token does not resolve — no rejection."""
         scope = self.request.scope
         if _PRINCIPAL_SCOPE_KEY not in scope:
             scope[_PRINCIPAL_SCOPE_KEY] = self._resolve()
@@ -87,16 +69,16 @@ class RunnerAuth:
         registration = self.services.registry.registration_for_token_hash(TokenHash(token).hex)
         if registration is None:
             return None
-        return RunnerPrincipal(runner_id=registration.runner_id, workspace_id=registration.workspace_id)
+        return RunnerPrincipal(
+            runner_id=registration.runner_id, runner_name=registration.name, workspace_id=registration.workspace_id
+        )
 
-    def demand(self) -> RunnerPrincipal | None:
-        """The resolved principal, or ``None`` under ``warn``. Under ``enforce`` a
-        missing/malformed header or an unresolved token raises 401. A **revoked** token
-        raises 401 under every mode — checked before :meth:`AuthMode.refuse` is consulted,
-        since ``warn`` would otherwise let it through as anonymous."""
+    def demand(self) -> RunnerPrincipal:
+        """The resolved principal; a missing/malformed header, a revoked token, or one that
+        resolves to no runner raises 401 — there is no tokenless fleet call."""
         principal = self.principal
         if principal is not None:
-            annotate({CALLER: "runner", RUNNER_ID: principal.runner_id})
+            annotate({CALLER: "runner", RUNNER_ID: principal.runner_id, RUNNER_NAME: principal.runner_name})
             return principal
         token = presented_bearer(self.request)
         if token is not None and self.services.registry.is_token_revoked(TokenHash(token).hex):
@@ -104,37 +86,46 @@ class RunnerAuth:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
         reason = (
             "missing or malformed Authorization header"
-            if presented_bearer(self.request) is None
+            if token is None
             else "bearer token does not resolve to a known runner"
         )
-        self.mode.refuse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=reason,
-            event="runner auth failed",
-            reason=reason,
-            path=self.request.url.path,
-        )
-        return None
+        _log.warning("runner auth failed", reason=reason, path=self.request.url.path)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
+
+    def identify(self) -> RunnerRegistration:
+        """The runner the presented token names, or :class:`RunnerTokenRefused` saying why the hub
+        refuses it — ``missing`` with no token, else the verdict of :func:`refuse_runner_token` over
+        the registration holding the token's hash and, when none does, the runner a revoked hash was
+        issued to. Reads only."""
+        token = presented_bearer(self.request)
+        if token is None:
+            raise RunnerTokenRefused(RunnerTokenRefusalReason.MISSING)
+        token_hash = TokenHash(token).hex
+        registry = self.services.registry
+        current = registry.registration_for_token_hash(token_hash)
+        revoked_runner_id = registry.revoked_token_runner_id(token_hash) if current is None else None
+        revoked_for = registry.get_runner(revoked_runner_id) if revoked_runner_id is not None else None
+        return refuse_runner_token(current, revoked_for=revoked_for)
 
     def refuse_runner(self) -> None:
-        """Refuse a runner's token on an operator router — valid only on the fleet router.
-        An unresolvable token is not flagged: that is what an anonymous
-        operator call looks like."""
+        """Refuse a runner's token on an operator router with 403 — valid only on the fleet
+        router. An unresolvable token is not flagged: that is what an anonymous operator call
+        looks like."""
         principal = self.principal
         if principal is None:
             return
-        self.mode.refuse(
+        _log.warning(
+            "runner token presented on operator verb", runner_id=principal.runner_id, path=self.request.url.path
+        )
+        raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"runner token for {principal.runner_id!r} is not valid on an operator verb",
-            event="runner token presented on operator verb",
-            runner_id=principal.runner_id,
-            path=self.request.url.path,
         )
 
 
 def require_runner_principal(
     request: Request, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerPrincipal | None:
+) -> RunnerPrincipal:
     return RunnerAuth.of(request, services).demand()
 
 

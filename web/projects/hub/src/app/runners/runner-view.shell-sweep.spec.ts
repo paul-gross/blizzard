@@ -34,6 +34,9 @@ const NOW = new Date().toISOString();
 
 const ROW: RunnerRow = {
   runner_id: 'rn_paced',
+  runner_name: 'paced',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -66,6 +69,9 @@ const ROW: RunnerRow = {
 // the panel's monospace face, which is what makes the alignment claim falsifiable.
 const UNEQUAL_LABEL_ROW: RunnerRow = {
   runner_id: 'rn_unequal',
+  runner_name: 'unequal',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -94,6 +100,9 @@ const UNEQUAL_LABEL_ROW: RunnerRow = {
 
 const SUBSCRIPTION_ROW: RunnerRow = {
   runner_id: 'rn_subs',
+  runner_name: 'subs',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -135,6 +144,9 @@ const SUBSCRIPTION_ROW: RunnerRow = {
 
 const MULTI_HARNESS_ROW: RunnerRow = {
   runner_id: 'rn_multi_harness',
+  runner_name: 'multi-harness',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -154,6 +166,9 @@ const MULTI_HARNESS_ROW: RunnerRow = {
 
 const GATED_ROW: RunnerRow = {
   runner_id: 'rn_gated',
+  runner_name: 'gated',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -170,6 +185,9 @@ const GATED_ROW: RunnerRow = {
 
 const EMPTY_SAMPLE_ROW: RunnerRow = {
   runner_id: 'rn_empty_sample',
+  runner_name: 'empty-sample',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -195,6 +213,9 @@ const EMPTY_SAMPLE_ROW: RunnerRow = {
 
 const LAPSED_ROW: RunnerRow = {
   runner_id: 'rn_lapsed',
+  runner_name: 'lapsed',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -225,6 +246,9 @@ const LAPSED_ROW: RunnerRow = {
 // falsifiable against.
 const FRESHNESS_ROW: RunnerRow = {
   runner_id: 'rn_freshness',
+  runner_name: 'freshness',
+  added_at: NOW,
+  connection: 'online',
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
@@ -279,6 +303,70 @@ async function render(rows: readonly RunnerRow[] = [ROW]) {
   await fixture.whenStable();
   return fixture;
 }
+
+describe('runner registry identity layout shell sweep (web:shell-sweep)', () => {
+  const SHARED_NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
+  const IDENTITY_ROWS: readonly RunnerRow[] = [
+    { ...ROW, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: SHARED_NAME, subscriptionPaces: [] },
+    { ...ROW, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runner_name: SHARED_NAME, subscriptionPaces: [] },
+    {
+      ...ROW,
+      runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNNEW1',
+      runner_name: SHARED_NAME,
+      connection: 'never_connected',
+      online: false,
+      workspace_id: null,
+      registered_at: null,
+      last_seen_at: null,
+      capabilities: [],
+      subscriptionPaces: [],
+    },
+  ];
+
+  it.each([390, 1280])('shows each row its name and full id, never connected included, with no horizontal overflow at %ipx', async (width) => {
+    const fixture = await render(IDENTITY_ROWS);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const ids = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="runner-id"]')).map((e) => e.textContent?.trim());
+      expect(ids).toEqual(IDENTITY_ROWS.map((r) => r.runner_id));
+      expect(root.querySelector('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"] [data-testid="runner-never-connected"]')).not.toBeNull();
+      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
+      expect(panel.scrollWidth, `panel overflows horizontally at ${width}px`).toBeLessThanOrEqual(panel.clientWidth);
+      for (const row of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="runner"]'))) {
+        expect(row.scrollWidth, `runner row overflows horizontally at ${width}px`).toBeLessThanOrEqual(row.clientWidth);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('draws the never-connected badge as a bordered kit pill set smaller than the row text, not bare row text', async () => {
+    await loadDesignTokens();
+    const fixture = await render(IDENTITY_ROWS);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(1280, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const row = root.querySelector<HTMLElement>('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"]')!;
+      const badge = getComputedStyle(row.querySelector<HTMLElement>('[data-testid="runner-never-connected"] .badge')!);
+      expect(badge.borderTopStyle).toBe('solid');
+      expect(parseFloat(badge.borderTopWidth)).toBeGreaterThan(0);
+      expect(parseFloat(badge.fontSize)).toBeLessThan(parseFloat(getComputedStyle(row).fontSize));
+    } finally {
+      root.remove();
+    }
+  });
+});
 
 describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzard#218)', () => {
   it('stacks the utilization and elapsed bars for both windows with no horizontal overflow at ~390px', async () => {

@@ -772,6 +772,10 @@ export type ChunkSummary = {
      * Runner Id
      */
     runner_id?: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     status: ChunkStatus;
     /**
      * Terminal
@@ -980,6 +984,10 @@ export type DecisionView = {
      * Imposed By Runner Id
      */
     imposed_by_runner_id?: string | null;
+    /**
+     * Imposed By Runner Name
+     */
+    imposed_by_runner_name?: string | null;
     /**
      * Node Id
      */
@@ -2319,6 +2327,10 @@ export type QuestionView = {
      */
     runner_id: string;
     /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+    /**
      * Session Id
      */
     session_id?: string | null;
@@ -2506,6 +2518,10 @@ export type RouteView = {
      */
     runner_id: string;
     /**
+     * Runner Name
+     */
+    runner_name?: string | null;
+    /**
      * Workspace Id
      */
     workspace_id: string;
@@ -2566,7 +2582,11 @@ export type RunnerControlView = {
     /**
      * Runner Id
      */
-    runner_id: string;
+    runner_id: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
 };
 
 /**
@@ -2610,7 +2630,11 @@ export type RunnerStatusView = {
     /**
      * Runner Id
      */
-    runner_id: string;
+    runner_id: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * Workspace Id
      */
@@ -3388,7 +3412,8 @@ export type ValidationError = {
  *
  * Who filed a hub-owned work item, legible for display — ``user_id``
  * and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
- * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``.
+ * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``, with
+ * ``runner_name`` the proposing runner's latest registered name when the registry holds it.
  */
 export type WorkItemAuthorView = {
     /**
@@ -3411,6 +3436,10 @@ export type WorkItemAuthorView = {
      * Runner Id
      */
     runner_id?: string | null;
+    /**
+     * Runner Name
+     */
+    runner_name?: string | null;
     /**
      * User Id
      */

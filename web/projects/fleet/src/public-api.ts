@@ -156,6 +156,7 @@ export type {
   RunDeltaView,
   RunRowView,
   RunnerCapability,
+  RunnerRegistryView,
   RunnerView,
   ScopeView,
   TrendView,
@@ -165,6 +166,7 @@ export type {
 } from './lib/api/hub';
 export {
   RecordKind,
+  RunnerConnection,
   createRepositoryApiRepositoriesPost,
   createSecretApiSecretsPost,
   createWorkSourceApiWorkSourcesPost,

@@ -43,7 +43,6 @@ def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )
@@ -70,7 +69,6 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )
@@ -223,7 +221,6 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )

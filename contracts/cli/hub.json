@@ -5450,8 +5450,50 @@
     },
     "runner": {
       "commands": {
+        "add": {
+          "help": "Add a runner under NAME; prints its hub-minted id and bearer token exactly once.\n\nThe runner stays never connected until it first registers with that token; from then on its\nown configured name replaces NAME. Names need not be unique. `blizzard runner init` adds a\nrunner and installs its token in one step.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner add",
+          "short_help": "Add a runner under NAME; prints its hub-minted id and bearer token exactly once."
+        },
         "enroll": {
-          "help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. Re-running\nrotates: the old token stops resolving immediately. RUNNER_ID must already be\nregistered at the hub (404 otherwise) and not retired (409 \u2014 `reinstate` it first).",
+          "help": "Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. The token it replaces stops resolving\nimmediately, the one `add` minted included. RUNNER_ID must already be added at the hub\n(404 otherwise) and not retired (409 \u2014 `reinstate` it first).",
           "params": [
             {
               "hidden": false,
@@ -5490,10 +5532,10 @@
             }
           ],
           "path": "hub runner enroll",
-          "short_help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once."
+          "short_help": "Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once."
         },
         "list": {
-          "help": "The fleet registry \u2014 every runner with derived liveness + paused state.\n\nExcludes a retired runner unless --all.",
+          "help": "The fleet registry \u2014 every added runner, oldest first: its id, name, connection and paused state.\n\nA runner added but never registered shows as never-connected. Excludes a retired runner\nunless --all.",
           "params": [
             {
               "help": "Include retired runners, marked.",
@@ -5533,10 +5575,10 @@
             }
           ],
           "path": "hub runner list",
-          "short_help": "The fleet registry \u2014 every runner with derived liveness + paused state."
+          "short_help": "The fleet registry \u2014 every added runner, oldest first: its id, name, connection and paused state."
         },
         "pause": {
-          "help": "Pause a runner \u2014 it stops claiming new work; in-flight chunks run on.",
+          "help": "Pause runner RUNNER_ID \u2014 it stops claiming new work; in-flight chunks run on.",
           "params": [
             {
               "hidden": false,
@@ -5587,10 +5629,10 @@
             }
           ],
           "path": "hub runner pause",
-          "short_help": "Pause a runner \u2014 it stops claiming new work; in-flight chunks run on."
+          "short_help": "Pause runner RUNNER_ID \u2014 it stops claiming new work; in-flight chunks run on."
         },
         "reinstate": {
-          "help": "Reinstate a retired runner \u2014 it stays unenrolled; `enroll` it afresh.",
+          "help": "Reinstate retired runner RUNNER_ID \u2014 it stays unenrolled; `enroll` it afresh.",
           "params": [
             {
               "hidden": false,
@@ -5641,10 +5683,10 @@
             }
           ],
           "path": "hub runner reinstate",
-          "short_help": "Reinstate a retired runner \u2014 it stays unenrolled; `enroll` it afresh."
+          "short_help": "Reinstate retired runner RUNNER_ID \u2014 it stays unenrolled; `enroll` it afresh."
         },
         "resume": {
-          "help": "Resume a paused runner \u2014 it claims work again on its next pull.",
+          "help": "Resume paused runner RUNNER_ID \u2014 it claims work again on its next pull.",
           "params": [
             {
               "hidden": false,
@@ -5695,10 +5737,10 @@
             }
           ],
           "path": "hub runner resume",
-          "short_help": "Resume a paused runner \u2014 it claims work again on its next pull."
+          "short_help": "Resume paused runner RUNNER_ID \u2014 it claims work again on its next pull."
         },
         "retire": {
-          "help": "Retire a runner \u2014 revoke its token and refuse its claims and registrations.\n\nRefused (409) while it holds chunks unless --force, which releases them. Re-running\nfinishes a partial release. Stop the runner process too: the hub refuses it from here on.",
+          "help": "Retire runner RUNNER_ID \u2014 revoke its token and refuse its claims and registrations.\n\nRefused (409) while it holds chunks unless --force, which releases them. Re-running\nfinishes a partial release. Stop the runner process too: the hub refuses it from here on.",
           "params": [
             {
               "hidden": false,
@@ -5761,10 +5803,10 @@
             }
           ],
           "path": "hub runner retire",
-          "short_help": "Retire a runner \u2014 revoke its token and refuse its claims and registrations."
+          "short_help": "Retire runner RUNNER_ID \u2014 revoke its token and refuse its claims and registrations."
         },
         "revoke-token": {
-          "help": "Revoke a runner's token \u2014 it stays registered, and is refused until re-enrolled.",
+          "help": "Revoke runner RUNNER_ID's token \u2014 it stays added, and is refused until re-enrolled.",
           "params": [
             {
               "hidden": false,
@@ -5815,10 +5857,10 @@
             }
           ],
           "path": "hub runner revoke-token",
-          "short_help": "Revoke a runner's token \u2014 it stays registered, and is refused until re-enrolled."
+          "short_help": "Revoke runner RUNNER_ID's token \u2014 it stays added, and is refused until re-enrolled."
         },
         "show": {
-          "help": "One runner's derived liveness + paused state, symmetric with ``runner list``.",
+          "help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``.",
           "params": [
             {
               "hidden": false,
@@ -5857,13 +5899,13 @@
             }
           ],
           "path": "hub runner show",
-          "short_help": "One runner's derived liveness + paused state, symmetric with ``runner list``."
+          "short_help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``."
         }
       },
-      "help": "Operator verbs over one runner: identity, liveness, its pause brake, and retirement.",
+      "help": "Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement.\n\nEvery verb but `add` and `list` takes a runner's hub-minted id, which `list` shows beside each\nname. A name is display-only and never resolves to a runner.",
       "params": [],
       "path": "hub runner",
-      "short_help": "Operator verbs over one runner: identity, liveness, its pause brake, and retirement."
+      "short_help": "Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement."
     },
     "scope": {
       "commands": {

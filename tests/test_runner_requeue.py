@@ -73,7 +73,6 @@ def _seed_escalated_chunk(  # type: ignore[no-untyped-def]
             node_id=node_id,
             node_name=node_name,
             epoch=epoch,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -133,7 +132,6 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path) -> None:  # t
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )

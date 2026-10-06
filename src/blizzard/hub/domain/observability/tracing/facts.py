@@ -238,3 +238,5 @@ class StepFacts:
     work_refs: tuple[str, ...] = ()
     #: The distinct work sources behind ``work_refs``, in ref order — read from the rows, never parsed from labels.
     work_sources: tuple[str, ...] = ()
+    #: Each named runner's registered name, keyed by runner id; one the hub holds no registration for is absent.
+    runner_names: dict[str, str] = field(default_factory=dict)

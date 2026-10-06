@@ -28,11 +28,13 @@ from blizzard.wire.envelope import (
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
 
-def completion_of(submission: CompletionSubmission) -> Completion:
+def completion_of(submission: CompletionSubmission, *, runner_id: str) -> Completion:
+    """The submission as the domain reads it, attributed to ``runner_id`` — the submitting bearer
+    token's runner; the body's own ``runner_id`` is never read."""
     return Completion(
         choice=submission.choice,
         epoch=submission.epoch,
-        runner_id=submission.runner_id,
+        runner_id=runner_id,
         from_node_id=submission.from_node_id,
         check_results=tuple(CheckOutcome(command=c.command, passed=c.passed) for c in submission.check_results),
         artifacts=_artifacts(submission.artifacts),
@@ -43,11 +45,13 @@ def completion_of(submission: CompletionSubmission) -> Completion:
     )
 
 
-def gate_submission_of(submission: DecisionSubmission) -> GateSubmission:
+def gate_submission_of(submission: DecisionSubmission, *, runner_id: str) -> GateSubmission:
+    """The submission as the domain reads it, attributed to ``runner_id`` — the submitting bearer
+    token's runner; the body's own ``runner_id`` is never read."""
     return GateSubmission(
         from_node_id=submission.from_node_id,
         epoch=submission.epoch,
-        runner_id=submission.runner_id,
+        runner_id=runner_id,
         artifacts=_artifacts(submission.artifacts),
         proposals=_proposals(submission.proposals),
         route_token=submission.route_token,

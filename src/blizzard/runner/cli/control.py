@@ -35,17 +35,24 @@ def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str 
     with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url) as daemon:
         view = daemon.patch("/api/runner", json_body={"paused": paused, "by": by}).json()
     if paused:
-        click.echo(f"runner {view['runner_id']} is now locally paused — it starts no new workers")
+        click.echo(f"runner {view['runner_name']} is now locally paused — it starts no new workers")
         if view.get("hub_paused"):
-            click.echo(
-                f"note: it is also paused at the hub — `blizzard hub runner resume {view['runner_id']}` clears that one"
-            )
+            click.echo(_hub_pause_note("is also", view.get("runner_id")))
         return
-    click.echo(f"runner {view['runner_id']} is no longer locally paused")
+    click.echo(f"runner {view['runner_name']} is no longer locally paused")
     if view.get("hub_paused"):
-        click.echo(
-            f"note: it stays paused at the hub — clear that with `blizzard hub runner resume {view['runner_id']}`"
+        click.echo(_hub_pause_note("stays", view.get("runner_id")))
+
+
+def _hub_pause_note(stance: str, runner_id: str | None) -> str:
+    """The note that the hub's brake is on too, naming the verb that clears it by the runner's id — which
+    the runner knows only from its first registration on."""
+    if runner_id is None:
+        return (
+            f"note: it {stance} paused at the hub — this runner has not registered yet, so find its id in"
+            " `blizzard hub runner list` to resume it there"
         )
+    return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
 @dto
@@ -105,7 +112,9 @@ def status(directory: str, runner_url: str | None) -> None:
         # Not raised on: a runner that cannot serve its trace status still renders every other section.
         traces_resp = daemon.send("get", "/api/traces/status")
 
-    click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
+    click.echo(
+        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'})  workspace={view['workspace_id']}"
+    )
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"

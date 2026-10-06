@@ -97,7 +97,6 @@ def completion_submission(completion: Completion) -> CompletionSubmission:
     return CompletionSubmission(
         choice=completion.choice,
         epoch=completion.epoch,
-        runner_id=completion.runner_id,
         from_node_id=completion.from_node_id,
         check_results=[CheckResult(command=c.command, passed=c.passed) for c in completion.check_results],
         artifacts=[_submitted(a) for a in completion.artifacts],
@@ -111,7 +110,6 @@ def completion_of(wire: CompletionSubmission) -> Completion:
     return Completion(
         choice=wire.choice,
         epoch=wire.epoch,
-        runner_id=wire.runner_id,
         from_node_id=wire.from_node_id,
         check_results=[CheckVerdict(command=c.command, passed=c.passed) for c in wire.check_results],
         artifacts=[_artifact_of(a) for a in wire.artifacts],
@@ -125,7 +123,6 @@ def decision_submission(gate: GateSubmission) -> DecisionSubmission:
     return DecisionSubmission(
         from_node_id=gate.from_node_id,
         epoch=gate.epoch,
-        runner_id=gate.runner_id,
         artifacts=[_submitted(a) for a in gate.artifacts],
         route_token=gate.route_token,
         lease_id=gate.lease_id,
@@ -136,7 +133,6 @@ def gate_submission_of(wire: DecisionSubmission) -> GateSubmission:
     return GateSubmission(
         from_node_id=wire.from_node_id,
         epoch=wire.epoch,
-        runner_id=wire.runner_id,
         artifacts=[_artifact_of(a) for a in wire.artifacts],
         route_token=wire.route_token,
         lease_id=wire.lease_id,

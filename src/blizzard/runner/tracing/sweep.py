@@ -22,6 +22,7 @@ from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump,
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository, event_payload
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
@@ -92,7 +93,9 @@ def skipped_window_report(jump: CursorJump[LeaseCursorKey], *, unsent: bool) -> 
 
 
 class LeaseTraceSweep:
-    """Select, assemble, export, advance — the cursor moves only once the exporter accepts."""
+    """Select, assemble, export, advance — the cursor moves only once the exporter accepts. Before the
+    runner's first registration it holds: a span has no runner id to carry yet, and the leases closing
+    meanwhile wait for one rather than being passed over."""
 
     def __init__(
         self,
@@ -100,10 +103,12 @@ class LeaseTraceSweep:
         leases: IWriteLeaseTraces,
         outbound: IWriteOutboundRepository,
         exporter: ITraceExporter,
+        identity: ICurrentRunnerIdentity,
         clock: IClock,
         config: TracingConfig,
     ) -> None:
         self._leases = leases
+        self._identity = identity
         self._outbound = outbound
         self._exporter = exporter
         self._clock = clock
@@ -117,6 +122,8 @@ class LeaseTraceSweep:
         self._cursor_started = False
 
     def sweep(self) -> None:
+        if self._identity.current() is None:
+            return
         now = self._clock.now()
         if not self._latch.is_due(now):
             return

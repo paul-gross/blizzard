@@ -1,4 +1,9 @@
 {
+  "added": {
+    "runner_id": "runner-a",
+    "kind": "added",
+    "by": "operator"
+  },
   "heartbeat": {
     "runner_id": "runner-a",
     "kind": "heartbeat"
@@ -27,5 +32,10 @@
     "kind": "token-revoked",
     "by": "operator",
     "key": "runner_token_revocations:1"
+  },
+  "named-runner": {
+    "runner_id": "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "runner_name": "r-claude",
+    "kind": "registered"
   }
 }

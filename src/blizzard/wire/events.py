@@ -17,7 +17,7 @@ from blizzard.foundation.event_log import EventLogSeverity
 class EventView(BaseModel):
     """One operational event on the wire — an ``event_log`` row or a projected open
     escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
-    event; ``runner_id`` is absent for a projected escalation (``null``,
+    event; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,
     never ``""``); ``detail`` is the event-specific JSON payload."""
 
     id: int
@@ -25,6 +25,7 @@ class EventView(BaseModel):
     severity: EventLogSeverity
     kind: str
     runner_id: str | None = None
+    runner_name: str | None = None
     chunk_id: str | None = None
     lease_id: str | None = None
     node_name: str | None = None

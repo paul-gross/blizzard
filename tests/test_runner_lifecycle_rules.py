@@ -125,7 +125,6 @@ def _lease(*, lease_id: str = "lease_1", epoch: int = 1, spawned: bool = True, h
         node_id="nd_build",
         node_name="build",
         epoch=epoch,
-        runner_id=_ME,
         retries_max=2,
         created_at=_NOW,
         pid=100 if spawned else None,

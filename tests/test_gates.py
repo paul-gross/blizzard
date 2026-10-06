@@ -282,8 +282,9 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
     assert decision["node_name"] == "build"
     assert {c["name"] for c in decision["choices"]} == {"pass", "fail"}
     assert decision["imposed_by_runner_id"] == "r1"  # the submitting runner's configuration imposed it
+    assert decision["imposed_by_runner_name"] == "r1"  # the runner's registered name, added under its id
     listed = hub.client.get("/api/decisions").json()["decisions"]
-    assert [d["imposed_by_runner_id"] for d in listed] == ["r1"]
+    assert [(d["imposed_by_runner_id"], d["imposed_by_runner_name"]) for d in listed] == [("r1", "r1")]
     # The gated step's artifact committed atomically with the decision.
     assert any(a["name"] == "acme/widget" for a in detail["artifacts"])
 

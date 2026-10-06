@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel, KitSlotBar, type Tone, formatSeenAgo } from 'fleet';
+import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel, KitSlotBar, RunnerConnection, type Tone } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
-import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
@@ -72,16 +72,8 @@ export class RunnerPanelView {
 
   protected readonly toggleHint = runnerToggleHint;
 
-  /**
-   * A compact "seen 12s ago" liveness label from `last_seen_at` (`bzh:utc-instants`).
-   *
-   * Liveness is decided where both instants share one clock — the hub, via `online`
-   * (`derive_online` compares `last_seen_at` against the hub's own clock); this
-   * label is decoration computed against the *browser's* clock, so it defers to the
-   * shared skew-tolerant `formatSeenAgo` (`when.ts`) rather than re-deriving its own
-   * tolerance window.
-   */
-  protected seenLabel(row: RunnerRow): string {
-    return formatSeenAgo(row.last_seen_at, row.online, row.nowMs);
-  }
+  protected readonly seenLabel = runnerSeenLabel;
+
+  /** The wire's connection vocabulary, for the row's connection classes and badge. */
+  protected readonly connection = RunnerConnection;
 }

@@ -1,18 +1,21 @@
-"""Fleet-registry domain — runner registration, liveness, and the pause brake.
+"""Fleet-registry domain — runner addition, registration, liveness, and the pause brake.
 
-Derived rather than stored: **liveness** (``last_seen_at`` against a staleness threshold, at read time),
-**paused** and **retired** (the newest appended fact), and **external subscription usage** (by slug, against
-its own wider threshold). ``token_hash`` is the one mutable exception; a revoked hash is kept as a fact."""
+A runner's ``runner_id`` is the hub-minted ``rn_`` id, its one identity. Derived rather than stored:
+**liveness** (``last_seen_at`` against a staleness threshold, at read time), **never connected** (no
+``registered_at``), **paused** and **retired** (the newest appended fact), and **external subscription
+usage**. ``token_hash`` is the one mutable exception; a revoked hash is kept as a fact."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
@@ -36,9 +39,9 @@ CREDENTIAL_LAPSED_CONDITION = SampleMissReason.CREDENTIAL_LAPSED
 
 
 class RunnerState(StrEnum):
-    """A registration's lifecycle state, derived from its row. An unregistered runner has no row
-    and so no state: every operator verb on it is an unknown id, and a runner's own contact passes
-    the retired guard with nothing to be retired."""
+    """A registration's lifecycle state, derived from its row. A runner the hub never added has no
+    row and so no state: every operator verb on it is an unknown id. An added runner that has never
+    registered has a row and a state, and is never connected (:meth:`RunnerRegistration.never_connected`)."""
 
     UNENROLLED = "unenrolled"
     ENROLLED = "enrolled"
@@ -112,12 +115,32 @@ class TokenRevocation:
 @dataclass(frozen=True)
 class TokenRotation:
     """Enroll a fresh token hash. Any hash it replaces is recorded as revoked in the same write,
-    so rotating is revoking: the old token is refused under every runner-auth mode."""
+    so rotating is revoking: the old token is refused from that instant."""
 
     runner_id: str
     token_hash: str
     at: datetime
     by: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerAddition:
+    """Add a runner: a never-connected registration under ``runner_id`` and its initial ``name``,
+    holding ``token_hash`` — the hash of the bearer token minted with the id — recorded as added
+    ``at`` by ``by``."""
+
+    runner_id: str
+    name: str
+    token_hash: str
+    at: datetime
+    by: str
+
+
+def declared_name(name: str | None) -> str | None:
+    """The name a registration records: ``name`` without its surrounding whitespace, or ``None`` —
+    keeping the name the registry already holds — when the runner declares none or a blank one."""
+    return (name or "").strip() or None
 
 
 @domain_model
@@ -129,10 +152,16 @@ class RunnerRegistration:
     claiming?" wants both. ``locally_paused_by``/``_reason`` populate only alongside a *true* brake."""
 
     runner_id: str
-    workspace_id: str
-    registered_at: datetime
-    last_seen_at: datetime
+    #: The runner's display name — not unique; nothing keys on it.
+    name: str
+    added_at: datetime
     hub_paused: bool
+    #: Who added the runner; ``None`` when the hub recorded no one.
+    added_by: str | None = None
+    #: These three stay ``None`` until the runner first registers (:meth:`never_connected`).
+    workspace_id: str | None = None
+    registered_at: datetime | None = None
+    last_seen_at: datetime | None = None
     locally_paused: bool = False
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
@@ -163,6 +192,11 @@ class RunnerRegistration:
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
 
+    def never_connected(self) -> bool:
+        """Whether the runner was added but has never registered — no workspace, capabilities,
+        or liveness yet. A connection condition, orthogonal to :meth:`state`."""
+        return self.registered_at is None
+
     def state(self) -> RunnerState:
         """The lifecycle state this row derives: retired first, then whether a token is enrolled."""
         if self.retired:
@@ -175,10 +209,15 @@ class RunnerRegistration:
 
     def refuse_if_retired(self, *, action: str) -> None:
         """Raise :class:`RunnerRetired` when this runner is retired — the one guard every
-        operation a retired runner must not perform enforces, keyed on the id so a token-less
-        caller under ``warn`` is refused too."""
+        operation a retired runner must not perform enforces, whatever token admitted the caller."""
         if not self.permits(RunnerVerb.CONTACT):
             raise RunnerRetired(self.runner_id, action=action)
+
+    def refuse_if_never_connected(self) -> None:
+        """Raise :class:`RunnerNeverConnected` when the runner has never registered — its
+        declarative state (workspace, capabilities, liveness) does not exist yet."""
+        if self.never_connected():
+            raise RunnerNeverConnected(self.runner_id)
 
     def enroll(self, token_hash: str, *, by: str, at: datetime) -> TokenRotation:
         """Mint (or rotate to) ``token_hash``. A retired runner raises :class:`RunnerRetired`:
@@ -188,7 +227,7 @@ class RunnerRegistration:
         return TokenRotation(runner_id=self.runner_id, token_hash=token_hash, at=at, by=by)
 
     def revoke_token(self, *, by: str, at: datetime) -> TokenRevocation:
-        """Revoke the held token, leaving the runner registered. Raises :class:`RunnerNotEnrolled`
+        """Revoke the held token, leaving the runner added. Raises :class:`RunnerNotEnrolled`
         when it holds none — a retired runner's is normally revoked at retire, but one an enroll
         racing the retire left behind is still revocable."""
         if not self.permits(RunnerVerb.REVOKE_TOKEN) or self.token_hash is None:
@@ -266,11 +305,22 @@ class RunnerLiveness:
 
     @classmethod
     def of(cls, registration: RunnerRegistration, *, now: datetime, threshold: timedelta) -> RunnerLiveness:
-        """Online iff the runner was seen within ``threshold`` of ``now``.
+        """Online iff the runner has registered and was seen within ``threshold`` of ``now``. A
+        never-connected runner is offline whatever its ``last_seen_at`` holds, so its liveness and
+        :meth:`connection` never disagree.
 
-        Both operands are coerced UTC-aware via :func:`~blizzard.foundation.store.utc.as_utc`
-        (idempotent) rather than depending on unnamed adapter behavior (``bzh:domain-core``)."""
-        return cls(registration, (as_utc(now) - as_utc(registration.last_seen_at)) <= threshold)
+        Both operands are coerced UTC-aware (``bzh:domain-core``)."""
+        seen = registration.last_seen_at
+        if registration.never_connected() or seen is None:
+            return cls(registration, False)
+        return cls(registration, (as_utc(now) - as_utc(seen)) <= threshold)
+
+    def connection(self) -> RunnerConnection:
+        """The runner's connection condition: never connected before its first registration,
+        else online or offline by its liveness."""
+        if self.registration.never_connected():
+            return RunnerConnection.NEVER_CONNECTED
+        return RunnerConnection.ONLINE if self.online else RunnerConnection.OFFLINE
 
 
 @domain_model
@@ -473,12 +523,22 @@ class IReadRunnerRegistry(Protocol):
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
     def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
-        """Every registration, oldest first — retired runners only when ``include_retired``."""
+        """Every registration, oldest added first — retired runners only when ``include_retired``."""
+        ...
+
+    def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:
+        """Each named runner's current name, keyed by its id, in one batched read; an id with no
+        registration is absent from the result, never mapped to a placeholder."""
         ...
 
     def is_token_revoked(self, token_hash: str) -> bool:
-        """Whether ``token_hash`` was ever revoked — a revoked token is refused as revoked,
-        never merely left unresolved, since ``warn`` tolerates an unresolved one."""
+        """Whether ``token_hash`` was ever revoked — revoked outright, or rotated away from."""
+        ...
+
+    def revoked_token_runner_id(self, token_hash: str) -> str | None:
+        """The runner a revoked ``token_hash`` was issued to — the one its newest revocation names —
+        or ``None`` when the hash was never revoked; one hash-indexed read. How a refused token
+        names the runner it belonged to (:func:`refuse_runner_token`)."""
         ...
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
@@ -499,10 +559,17 @@ class IReadRunnerRegistry(Protocol):
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     """Read-write registry access — only the domain layer depends on this variant."""
 
-    def upsert_registration(
+    def add(self, addition: RunnerAddition) -> None:
+        """Insert ``addition`` as a never-connected registration — its id, name, and token hash, with
+        ``added_at``/``added_by`` from its ``at``/``by`` and no workspace, registration, or contact.
+        The id is the caller's: minted in production, chosen by a test."""
+        ...
+
+    def record_registration(
         self,
         runner_id: str,
         *,
+        name: str | None = None,
         workspace_id: str,
         env_capacity: int | None,
         public_url: str | None = None,
@@ -512,17 +579,18 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         gates: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
-        """Register a runner (idempotent upsert), refreshing ``last_seen_at``; returns True if the row
-        was newly created. ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``,
-        ``subscriptions``, and ``gates`` are written on **both** branches, so a change converges on
-        re-registration; absent writes verbatim to null/empty. ``subscriptions`` alone keeps ``None``
-        vs ``()`` distinct, unlike ``capabilities``, which collapses both to null."""
+        """Record a registration of the added runner ``runner_id``, refreshing ``last_seen_at``; returns
+        True on its first one, which also stamps ``registered_at``. ``name`` replaces the held name
+        unless ``None``; every other field is written on **every** registration, absent ones verbatim
+        to null/empty, and ``subscriptions`` alone keeps ``None`` vs ``()`` distinct. A ``runner_id``
+        with no row raises :class:`LookupError` — a registration only ever follows an add."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
         """Refresh a registered runner's ``last_seen_at`` (the heartbeat).
 
-        Returns False if the runner is unknown — a heartbeat before registration."""
+        Returns False, writing nothing, if the runner is unknown or has never registered — a
+        heartbeat before registration, which must not make a never-connected runner read live."""
         ...
 
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
@@ -577,7 +645,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
 
 class RunnerRetired(Exception):
-    """The runner is retired — refused regardless of auth mode, keyed on its id."""
+    """The runner is retired — refused whatever token admitted the caller, keyed on its id."""
 
     def __init__(self, runner_id: str, *, action: str) -> None:
         super().__init__(f"runner {runner_id} is retired — {action} refused; `reinstate` it first")
@@ -602,6 +670,14 @@ class RunnerNotEnrolled(Exception):
         self.runner_id = runner_id
 
 
+class RunnerNeverConnected(Exception):
+    """A read of a runner's declarative state found a runner added but never registered."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} has not registered")
+        self.runner_id = runner_id
+
+
 class RunnerNotRetired(Exception):
     """A reinstate targeted a runner that is not retired."""
 
@@ -618,10 +694,40 @@ class UnregisteredRedirect(Exception):
         self.runner_id = runner_id
 
 
+class RunnerTokenRefused(Exception):
+    """A presented runner bearer token names no runner the hub admits — ``reason`` says why, and
+    ``runner_id`` names the runner a revoked or retired token was issued to."""
+
+    def __init__(self, reason: RunnerTokenRefusalReason, *, runner_id: str | None = None) -> None:
+        named = "" if runner_id is None else f" for runner {runner_id}"
+        super().__init__(f"runner token refused{named}: {reason.value}")
+        self.reason = reason
+        self.runner_id = runner_id
+
+
+def refuse_runner_token(
+    current: RunnerRegistration | None, *, revoked_for: RunnerRegistration | None
+) -> RunnerRegistration:
+    """Refuse a presented runner bearer token with :class:`RunnerTokenRefused`; the runner it
+    names otherwise. ``current`` is the registration holding the token's hash as its current one;
+    ``revoked_for``, read only when none does, is the runner a revoked hash was issued to.
+
+    Retirement outranks revocation, even while the token's hash is still current."""
+    if current is not None:
+        if current.state() is RunnerState.RETIRED:
+            raise RunnerTokenRefused(RunnerTokenRefusalReason.RETIRED, runner_id=current.runner_id)
+        return current
+    if revoked_for is None:
+        raise RunnerTokenRefused(RunnerTokenRefusalReason.UNKNOWN)
+    if revoked_for.state() is RunnerState.RETIRED:
+        raise RunnerTokenRefused(RunnerTokenRefusalReason.RETIRED, runner_id=revoked_for.runner_id)
+    raise RunnerTokenRefused(RunnerTokenRefusalReason.REVOKED, runner_id=revoked_for.runner_id)
+
+
 class RetiredRunnerGuard:
     """The id-keyed retired-runner refusal — the one domain home for every operation that
-    names a runner by id rather than a loaded registration, so a token-less caller under
-    ``warn`` is refused on each of them alike."""
+    names a runner by id rather than a loaded registration, so each of them refuses a retired
+    runner alike."""
 
     def __init__(self, *, registry: IReadRunnerRegistry) -> None:
         self._registry = registry
@@ -629,8 +735,8 @@ class RetiredRunnerGuard:
     # runner_id resolves the retired-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
     def refuse_if_retired(self, runner_id: str, *, action: str) -> None:
-        """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. An
-        unregistered runner passes — there is nothing to be retired."""
+        """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. A runner the
+        hub never added passes — it has no row, so there is nothing to be retired."""
         registration = self._registry.get_runner(runner_id)
         if registration is not None:
             registration.refuse_if_retired(action=action)

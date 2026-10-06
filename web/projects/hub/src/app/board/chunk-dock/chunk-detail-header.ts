@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
+import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 
 /**
  * The chunk detail dock's header — the chunk's identity in the
@@ -126,6 +126,19 @@ export class ChunkDetailHeader {
    * a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
+  /** The display name of the runner holding the route, or `null` while none does — the
+   * claim line's and the Pause/Resume/Detach copy's `<runner>` slot. */
+  protected readonly claimant = computed<string | null>(() => {
+    const route = this.route();
+    return route ? runnerDisplayName(route.runner_id, route.runner_name) : null;
+  });
+
+  /** The claim line's tooltip — the display name the line may clip, then the runner's full id. */
+  protected readonly claimantTitle = computed<string | null>(() => {
+    const route = this.route();
+    return route ? runnerTitle(route.runner_id, route.runner_name) : null;
+  });
+
   /** The node the chunk currently sits at, for display and for `detachCopy`'s own
    * `<node>` slot — the same fallback chain the `.nd` chip already reads
    * (`current_node_name`, then `current_node_id`, then an em dash). */
@@ -190,7 +203,7 @@ export class ChunkDetailHeader {
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Detach chunk ${chunkId}`,
-      message: detachCopy(route.runner_id, this.currentNodeName()).text,
+      message: detachCopy(runnerDisplayName(route.runner_id, route.runner_name), this.currentNodeName()).text,
       confirmLabel: 'Detach',
       variant: 'primary',
       run: () => this.detach.emit(chunkId),
@@ -204,7 +217,7 @@ export class ChunkDetailHeader {
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Pause chunk ${chunkId}`,
-      message: pauseCopy(this.route()?.runner_id ?? null).text,
+      message: pauseCopy(this.claimant()).text,
       confirmLabel: 'Pause',
       variant: 'primary',
       run: () => this.pauseChunk.emit(chunkId),
@@ -219,7 +232,7 @@ export class ChunkDetailHeader {
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Resume chunk ${chunkId}`,
-      message: resumeCopy(this.route()?.runner_id ?? null).text,
+      message: resumeCopy(this.claimant()).text,
       confirmLabel: 'Resume',
       variant: 'primary',
       run: () => this.resumeChunk.emit(chunkId),

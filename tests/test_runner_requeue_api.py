@@ -40,7 +40,6 @@ def _seed_escalated_chunk(store) -> None:  # type: ignore[no-untyped-def]
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )
@@ -108,7 +107,6 @@ def test_requeue_a_chunk_that_is_not_needs_human_is_409(tmp_path: Path) -> None:
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="runner-local",
             retries_max=2,
             created_at=_NOW,
         )

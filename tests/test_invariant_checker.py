@@ -44,11 +44,7 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for lease_id in ("lease_a", "lease_b"):
-            conn.execute(
-                insert(runner.leases).values(
-                    lease_id=lease_id, chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW
-                )
-            )
+            conn.execute(insert(runner.leases).values(lease_id=lease_id, chunk_id="ch_1", epoch=1, created_at=_NOW))
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:one-live-lease-per-chunk" in slugs
     # Closing one lease clears the violation (facts-not-status: a closure is the fact).
@@ -67,9 +63,7 @@ def test_a_closed_lease_with_an_ambiguous_generation_is_a_violation(tmp_path: Pa
     so this shape means that guard was bypassed — a leaked, ownerless process."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(
             insert(runner.lease_spawns).values(
                 lease_id="lease_a", spawned_at=_NOW, pid=4242, process_start_time="start-4242", pgid=4242
@@ -89,9 +83,7 @@ def test_a_closed_lease_whose_generation_was_marked_identity_failed_is_not_a_vio
     ``record_identity_failed`` before ``Attempt.fail`` — not a leak."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(
             insert(runner.lease_spawns).values(
                 lease_id="lease_a",
@@ -121,7 +113,6 @@ def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=_NOW,
                 pid=99999,
                 process_start_time="start-99999",
@@ -144,7 +135,6 @@ def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_pa
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=_NOW,
                 pid=4242,
                 process_start_time="start-4242",
@@ -166,7 +156,6 @@ def test_an_active_lease_whose_generation_already_failed_identity_is_not_a_viola
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=_NOW,
                 pid=99999,
                 process_start_time="start-99999",
@@ -199,7 +188,6 @@ def test_an_active_lease_with_a_genuinely_leaked_provisional_generation_is_still
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=_NOW,
                 pid=99999,
                 process_start_time="start-99999",
@@ -225,7 +213,6 @@ def test_an_active_lease_with_two_unidentified_generations_reports_exactly_once(
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                runner_id="r",
                 created_at=_NOW,
                 pid=99999,
                 process_start_time="start-99999",
@@ -257,7 +244,6 @@ def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_pat
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     epoch=1,
-                    runner_id="r",
                     created_at=_NOW,
                     pid=555,
                     process_start_time="start-555",
@@ -556,9 +542,7 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
     ``Attempt.close``, the one funnel every closure path shares, was bypassed."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -583,9 +567,7 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
 def test_a_closed_leases_closed_invocation_boundary_is_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -613,9 +595,7 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
     open boundary is the violation."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -637,9 +617,7 @@ def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp
     scoped per generation, not per lease."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         for generation, kind in ((1, "spawn"), (2, "resume")):
             conn.execute(
                 insert(runner.invocation_boundaries).values(
@@ -662,9 +640,7 @@ def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_pat
     checker names it instead."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
-        )
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
         for kind in ("nudge", "resume"):
             conn.execute(
                 insert(runner.invocation_boundaries).values(

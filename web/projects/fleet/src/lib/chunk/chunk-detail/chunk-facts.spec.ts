@@ -14,7 +14,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+  route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
 // A not_ready chunk the wire calls graph-editable — the one window the graph edit is open.
@@ -47,7 +47,7 @@ describe('ChunkFacts', () => {
     const fact = (key: string) => el.querySelector(`[data-testid="fact-${key}"]`)?.textContent?.trim();
     expect(fact('status')).toBe('running');
     expect(fact('node')).toBe('build');
-    expect(fact('runner')).toBe('rn_01');
+    expect(fact('runner')).toBe('R-01.r-claude');
     expect(fact('attempts')).toBe('1');
   });
 

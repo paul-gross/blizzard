@@ -18,6 +18,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.leases import (
     IReadLeaseLivenessRepository,
@@ -71,6 +72,7 @@ class IReadRunnerStore(
     IReadOverloadRepository,
     IReadAskRepository,
     IReadPauseRepository,
+    IReadRunnerIdentityRepository,
     IReadTakeoverRepository,
     IReadRequeueRepository,
     IReadEscalationRepository,
@@ -101,6 +103,7 @@ class IWriteRunnerStore(
     IWriteOverloadRepository,
     IWriteAskRepository,
     IWritePauseRepository,
+    IWriteRunnerIdentityRepository,
     IWriteTakeoverRepository,
     IWriteRequeueRepository,
     IWriteEscalationRepository,
@@ -135,6 +138,7 @@ class RunnerStores:
     overload: IWriteOverloadRepository
     asks: IWriteAskRepository
     pause: IWritePauseRepository
+    identity: IWriteRunnerIdentityRepository
     takeover: IWriteTakeoverRepository
     requeue: IWriteRequeueRepository
     escalations: IWriteEscalationRepository
@@ -166,6 +170,7 @@ class RunnerReadStores:
     overload: IReadOverloadRepository
     asks: IReadAskRepository
     pause: IReadPauseRepository
+    identity: IReadRunnerIdentityRepository
     takeover: IReadTakeoverRepository
     requeue: IReadRequeueRepository
     escalations: IReadEscalationRepository
@@ -196,6 +201,7 @@ class RunnerReadStores:
             overload=stores.overload,
             asks=stores.asks,
             pause=stores.pause,
+            identity=stores.identity,
             takeover=stores.takeover,
             requeue=stores.requeue,
             escalations=stores.escalations,

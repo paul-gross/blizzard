@@ -25,6 +25,7 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _winter_source,
 )
+from tests.runner_join import fleet_headers
 
 pytestmark = [
     pytest.mark.e2e,
@@ -194,7 +195,8 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
         chunk_id = _ingest(forge, hub, "transcript tab browser scenario")
         ack = hub.post(
             "/api/fleet/transcripts",
-            json={"runner_id": "r1", "records": [_segment_one(chunk_id), _segment_two(chunk_id)]},
+            json={"records": [_segment_one(chunk_id), _segment_two(chunk_id)]},
+            headers=fleet_headers(hub),
         )
         assert ack.status_code == 200, ack.text
         assert ack.json()["applied"] == [1, 2]

@@ -7,6 +7,7 @@ fakes standing in for the hub, provider, harness, probe, and worktree git.
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -16,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import Engine, MetaData
+from sqlalchemy import Engine, MetaData, make_url
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock
@@ -60,11 +61,13 @@ from blizzard.runner.hub.client import (
     IHubClient,
     PushedFact,
     QueueEntry,
+    RegistrationReply,
     RouteClaimOutcome,
     SubscriptionDeclaration,
     TranscriptPush,
     TranscriptPushAck,
 )
+from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
@@ -87,6 +90,7 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
@@ -139,6 +143,7 @@ class SqlAlchemyRunnerStore(
     OverloadStore,
     AskStore,
     PauseStore,
+    RunnerIdentityStore,
     TakeoverStore,
     RequeueStore,
     EscalationStore,
@@ -172,6 +177,7 @@ class SqlAlchemyRunnerStore(
         OverloadStore.__init__(self, store)
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
+        RunnerIdentityStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)
         EscalationStore.__init__(self, store)
@@ -234,6 +240,16 @@ def runner_migration_prototype() -> Path:
         return _runner_prototype_db
 
 
+def migrated_store_at(db_url: str) -> None:
+    """Lay a head-migrated runner store at ``db_url``'s sqlite file unless one is already there —
+    what ``host`` does before it builds its process graph, which reads the identity row at boot."""
+    path = Path(make_url(db_url).database or "")
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(runner_migration_prototype(), path)
+
+
 def _checkpoint_sqlite(db_url: str) -> None:
     """Flush a sqlite file's WAL back into itself and drop the connection — a bare copy
     of the ``.db`` file is only a complete store once no ``-wal``/``-shm`` sidecar is
@@ -262,6 +278,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         overload=store,
         asks=store,
         pause=store,
+        identity=store,
         takeover=store,
         requeue=store,
         escalations=store,
@@ -352,6 +369,21 @@ class PeekCall:
     policy: str
 
 
+#: The bearer token a :class:`FakeHub` client presents unless a test hands it another.
+FAKE_RUNNER_TOKEN = "test-runner-token"
+
+#: When a seeded identity's registration succeeded — fixed, so seeding never reads a test's clock.
+REGISTERED_AT = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+def registered_identity(runner_id: str = "r1", runner_name: str = "runner-local") -> RunnerIdentityHolder:
+    """A holder answering one successful registration — the identity a status, control or federation
+    surface reads for a runner that has registered."""
+    return RunnerIdentityHolder(
+        RunnerIdentity(runner_id=runner_id, runner_name=runner_name, registered_at=REGISTERED_AT)
+    )
+
+
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
@@ -360,9 +392,13 @@ class FakeHub:
     """
 
     def __init__(self, *, default_runner_id: str = "r1") -> None:
-        # The runner id the unscripted `chunk_statuses` fallback's route reports as holding
-        # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id`.
+        # The runner id this client's token was issued to — what a registration replies, and what the
+        # unscripted `chunk_statuses` fallback's route reports as holding the chunk.
         self.default_runner_id = default_runner_id
+        # The bearer token this client presents, and the tokens the hub holds, each to the runner id it
+        # was issued to: a fleet call resolves its caller from the presented token, refusing an unheld one with 401.
+        self.token = FAKE_RUNNER_TOKEN
+        self.issued: dict[str, str] = {FAKE_RUNNER_TOKEN: default_runner_id}
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
@@ -398,7 +434,7 @@ class FakeHub:
         self.refuse_transcript_seqs: set[int] = set()  # acked, never stored: another owner's (chunk, epoch)
         self.questions: dict[str, HubQuestion] = {}
         self.delivered: list[tuple[str, HubQuestion]] = []
-        self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
+        self.registered: list[tuple[str, str]] = []  # (declared name, workspace_id)
         self.registered_capacities: list[int | None] = []  # env_capacity per register call
         self.registered_urls: list[str | None] = []  # url per register call
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call
@@ -427,7 +463,15 @@ class FakeHub:
             return self.queue_responses.pop(0)
         return list(self.queue)
 
+    def _caller(self) -> str:
+        """The runner id the presented token resolves to — a 401 for a token the hub does not hold."""
+        runner_id = self.issued.get(self.token)
+        if runner_id is None:
+            raise HubClientError("401 unknown runner token")
+        return runner_id
+
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
+        self._caller()
         self.claims.append(claim)
         assert self.claim_outcome is not None, "no claim outcome scripted"
         return self.claim_outcome
@@ -447,9 +491,10 @@ class FakeHub:
             return self.decision_responses.pop(0)
         return ApplyReply(outcome=ApplyOutcome.PARKED_AT_GATE, detail="parked at gate")
 
-    def push_facts(self, runner_id: str, facts: Sequence[PushedFact]) -> FactPushAck:
+    def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         if self.down:
             raise HubClientError("fake hub is down")
+        runner_id = self._caller()
         self.push_facts_calls.append([fact.seq for fact in facts])
         mark = self.high_water.get(runner_id, 0)
         applied, already = [], []
@@ -463,9 +508,10 @@ class FakeHub:
         self.high_water[runner_id] = mark
         return FactPushAck(high_water=mark, applied=applied, already_applied=already, rejected=[], route_ended=[])
 
-    def push_transcripts(self, runner_id: str, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         if self.down:
             raise HubClientError("fake hub is down")
+        runner_id = self._caller()
         # Validated into the wire record exactly as the httpx binding does, so a test reads what shipped.
         shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
         self.push_transcripts_calls.append([record.seq for record in shipped])
@@ -545,7 +591,7 @@ class FakeHub:
 
     def register_runner(
         self,
-        runner_id: str,
+        name: str,
         workspace_id: str,
         *,
         env_capacity: int | None = None,
@@ -554,20 +600,24 @@ class FakeHub:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
-    ) -> None:
+    ) -> RegistrationReply:
         if self.down:
             raise HubClientError("fake hub is down")
-        self.registered.append((runner_id, workspace_id))
+        runner_id = self._caller()
+        self.registered.append((name, workspace_id))
         self.registered_capacities.append(env_capacity)
         self.registered_urls.append(url)
         self.registered_redirect_uris.append(redirect_uris)
         self.registered_capabilities.append(capabilities)
         self.registered_subscriptions.append(subscriptions)
         self.registered_gates.append(gates)
+        return RegistrationReply(runner_id=runner_id, runner_name=name, first_registration=len(self.registered) == 1)
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:
             raise HubClientError("fake hub is down")
+        if runner_id != self._caller():
+            raise HubClientError(f"403 runner {runner_id} is not the caller")
         return self.paused
 
     def rekey_route_token(self, chunk_id: str) -> str:
@@ -1285,16 +1335,14 @@ def make_context(
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
+    registered: bool = True,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
 
-    ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step
-    driven directly (not through ``tick()``) reads the hub on every ``get()``, exactly as
-    ``get_chunk`` did before the per-tick cache."""
-    resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
-    # Derived, not duplicated: keeps the fake's unscripted `chunk_statuses`
-    # route matching this context's actual runner_id.
-    hub.default_runner_id = resolved_config.runner_id
+    ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step driven directly
+    (not through ``tick()``) reads the hub on every ``get()``. ``registered`` seeds the store's identity row and
+    the holder with ``hub``'s runner id; ``False`` leaves the runner never registered."""
+    resolved_config = config if config is not None else LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1)
     _hub: IHubClient = hub
     _chunk_views: IChunkViews = chunk_views if chunk_views is not None else ReadThroughChunkViews(hub=_hub)
     _provider: IWorkspaceProvider = provider
@@ -1313,10 +1361,18 @@ def make_context(
     _elicitation_root = resolved_config.elicitation_output_dir or tempfile.mkdtemp(prefix="blizzard-elicit-")
     _elicitation_files = ElicitationFiles(_elicitation_root)
     _stores = make_stores(store)
+    _identity = RunnerIdentityHolder()
+    if registered:
+        seeded = RunnerIdentity(
+            runner_id=hub.default_runner_id, runner_name=resolved_config.runner_name, registered_at=REGISTERED_AT
+        )
+        store.record_runner_identity(seeded)
+        _identity.hold(seeded)
     return LoopContext(
         stores=_stores,
         clock=_clock,
         hub=_hub,
+        identity=_identity,
         chunk_views=_chunk_views,
         provider=_provider,
         process=_probe,

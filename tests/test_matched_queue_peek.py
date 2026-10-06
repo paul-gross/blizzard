@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from tests.support import build_hub, count_queries
 from tests.test_fleet_auth import _bearer, _enroll, _register
@@ -161,20 +162,14 @@ def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_p
     assert resp.json()["entries"] == []
 
 
-def test_refuses_401_without_a_resolvable_principal_under_warn(tmp_path: Path) -> None:
-    """``warn`` (the default) is what leaves the legacy verb answering an unenrolled
-    runner's peek — the matched verb's own demand for a principal is not softened by it
-    an unenrolled caller (no token, or an unresolvable one) gets 401 regardless."""
-    hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/fleet/queue/peek", json={})
-    assert resp.status_code == 401, resp.text
-
-
-def test_refuses_401_without_a_resolvable_principal_under_enforce(tmp_path: Path) -> None:
-    from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-
-    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
-    resp = hub.client.post("/api/fleet/queue/peek", json={})
+@pytest.mark.parametrize("auth_mode", ["none", "oauth"])
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer never-issued"}], ids=["no-token", "unknown-token"])
+def test_refuses_401_without_a_resolvable_principal_under_every_configuration(
+    tmp_path: Path, auth_mode: str, headers: dict[str, str]
+) -> None:
+    hub = build_hub(tmp_path, auth_mode=auth_mode)
+    assert hub.app is not None
+    resp = TestClient(hub.app).post("/api/fleet/queue/peek", json={}, headers=headers)
     assert resp.status_code == 401, resp.text
 
 

@@ -7,8 +7,8 @@ from __future__ import annotations
 import click
 
 from blizzard.cli.operator_trace import OperatorGroup
-from blizzard.hub.cli.sessions.internal.session_file import SessionFile
-from blizzard.hub.cli.sessions.service import SessionService
+from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.operator_sessions.service import SessionService
 
 _CLI = "blizzard.hub.cli"
 
@@ -52,7 +52,7 @@ def hub(ctx: click.Context) -> None:
     # subcommand's own context — a `SessionService` wrapping the one `SessionFile`,
     # so a read-only verb still narrows it to `IReadSessionStore` while login/logout pull
     # the full service off the same object (pinned by
-    # tests/test_layering.py::test_session_file_is_named_only_at_its_composition_root).
+    # tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root).
     ctx.obj = SessionService(SessionFile.of())
     if ctx.invoked_subcommand is None:
         host = hub.get_command(ctx, "host")

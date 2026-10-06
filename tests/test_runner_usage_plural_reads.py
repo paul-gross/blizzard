@@ -157,7 +157,7 @@ def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tm
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
         subscriptions=resolved,
     )
 
@@ -187,7 +187,7 @@ def test_fallback_reset_picks_the_soonest_reset_across_declared_slugs(tmp_path: 
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
         subscriptions=resolved,
     )
 

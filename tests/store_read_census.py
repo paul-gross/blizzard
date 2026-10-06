@@ -35,7 +35,6 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.cli.sessions import IReadSessionStore
 from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, IReadWorkItemRepository, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
@@ -87,7 +86,12 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
-from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.repository import (
+    IReadRunnerNames,
+    IReadTraceStatus,
+    IReadTraceSteps,
+    TraceCheckpoint,
+)
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
@@ -119,6 +123,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.leases import (
     IReadLeaseLivenessRepository,
@@ -147,7 +152,16 @@ from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.repository import IReadCredentialRenewalRepository, IReadUsageRepository
 from tests.runner_fakes import record_usage
-from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk_record, seed_work_item
+from tests.support import (
+    HubHarness,
+    added_runner,
+    build_hub,
+    chunk_stores,
+    hub_store_connections,
+    seed_chunk_record,
+    seed_runner,
+    seed_work_item,
+)
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 
@@ -214,7 +228,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_a,
             node_name="build",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=3,
             created_at=_t(0),
             session_name="pool-a",
@@ -271,7 +284,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_a,
             node_name="build",
             epoch=2,
-            runner_id=RUNNER_ID,
             retries_max=3,
             created_at=_t(7),
             session_name="pool-a",
@@ -419,7 +431,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_b,
             node_name="review",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(20),
         )
@@ -453,7 +464,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_c,
             node_name="judge",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(30),
         )
@@ -472,7 +482,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_d,
             node_name="build",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(40),
             session_name="pool-d",
@@ -505,7 +514,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_e,
             node_name="judge",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(50),
         )
@@ -525,7 +533,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_f,
             node_name="build",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(60),
         )
@@ -543,7 +550,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             node_id=node_g,
             node_name="build",
             epoch=1,
-            runner_id=RUNNER_ID,
             retries_max=2,
             created_at=_t(70),
         )
@@ -551,11 +557,12 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     stores.pause.record_pause_park(lease_id=lease_8, chunk_id=chunk_7, parked_at=_t(71))
 
     # --- runner-wide facts, not chunk-keyed ----------------------------------------------
-    stores.pause.record_daemon_liveness(runner_id=RUNNER_ID, alive_at=_t(80))
-    stores.pause.set_hub_paused(RUNNER_ID, paused=False, at=_t(81))
+    stores.pause.record_daemon_liveness(alive_at=_t(80))
+    stores.pause.set_hub_paused(paused=False, at=_t(81))
     stores.pause.record_local_pause(
-        RUNNER_ID, paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+        paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
+    stores.identity.record_runner_identity(RunnerIdentity(RUNNER_ID, "runner-local", _t(82)))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"
     stores.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
@@ -723,10 +730,11 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadAskRepository, "ask_parked_lease_ids"): lambda w: w.read.asks.ask_parked_lease_ids(),
     (IReadAskRepository, "open_park"): lambda w: w.read.asks.open_park(w.lease_3),
     (IReadAskRepository, "open_asks"): lambda w: w.read.asks.open_asks(),
-    (IReadPauseRepository, "hub_contact_at"): lambda w: w.read.pause.hub_contact_at(RUNNER_ID),
-    (IReadPauseRepository, "hub_paused"): lambda w: w.read.pause.hub_paused(RUNNER_ID),
-    (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(RUNNER_ID),
-    (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(RUNNER_ID),
+    (IReadPauseRepository, "hub_contact_at"): lambda w: w.read.pause.hub_contact_at(),
+    (IReadPauseRepository, "hub_paused"): lambda w: w.read.pause.hub_paused(),
+    (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(),
+    (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(),
+    (IReadRunnerIdentityRepository, "runner_identity"): lambda w: w.read.identity.runner_identity(),
     (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
@@ -852,7 +860,12 @@ _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
 
 
 def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceStore:
-    return TraceStore(connections, graphs=hub.services.graphs, label=lambda ref: f"{ref.source}#{ref.ref}")
+    return TraceStore(
+        connections,
+        graphs=hub.services.graphs,
+        names=hub.services.registry,
+        label=lambda ref: f"{ref.source}#{ref.ref}",
+    )
 
 
 def _egress_store_of(connections: HubStoreConnections) -> EgressStore:
@@ -1106,14 +1119,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     # --- registry -------------------------------------------------------------------------
+    seed_runner(hub, HUB_RUNNER_ID, register=False)
+    seed_runner(hub, HUB_RUNNER_ID_2, register=False)
     hub.services.fleet.register(
-        HUB_RUNNER_ID,
+        added_runner(hub, HUB_RUNNER_ID),
         "workspace-1",
         env_capacity=2,
         public_url="http://r1.local",
         redirect_uris=("http://r1.local/cb",),
     )
-    hub.services.fleet.register(HUB_RUNNER_ID_2, "workspace-2")
+    hub.services.fleet.register(added_runner(hub, HUB_RUNNER_ID_2), "workspace-2")
     registration = hub.services.registry.get_runner(HUB_RUNNER_ID)
     assert registration is not None
     runner_token = hub.services.enrollment.enroll(registration)
@@ -1332,7 +1347,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         "harness_version": "claude-code-1.0",
         "turns": turns,
     }
-    pushed = hub.client.post("/api/fleet/transcripts", json={"runner_id": HUB_RUNNER_ID, "records": [record]})
+    pushed = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"records": [record]},
+        headers={"Authorization": f"Bearer {runner_token}"},
+    )
     assert pushed.status_code == 200, pushed.text
     hub.services.event_derivation.sweep()
 
@@ -2070,9 +2089,14 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.runner_token_hash
     ),
     (IReadRunnerRegistry, "is_token_revoked"): lambda w: w.hub.services.registry.is_token_revoked(w.runner_token_hash),
+    (IReadRunnerRegistry, "revoked_token_runner_id"): lambda w: w.hub.services.registry.revoked_token_runner_id(
+        w.runner_token_hash
+    ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50
     ),
+    (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
+    (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
     (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name("gardening"),
     (IReadRoutineRepository, "list_all"): lambda w: w.hub.services.routines.list_all(),
@@ -2181,10 +2205,4 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
 }
 
 #: Hub ``IRead*`` methods with no SQL behind them at all, each reasoned below.
-HUB_EXEMPTIONS: dict[tuple[type, str], str] = {
-    (IReadSessionStore, "load"): (
-        "blizzard.hub.cli.sessions.internal.session_file.SessionFile implements this over a local JSON "
-        "file under the CLI operator's own config dir — no SQL, and not part of any hub "
-        "HubServices/ChunkReadStores wiring."
-    ),
-}
+HUB_EXEMPTIONS: dict[tuple[type, str], str] = {}

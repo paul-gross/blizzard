@@ -21,6 +21,8 @@ from blizzard.foundation.roles import domain_model
 #: The declared surface (docs/versioning.md's hub↔runner skew row): fleet calls, plus federation.
 _SURFACE_PREFIX = "/api/fleet"
 _SURFACE_EXTRA_PATHS = ("/api/auth/jwks.json", "/api/auth/authorize")
+#: Single operations a runner reaches on an operator path — `runner init` adding its runner.
+_SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"),)
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 
 _BREAKING_COMMIT_MARKER = re.compile(r"^\w+(\([^)]*\))?!:")
@@ -47,17 +49,17 @@ class WireCompatError(RuntimeError):
 # --- Surface + schema reachability -------------------------------------------------
 
 
-def _is_surface_path(path: str) -> bool:
-    return path.startswith(_SURFACE_PREFIX) or path in _SURFACE_EXTRA_PATHS
+def _is_surface_operation(path: str, method: str) -> bool:
+    return (
+        path.startswith(_SURFACE_PREFIX) or path in _SURFACE_EXTRA_PATHS or (method, path) in _SURFACE_EXTRA_OPERATIONS
+    )
 
 
 def _surface_operations(doc: dict) -> list[tuple[str, str, dict]]:
     operations = []
     for path, methods in doc.get("paths", {}).items():
-        if not _is_surface_path(path):
-            continue
         for method, op in methods.items():
-            if method in _HTTP_METHODS:
+            if method in _HTTP_METHODS and _is_surface_operation(path, method):
                 operations.append((path, method, op))
     return operations
 
@@ -313,15 +315,15 @@ def _diff_schema(
 
 
 def _diff_paths_and_methods(base: dict, head: dict, violations: list[Violation]) -> None:
-    base_paths = {p: m for p, m in base.get("paths", {}).items() if _is_surface_path(p)}
-    head_paths = {p: m for p, m in head.get("paths", {}).items() if _is_surface_path(p)}
-    for path, methods in base_paths.items():
+    head_paths = head.get("paths", {})
+    removed_paths: set[str] = set()
+    for path, method, _op in _surface_operations(base):
         if path not in head_paths:
-            violations.append(Violation(path, "surface path removed"))
-            continue
-        for method in methods:
-            if method in _HTTP_METHODS and method not in head_paths[path]:
-                violations.append(Violation(f"{method.upper()} {path}", "surface method removed"))
+            if path not in removed_paths:
+                removed_paths.add(path)
+                violations.append(Violation(path, "surface path removed"))
+        elif method not in head_paths[path]:
+            violations.append(Violation(f"{method.upper()} {path}", "surface method removed"))
 
 
 def _parameter_schema(op: dict) -> dict:

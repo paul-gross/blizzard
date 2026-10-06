@@ -23,6 +23,7 @@ from tests.service.support import (
     mint_fixture,
     mock_runner,
     poll_until,
+    registered_runner_id,
     require_mock_fleet,
     require_winter_source,
     service_gate,
@@ -326,15 +327,14 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-brake") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-brake") as runner,
     ):
-        assert runner.post("/_drive/register").json()["status"] == 201
-        assert poll_until(
-            lambda: any(r["runner_id"] == "runner-brake" for r in hub.get("/api/runners").json()["runners"])
-        )
+        runner_id = registered_runner_id(runner)
+        assert poll_until(lambda: any(r["runner_id"] == runner_id for r in hub.get("/api/runners").json()["runners"]))
         # the operator flips the pause brake; the hub's registry reflects it.
-        assert hub.post("/api/runners/runner-brake/pause", json={"by": "operator"}).status_code == 200
-        view = hub.get("/api/fleet/runners/runner-brake").json()
+        assert hub.post(f"/api/runners/{runner_id}/pause", json={"by": "operator"}).status_code == 200
+        view = hub.get(f"/api/runners/{runner_id}").json()
+        assert view["runner_name"] == "runner-brake"
         assert view["hub_paused"] is True
         # The runner's own brake is a separate field the hub only ever reads; the
         # operator flipping the fleet's brake must not appear to have set it.
@@ -347,9 +347,9 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-subscriptions") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-subscriptions") as runner,
     ):
-        assert runner.post("/_drive/register").json()["status"] == 201
+        runner_id = registered_runner_id(runner)
         valid = runner.post(
             "/_drive/report-external-usage",
             json={"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": []},
@@ -364,7 +364,7 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
         ).json()
         assert invalid["response"]["rejected"] == [2]
 
-        assert hub.get("/api/runners/runner-subscriptions").json()["subscriptions"] == [
+        assert hub.get(f"/api/runners/{runner_id}").json()["subscriptions"] == [
             {
                 "slug": "openai",
                 "name": "OpenAI",
@@ -385,9 +385,9 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-lapsed") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-lapsed") as runner,
     ):
-        assert runner.post("/_drive/register").json()["status"] == 201
+        runner_id = registered_runner_id(runner)
         driven = runner.post(
             "/_drive/report-external-usage-miss",
             json={"slug": "openai", "name": "OpenAI", "missed_at": missed_at, "reason": "credential_lapsed"},
@@ -401,7 +401,7 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
         ).json()
         assert invalid["response"]["rejected"] == [2]
 
-        assert hub.get("/api/runners/runner-lapsed").json()["subscriptions"] == [
+        assert hub.get(f"/api/runners/{runner_id}").json()["subscriptions"] == [
             {
                 "slug": "openai",
                 "name": "OpenAI",
@@ -421,15 +421,13 @@ def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: 
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-roster") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-roster") as runner,
     ):
-        reg = runner.post(
-            "/_drive/register",
-            json={"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]},
-        ).json()
-        assert reg["status"] == 201, reg
+        runner_id = registered_runner_id(
+            runner, {"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]}
+        )
 
-        view = hub.get("/api/runners/runner-roster").json()["subscriptions"]
+        view = hub.get(f"/api/runners/{runner_id}").json()["subscriptions"]
         assert view == [
             {
                 "slug": "probe",
@@ -449,16 +447,15 @@ def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-roster-2") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-roster-2") as runner,
     ):
-        runner.post(
-            "/_drive/register",
-            json={"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]},
+        runner_id = registered_runner_id(
+            runner, {"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]}
         )
-        assert len(hub.get("/api/runners/runner-roster-2").json()["subscriptions"]) == 1
+        assert len(hub.get(f"/api/runners/{runner_id}").json()["subscriptions"]) == 1
 
         runner.post("/_drive/register", json={"subscriptions": []})
-        assert hub.get("/api/runners/runner-roster-2").json()["subscriptions"] == []
+        assert hub.get(f"/api/runners/{runner_id}").json()["subscriptions"] == []
 
 
 def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp_path: Path) -> None:
@@ -468,10 +465,10 @@ def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp
     with (
         _forge(bin_dir, origins, forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-no-roster") as runner,
+        mock_runner(bin_dir, _free_port(), hub_port, name="runner-no-roster") as runner,
     ):
-        assert runner.post("/_drive/register").json()["status"] == 201
-        assert hub.get("/api/runners/runner-no-roster").json()["subscriptions"] == []
+        runner_id = registered_runner_id(runner)
+        assert hub.get(f"/api/runners/{runner_id}").json()["subscriptions"] == []
 
 
 # --- Route-token authorization over the wire ---

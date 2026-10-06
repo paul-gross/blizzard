@@ -54,7 +54,6 @@ def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str): 
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -78,7 +77,6 @@ def _seed_escalated(store, *, chunk: str, lease: str):  # type: ignore[no-untype
             node_id="nd_build",
             node_name="build",
             epoch=1,
-            runner_id="r1",
             retries_max=2,
             created_at=_NOW,
         )
@@ -153,8 +151,8 @@ class _WriteReactingHub(FakeHub):
     scripted status — standing in for the hub's own reaction to the write landing, the
     signal a reader after invalidation must see and a stale cache would have missed."""
 
-    def push_facts(self, runner_id, facts):  # type: ignore[no-untyped-def]
-        ack = super().push_facts(runner_id, facts)
+    def push_facts(self, facts):  # type: ignore[no-untyped-def]
+        ack = super().push_facts(facts)
         self.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
         return ack
 
@@ -192,7 +190,7 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
     # (b) ch_b: an active lease with a buffered completion — primed under the spend cap,
     # then the flush's own hub reaction pushes it over, which _capped must catch fresh.
     _seed_active_lease(store, chunk="ch_b", lease="lease_b", pid=300, start="start-300")
-    submission = Completion(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
+    submission = Completion(choice="pass", epoch=1, from_node_id="nd_build")
     store.enqueue_outbound(
         kind=COMPLETION_KIND,
         chunk_id="ch_b",
@@ -234,7 +232,7 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
         provider=provider,
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=5.0),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=5.0),
     )
 
     tick(ctx)
