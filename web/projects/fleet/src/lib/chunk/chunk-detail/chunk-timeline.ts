@@ -25,21 +25,18 @@ import {
  * summing) lives in `chunk-timeline-rows.ts` (`canon:one-owner`) — this
  * component only renders it. Presentational either way a row responds:
  * {@link activatable} makes a keyed row emit {@link ChunkTimeline.pickStep}
- * (the chunk detail page's own tabs, already on the right route); the
- * default, non-activatable mode instead links a keyed row to the chunk
- * detail page's Node history tab under {@link linkBase} (the board dock,
- * on a different page), the same plain-`routerLink`-no-injected-`Router`
- * contract `chunk-artifacts.ts`'s own `linkBase` establishes.
+ (for a host already on the right route); the default,
+ * non-activatable mode instead links a keyed row to the chunk detail page's
+ * Node history tab under {@link linkBase} via a plain `routerLink`, with no
+ * injected `Router`.
  *
  * Each `<li>` stays a bare grid item — its own listitem role is what lets a
  * screen reader announce `.timeline` as an `<ol>` with the right item count.
  * The interactive `.step` div nested inside it, not the `<li>` itself, carries
  * `role="button"`/tabindex when {@link activatable} — a role set directly on
  * an `<li>` would override its implicit listitem role instead of layering on
- * top of it. Nesting works with the column layout rather than
- * against it: `.step` subgrids a second time from the bare `<li>`'s own
- * subgrid, so the verdict column stays aligned exactly as it did with one
- * subgrid level.
+ * top of it. `.step` subgrids a second time from the bare `<li>`'s own
+ * subgrid, so the verdict column stays aligned across the nesting.
  *
  * A non-activatable keyed row's own link is a `.step-link` anchor stretched over
  * the whole `.step` (`position: absolute; inset: 0`), not `.step` itself made an
@@ -48,8 +45,7 @@ import {
  * the stretched link and, but for the columns that carry their own `title`
  * tooltip (the node name, the routed-to column, the recency stamp — each opts
  * back into `pointer-events: auto`, `chunk-timeline.css`), hands its own click
- * through to the link instead of claiming it — the same pattern
- * `glance-view.css`'s `.hit` establishes for a whole-row link over plain content.
+ * through to the link instead of claiming it.
  */
 @Component({
   selector: 'fleet-chunk-detail-timeline',
@@ -71,28 +67,22 @@ export class ChunkTimeline {
    * {@link pickStep}, instead of linking to the chunk detail page's Node history tab
    * under {@link linkBase}. Either way, a keyed row draws the hover wash and takes the
    * focus/keyboard affordance — a keyless row (a migration, bounce, or restart, or an active row with no
-   * epoch yet) draws neither, regardless of this input. `false` (the default) is the
-   * board dock's own mode; the chunk detail page's own tabs, already on the route a
-   * link would point at, set this `true`. No third mode today for a keyed row that is
-   * neither — a consumer wanting one needs a new input, not a repurposing of this one. */
+   * epoch yet) draws neither, regardless of this input. `false` (the default) links;
+   * a host already on the route a link would point at sets this `true`. */
   readonly activatable = input(false);
 
   /** The currently selected row's own key, or `null` — visual only, drawn from the
    * URL by the consumer that owns selection; this component injects no router. */
   readonly selectedKey = input<string | null>(null);
 
-  /** The chunk detail route's own path segments, before the chunk id — the same
-   * `linkBase` contract `chunk-artifacts.ts` establishes, on the link a non-activatable
+  /** The chunk detail route's own path segments, before the chunk id — the base of the link a non-activatable
    * keyed row builds to reach that node on the full chunk detail page. Unused while
    * {@link activatable} is `true`, since an activatable row emits instead of linking. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** The graphs view's own path segments, before the graph id — when set, a
-   * multi-graph row's own graph badge links there (`/graphs/:graphId`), the same
-   * `graphLinkBase` contract {@link ChunkFacts} already establishes for the Graph fact
-   * row. `null` (the default) is every existing consumer's current behavior — plain
-   * text, since the runner app (this component is shared with it) has no `/graphs`
-   * route to point at. */
+   * multi-graph row's own graph badge links there (`/graphs/:graphId`).
+   * `null` (the default) renders plain text, for a host with no graphs route. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** Emitted with an activated row's join key, or `null` when the already-selected

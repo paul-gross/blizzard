@@ -392,10 +392,8 @@ describe('TranscriptViewer', () => {
     expect(el.querySelector('.trunc-note')?.textContent).toContain('truncated');
   });
 
-  describe('turn timestamps render in browser-local time (issue #136, review:F8)', () => {
-    // Re-homed from the runner's former transcript panel spec when `turnClockInfo`/
-    // `turnAbsolute` moved here — pin both the zone and "now" so the
-    // local-day boundary is deterministic.
+  describe('turn timestamps render in browser-local time', () => {
+    // Pin both the zone and "now" so the local-day boundary is deterministic.
     beforeEach(() => {
       vi.stubEnv('TZ', 'America/New_York');
       vi.setSystemTime(new Date('2026-07-16T15:00:00.000Z')); // 11:00 EDT

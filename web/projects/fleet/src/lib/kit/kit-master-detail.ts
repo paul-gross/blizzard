@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { KitBackBar } from './kit-back-bar';
 
 /**
- * The master/detail split every two-pane list-beside-viewer tab re-typed —
+ * The master/detail split for a two-pane list-beside-viewer tab —
  * a fixed list pane and a detail pane, each an `<ng-content>` slot
  * (`[kit-master-detail-list]` / `[kit-master-detail-detail]`, {@link ChunkPageShell}'s
  * own kebab-case, component-prefixed slot-attribute convention) rather than a shape this
@@ -26,16 +26,13 @@ import { KitBackBar } from './kit-back-bar';
  * and activating Back only emits; the consumer's own selection state is the sole writer.
  *
  * `testidPrefix` roots the Back button's own `data-testid` the same way
- * {@link ChunkArtifactsPanel.testidPrefix} roots its nav/view testids — a consumer whose
- * existing Back testid an outside caller already queries (the hub's chunk page restores
- * focus to `node-history-back` after a step pick) keeps that exact string by setting
- * `testidPrefix="node-history"`.
+ * {@link ChunkArtifactsPanel.testidPrefix} roots its nav/view testids, so a consumer
+ * whose Back testid is queried from outside keeps a stable string of its own choosing.
  *
  * A caption is optional per pane; given one, the pane reads `role="region"` labelled by
  * it, with the label's own `id` derived from the required `paneId` input the way
  * {@link KitAccordionSection.sectionId} already derives its `aria-controls`/`aria-labelledby`
- * pair — an omitted caption leaves the pane unlabelled rather than expanding today's wiring,
- * where only the list pane (`Timeline`) is ever named and the detail pane never is.
+ * pair — an omitted caption leaves the pane unlabelled.
  *
  * The detail pane's own content inset is a CSS custom property
  * (`--kit-master-detail-detail-inset`), not an input, the same hook

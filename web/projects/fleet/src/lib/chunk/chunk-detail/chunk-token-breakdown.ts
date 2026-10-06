@@ -18,7 +18,7 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
 /**
  * The chunk's cost + token-usage breakdown — its own labelled table, separate from
  * {@link ChunkFacts}'s chunk-identity table above it: derived usage/cost is a
- * different kind of information from Status/Node/Runner/Attempts/Graph, so it now
+ * different kind of information from Status/Node/Runner/Attempts/Graph, so it
  * reads as its own thing rather than folding into that table as extra rows. The
  * derived total cost is visibly marked PARTIAL whenever `cost_partial` is set (never
  * silently understated). A subscription invocation's runner-reported estimate, when
@@ -30,12 +30,8 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
  * (`ChunkUsageTotalView`) — always visible inline, no expand
  * toggle standing between the operator and any of the five figures.
  *
- * Content-projected into {@link ChunkFacts}'s `[token-breakdown]` slot as a block
- * after that component's own `<dl>` closes (not into it), and styled to match: same
- * label/value column widths (`--kv-label-col`, set on `ChunkFacts`'s `:host` and
- * inherited here since projected content still renders inside that host's DOM
- * subtree regardless of component ownership), same fact-row look (`.kv`/`dt`/`dd`).
- * Angular's emulated style encapsulation does not reach across a component
+ * Styled to match {@link ChunkFacts}, whose `[token-breakdown]` slot projects it:
+ * label/value column widths come from the inherited `--kv-label-col`. Angular's emulated style encapsulation does not reach across a component
  * boundary, so this table keeps its own copy of the shared `.kv` shape and its
  * `dt`/`dd` rules rather than relying on `ChunkFacts`'s.
  */
@@ -54,8 +50,8 @@ export class ChunkTokenBreakdown {
   protected readonly formatTokens = formatTokens;
 
   /** The chunk's derived usage/cost total — never absent: the hub API always
-   * populates `cost`, and {@link ZERO_USAGE_TOTAL} covers a construction-site
-   * fixture that predates it. Every field here is a required, never-null integer
+   * populates `cost`, and {@link ZERO_USAGE_TOTAL} is the default before a
+   * real read. Every field here is a required, never-null integer
    * (`ChunkUsageTotalView`) — a usage fact's cost can be absent
    * (`cost_partial`), but its token counts cannot, so the four rows below never need
    * their own null handling. */

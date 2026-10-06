@@ -46,9 +46,7 @@
    trailing content can't itself give way (the hub's menu-only cluster)
    would then take a real, if small, share of it — with no overflow:
    hidden of its own, that share spills past the header's own right edge
-   into genuine page-level horizontal scroll (a shell sweep
-   caught this a few px wide, right above this strip's own 1150px
-   breakpoint). The lopsided factor makes the strip absorb a shrinking
+   into genuine page-level horizontal scroll. The lopsided factor makes the strip absorb a shrinking
    header almost entirely by itself while it still has any width left to
    give. */
 .stats {
@@ -113,13 +111,11 @@
 /*
  * The trailing cluster shrinks rather than overflowing, but only into
  * whatever its consumer marked shrinkable — a consumer projecting content of
- * *content-dependent* width (the runner's local panel projects a signed-in
- * username) has to be able to truncate it, and a flex: none wrapper is sized
- * to its max-content, so a long username would push the whole cluster, menu
- * included, past the clipped right edge. A zero min-width removes that floor;
- * each projected control then decides for itself whether it gives way (see
- * app-panel-layout.ts, where the identity truncates and the menu is pinned
- * flex: none).
+ * *content-dependent* width has to be able to truncate it, and a flex: none
+ * wrapper is sized to its max-content, so long projected content would push
+ * the whole cluster past the clipped right edge. A zero min-width removes that
+ * floor; each projected control then decides for itself whether it gives way
+ * (see app-panel-layout.ts).
  */
 .trailing {
   display: flex;
@@ -138,9 +134,8 @@
  * never be the thing that gets pushed off.
  *
  * The wordmark goes with the tagline rather than after it. Together they are
- * ~190px of a 390px phone, which is the difference between the trailing
- * cluster fitting and running off the edge on the runner's local panel,
- * whose trailing slot carries more than the hub's — and the mark alone still
+ * ~190px of a 390px phone, which is the difference between a fuller trailing
+ * cluster fitting and running off the edge — and the mark alone still
  * identifies the app.
  */
 @container board-header (max-width: 1149px) {

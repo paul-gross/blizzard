@@ -168,9 +168,8 @@ export class ChunkPage {
     this.selection.selectArtifact(key);
   }
 
-  /** A segment picked in the Transcripts tab writes its id back to the URL —
-   * {@link ChunkTranscriptsContainer} forwards it straight to the presentational tab,
-   * a pure function of that param, never its own selection state. */
+  /** A segment picked in the Transcripts tab writes its id back to the URL, which stays
+   * the selection's only home. */
   protected onSelectTranscriptSegment(segmentId: string | null): void {
     if (this.mobile()) {
       if (segmentId === null) {
@@ -226,9 +225,7 @@ export class ChunkPage {
   protected readonly eventsLinkBase = this.actions?.eventsLinkBase ?? null;
 
   /** Whether the Transcripts tab's option shows in the strip. With a port, the port's
-   * permission decides; a deep link still reaches {@link ChunkTranscriptsContainer},
-   * which renders the backend's 403 as its own state rather than relying on this
-   * client-side check to be the only gate. With none, always — a daemon without a
+   * permission decides — a display filter only, not the access gate. With none, always — a daemon without a
    * permission model serves its own transcripts to whoever reaches its panel. */
   protected readonly canReadTranscripts = computed(() => this.actions?.canReadTranscripts() ?? true);
 

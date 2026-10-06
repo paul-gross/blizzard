@@ -102,8 +102,7 @@ describe('BoardHeader', () => {
     // so the two cannot drift apart; a lane added there appears in both or neither.
     const el = await render([]);
     const cells = [...el.querySelectorAll('[data-stat]')].map((c) => c.getAttribute('data-stat'));
-    // Ready is one of those lane cells now, not a cell of its own
-    // ahead of them — the board grew the READY column it counts.
+    // Ready is one of those lane cells, not a cell of its own ahead of them.
     expect(cells).toEqual(['total', ...LANES.map((l) => l.key)]);
   });
 
@@ -362,7 +361,7 @@ describe('BoardHeader', () => {
       expect(at(el, '[data-testid="board-header-stats"]', 420)).toBe(true);
       expect(at(el, '[data-testid="spend-today"]', 420)).toBe(true);
       expect(at(el, '[data-testid="spend-yesterday"]', 420)).toBe(true);
-      // The whole text block, tagline included — the tagline now goes with its
+      // The whole text block, tagline included — the tagline goes with its
       // parent rather than by a rule of its own, which is why this asserts the
       // block: `hiddenAtContainerWidth` answers for one element's own resolved
       // display, not for ancestors collapsing above it.
@@ -379,15 +378,9 @@ describe('BoardHeader', () => {
       const strip = el.querySelector<HTMLElement>('[data-testid="board-header-stats"]')!;
       // `min-width: 0` + `overflow: hidden` is what lets the strip clip instead
       // of forcing the row wider than the viewport-locked shell. The outsized
-      // `flexShrink` (a shell sweep) makes the strip absorb the
-      // *entire* deficit against `.trailing` before it gives up a pixel: at
-      // equal shrink factors the two split it in proportion to their own
-      // widths, and `.trailing`'s share — a handful of px in the narrow band
-      // just above the strip's own 1150px breakpoint, real content, both
-      // spend cells shown — has nowhere to clip to, so it spilled past the
-      // header's own right edge into real page overflow. The strip, already
-      // built to clip via `overflow: hidden`, is the side that can safely
-      // absorb it instead.
+      // `flexShrink` makes the strip absorb the *entire* deficit against
+      // `.trailing`: at equal shrink factors the two split it in proportion to
+      // their own widths, and `.trailing`'s share has nowhere to clip to.
       expect(getComputedStyle(strip).minWidth).toBe('0px');
       expect(getComputedStyle(strip).overflow).toBe('hidden');
       expect(getComputedStyle(strip).flexShrink).toBe('999');
@@ -403,8 +396,7 @@ describe('BoardHeader', () => {
       const trailing = el.querySelector<HTMLElement>('.trailing')!;
 
       // Pinning this `flex: none` would size it to max-content, and a consumer
-      // projecting something content-sized (the runner's signed-in username)
-      // would then push its own menu off the clipped right edge no matter how
+      // projecting something content-sized would then push its own menu off the clipped right edge no matter how
       // narrow the header got — a hard breakpoint cannot cover a width that
       // depends on the data. Shrinkable here, with each projected control
       // deciding for itself whether it gives way (`app-panel-layout.ts`).

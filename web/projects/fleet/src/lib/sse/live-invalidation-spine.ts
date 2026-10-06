@@ -28,8 +28,7 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
  * services drive (`bzh:frontend-disjoint-diffs` — the machinery
  * lifted here is kind-agnostic, unlike each daemon's own registry, which stays put).
  * One SSE subscription, dispatched through the caller's registry into a coalesced
- * `invalidateQueries` pass, plus reconnect-then-re-GET gap recovery: identical to what
- * `fleet-live.ts` and `runner-live-updates.ts` each hand-carried before this extraction.
+ * `invalidateQueries` pass, plus reconnect-then-re-GET gap recovery.
  */
 export class LiveInvalidationSpine<TPayload extends object, TType extends string> {
   private handle: SseHandle<TPayload> | null = null;
@@ -115,8 +114,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
 
     // A stream 401 is terminal — `SseService` schedules no reconnect past one —
     // so this is the only place that ever observes it. Only a caller that names
-    // `onAuthFailed` wants this watched at all (the hub instead exposes `authFailed`
-    // for its app root to route on).
+    // `onAuthFailed` wants this watched at all; `authFailed` exposes it either way.
     this.authRef = onAuthFailed
       ? untracked(() =>
           effect(

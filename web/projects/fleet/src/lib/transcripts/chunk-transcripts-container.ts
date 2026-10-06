@@ -14,9 +14,8 @@ import { segmentFinal } from './transcript-selection.model';
  * — owns its two queries (the index on open, one segment's turns only
  * once opened) and maps their loading/error state, forwarding resolved data down to the
  * presentational {@link ChunkTranscriptsTab}, which carries the tab's markup and injects
- * nothing. Moved into `fleet` (runner-node-grouped-transcripts) so both the hub
- * and runner apps mount the identical component; {@link client}/{@link plane} are the seam
- * each app crosses to reach its own copy of the identically-shaped route — required
+ * nothing. {@link client}/{@link plane} are the seam a mounting app crosses to reach its
+ * own copy of the identically-shaped route — required
  * inputs, never defaulted, so a mounting app states which plane it reads from rather than
  * this component guessing or branching on it.
  *

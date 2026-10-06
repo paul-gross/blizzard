@@ -49,8 +49,7 @@ export function completeCopy(): ChunkActionCopy {
   };
 }
 
-/** Delete's copy — no interpolation; the disabled-with-dependents subtitle is the
- * header's own computed, layered on top of this at the call site. */
+/** Delete's copy — no interpolation; any disabled-state subtitle is the caller's. */
 export function deleteCopy(): ChunkActionCopy {
   return {
     label: 'Delete…',

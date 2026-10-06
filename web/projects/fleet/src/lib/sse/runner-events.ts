@@ -4,11 +4,9 @@
  * client's; the golden corpus's runner scope at `contracts/sse/runner/` is the single
  * description both sides hold to.
  *
- * Frames are thin id-and-cause notifications; the runner app re-reads through the
- * runner's existing endpoints rather than the frame itself carrying a full view. This
- * module carries only the wire vocabulary — the event union type and payload map — so
- * the runner app can consume them. It builds no live-updates service or invalidation
- * registry of its own; `SseService` is imported unchanged.
+ * Frames are thin id-and-cause notifications, not full views. This module carries
+ * only the wire vocabulary — the event union type and payload map; it builds no
+ * live-updates service or invalidation registry of its own.
  */
 
 import {

@@ -16,9 +16,7 @@
   <div class="spacer"></div>
   <!-- The fleet-wide spend-since reads —
        each cell withholds itself until its own read resolves, independently, so
-       neither ever shows a misleading $0.00; the combined figure (formatCost)
-       marks an estimated amount with a leading `~` and a cost-absent lower bound
-       with a trailing `+`. -->
+       neither ever shows a misleading $0.00; the figure's format is formatCost's. -->
   @for (cell of spendCells(); track cell.key) {
     @if (cell.spend; as spend) {
       <div class="cell spend" [class.spend-yesterday]="cell.key === 'yesterday'" [attr.data-testid]="cell.testid">
@@ -36,8 +34,8 @@
   <!-- The trailing cluster is wrapped rather than projected straight into the
        flex row so this component can size it as one unit — view encapsulation
        puts the *consumer's* attribute on projected nodes, so a rule here
-       could never reach them, and an unmanaged trailing cell is exactly how
-       the profile menu used to get clipped. -->
+       could never reach them, and an unmanaged trailing cell lets projected
+       controls get clipped. -->
   <div class="trailing">
     <ng-content select="[header-trailing]" />
   </div>

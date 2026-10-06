@@ -17,33 +17,25 @@ import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view
 /**
  * The chunk detail page's Node history tab — {@link ChunkTimelineSelection}'s
  * three-line rows beside the selected step's own transcript and artifacts, each in its
- * own collapsible {@link KitAccordionSection} rather than the always-visible stack this
- * tab rendered before: a step can carry more than one transcript segment (a resumed
- * lease), and every one of them pages through the same seam buttons the Transcripts tab
- * already gives — no "open in the Transcripts tab" pointer remains. Presentational
- * (`bzh:frontend-container-presentational`): {@link ChunkNodeHistoryContainer} owns the
- * transcript-index/segment queries this needs and forwards their resolved state down, the
- * same split {@link ChunkTranscriptsContainer}/`ChunkTranscriptsTab` already establish.
+ * own collapsible {@link KitAccordionSection}: a step can carry more than one transcript
+ * segment (a resumed lease), each paged through seam buttons. Presentational
+ * (`bzh:frontend-container-presentational`): container, {@link ChunkNodeHistoryContainer}.
  *
- * The split itself — the list/detail chrome, the `@media (min-width: 720px)` collapse,
- * and the opt-in phone drill-down with its Back control — is {@link KitMasterDetail}'s;
- * this component projects only its own list content (the timeline) and detail content
+ * The list/detail split is {@link KitMasterDetail}'s; this component projects only its own list content (the timeline) and detail content
  * (the transcript/artifacts accordions), and still computes {@link hasSelection} itself
  * since the shell cannot derive a selection from content it does not own.
  *
  * The join is exact `(node_id, epoch)` equality — {@link stepArtifacts} is already
- * filtered that way by the container ({@link filterArtifactsByStep}), never latest-by-node.
+ * filtered that way upstream ({@link filterArtifactsByStep}), never latest-by-node.
  *
  * The artifact half rides {@link detail}, already resolved, and states its own empty
  * case directly; the transcript half is query-gated through {@link KitAsyncState} via
  * {@link indexState}/{@link segmentState} — `[]` during the first fetch is indistinguishable
  * from a settled empty read without that gate.
  *
- * Both accordion sections default open — the least behavior change from the always-visible
- * layout this replaces — and more than one can be open at once; nothing here coordinates
- * them shut. The transcript body itself renders through {@link TranscriptSegmentView}, the
- * same shared seam-button/turn-cap body the Transcripts tab mounts, so this pane's paging
- * carries no copy of that markup.
+ * Both accordion sections default open, and more than one can be open at once; nothing
+ * here coordinates them shut. The transcript body renders through
+ * {@link TranscriptSegmentView}.
  */
 @Component({
   selector: 'fleet-chunk-node-history-tab',
@@ -75,7 +67,7 @@ export class ChunkNodeHistoryTab {
 
   /** The effective (operator-paged or step-default) segment's own resume-seam links —
    * {@link ChunkNodeHistoryContainer.continuedFrom}/`.continuesIn` forwarded straight
-   * through, the same shape {@link ChunkTranscriptsTab} already renders. */
+   * through. */
   readonly continuedFrom = input<TranscriptSegmentIndexEntry | null>(null);
   readonly continuesIn = input<TranscriptSegmentIndexEntry | null>(null);
 
@@ -85,8 +77,7 @@ export class ChunkNodeHistoryTab {
    * own Back control. */
   readonly pickStep = output<string | null>();
 
-  /** A transcript seam button followed — the target segment id, forwarded straight to
-   * the container, which pages {@link segmentData} to it. */
+  /** A transcript seam button followed — the target segment id to page to. */
   readonly pickSegment = output<string>();
 
   /** {@link ChunkTimelineSelection.graphLinkBase} — the daemon's graphs view, or `null`

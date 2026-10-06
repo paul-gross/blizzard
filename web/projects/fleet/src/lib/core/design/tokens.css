@@ -66,9 +66,8 @@
   /*
    * Overlay opacities — the discrete black washes used for panel
    * headers, table heads, pressed/inset surfaces, and the engraved-label text
-   * shadow. Named by their opacity so a component picks the wash it already
-   * used, verbatim; no existing token value changes here, only these five new
-   * ones plus the label shadow, replacing raw `rgba(0, 0, 0, …)` literals.
+   * shadow. Named by their opacity so a component picks the wash by value
+   * rather than writing a raw `rgba(0, 0, 0, …)` literal.
    */
   --overlay-20: rgba(0, 0, 0, 0.2);
   --overlay-25: rgba(0, 0, 0, 0.25);
@@ -111,11 +110,7 @@
    * the padding belongs to the row (or the card, or the accordion section)
    * that actually carries the background, so that background reaches the
    * container's full width rather than floating inset from it with a gap on
-   * both sides. `chunk-timeline.ts`'s own `:host` comment is the worked
-   * example: vertical padding stays on the host, horizontal padding moved to
-   * `.step`, the same "consumer decides its own inset" contract
-   * `kit-panel.ts`'s zero-padded `.p-body` already established before this
-   * scale existed.
+   * both sides. See `chunk-timeline.ts` and `kit-panel.ts`.
    */
   --surface-resting: var(--panel);
   --surface-hover: var(--panel-hover);

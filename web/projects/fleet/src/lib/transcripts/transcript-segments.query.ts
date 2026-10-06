@@ -48,7 +48,7 @@ export function shouldRetryTranscriptFetch(failureCount: number, error: Error): 
  *
  * `client`/`plane` are accessors, not plain values, the same as `chunkId` — not because
  * either is expected to change, but because a caller threading a signal `input.required()`
- * straight through (`ChunkTranscriptsContainer`) cannot read it eagerly at field-init time
+ * straight through cannot read it eagerly at field-init time
  * (Angular's own `NG8118`: a required input has no value yet at that point in a real
  * template-bound mount); wrapped in a closure, it resolves lazily instead, once
  * `injectQuery`'s own reactive computation actually runs.
@@ -82,7 +82,7 @@ export function injectChunkTranscriptsQuery(
 }
 
 /** The hub-plane transcript index query — a thin, permanently-hub-bound alias of
- * {@link injectChunkTranscriptsQuery} for callers (e.g. the Node History tab) that only
+ * {@link injectChunkTranscriptsQuery} for callers that only
  * ever read the hub's own transcripts and have no reason to thread a client through. */
 export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
   return injectChunkTranscriptsQuery(

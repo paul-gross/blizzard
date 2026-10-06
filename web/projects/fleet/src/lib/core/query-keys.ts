@@ -33,13 +33,13 @@ export const hubActivityKey = ['hub', 'activity'] as const;
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
 export const hubGraphsKey = ['hub', 'graphs'] as const;
 /** The resolved-identity read — `GET /api/me`. Never invalidated by an
- * SSE event (no event names an identity change yet, #94); the login/logout flows
+ * SSE event (no event names an identity change); the login/logout flows
  * invalidate it explicitly instead. */
 export const hubMeKey = ['hub', 'me'] as const;
 /** The configured login-provider list — `GET /api/auth/providers`. */
 export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
 /** The admin page's user listing — `GET /api/users`. Invalidated by the
- * role-assignment mutation directly (no SSE event names a role change yet). */
+ * role-assignment mutation directly (no SSE event names a role change). */
 export const hubUsersKey = ['hub', 'users'] as const;
 /** The root every live-configuration read shares — work sources, repositories,
  * secrets, and the change log. A config write changes more than its own record (a
@@ -65,7 +65,7 @@ export function hubConfigHistoryKey(recordKind: string, recordKey: string | null
 /** The unfiltered change log — `GET /api/config/changes`, paged newest first. */
 export const hubConfigChangesKey = [...hubConfigKey, 'changes'] as const;
 /** The gardening tab's docket read — `GET /api/garden-proposals`. Not
- * yet in the SSE event vocabulary, so nothing invalidates this key on a live event. */
+ * in the SSE event vocabulary, so nothing invalidates this key on a live event. */
 export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 /** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
  * carry no SSE event of their own, the same standing `hubGraphsKey` has. */
@@ -128,8 +128,7 @@ export function hubWorkItemKey(source: string | null, ref: string | null): reado
 export function hubWorkItemsKey(pointers: readonly (readonly [string, string])[]): readonly unknown[] {
   return ['hub', 'work-items', ...pointers.flatMap(([source, ref]) => [source, ref])];
 }
-/** The scope list — `GET /api/scopes`. Feeds both the gardening run dialog's scope
- * picker and the routines panel's scope list. Scopes change rarely and carry no SSE
+/** The scope list — `GET /api/scopes`. Scopes change rarely and carry no SSE
  * event of their own, `hubRoutinesKey`'s own standing. */
 export const hubScopesKey = ['hub', 'scopes'] as const;
 
@@ -228,22 +227,20 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
 /** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts)
  * — namespaced so a plane's own live-invalidation event, where one exists, only ever
  * refetches that plane's own cache entries, even though both planes answer the identical
- * wire shape. Only the hub plane has such an event today; see
+ * wire shape. Only the hub plane has such an event; see
  * {@link chunkTranscriptsKey} for the runner plane's own gap. */
 export type TranscriptPlane = 'hub' | 'runner';
 
 /** One chunk's full aggregate on either plane, keyed by plane and id — each plane's
  * key sits under the prefix its own live-update registry already invalidates: the hub's
- * {@link hubChunkKey} (`sse/fleet-live.ts`), and the runner's `[runner, chunk, id,
- * detail]`, which the runner panel's registry and pause mutation stale by this same
- * function. */
+ * {@link hubChunkKey}, and the runner's `[runner, chunk, id, detail]`. */
 export function chunkDetailKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
   return plane === 'hub' ? hubChunkKey(chunkId) : ['runner', 'chunk', chunkId, 'detail'];
 }
 
 /** One chunk's related work items on either plane, keyed by plane and id. The runner's
  * entry is its own `work-items-detail` key so it never shares a cache entry or observer
- * options with the runner panel's severable row-title read of the same endpoint. */
+ * options with another read of the same endpoint. */
 export function chunkWorkItemsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
   return plane === 'hub' ? hubChunkWorkItemsKey(chunkId) : ['runner', 'chunk', chunkId, 'work-items-detail'];
 }
@@ -251,11 +248,9 @@ export function chunkWorkItemsKey(plane: TranscriptPlane, chunkId: string | null
 /** One chunk's transcript-segment index, keyed by plane and id —
  * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
  * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as
- * the chunk's steps progress. The runner plane carries no equivalent event yet — no
- * `RunnerEventType` names a transcript change (`runner/src/app/core/live/runner-live-updates.ts`'s own
- * registry is exhaustive over the six it does have) — so a runner operator watching a
- * live chunk needs a manual reload to see new segments; this key's placement positions
- * it to pick up a future runner event, it does not itself close today's gap. */
+ * the chunk's steps progress. The runner plane carries no equivalent event — no
+ * `RunnerEventType` names a transcript change — so a runner-plane read sees new
+ * segments only on reload. */
 export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
   return [plane, 'chunk', chunkId, 'transcripts'];
 }

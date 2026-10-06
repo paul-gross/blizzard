@@ -15,12 +15,10 @@ import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
 /**
- * The Node history tab's own container (`bzh:frontend-container-presentational`), the
- * same split as {@link ChunkTranscriptsContainer} — owns the transcript-index query the
- * per-step transcript panel needs (no new endpoint; the same read the
- * Transcripts tab already mounts), forwarding resolved state to the presentational
- * {@link ChunkNodeHistoryTab}, which injects nothing. `ChunkPage` mounts this only inside
- * its `@case ('node-history')` branch, keeping the query lazy the same way.
+ * The Node history tab's own container (`bzh:frontend-container-presentational`) — owns
+ * the transcript-index and segment queries the per-step transcript panel needs,
+ * forwarding resolved state to the presentational {@link ChunkNodeHistoryTab}, which
+ * injects nothing.
  *
  * The transcript reads cross the daemon's own seam ({@link CHUNK_PAGE_DAEMON}'s `client`
  * and `plane`), so each daemon's page shows the per-step transcript from its own
@@ -31,12 +29,9 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
  * itself — and {@link effectiveSegmentId} falls back to the step's first segment
  * whenever the pick names nothing in the currently selected step: a step change makes
  * a stale pick from the *previous* step fall back automatically, since no two segments
- * ever share an id. {@link resolveSegmentSeams} (already shared with the Transcripts
- * tab, `transcripts/transcript-steps.ts`) resolves the continued-from/continues-in
- * links the presentational tab renders as seam buttons, the same way
- * `ChunkTranscriptsContainer` does for its own tab — this pane pages through every
- * segment of a step rather than reading only the first and pointing elsewhere for
- * the rest.
+ * ever share an id. {@link resolveSegmentSeams} resolves the continued-from/continues-in
+ * links the presentational tab renders as seam buttons, so this pane pages through every
+ * segment of a step.
  */
 @Component({
   selector: 'fleet-chunk-node-history-container',
@@ -71,8 +66,7 @@ export class ChunkNodeHistoryContainer {
     stepArtifacts(this.detail().artifacts ?? [], this.parsedSelection()),
   );
 
-  /** Every transcript step, the same derivation the Transcripts tab
-   * reads over the same index — {@link selectedStepSegments} and the seam resolution
+  /** Every transcript step derived from the index — {@link selectedStepSegments} and the seam resolution
    * below both read this rather than re-deriving it. */
   private readonly steps = computed<readonly TranscriptStep[]>(() => {
     const d = this.detail();
@@ -115,8 +109,7 @@ export class ChunkNodeHistoryContainer {
   );
 
   /** The effective segment's own resume-seam links — {@link resolveSegmentSeams} over
-   * this container's {@link steps}, the same call `ChunkTranscriptsContainer` makes for
-   * its own tab. */
+   * this container's {@link steps}. */
   private readonly seams = computed(() => resolveSegmentSeams(this.steps(), this.effectiveSegmentId()));
 
   protected readonly continuedFrom = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuedFrom);
@@ -136,8 +129,7 @@ export class ChunkNodeHistoryContainer {
 
   protected readonly indexState = computed<KitAsyncStateValue>(() => asyncState(this.indexQuery, false));
 
-  /** `asyncState()`'s disabled-query trap (`query-state.ts`) — branched the same way
-   * {@link ChunkTranscriptsContainer.segmentState} branches it: no step selected, or a
+  /** `asyncState()`'s disabled-query trap (`query-state.ts`): no step selected, or a
    * selected step with no segments at all, is this component's own rest state, resolved
    * before the query's own loading/error/ready fold. */
   protected readonly segmentState = computed<KitAsyncStateValue>(() =>

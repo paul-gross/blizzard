@@ -30,14 +30,12 @@ export interface SidechainOpenEvent {
 }
 
 /**
- * The shared, presentational turn list — one component both the
- * runner's chunk page and the hub's chunk
- * Transcripts tab render, over the structural {@link TranscriptTurn} shape. Injects
+ * The shared, presentational turn list, over the structural {@link TranscriptTurn} shape. Injects
  * nothing and owns no query; a container passes `turns` and this component only ever
  * renders what it is given (`bzh:frontend-container-presentational`).
  *
  * Four turn kinds render distinctly:
- * - `env`/`asst` — plain text, as `local-transcript-panel` always rendered them.
+ * - `env`/`asst` — plain text.
  * - `tool` — a `<details>` card naming the call, its structured input, and its output
  *   (or a running placeholder while `tool.output` is still `null`); a tool call that
  *   spawned a sidechain nests this same component recursively inside the card, behind
@@ -56,8 +54,7 @@ export interface SidechainOpenEvent {
  * just its own locally-indexed identity.
  *
  * `turnClockInfo`/`turnAbsolute` render a turn's `timestamp` in the viewer's own local
- * zone (`bzh:utc-instants`) — unchanged from `local-transcript-panel`'s own
- * copy, which this component now owns instead.
+ * zone (`bzh:utc-instants`).
  */
 @Component({
   selector: 'fleet-transcript-viewer',
@@ -92,7 +89,7 @@ export class TranscriptViewer {
 
   /** {@link inputPreview}'s memoized backing — one `JSON.stringify` per
    * tool turn, recomputed only when {@link turns} changes, not on every change-detection
-   * pass the way computing it directly in the template-invoked `inputPreview` did. */
+   * pass. */
   private readonly inputPreviewsByTool = computed<Map<TranscriptTool, string>>(() => {
     const previews = new Map<TranscriptTool, string>();
     for (const turn of this.turns()) {
@@ -113,9 +110,8 @@ export class TranscriptViewer {
 
   /**
    * A turn's browser-local `HH:MM:SS` plus day context, or `null` when
-   * absent/unparsable — the template's time cell falls back to `—`. Moved from
-   * `local-transcript-panel` unchanged (`bzh:utc-instants`): the wire and
-   * the runner store stay UTC end to end, this is display decoration over that instant.
+   * absent/unparsable — the template's time cell falls back to `—`
+   * (`bzh:utc-instants`): display decoration over a UTC instant.
    */
   protected turnClockInfo(iso: string | null): LocalClockWithDay | null {
     return formatLocalClockWithDay(iso);

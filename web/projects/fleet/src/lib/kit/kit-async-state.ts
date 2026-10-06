@@ -5,33 +5,29 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
 
 /**
- * The async-state triad — the loading/error/empty status line
- * every read-backed panel duplicated (the runner panel's byte-for-byte `.status`
- * block), plus a `'ready'` state that projects the caller's populated content
+ * The async-state triad — the loading/error/empty status line a
+ * read-backed panel shows, plus a `'ready'` state that projects the caller's populated content
  * instead. Presentational: it renders whichever state it is handed and reads
  * no query itself.
  *
  * `:host { display: contents }` so this component contributes no box of its
  * own — the status line's `position: absolute` centering resolves against
- * whichever positioned ancestor the *caller* already provides (its own
- * `:host`, or a wrapping element), exactly as it did before extraction.
+ * whichever positioned ancestor the *caller* provides (its own `:host`, or a
+ * wrapping element).
  *
  * `tone` covers a state that reads with a variant color, distinct from the
  * plain default (dim) and `'error'` (red) — e.g. a "not available yet, but
  * that's expected" message in the accent color rather than the alarm color.
  *
- * `placement` picks the status line's layout: `'center'` (default) keeps the
- * original `position: absolute` centering, right for a panel-sized void
- * (board, chunk dock); `'inline'` renders the same states in normal flow with
- * left-aligned padding, right for a list panel whose existing `.none` copy sat
- * as a padded top-left line — adopting the kit there is not a silent visual
- * regression.
+ * `placement` picks the status line's layout: `'center'` (default) uses
+ * `position: absolute` centering, right for a panel-sized void; `'inline'`
+ * renders the same states in normal flow with left-aligned padding, right for
+ * a list panel whose empty copy reads as a padded top-left line.
  *
  * `loadingMode` picks what the `loading` state renders: `'text'` (default)
  * keeps the status line; `'content'` instead projects the `[loading]`-slotted
  * content the caller supplies (typically a `KitSkeleton`) — a shape-of-what's-
- * coming placeholder rather than a status line, purely a polish increment
- * over the text every acceptance criterion is already met by.
+ * coming placeholder rather than a status line.
  */
 @Component({
   selector: 'fleet-kit-async-state',

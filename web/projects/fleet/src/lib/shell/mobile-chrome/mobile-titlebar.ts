@@ -6,17 +6,12 @@ import { KitMenu } from '../../kit';
 /**
  * The generic mobile titlebar (mock screen C's `.appbar`,
  * `../../../docs/designs/mobile/core-flows.html`) — the brand mark + wordmark,
- * a live dot, and a buried `⋮` overflow menu, shared by both mobile shells:
- * the hub's app-root fork (`hub/src/app/shell/nav/mobile-titlebar.ts`, a thin
- * wrapper around this) and the runner's `app-panel-mobile.ts`. Presentational
- * only — the `live` boolean and the menu's panel are each consumer's own
- * concern (the hub derives liveness from `FleetLiveUpdates`, the runner from
- * its own hub-reachability read); this component owns only the chrome both
- * shells duplicated.
+ * a live dot, and a buried `⋮` overflow menu, for a mobile shell.
+ * Presentational only — the `live` boolean and the menu's panel are the
+ * consumer's own concern; this component owns only the titlebar chrome.
  *
  * The menu's contents arrive as a {@link TemplateRef} rather than as projected
- * content, the contract {@link KitMenu} carries since the CDK-menu rebuild:
- * a `CdkMenu` panel wrapped around an `<ng-content>` slot cannot
+ * content, matching {@link KitMenu}'s contract: a `CdkMenu` panel wrapped around an `<ng-content>` slot cannot
  * see the items projected into it, so the panel is declared in the consumer's
  * own view and passed here.
  *
