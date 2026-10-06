@@ -23,6 +23,7 @@ from blizzard.hub.domain.observability.egress.event_rows import (
     dropped_row,
 )
 from blizzard.hub.domain.observability.egress.rows import step_row
+from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from tests import trace_fixtures as fx
@@ -173,6 +174,129 @@ def test_a_drop_gives_one_dropped_row_carrying_its_step() -> None:
         derivation.step_started_at,
     )
     assert (row.derivation_id, row.derived_at, row.kind, row.subject) == (None,) * 4
+
+
+def _release_facts() -> StepFacts:
+    """A chunk whose every identifying value differs from the fixtures' defaults."""
+    graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
+    return fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
+
+
+_RELEASE_STEP = {
+    "step_key": "ch_7/2",
+    "trace_id": "f3e010092ca8029cd2d02a1a497f5ece",
+    "step_started_at": datetime(2026, 1, 1, 0, 0, 40, tzinfo=UTC),
+    "chunk_id": "ch_7",
+    "epoch": 2,
+    "spawn_generation": 4,
+    "graph_id": "g5",
+    "graph_name": "release-flow",
+    "node_id": "g5-plan",
+    "node_name": "plan",
+}
+
+
+def test_a_derivation_and_its_event_rows_in_full() -> None:
+    event = _event(
+        kind="agent_spawn",
+        turn_path="3.1",
+        occurrence=2,
+        subject="reviewer",
+        tool="Task",
+        chunk_id="ch_7",
+        node_id="g5-ship",
+        epoch=2,
+        spawn_generation=4,
+        depth=1,
+        agent_type="coder",
+        occurred_at=datetime(2026, 1, 1, 0, 0, 50, tzinfo=UTC),
+    )
+    derivation = EventDerivation(
+        marker=DerivationMarker(
+            "seg_9", "blizzard-analytics/6", "fp", datetime(2026, 1, 1, 0, 1, tzinfo=UTC), 1, False
+        ),
+        provenance=SegmentProvenance("opencode", "0.9", "gpt-q", "low"),
+        events=(event,),
+        chunk_id="ch_7",
+        epoch=2,
+        spawn_generation=4,
+        spawn_cwd="/w",
+    )
+    keyed: dict[str, Any] = {
+        "segment_id": "seg_9",
+        "extractor_version": "blizzard-analytics/6",
+        "derivation_id": "f940c32ed89e6381998b7a6423ea66ad",
+        "derived_at": datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+        "dropped_at": None,
+        **_RELEASE_STEP,
+        "exported_at": datetime(2026, 2, 1, tzinfo=UTC),
+    }
+    assert derivation_rows(_release_facts(), derivation, RELATIVE, EXPORTED) == (
+        ExportedEventsEntry(
+            record_type="derivation",
+            complete=False,
+            event_count=1,
+            kind=None,
+            subject=None,
+            tool=None,
+            turn_path=None,
+            occurrence=None,
+            occurred_at=None,
+            depth=None,
+            agent_type=None,
+            harness_id=None,
+            harness_version=None,
+            model=None,
+            effort=None,
+            **keyed,
+        ),
+        ExportedEventsEntry(
+            record_type="event",
+            complete=None,
+            event_count=None,
+            kind="agent_spawn",
+            subject="reviewer",
+            tool="Task",
+            turn_path="3.1",
+            occurrence=2,
+            occurred_at=datetime(2026, 1, 1, 0, 0, 50, tzinfo=UTC),
+            depth=1,
+            agent_type="coder",
+            harness_id="opencode",
+            harness_version="0.9",
+            model="gpt-q",
+            effort="low",
+            **keyed,
+        ),
+    )
+
+
+def test_a_dropped_row_in_full() -> None:
+    drop = DropFact("seg_9", "ch_7", 2, 4, datetime(2026, 1, 1, 0, 1, 10, tzinfo=UTC))
+    assert dropped_row(_release_facts(), drop, EXPORTED) == ExportedEventsEntry(
+        record_type="dropped",
+        segment_id="seg_9",
+        extractor_version=None,
+        derivation_id=None,
+        derived_at=None,
+        complete=None,
+        event_count=None,
+        dropped_at=datetime(2026, 1, 1, 0, 1, 10, tzinfo=UTC),
+        kind=None,
+        subject=None,
+        tool=None,
+        turn_path=None,
+        occurrence=None,
+        occurred_at=None,
+        depth=None,
+        agent_type=None,
+        **_RELEASE_STEP,
+        harness_id=None,
+        harness_version=None,
+        model=None,
+        effort=None,
+        exported_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
 
 
 def test_a_chunk_mismatch_is_refused_and_a_missing_step_is_not_found() -> None:

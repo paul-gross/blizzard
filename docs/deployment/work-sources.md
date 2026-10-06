@@ -144,11 +144,12 @@ closer and records each outcome. A PR opened before an upgrade keeps the body it
 
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
-a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires up to a
-fixed number of due intents per pass through that source's binding, leaving the rest to the next pass — the guarantee
-half of closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the
-drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so
-more than one hub pointed at the same repo closing the same item is not a race to coordinate around.
+a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then attempts up to a
+fixed number of due intents per pass through that source's binding, leaving the rest to the next pass, and a failed
+attempt stays pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata
+is only an opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical
+constraint: a close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is
+not a race to coordinate around.
 
 It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
 any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`; the
@@ -198,6 +199,6 @@ Closure is unconditional, so a `close` key on a leftover `[[work_source]]` block
 
 The migration that ships beside this wheel backfills a close intent for every already-landed or hand-completed work ref
 still carrying no terminal outcome, regardless of whether its source ever set `close = true` — because no deployment
-ever did, this closes the whole accumulated backlog of delivered forge items in one pass on the first drain after
-upgrade. That is the intended repair, not a bug: expect a burst of `work-item-closed` events, one per backlog ref, in
-the minutes after the restart.
+ever did, the drain works through the accumulated backlog of delivered forge items over the passes after the upgrade, a
+fixed number of attempts each, and a failed attempt waits under backoff. That is the intended repair, not a bug: expect
+a burst of `work-item-closed` events, one per backlog ref, in the minutes after the restart.

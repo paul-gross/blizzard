@@ -19,7 +19,15 @@ import duckdb
 import pyarrow.parquet as pq
 
 from blizzard.hub.egress.writer import rfc3339_utc
-from tests.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
+from tests.egress_recipes import (
+    COST_BY_NODE_BY_DAY,
+    LOAD_EVENTS_NDJSON,
+    LOAD_NDJSON,
+    LOAD_PARQUET,
+    SLOWEST_STATION_OF_THE_WEEK,
+    load,
+    recipe,
+)
 from tests.repo_files import repo_root
 
 DATASETS = {"steps": "step_key", "invocations": "usage_id"}
@@ -124,32 +132,23 @@ def assert_nothing_planted(directory: Path, fmt: str, planted: Mapping[str, Sequ
 
 
 def warehouse(directory: Path, fmt: str) -> duckdb.DuckDBPyConnection:
-    """DuckDB over the directory in place: each dataset bound to its files, and the dictionary's newest-copy view
-    over it as ``<dataset>_newest``, which is what the docs' recipes read."""
+    """DuckDB over the directory in place, loaded by the docs' own manifest-driven SQL: each dataset bound to its
+    files, and the dictionary's newest-copy view over it as ``<dataset>_newest``, which is what the docs' recipes read."""
     connection = duckdb.connect()
     connection.execute("SET TimeZone = 'UTC'")
     for dataset in DATASETS:
-        pattern = f"{directory}/{dataset}/v1/*/*{SUFFIX[fmt]}"
-        reader = (
-            f"read_json_auto('{pattern}', format = 'newline_delimited')"
-            if fmt == "ndjson"
-            else f"read_parquet('{pattern}')"
-        )
-        connection.execute(f"CREATE VIEW {dataset} AS SELECT * FROM {reader}")
+        load(connection, LOAD_NDJSON if fmt == "ndjson" else LOAD_PARQUET, directory, dataset)
         view = (_CONTRACT_DIR / f"{dataset}_newest.sql").read_text().strip()
         connection.execute(f"CREATE VIEW {dataset}_newest AS {view}")
     return connection
 
 
 def events_warehouse(directory: Path) -> duckdb.DuckDBPyConnection:
-    """DuckDB over the NDJSON ``events`` files in place, with the dictionary's two views over them."""
+    """DuckDB over the NDJSON ``events`` files in place, loaded by the docs' own SQL, with the dictionary's two views
+    over them."""
     connection = duckdb.connect()
     connection.execute("SET TimeZone = 'UTC'")
-    pattern = f"{directory}/events/v1/*/*{SUFFIX['ndjson']}"
-    connection.execute(
-        f"CREATE VIEW events AS SELECT * FROM read_json_auto('{pattern}', format = 'newline_delimited', "
-        "union_by_name = true, sample_size = -1)"
-    )
+    load(connection, LOAD_EVENTS_NDJSON, directory, "events")
     for view in ("events_current", "events_by_version"):
         connection.execute(f"CREATE VIEW {view} AS {(_CONTRACT_DIR / f'{view}.sql').read_text().strip()}")
     return connection

@@ -13,6 +13,7 @@ from blizzard.hub.domain.observability.egress.rows import (
     AttributedUsage,
     ExportedInvocation,
     ExportedStep,
+    invocation_row,
     money,
     step_row,
 )
@@ -206,6 +207,64 @@ def test_an_invocation_row_renames_its_usage_fact() -> None:
     assert (row.input_tokens, row.cache_read_tokens) == (100, 1000)
     assert (row.recorded_at, row.exported_at) == (fact.recorded_at, EXPORTED)
     assert len(row.trace_id) == 32
+
+
+def _release_facts() -> StepFacts:
+    """A chunk whose every identifying value differs from the fixtures' defaults."""
+    graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
+    return fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
+
+
+def test_an_invocation_row_in_full() -> None:
+    fact = fx.usage(
+        epoch=2,
+        at_seconds=45,
+        node_id="g5-ship",
+        kind="judge",
+        model="gpt-q",
+        input_tokens=11,
+        output_tokens=22,
+        cache_read_tokens=33,
+        cache_create_tokens=44,
+        cost_usd=0.125,
+        estimated_cost_usd=0.0625,
+        harness_id="opencode",
+        harness_version="0.9",
+    )
+    row = fx.invocation_of(_release_facts(), AttributedUsage(42, "ch_7", "r-x", fact), EXPORTED)
+    assert row == ExportedInvocation(
+        usage_id=42,
+        step_key="ch_7/2",
+        trace_id="f3e010092ca8029cd2d02a1a497f5ece",
+        chunk_id="ch_7",
+        epoch=2,
+        graph_id="g5",
+        graph_name="release-flow",
+        node_id="g5-plan",
+        node_name="plan",
+        runner_id="r-x",
+        kind="judge",
+        model="gpt-q",
+        harness_id="opencode",
+        harness_version="0.9",
+        input_tokens=11,
+        output_tokens=22,
+        cache_read_tokens=33,
+        cache_create_tokens=44,
+        cost_billed_usd=Decimal("0.125000000"),
+        cost_estimated_usd=Decimal("0.062500000"),
+        recorded_at=datetime(2026, 1, 1, 0, 0, 45, tzinfo=UTC),
+        exported_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+
+
+def test_an_invocation_of_another_chunk_is_refused_naming_both() -> None:
+    facts = _release_facts()
+    step = next(s for s in identify_steps(facts) if s.kind is StepKind.RUNNER)
+    usage = AttributedUsage(42, "ch_other", "r-x", fx.usage(epoch=2))
+    with pytest.raises(ValueError) as refused:
+        invocation_row(facts, step, usage, EXPORTED)
+    assert str(refused.value) == "usage 42 belongs to ch_other, not ch_7"
 
 
 def test_an_invocation_without_a_runner_step_at_its_epoch_is_refused() -> None:

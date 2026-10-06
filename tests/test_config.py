@@ -2280,6 +2280,30 @@ def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> 
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("key", ["sweep_seconds", "batch_limit", "max_rows_per_file", "backfill_max_window"])
+def test_egress_positive_keys_accept_one_and_refuse_zero(tmp_path: Path, key: str) -> None:
+    assert getattr(EgressConfig.of({key: 1}), key) == 1
+    with pytest.raises(HubConfigError) as error:
+        EgressConfig.of({key: 0})
+    assert str(error.value) == f"egress.{key} must be positive, got 0"
+
+
+@pytest.mark.unit
+def test_egress_file_paths_refuses_a_non_string_naming_every_mode() -> None:
+    with pytest.raises(HubConfigError) as error:
+        EgressConfig.of({"file_paths": 3})
+    assert str(error.value) == "egress.file_paths must be one of relative, hashed, absolute, omit, got 3"
+
+
+@pytest.mark.unit
+def test_egress_header_comment_names_the_file_path_and_key_variable_knobs() -> None:
+    header = EgressConfig().to_toml()[0]
+    assert "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n" in header
+    assert "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n" in header
+    assert "# environment variable holding the key for hashed paths. extractor_versions is current or\n" in header
+
+
+@pytest.mark.unit
 def test_runner_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None:
     _write_runner_config(tmp_path / "runner", "")
     assert RunnerConfig.load(tmp_path / "runner").tracing == TracingConfig()
