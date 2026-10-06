@@ -26,7 +26,7 @@ from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMar
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
-from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support import OMIT_TITLE, OP, WorkSourceRegistry, config_authoring, forge_state, github_double, migrate_to
 
 pytestmark = pytest.mark.component
@@ -227,8 +227,9 @@ def test_factory_gives_each_source_its_own_credentialed_client(tmp_path: Path) -
     assert source_one._client is not source_two._client
 
 
-def test_factory_refuses_a_source_whose_secret_cannot_be_revealed(tmp_path: Path) -> None:
-    """A source that exists but cannot be built is an error naming it, never an absent source."""
+def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_path: Path) -> None:
+    """Items already ingested from a retired source must stay readable: once its secret is retired too,
+    the source reads as absent rather than failing every read path."""
     registry, authoring, core = _registry_world(tmp_path, ("one", _github("acme/one")))
     record = core.work_source_records.get("one")
     assert record is not None
@@ -236,8 +237,7 @@ def test_factory_refuses_a_source_whose_secret_cannot_be_revealed(tmp_path: Path
     secret = core.secrets.get("gh")
     assert secret is not None
     authoring.retire_secret(secret, OP)
-    with pytest.raises(WorkSourceError, match="one"):
-        registry.get("one")
+    assert registry.get("one") is None
 
 
 def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(tmp_path: Path) -> None:
