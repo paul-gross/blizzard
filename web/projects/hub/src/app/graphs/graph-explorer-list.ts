@@ -28,9 +28,8 @@ type VersionLabel = 'effective' | 'superseded' | 'retired';
 /** A version's lifecycle label → badge tone — borrows the shared `Tone` ladder for
  * its color rather than inventing a graph-lifecycle-specific one
  * (`chunk-issue-list.ts`'s own `PRIORITY_TONE`/`events-view.ts`'s `SEVERITY_TONE`
- * shape). The mapping is chosen for the color each label already carried in the
- * hand-rolled `.badge.effective`/`.badge.superseded`/`.badge.retired` chrome this
- * replaces, not for `Tone`'s own documented meanings: `effective` reuses
+ * shape). The mapping is chosen for color, not for `Tone`'s own documented
+ * meanings: `effective` reuses
  * `spawning`'s cyan (`Tone`'s only cyan), `superseded` reuses `idle`'s dim — a
  * reasonable double meaning, since a superseded version really is this lineage's
  * spent, inert entry — and `retired` reuses `stale`'s red, reading as the alarm a
@@ -72,9 +71,8 @@ const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
  * {@link isExpanded} reveals its group.
  *
  * Presentational only: `graphs`/`selectedGraphId` are plain inputs, no query
- * injection (`bzh:frontend-container-presentational`) — {@link GraphExplorer}
- * supplies both from `injectHubGraphsQuery`, keeping only the query and the
- * `KitAsyncStateValue` for itself.
+ * injection (`bzh:frontend-container-presentational`); {@link GraphExplorer} supplies
+ * both.
  */
 @Component({
   selector: 'app-graph-explorer-list',

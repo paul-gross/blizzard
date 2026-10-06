@@ -25,8 +25,7 @@
   border-bottom-color: var(--cyan-dim);
   background: var(--surface-hover);
 }
-/* Selected reads as the lightest background plus the left-edge accent, the
-   same pattern node history and the artifacts tab use: the status color
+/* Selected reads as the lightest background plus the left-edge accent: the status color
    below yields to it while selected — a transient override, not a loss of
    the status signal, since the status rules below re-take the edge the
    instant `.selected` no longer matches. `[data-status]` (always present,
@@ -174,8 +173,7 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-/* The control row: Promote is its one occupant now that Delete moved to the
-   chunk detail dock's header — empty (no control renders) when canControl is
+/* The control row: Promote is its one occupant — empty (no control renders) when canControl is
    false or the status is not_ready, so it never adds a visible gap on a
    read-only or non-backlog card. */
 .card-controls {

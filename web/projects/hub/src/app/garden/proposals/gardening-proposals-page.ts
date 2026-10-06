@@ -71,10 +71,8 @@ export class GardeningProposalsPage {
   private readonly waitingOnly = computed<boolean>(() => this.url.read('show') !== SHOW_ALL);
 
   /** Every proposal id a Pass or Accept mutation is currently pending for
-   * (`bzh:frontend-pending-override`) — read by `mutationKey` alone, not by owning
-   * either mutation here: `gardening-proposal-pass-dialog.ts`/`gardening-proposal-
-   * accept-dialog.ts` fire them from the detail child this list mounts beside, never
-   * from this container. Both are the domain's own two closing verbs
+   * (`bzh:frontend-pending-override`) — read by `mutationKey` alone; this container
+   * owns neither mutation. Both are the domain's own two closing verbs
    * (`domain/findings-and-proposals.md` "Closing a proposal: pass or accept") and
    * closure is terminal — {@link isGardenProposalWaiting} reads `false` the instant
    * either lands, whichever closure kind it records, so this needs only the pending

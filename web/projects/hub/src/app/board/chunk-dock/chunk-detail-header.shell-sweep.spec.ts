@@ -13,7 +13,7 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * This mounts the header with every in-flow control live at once — a routed,
  * pausable chunk with a long runner identity — the worst case the row can carry
  * (Pause and the `⋯` overflow trigger, plus the close button; Detach, Complete, and
- * Delete moved into the trigger's own menu panel), and sweeps that nothing overflows
+ * Delete live in the trigger's own menu panel), and sweeps that nothing overflows
  * the dock's own right edge, at 800px (wider than any real dock share) and at
  * 390/320px (`bzh:narrow-viewport-tier-rule`). A second case opens the menu and
  * sweeps its own panel items at the same widths — a real CDK overlay, not the
@@ -45,7 +45,7 @@ const DETAIL: ChunkDetail = {
 const WIDTHS = [800, 390, 320];
 
 /** Every in-flow control the fixture above makes live at once — Detach, Complete,
- * and Delete no longer render inline; they live in the `⋯` trigger's own menu. */
+ * and Delete live in the `⋯` trigger's own menu. */
 const SWEPT = ['pause-chunk', 'chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk

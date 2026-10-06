@@ -5,7 +5,7 @@ import { QuestionsPanelView } from './questions-view';
 import { injectHubQuestionsQuery } from './questions.query';
 
 /**
- * The open-questions panel (MVP criterion 7) — every agent ask across the
+ * The open-questions panel — every agent ask across the
  * fleet, in the right rail. A parked chunk's question is the one thing on this
  * board that blocks a worker on a human, so it is surfaced fleet-wide rather than
  * only inside the chunk nobody has selected yet; clicking an ask opens its chunk,
@@ -31,6 +31,6 @@ export class QuestionsPanel {
   /** Every open ask across the fleet; empty until the first read resolves. */
   protected readonly questions = computed(() => this.query.data() ?? []);
 
-  /** The questions query's async state (AC 3). */
+  /** The questions query's async state. */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.query, this.questions().length === 0));
 }

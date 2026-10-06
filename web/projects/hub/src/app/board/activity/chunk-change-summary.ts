@@ -22,7 +22,7 @@ export interface ChunkChangeSummary {
  * with the panel's existing `→` vocabulary — each absent segment (and its adjacent
  * arrow) is dropped rather than rendered as placeholder junk — `status` included, since
  * a backfilled row (`ActivityView`) can structurally carry no status — so a frame carrying neither node
- * degrades to exactly today's `C-1NWW → running`, and a frame carrying a node but no
+ * degrades to `C-1NWW → running`, and a frame carrying a node but no
  * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
  * build`. `runner` is the compact runner ref when the frame names one, else omitted —
  * an unclaimed transition (e.g. a promote or a stop past the point the route
@@ -34,7 +34,7 @@ export interface ChunkChangeSummary {
  * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
  * frame's `by` fills the same line — Delete's actor, not a runner, but
  * the same "who did this" line 2 the block already renders for a claimed transition.
- * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
+ * Every other unclaimed transition omits line 2 entirely.
  */
 export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSummary {
   if (data.cause === ChunkChangeCause.CLAIMED) {

@@ -12,19 +12,11 @@ export interface ChunkGraphEditVars {
 
 /**
  * `PATCH /api/chunks/{id}` with `{ graph_id }` — through the generated client
- * (bzh:generated-client) — the unified all-or-nothing PATCH (in #104's
- * shape). Server-refused 404 for an unknown
- * chunk or target graph, and 409 once the chunk is claimed or has moved (`EditService`)
- * — the chunk detail dock mirrors that refusal so it never offers the edit outside that
- * window, and surfaces one anyway if the race is lost: a refusal reaches the
- * caller as a thrown error, nothing here swallows it. On
- * success it re-reads the fleet list and the chunk detail; the endpoint's
- * `chunk-changed` SSE frame corroborates for every other open view.
- *
- * The chunk's model selection was editable here too until `Chunk.model` was retired
- * for the `default_model`/`default_effort` pair, which has no web editing
- * surface — `blizzard hub chunk set --default-model/--default-effort` is the one way to
- * write them, and `chunk show` reads them back.
+ * (bzh:generated-client) — the unified all-or-nothing PATCH. Server-refused 404 for an
+ * unknown chunk or target graph, and 409 once the chunk is claimed or has moved
+ * (`EditService`): a refusal reaches the caller as a thrown error, nothing here
+ * swallows it. On success it re-reads the fleet list and the chunk detail; the
+ * endpoint's `chunk-changed` SSE frame corroborates for every other open view.
  */
 export function injectSetChunkGraphMutation() {
   const queryClient = inject(QueryClient);

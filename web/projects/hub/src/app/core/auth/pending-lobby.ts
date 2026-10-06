@@ -3,15 +3,13 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { type MeResponse, KitButton } from 'fleet/shell';
 
 /**
- * The `pending` lobby (renamed from the `guest` lobby) — an
+ * The `pending` lobby — an
  * authenticated user resolved with an **empty** permission set (a freshly-linked
- * account, `role = "pending"`, before an admin grants a role — #94's role
- * assignment) sees this instead of the board: "signed in, awaiting access", not a
- * board silently failing every gated read with `403`s. Presentational: the app root
- * decides *when* to render this (an `authState` of `'lobby'`) and hands down the
- * resolved identity; logout is a working control here too (the AC: "a pending
- * account can log out from the lobby") — this only emits the intent, the container
- * owns the mutation.
+ * account, `role = "pending"`, before an admin grants a role) sees this instead of
+ * the board: "signed in, awaiting access", not a
+ * board silently failing every gated read with `403`s. Presentational: hands down
+ * the resolved identity; logout is a working control here — this only emits the
+ * intent, the container owns the mutation.
  */
 @Component({
   selector: 'app-pending-lobby',

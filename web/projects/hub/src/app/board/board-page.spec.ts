@@ -223,8 +223,7 @@ describe('BoardPage', () => {
 
     expect(el.querySelector('app-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The one rail composes beside the board: runners, asks, gates, activity feed. The
-    // titlebar itself lives at the app root now.
+    // The one rail composes beside the board: runners, asks, gates, activity feed.
     expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="questions-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gates-panel"]')).toBeTruthy();
@@ -234,8 +233,7 @@ describe('BoardPage', () => {
   it('lays the board out as two columns, the ready queue among the board lanes', async () => {
     const { el } = await open();
 
-    // The centre and the one rail are the columns of the main grid — the left
-    // rail is gone with the queue panel it held.
+    // The centre and the one rail are the columns of the main grid.
     const columns = el.querySelectorAll('.main > .col');
     expect(columns.length).toBe(2);
     expect(el.querySelector('app-board-shell')?.closest('.col')).toBe(columns[0]);
@@ -266,11 +264,10 @@ describe('BoardPage', () => {
     expect(el.querySelector(`[data-testid="rail-gate"][data-chunk="${GATED}"]`)).not.toBeNull();
   });
 
-  it('renders a ready chunk exactly once across the whole page (issue #22)', async () => {
+  it('renders a ready chunk exactly once across the whole page', async () => {
     const { el } = await open();
 
-    // The READY lane replaced the rail rather than joining it: one chunk, one
-    // place on the board, wherever its status puts it.
+    // One chunk, one place on the board, wherever its status puts it.
     expect(el.querySelectorAll(`[data-chunk="${READY}"]`)).toHaveLength(1);
     expect(card(el, READY).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
   });
@@ -343,17 +340,14 @@ describe('BoardPage', () => {
   });
 
   /*
-   * Part A conformance: one `promoteChunk` mutation instance fires once per
-   * promoted card, so a pending mutation's effect must scope to the card whose own
-   * mutation is in flight — a sibling card's Promote button must stay clickable.
+   * One `promoteChunk` mutation instance fires once per promoted card, so a pending
+   * mutation's effect must scope to the card whose own mutation is in flight — a sibling
+   * card's Promote button must stay clickable.
    *
-   * The clicked card no longer just disables its own Promote button in place: the
-   * READY-lane override (`bzh:frontend-pending-override`, below) moves the whole card into
-   * READY while its promote is pending, and a card in READY never carries a Promote button
-   * at all — a not_ready and a ready card can never both be true of the same card at once, since
-   * both are derived off the same pending list.
+   * The READY-lane override (`bzh:frontend-pending-override`, below) moves the clicked
+   * card into READY while its promote is pending, where it carries no Promote button.
    */
-  describe('Promote per-card pending scope (Part A)', () => {
+  describe('Promote per-card pending scope', () => {
     /** The Promote button on a backlog card, or `undefined` if the card carries none. */
     const promoteButton = (el: HTMLElement, chunkId: string): HTMLButtonElement | null | undefined =>
       card(el, chunkId).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]');
@@ -369,8 +363,7 @@ describe('BoardPage', () => {
       promoteButton(el, BACKLOG)?.click();
       // Held open by the `invalidateQueries` spy above — `settle()`'s own
       // `whenStable()` would hang on it, so a bare macrotask tick + a manual
-      // `detectChanges()` stands in, the same idiom `status.query.spec.ts` uses
-      // for the same reason.
+      // `detectChanges()` stands in.
       await new Promise((resolve) => setTimeout(resolve, 0));
       harness.fixture.detectChanges();
 
@@ -421,12 +414,10 @@ describe('BoardPage', () => {
       [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
 
     /**
-     * The hub always assigns a freshly-promoted chunk a **tail** position
-     * (`promote.py::tail_position` — it appends after every currently-ready chunk,
-     * never the head), so the pending override must not predict a top-of-lane rank:
-     * it lands at the *bottom* of READY, behind the real queue order, via
-     * `BoardShell`'s own "unranked id" fallback — the same fallback a promote that
-     * has landed server-side but whose queue read hasn't caught up yet relies on.
+     * The hub assigns a freshly-promoted chunk a **tail** position
+     * (`promote.py::tail_position` owns it), so the pending override must not predict a
+     * top-of-lane rank: it lands at the *bottom* of READY, behind the real queue order,
+     * via `BoardShell`'s "unranked id" fallback.
      */
     it('renders the promoted card at the bottom of READY, behind the real queue order, while its promote is pending', async () => {
       const { el, harness } = await open();
@@ -466,7 +457,7 @@ describe('BoardPage', () => {
     });
   });
 
-  describe('a chunk with a pending delete is hidden from the board (Part B)', () => {
+  describe('a chunk with a pending delete is hidden from the board', () => {
     /** `ChunkDetail`'s dock owns and fires the delete mutation, not `BoardPage` — a
      * `mutationKey`-scoped read is exactly what lets this list surface see another
      * component's in-flight mutation without owning it, so this fires it from the same
@@ -628,7 +619,7 @@ describe('BoardPage', () => {
     });
   });
 
-  it('docks chunk detail beside the rails, so selecting never resizes the board (issue #21)', async () => {
+  it('docks chunk detail beside the rails, so selecting never resizes the board', async () => {
     const { el, harness } = await open();
 
     // Nothing selected: the dock is already mounted, stacked under the board inside
@@ -647,7 +638,7 @@ describe('BoardPage', () => {
     expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
   });
 
-  it('opens a chunk from an ask in the right rail (MVP criterion 7)', async () => {
+  it('opens a chunk from an ask in the right rail', async () => {
     const { el, harness } = await open();
 
     // An ask names a chunk nobody has selected; activating it fills the same dock the
@@ -659,7 +650,7 @@ describe('BoardPage', () => {
     expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
   });
 
-  describe('the URL drives selection (issue #162)', () => {
+  describe('the URL drives selection', () => {
     it('hydrates the selection from the URL on load, no click — a shareable, refresh-safe link', async () => {
       const { el } = await open(`/board?chunk=${RUNNING}`);
 

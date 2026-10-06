@@ -7,12 +7,9 @@ import type { DiagramSelection } from './graph-diagram-selection';
 
 /**
  * The diagram's 50/50 split — `GraphDiagram` left, `GraphDiagramDetail` right —
- * and the sole owner of "what is selected". `GraphDiagram` stays
- * fully controlled (it renders `selection`, emits `selectionChange`); this
- * component is the one place those two meet, so the diagram and the pane can
- * never disagree about the current selection. Layout runs once, inside
- * `GraphDiagram`'s own `GRAPH_LAYOUT` seam — this component holds no second copy
- * of the laid-out graph.
+ * and the sole owner of "what is selected", so the diagram and the pane can
+ * never disagree about the current selection. This component holds no copy of the
+ * laid-out graph (`GraphDiagram` owns layout).
  */
 @Component({
   selector: 'app-graph-diagram-view',

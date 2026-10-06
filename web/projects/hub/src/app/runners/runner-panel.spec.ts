@@ -50,14 +50,11 @@ const RUNNERS = {
 // and one rn_online FINISHED — only the first shows under rn_online.
 //
 // rn_both's chunk sits at the same node as rn_online's and differs only in status:
-// the pair the claim-status tone assertion (#156) reads, where the node alone would
+// the pair the claim-status tone assertion reads, where the node alone would
 // make the two lines identical.
 //
-// The done row documents the shape the hub sends: a terminal chunk reports
-// `runner_id: null` / `environment_count: 0` even when its route facts still name the
-// runner that worked it. It is a fixture, NOT a regression guard — the panel reaches it
-// on the same unrouted branch `ch_01idle…` already covers, so removing it fails nothing.
-// The behavior it documents lives wholly in the hub and is pinned there, by
+// The done row (`runner_id: null` / `environment_count: 0`) takes the same unrouted
+// branch `ch_01idle…` covers; the hub's terminal-chunk shape is pinned by
 // `tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted`.
 const CHUNKS = [
   {

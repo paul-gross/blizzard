@@ -11,9 +11,8 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
  *
  * The entry marker is `fleet-kit-badge`'s `soft` pill (`bzh:frontend-kit-floor`),
  * the same variant the graph explorer's effective/superseded pills use, so the two
- * graph surfaces share one pill vocabulary. Its tone is chosen for the color the
- * marker already carried — `waiting` is the ladder's `--amber-hi`, the badge's own
- * previous border and text color — not for `Tone`'s documented meaning, exactly as
+ * graph surfaces share one pill vocabulary. Its tone is chosen for color — `waiting` is
+ * the ladder's `--amber-hi` — not for `Tone`'s documented meaning, exactly as
  * `graph-explorer-list.ts`'s `LIFECYCLE_TONE` picks its three.
  */
 @Component({

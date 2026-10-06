@@ -5,14 +5,12 @@ import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
-// The container (`chunk-detail.ts`) imports these three event types from here too —
-// re-exported so it needs no edit for the split (the container-unchanged
-// invariant). `WorkItemsState` is not among them: the container takes it straight
-// from `work-items-state.ts`, this feature's own owner of that fold.
+// Re-exported alongside the panel's own outputs, so a consumer binding them
+// imports their event types from here.
 export type { EditGraphEvent } from 'fleet';
 
 /**
- * The chunk detail dock (MVP criterion 9/11) — everything known about the
+ * The chunk detail dock — everything known about the
  * selected chunk, filling the centre column under the board without reflowing it.
  *
  * A thin **composition** of seven sibling presentational
@@ -22,14 +20,11 @@ export type { EditGraphEvent } from 'fleet';
  * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}), the node-history
  * {@link ChunkTimeline}, and the artifacts column ({@link ChunkArtifacts}).
  * This panel forwards `detail`/`workItems`/`actionError` down to whichever
- * siblings need them and re-emits their outputs up unchanged, so
- * `chunk-detail.ts`'s (the container's) template binding set is identical to
- * before the split.
+ * siblings need them and re-emits their outputs up unchanged.
  *
  * `ChunkTokenBreakdown` is content-projected into `ChunkFacts`'s
  * `[token-breakdown]` slot so the cost/token rows land between Attempts and
- * Graph in one continuous `<dl class="kv">` — the exact row order the
- * monolith rendered.
+ * Graph in one continuous `<dl class="kv">`.
  *
  * Presentational only: every server call (the mutations these events drive,
  * and the error any of them surfaces back down as `actionError`) lives in
@@ -77,8 +72,7 @@ export class ChunkDetailPanel {
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
    * {@link ChunkTimeline} — `null` (the default) withholds the Graph fact's and every
-   * timeline row's link the same way {@link ChunkFacts.graphLinkBase} already defaults,
-   * since this panel is exported from `fleet` too (`ChunkDetail`'s own public API) and
+   * timeline row's link, since this panel is exported from `fleet` too (`ChunkDetail`'s own public API) and
    * must not hardcode the hub-only `/graphs` route a runner-mounted instance has
    * nowhere to send. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
@@ -118,7 +112,7 @@ export class ChunkDetailPanel {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
-  /** Emitted when the operator answers an open question (MVP criterion 7). */
+  /** Emitted when the operator answers an open question. */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 
   /** Emitted when the operator resolves an open gate decision. */

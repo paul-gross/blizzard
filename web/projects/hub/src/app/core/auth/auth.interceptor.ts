@@ -9,9 +9,8 @@ import { redirectToLogin } from './auth-redirect';
  * hub client's own transport — the app has no `HttpClient`/`HttpInterceptorFn` seam to
  * hang off (`bzh:generated-client`'s fetch-based client is the one transport every
  * request rides), so this is that seam's counterpart. Any hub response answering
- * `401` (an unresolved or expired session — the one status `require()`/`/api/me`
- * raise for "not authenticated", never for "authenticated but lacking a permission",
- * which is `403` and left alone here) routes the app to `/login`, stashing the
+ * `401` (an unresolved or expired session; a `403` is left alone) routes the app
+ * to `/login`, stashing the
  * current route for a post-login return (`redirectToLogin`).
  *
  * Registered once, app-wide (`provideAuthInterceptor()` in `app.config.ts`) via an

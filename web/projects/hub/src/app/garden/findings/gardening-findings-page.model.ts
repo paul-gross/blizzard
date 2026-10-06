@@ -9,8 +9,7 @@ import { type FindingListRowVm } from '../core/finding-list';
  * say which it came from, but a bucket already filtered to one doesn't need it
  * repeated on every row. `source`/`severity`/`raised_by_chunk_id`
  * ride every row verbatim — unlike routine/scope they carry no filter-dependent
- * `null`-out, since `FleetFindingList` only renders them at all for a
- * `source === 'review'` row. */
+ * `null`-out. */
 export function findingListRows(
   bucket: readonly FindingView[],
   selectedRoutine: string | null,

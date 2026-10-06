@@ -3,11 +3,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 /**
  * The graph detail's **lifecycle status** section — the action-error line
  * (report-don't-swallow pattern) and the entry-node line. Ordinary
- * body content below `fleet-kit-panel`'s header bar, where `GraphDetailHeader`
- * (the identity supplement — lifecycle text, graph id, and the retire/re-enable
- * control itself) lives instead: the retire/re-enable confirm-then-emit pair
- * moved there (alongside the lifecycle text it right-aligns against) so a
- * failed attempt still reports here, right below where the control lives.
+ * body content below `fleet-kit-panel`'s header bar; the retire/re-enable control
+ * itself lives in `GraphDetailHeader`, and a failed attempt reports here.
  *
  * Presentational only: forwards its two inputs straight to the template
  * (`bzh:frontend-container-presentational`); it holds no state of its own.

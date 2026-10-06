@@ -60,11 +60,9 @@
               [gates]="row.gates ?? []"
             />
             <!-- The chunks this runner currently holds a route on, the node each
-                 sits at, and how it is doing there — folded in by the container from
-                 the board's own chunk list, so the registry and the board can never
-                 disagree about who is working what. The status badge colors off the
-                 same STATUS_TONE ladder the board card uses, so a claim and its
-                 card always read the same tone. -->
+                 sits at, and how it is doing there (`row.claims`, supplied by the
+                 container). The status badge colors off the shared STATUS_TONE
+                 ladder. -->
             @if (row.claims.length > 0) {
               <ul class="claims" data-testid="runner-claims">
                 @for (claim of row.claims; track claim.chunkId) {

@@ -9,12 +9,8 @@ import { fleetSpendApiSpendGet, type FleetSpendView, LIVE_COVERED_POLL_BACKSTOP_
  * recompute them (e.g. local start-of-day rolling over) without re-wiring the query;
  * both ride in the query key so a new window is its own cache entry — `until` included,
  * or two windows sharing a `since` but differing in `until` would collide on one entry.
- * `until` is omitted from the request when the accessor returns `undefined` — the
- * original open-ended tail.
- *
- * Relocated from `/api/fleet/spend`: that prefix is now the
- * runner-authenticated fleet router, so the operator's anonymous spend read moved to
- * `/api/spend` to free the namespace.
+ * `until` is omitted from the request when the accessor returns `undefined` — an
+ * open-ended tail.
  */
 export function injectHubFleetSpendQuery(since: () => string, until: () => string | undefined = () => undefined) {
   return injectQuery(() => ({

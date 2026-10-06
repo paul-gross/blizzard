@@ -13,14 +13,11 @@ const LAST_PROVIDER_KEY = 'fleet.auth.last-provider';
 /**
  * The `/login` route — a container: owns the providers read and the
  * last-used-provider preference, forwards both to the presentational
- * {@link LoginButtons}. Reached either directly or via the 401 interceptor
- * (`auth.interceptor.ts`), which stashes the original route for
- * {@link consumeReturnUrl} to hand back to each provider link as `return_to` — so
- * completing the dance returns to where the app was interrupted.
+ * {@link LoginButtons}, handing each provider link {@link consumeReturnUrl}'s route
+ * as `return_to` so completing the dance returns to where the app was interrupted.
  *
- * Under `auth.mode = "none"` the providers list is always empty (the hub's own
- * answer — never re-derived here), so this route renders no buttons; the app root
- * never routes here in that mode to begin with (`/api/me` never 401s under `none`).
+ * An empty providers list (the hub's own answer — never re-derived here) renders
+ * no buttons.
  */
 @Component({
   selector: 'app-login-page',

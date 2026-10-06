@@ -121,7 +121,7 @@ async function render(detail: hubApi.ChunkDetail = DETAIL) {
   return fixture;
 }
 
-describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#203)', () => {
+describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
   it('stacks work item, issues and node history at narrow widths with no horizontal overflow', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
@@ -283,7 +283,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
     }
   });
 
-  it('keeps a long wrapped takeover command and its raw fallback scrollable, not clipped, at 320px (blizzard#251)', async () => {
+  it('keeps a long wrapped takeover command and its raw fallback scrollable, not clipped, at 320px', async () => {
     const fixture = await render(NEEDS_HUMAN_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -345,7 +345,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
  * same query jsdom parses without evaluating, so a real headless-Chromium proof is
  * needed the same way the General tab's own two-column split needed one above.
  */
-describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizzard#248)', () => {
+describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () => {
   it('stacks the step nav above the segment viewer at 390px with no horizontal overflow', async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkTranscriptsTab],

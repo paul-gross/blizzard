@@ -35,8 +35,7 @@ export interface FindingListRowVm {
   /** `FindingView.source` — `"routine"` or `"review"`. A
    * review-sourced finding carries no {@link routineName} (always `null` for one),
    * so the row shows {@link severity} and {@link raisedByChunkId} in its place
-   * rather than leaving that slot silently empty. A `"routine"` row renders exactly
-   * as it did before this field existed — additive, not a redesign. */
+   * rather than leaving that slot silently empty. */
   readonly source: hubApi.FindingSource;
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
   readonly severity: hubApi.FindingSeverity | null;

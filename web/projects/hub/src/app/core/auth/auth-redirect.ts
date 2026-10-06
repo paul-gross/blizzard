@@ -1,9 +1,8 @@
 import type { Router } from '@angular/router';
 
 /** `sessionStorage` key the original route is stashed under before a 401 or an
- * auth-failed SSE stream routes to `/login` — read once by the login
- * page to build each provider link's `return_to`, so completing the dance lands back
- * where the app was interrupted rather than always on the board. `sessionStorage`
+ * auth-failed SSE stream routes to `/login`; read back by {@link consumeReturnUrl}.
+ * `sessionStorage`
  * (not `localStorage`): the return location is this tab's navigation state, not a
  * durable preference — {@link LAST_PROVIDER_KEY} is the one thing meant to survive
  * across tabs/sessions. */
@@ -12,11 +11,7 @@ const RETURN_URL_KEY = 'fleet.auth.return-to';
 /** Routes the app to `/login`, first stashing the current route (unless already on
  * `/login`, which would otherwise clobber a real return location with `/login`
  * itself) for {@link consumeReturnUrl} to read back once the dance completes. The one
- * seam both the hub's 401 interceptor (`auth.interceptor.ts`) and the SSE auth-failure
- * channel (`../sse/fleet-live.ts`) route through, so "an unauthenticated hub response
- * means log in again" is decided in exactly one place *for the hub app* — the runner
- * webapp makes the same decision independently, for its own surface, in the runner app's
- * `session-recovery.ts`. */
+ * place the hub app decides "an unauthenticated hub response means log in again". */
 export function redirectToLogin(router: Router): void {
   const current = router.url;
   if (!current.startsWith('/login')) {
@@ -34,10 +29,8 @@ export function consumeReturnUrl(): string {
   return sessionStorage.getItem(RETURN_URL_KEY) ?? '/';
 }
 
-/** Validates a URL-borne `return_to` for the hub-as-IdP multi-provider bounce: the
- * hub's authorize endpoint redirects an unauthenticated browser here as
- * `/login?return_to=/api/auth/authorize?…`, and the login page resumes that pending
- * request by threading `return_to` through each provider button. Returns the value only
+/** Validates a URL-borne `return_to` (`/login?return_to=/api/auth/authorize?…`) for
+ * the hub-as-IdP multi-provider bounce. Returns the value only
  * when it is a same-origin `/api/auth/authorize` request — never a cross-origin or
  * protocol-relative URL, and never any other path — so a crafted `/login?return_to=…`
  * link cannot turn the chooser into an open redirect or aim the resumed dance at a

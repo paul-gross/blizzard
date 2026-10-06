@@ -45,9 +45,8 @@ export class ActivityPanel {
   private readonly backfill = computed<readonly LoggedEvent[]>(() => backfillEvents(this.activityQuery.data()));
 
   /** The backfill and live feeds merged and deduped by `key` (see the class doc),
-   * oldest → newest, capped at {@link RENDER_LIMIT} — the same shape
-   * {@link FleetLiveUpdates.log} produces on its own, so {@link rows} below needs no
-   * branch on which source a given entry came from. */
+   * oldest → newest, capped at {@link RENDER_LIMIT} — one shape, so {@link rows} below
+   * needs no branch on which source a given entry came from. */
   private readonly merged = computed<readonly LoggedEvent[]>(() =>
     mergeActivityFeeds(this.backfill(), this.live.log(), RENDER_LIMIT),
   );

@@ -46,8 +46,7 @@ describe('the board route (route-table mobile/desktop fork)', () => {
     localStorage.clear();
     // The app root's session gate needs `/api/me` to resolve before it
     // renders `<router-outlet>` at all — stub the full-permission operator identity
-    // (`auth.mode = "none"`'s shape) so these route-fork assertions, which predate
-    // auth, keep exercising exactly what they did before.
+    // (`auth.mode = "none"`'s shape).
     authStub = stubRequestClient(hubClient, (method, path) => {
       if (path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (path === '/api/auth/providers') return [];

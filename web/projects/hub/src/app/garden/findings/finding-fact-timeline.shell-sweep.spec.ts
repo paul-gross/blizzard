@@ -23,9 +23,8 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * happen, rather than in an isolation the timeline is never rendered in on its own.
  *
  * The fixture note is a genuinely unbroken 96-character run with no
- * spaces — the previous fixture was ordinary space-separated prose, which wraps at
- * word boundaries with or without `overflow-wrap: anywhere`, so it proved nothing
- * about the rule it claimed to. Proven able to fail: temporarily commenting out
+ * spaces — space-separated prose would wrap at word boundaries with or without
+ * `overflow-wrap: anywhere`. Proven able to fail: temporarily commenting out
  * `overflow-wrap: anywhere` on `.note`/`.actor` in `finding-fact-timeline.css`
  * fails this spec; restoring it passes again (`chunk-page-layout.shell-sweep.spec.ts`'s
  * own "proven able to fail" convention,

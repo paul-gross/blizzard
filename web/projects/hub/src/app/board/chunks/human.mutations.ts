@@ -52,8 +52,7 @@ export function readAnswerFailure(error: unknown): AnswerFailure {
 
 /**
  * `POST /api/questions/{id}/answers` — first-write-wins CAS answer through the
- * generated client (bzh:generated-client); `POST /api/questions/{id}/answer` is now
- * a deprecated alias this board no longer calls.
+ * generated client (bzh:generated-client).
  *
  * Re-reads the parked chunk's detail and the fleet list on `onSettled`, not `onSuccess`:
  * a **lost** race (the 409 {@link readAnswerFailure} folds) changed the server state just
@@ -107,8 +106,7 @@ function readDecisionConflict(error: unknown): DecisionConflict | null {
 /**
  * Fold a resolve mutation's `onError` into the channel it belongs on, for both surfaces
  * that resolve a gate: a lost first-write-wins race reads as the winning outcome,
- * "<choice> by <who>, <when>" — the same line the gate panel renders once the refreshed
- * detail lands — and anything else as "Resolve failed.". Pinned per surface by
+ * "<choice> by <who>, <when>" — and anything else as "Resolve failed.". Pinned per surface by
  * `chunk-detail.spec.ts` and `chunk-page.spec.ts`'s lost-resolve-race cases.
  */
 export function readDecisionFailure(error: unknown): AnswerFailure {
@@ -130,9 +128,7 @@ export interface ResolveVars {
 
 /**
  * `POST /api/decisions/{id}/resolutions` — a person picks one choice, first-write-wins
- * CAS, through the generated client (bzh:generated-client); `POST
- * /api/decisions/{id}/resolution` is now a deprecated alias this board no longer
- * calls. The holding runner records the resolving transition over its pull; here we
+ * CAS, through the generated client (bzh:generated-client). The holding runner records the resolving transition over its pull; here we
  * re-read the chunk, the list, and the fleet-wide open gates — on `onSettled`, so a lost
  * race re-reads too, and the mutation settles only once the refreshed detail carries the
  * resolution the gate panel renders.

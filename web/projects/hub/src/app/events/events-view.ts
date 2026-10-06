@@ -31,9 +31,7 @@ const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
  * The three filter axes match `GET /api/events`' own query params. Severity is a
  * fixed set ({@link SEVERITY_OPTIONS}); the runner and chunk axes are open, so the
  * container hands their id **universe** in (`runnerIds`/`chunkIds`) and this view
- * renders one chip per id — the universe is derived from a severity-only read, not
- * the filtered feed, so selecting a runner/chunk never makes the other chips vanish
- * (that derivation lives in `events-panel.ts`). An empty id array hides its row.
+ * renders one chip per id (derived in `events-panel.ts`). An empty id array hides its row.
  *
  * Default sort is the server's (newest-first by recency, `GET /api/events`), so this
  * renders events as-received rather than re-sorting client-side.

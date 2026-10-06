@@ -5,10 +5,7 @@ import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-time
 
 /**
  * A finding's whole fact chain, rendered oldest-first —
- * the append-only record `finding-panel.ts`'s own record/summary/note blocks read
- * only the newest of. Presentational and much simpler than `chunk-timeline.ts`, the
- * pair's own model: no join keys, no activation, no per-row usage figures, just an
- * ordered read-only list. Row derivation lives in `finding-fact-timeline-rows.ts`
+ * presentational, just an ordered read-only list. Row derivation lives in `finding-fact-timeline-rows.ts`
  * (`canon:one-owner`) — this component only renders it.
  *
  * Carries no heading of its own — a consumer supplies one around it.

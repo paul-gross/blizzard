@@ -8,8 +8,8 @@ import { getWorkItemApiWorkSourcesSourceItemsRefGet, type WorkItemView, hubWorkI
  * than the accept response's `chunk_id`: `chunk_id` rides only
  * `GardenProposalAcceptResponse` and does not persist, so the stored closure's
  * pointer is what a later read has to work with). `label`/`web_url` come from this
- * view rather than being guessed; `web_url` is `null` once the chunk is terminal, so
- * the caller degrades to the label instead of a dead link. Reactive over the
+ * view rather than being guessed; `web_url` is `null` once the chunk is terminal.
+ * Reactive over the
  * selected (source, ref) pair, `graphs.query.ts`'s own `injectHubGraphQuery`
  * null-tolerant conditional-query shape.
  */

@@ -93,8 +93,7 @@ export class GardeningScopeDetail {
    * **Total in both directions.** A scope's lifecycle carries exactly the two states
    * `domain/routines-and-scopes.md`'s "The retired brake" section names — `retired`
    * and enabled — with no third state or precedence rule complicating either
-   * transition (unlike `chunk-detail.ts`'s Pause, which a human-gated status can
-   * outrank): `retire` and `enable` are each reachable from the other unconditionally,
+   * transition: `retire` and `enable` are each reachable from the other unconditionally,
    * so the fired direction is always the resulting one, the same strong case
    * `graph-lifecycle.mutations.ts`'s own `retired` boolean rides.
    */
