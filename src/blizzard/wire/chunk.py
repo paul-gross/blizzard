@@ -23,7 +23,7 @@ from blizzard.wire.work_source import WorkItemAuthorView
 
 class WorkRefModel(BaseModel):
     """One ``{source, ref}`` work ref — ``source`` names a configured
-    ``[[work_source]]``; ``ref`` is that source's own item token."""
+    work source record; ``ref`` is that source's own item token."""
 
     source: str
     ref: str

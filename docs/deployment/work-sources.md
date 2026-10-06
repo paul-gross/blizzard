@@ -11,8 +11,8 @@ to ingest from.
 
 The hub reads a source's record on every call, so a created, edited, retired or re-enabled source, and a replaced
 secret, takes effect on the next ingest, label sweep or closure with no restart. A `[[work_source]]` block left in
-`blizzard-hub.toml` is parsed and ignored: the hub logs one warning at start naming the blocks, and serves its sources
-from records only. Carry each block's fields into a record with `blizzard hub source create`, then delete the block.
+`blizzard-hub.toml` stops the hub from starting; `blizzard hub config import-legacy` carries the blocks into records,
+and [install.md](./install.md#work-sources-and-forge-settings-are-records) owns that upgrade step.
 
 ## Work source records
 
@@ -61,8 +61,8 @@ Writes need the `config:edit` permission and reads need `fleet:view`. The record
 never an absent source.
 
 The board's Admin page lists work sources, with each record's revision, last change, and history. On a desktop, a user
-with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change before
-it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
+with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
+before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
 built-in `hub` source is listed and cannot be changed.
 
 ## Ingesting work items
@@ -193,8 +193,8 @@ fix it, or add a second record under the correct tail, and restart.
 
 ## Upgrading past the `close` flag
 
-Closure is unconditional, so a `close` key on a leftover `[[work_source]]` block has nothing left to opt into; the hub
-ignores the whole block along with it.
+Closure is unconditional, so a `close` key on a leftover `[[work_source]]` block has nothing left to opt into;
+`import-legacy` drops it when it carries the block into a record.
 
 The migration that ships beside this wheel backfills a close intent for every already-landed or hand-completed work ref
 still carrying no terminal outcome, regardless of whether its source ever set `close = true` — because no deployment

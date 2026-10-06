@@ -65,11 +65,23 @@ any `hub.db-wal` already at the destination first, or its stale frames replay ov
 
 ### Work sources and forge settings are records
 
-A hub whose `blizzard-hub.toml` still declares `[[work_source]]` blocks, or whose environment still sets `BZ_FORGE_URL`,
-`BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH`, starts and ignores them, logging one warning naming the
-blocks. Before the restart that carries the change, create the equivalent secrets, work source records and repository
-records, or ingest from those sources stops and every `deliver` step is refused with `repository-unresolved`; then
-delete the leftovers.
+Work sources, repositories and their credentials live in the hub's store. A hub refuses to start while its
+`blizzard-hub.toml` still declares `[[work_source]]` blocks or its environment still sets `BZ_FORGE_URL`,
+`BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER`, `BZ_FORGE_BASE_BRANCH`, or a variable a block's `token_env` names. The refusal names
+the remedy: before the import has run, the import command; after it, each key that remains and where it was found.
+
+Carry a file-configured hub across with the hub stopped, on the hub host, with its old environment still set:
+
+1. Run `blizzard hub migrate --dir <hub-dir>`.
+2. Run `blizzard hub config import-legacy --dir <hub-dir>`. It creates a secret per credential, a work source record per
+   block, and a repository record per repo the hub has delivered commits to, in one transaction, and lists what it
+   created. A record the store already holds is skipped, never overwritten; a second run writes nothing.
+3. Delete the `[[work_source]]` blocks and unset the variables.
+4. Start the hub.
+
+A hosted or config-as-code deployment can skip the import: store each credential with `blizzard hub secret set`, then
+declare the work sources and repositories in a [configuration document](./config-documents.md) and run
+`blizzard hub config apply`, removing the keys before the restart.
 
 Response bodies carry no rename alias: `pm_pointers` is now `work_refs` on every chunk, queue, and envelope view; a
 client reading the old name gets an empty list, not an error, so client code must change whichever path it calls.

@@ -44,15 +44,18 @@ Everything durable lives under a single documented path: **`/var/lib/blizzard/hu
 The container image is configured by its runtime environment — see `docs/deployment/install.md`'s "Overriding config
 values from the environment" for the full precedence rule (CLI flag > environment > toml > default).
 
-| Variable                          | Image default                                         | Purpose                                                                                                                            |
-| --------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `BZ_HUB_DIR`                      | `/var/lib/blizzard/hub`                               | The runtime root the entrypoint scaffolds/migrates/serves.                                                                         |
-| `BZ_HUB_HOST`                     | `0.0.0.0`                                             | Bind host — the image default, so the daemon is reachable from outside the container without extra config.                         |
-| `BZ_HUB_PORT`                     | *(unset — toml/built-in default, 8421)*               | Bind port.                                                                                                                         |
-| `BZ_HUB_DB_URL`                   | *(unset — sqlite under `data/`)*                      | Point at a postgres URL (see the `postgres` extra below) to run the store off-volume.                                              |
-| `BZ_LOG_FORMAT`                   | `json`                                                | Structured JSON logs, the shape a container log collector expects.                                                                 |
-| `BZ_HUB_SECRET_KEY`               | *(unset — a key file under `data/auth/secret-keys/`)* | The hub's secret-sealing key, base64 of 32 bytes; `BZ_HUB_SECRET_KEY_PREVIOUS` also stays readable — `docs/deployment/secrets.md`. |
-| `BZ_FORGE_URL` / `BZ_FORGE_TOKEN` | *(unset)*                                             | The delivery forge a hub command node's `run:` script talks to — see `docs/deployment/install.md`.                                 |
+| Variable            | Image default                                         | Purpose                                                                                                                            |
+| ------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `BZ_HUB_DIR`        | `/var/lib/blizzard/hub`                               | The runtime root the entrypoint scaffolds/migrates/serves.                                                                         |
+| `BZ_HUB_HOST`       | `0.0.0.0`                                             | Bind host — the image default, so the daemon is reachable from outside the container without extra config.                         |
+| `BZ_HUB_PORT`       | *(unset — toml/built-in default, 8421)*               | Bind port.                                                                                                                         |
+| `BZ_HUB_DB_URL`     | *(unset — sqlite under `data/`)*                      | Point at a postgres URL (see the `postgres` extra below) to run the store off-volume.                                              |
+| `BZ_LOG_FORMAT`     | `json`                                                | Structured JSON logs, the shape a container log collector expects.                                                                 |
+| `BZ_HUB_SECRET_KEY` | *(unset — a key file under `data/auth/secret-keys/`)* | The hub's secret-sealing key, base64 of 32 bytes; `BZ_HUB_SECRET_KEY_PREVIOUS` also stays readable — `docs/deployment/secrets.md`. |
+
+The hub refuses to start while `BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` is set —
+forge settings are repository records; `docs/deployment/install.md`'s "Work sources and forge settings are records" owns
+the upgrade step.
 
 ## The `postgres` extra
 

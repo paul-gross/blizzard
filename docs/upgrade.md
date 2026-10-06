@@ -47,6 +47,13 @@ with no successful sample, whose credential has lapsed — it is `null`, and `co
 deliberate and counts as breaking on the HTTP API, so an API client that reads `sampled_at` as always present must
 handle null and read `condition` in that case.
 
+### File-configured work sources boundary
+
+A hub crossing into store-held work sources refuses to start while its `blizzard-hub.toml` keeps `[[work_source]]`
+blocks or its container environment keeps `BZ_FORGE_*` variables. Carry them into records before recreating the
+container — [`docs/deployment/install.md`](./deployment/install.md#work-sources-and-forge-settings-are-records) owns the
+step.
+
 ## Pull and recreate
 
 From `packaging/docker/`, pull the tag:

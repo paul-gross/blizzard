@@ -11783,7 +11783,7 @@
         "type": "object"
       },
       "WorkRefModel": {
-        "description": "One ``{source, ref}`` work ref \u2014 ``source`` names a configured\n``[[work_source]]``; ``ref`` is that source's own item token.",
+        "description": "One ``{source, ref}`` work ref \u2014 ``source`` names a configured\nwork source record; ``ref`` is that source's own item token.",
         "properties": {
           "ref": {
             "title": "Ref",
