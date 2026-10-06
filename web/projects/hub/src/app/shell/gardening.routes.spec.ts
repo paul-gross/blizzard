@@ -10,7 +10,7 @@ import { routes } from './app.routes';
 /**
  * The `/gardening` subtree in the real route table (`app.routes.ts`) —
  * proves the five top-level children resolve, the bare parent path redirects to
- * `scopes` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
+ * `runs` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
  * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects
  * the right detail — through the actual router rather than by mounting a page component
  * directly (that's each page's own spec). None of the five shares a selection with
@@ -78,17 +78,16 @@ describe('the /gardening route subtree', () => {
     }
   });
 
-  it('redirects the bare /gardening path to /gardening/scopes, selecting nothing', async () => {
+  it('redirects the bare /gardening path to /gardening/runs, selecting nothing', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
     await router.navigateByUrl('/gardening');
     await settle(fixture);
 
-    expect(router.url).toBe('/gardening/scopes');
+    expect(router.url).toBe('/gardening/runs');
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="gardening-scopes-empty"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-scope-panel-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-runs-empty"]')).toBeTruthy();
   });
 
   it('resolves /gardening/scopes/:scopeSlug to the scope detail', async () => {

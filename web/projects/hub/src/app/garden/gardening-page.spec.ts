@@ -41,11 +41,11 @@ describe('GardeningPage (blizzard#397)', () => {
     expect(el.querySelector('[data-testid="gardening-tab-proposals"]')?.textContent).toContain('Proposals');
     const tabs = Array.from(el.querySelectorAll('[fleetKitTab]')).map((t) => t.getAttribute('data-testid'));
     expect(tabs).toEqual([
-      'gardening-tab-scopes',
-      'gardening-tab-routines',
       'gardening-tab-runs',
       'gardening-tab-findings',
       'gardening-tab-proposals',
+      'gardening-tab-routines',
+      'gardening-tab-scopes',
     ]);
   });
 
