@@ -21,7 +21,7 @@ from blizzard.foundation.trace_spans import (
 from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.observability.tracing import attributes as attr
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
-from blizzard.hub.domain.observability.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome
+from blizzard.hub.domain.observability.tracing.steps import LinkReason, NodeStep, PrecededBy, StepKind, StepOutcome
 from blizzard.hub.domain.observability.tracing.summary import (
     Interval,
     IntervalKind,
@@ -153,21 +153,21 @@ def _child(step: NodeStep, parent: FinishedSpan, dims: dict[str, AttributeValue]
     )
 
 
-def _link_reason(facts: StepFacts, step: NodeStep, previous: NodeStep) -> str:
+def _link_reason(facts: StepFacts, step: NodeStep, previous: NodeStep) -> LinkReason:
     """The first reason that applies, in the spec's precedence."""
     if step.preceded_by is PrecededBy.RESTART:
-        return "restart"
+        return LinkReason.RESTART
     if previous.position.graph_id != step.position.graph_id:
-        return "migration"
+        return LinkReason.MIGRATION
     if previous.kind is not StepKind.GATE and any(b.epoch == previous.epoch for b in facts.bounces):
-        return "bounce"
+        return LinkReason.BOUNCE
     if (
         previous.close is not None
         and previous.close.outcome not in _MOVEMENTS
         and previous.position.node_name == step.position.node_name
     ):
-        return "retry"
-    return "next"
+        return LinkReason.RETRY
+    return LinkReason.NEXT
 
 
 def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[SpanLink, ...]:
@@ -175,7 +175,7 @@ def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tupl
     if not index:
         return ()
     previous = steps[index - 1]
-    return (SpanLink(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
+    return (SpanLink(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous).value}),)
 
 
 def assemble_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tuple[FinishedSpan, ...]:

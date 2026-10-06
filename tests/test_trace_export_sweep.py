@@ -337,6 +337,61 @@ def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(t
     assert detail["until"] == restarted.clock.now().isoformat()
 
 
+def _skipped_count(hub: HubHarness) -> int:
+    return _kinds(hub).count("trace-window-skipped")
+
+
+def _gapped_restart(tmp_path: Path) -> HubHarness:
+    hub, _exporter = _hub(tmp_path)
+    _sweep(hub).sweep()
+    _closed_pair(hub)
+    restarted, _again = _hub(tmp_path)
+    restarted.clock.instant = hub.clock.now()
+    restarted.clock.advance(timedelta(seconds=3600 + 60))
+    return restarted
+
+
+def test_a_failed_jump_write_retries_and_records_the_skipped_window_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    restarted = _gapped_restart(tmp_path)
+    sweep = _sweep(restarted)
+    append = sweep._steps.append_cursor
+    attempts = 0
+
+    def append_once_failed(record: TraceCheckpoint) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("transient cursor write failure")
+        append(record)
+
+    monkeypatch.setattr(sweep._steps, "append_cursor", append_once_failed)
+    with pytest.raises(OSError, match="transient cursor write failure"):
+        sweep.sweep()
+    assert _skipped_count(restarted) == 0
+
+    sweep.sweep()
+    sweep.sweep()
+    assert _skipped_count(restarted) == 1
+
+
+def test_a_jump_whose_cursor_write_never_succeeds_records_no_skipped_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    restarted = _gapped_restart(tmp_path)
+    sweep = _sweep(restarted)
+
+    def append_always_failed(record: TraceCheckpoint) -> None:
+        raise OSError("cursor store down")
+
+    monkeypatch.setattr(sweep._steps, "append_cursor", append_always_failed)
+    for _ in range(3):
+        with pytest.raises(OSError, match="cursor store down"):
+            sweep.sweep()
+    assert _skipped_count(restarted) == 0
+
+
 def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> None:
     hub, _exporter = _hub(tmp_path)
     _sweep(hub).sweep()

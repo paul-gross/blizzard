@@ -64,7 +64,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedRouteCreation,
     TracedRouteRelease,
 )
-from blizzard.hub.domain.observability.tracing.steps import identify_steps
+from blizzard.hub.domain.observability.tracing.steps import LinkReason, PrecededBy, StepOutcome, identify_steps
 from blizzard.runner.tracing import attributes as runner_attr
 from blizzard.runner.tracing import platform as runner_platform
 from blizzard.runner.tracing.assembly import assemble_lease
@@ -448,6 +448,18 @@ def test_the_dictionary_roles_are_the_code_roles() -> None:
         assert entry["type"] in _ATTRIBUTE_TYPES, entry["name"]
         assert entry["meaning"], entry["name"]
         assert set(entry.get("optional_on", ())) <= set(entry["on"]), entry["name"]
+
+
+def _meaning_tokens(name: str) -> set[str]:
+    meaning = next(a["meaning"] for a in dictionary()["attributes"] if a["name"] == name)
+    return set(re.findall(r"`([^`]+)`", meaning))
+
+
+def test_the_dictionary_value_sets_are_the_enums() -> None:
+    assert _meaning_tokens(attr.STEP_OUTCOME) == {m.value for m in StepOutcome}
+    assert _meaning_tokens(attr.STEP_PRECEDED_BY) == {m.value for m in PrecededBy}
+    assert _meaning_tokens(attr.LINK_REASON) == {m.value for m in LinkReason}
+    assert {entry["name"] for entry in dictionary()["link_reasons"]} == {m.value for m in LinkReason}
 
 
 def test_the_golden_shape_is_the_dictionary_shape() -> None:

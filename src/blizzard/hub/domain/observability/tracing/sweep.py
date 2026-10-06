@@ -129,16 +129,15 @@ class TraceExportSweep:
             self._record(_RECOVERED, "fleet trace export recovered; held steps are being told", None)
 
     def _jump(self, jump: CursorJump[CursorKey], now: datetime) -> None:
-        if (
-            jump.skipped_from is not None
-            and oldest_unsent(self._steps, jump.skipped_from, jump.to.at - timedelta(microseconds=1)) is not None
-        ):
+        since = jump.skipped_from
+        unsent = None if since is None else oldest_unsent(self._steps, since, jump.to.at - timedelta(microseconds=1))
+        self._steps.append_cursor(TraceCheckpoint(jump.to, 0, now))
+        if since is not None and unsent is not None:
             self._record(
                 _SKIPPED,
                 f"fleet trace cursor jumped ({jump.reason.value}); the skipped window is told only by replay",
-                {"reason": jump.reason.value, "since": _key_detail(jump.skipped_from), "until": iso_utc(jump.to.at)},
+                {"reason": jump.reason.value, "since": _key_detail(since), "until": iso_utc(jump.to.at)},
             )
-        self._steps.append_cursor(TraceCheckpoint(jump.to, 0, now))
 
     def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(

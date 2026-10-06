@@ -50,6 +50,16 @@ class PrecededBy(StrEnum):
     RELEASED_CLAIM = "released-claim"
 
 
+class LinkReason(StrEnum):
+    RESTART = "restart"
+    MIGRATION = "migration"
+    BOUNCE = "bounce"
+    RETRY = "retry"
+    NEXT = "next"
+    WORK = "work"
+    LIFETIME = "lifetime"
+
+
 @domain_model
 @dataclass(frozen=True)
 class StepClose:
