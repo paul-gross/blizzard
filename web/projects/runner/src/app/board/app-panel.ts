@@ -55,9 +55,8 @@ export class LocalPanel {
    * "adaptive shells over shared guts") — desktop renders the existing
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
    * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
-   * doesn't carry it. The mobile bottom tab bar and the viewport override are
-   * the app root's (`../shell/nav/mobile-tab-bar.ts`, `AppHeader`, `MobileTitlebar`),
-   * not this component's. */
+   * doesn't carry it. Owns neither the mobile bottom tab bar nor the viewport
+   * override; see `../shell/nav/`. */
   protected readonly viewport = inject(ViewportService);
 
   protected readonly mode = this.viewport.mode;

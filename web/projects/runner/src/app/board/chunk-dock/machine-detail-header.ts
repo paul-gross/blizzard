@@ -19,14 +19,14 @@ import {
  * The chunk id itself links to the runner-local chunk detail route — the
  * operator's way into the shared `fleet` sections and the transcript.
  * The link carries the chunk in the route's own path and no query params at
- * all: `?chunk=` is the board's selection (the shared `injectChunkUrlSelection`) and means
- * nothing on the detail route, and `?attempt=` is that route's own, written
+ * all: `?chunk=` is the board's selection (the shared
+ * `injectChunkUrlSelection`) and means nothing on the detail route, and `?attempt=` is that route's own, written
  * there once an attempt is picked.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
  * owns the severable `ChunkDetail` read and the pause mutation, and forwards
- * their data down as plain inputs; this component only renders and, asks for confirmation before emitting
- * {@link pauseChunk}/{@link resumeChunk} upward.
+ * their data down as plain inputs; this component only renders and asks for confirmation before
+ * emitting {@link pauseChunk}/{@link resumeChunk} upward.
  */
 @Component({
   selector: 'app-machine-detail-header',

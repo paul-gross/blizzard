@@ -9,8 +9,8 @@ const logoutInFlightSignal = signal(false);
 
 /** Whether `POST /api/auth/logout` is currently in flight — set for
  * the duration of {@link injectRunnerLogoutMutation}'s call, the panel's only
- * logout driver. A `401` arriving while this holds is the deliberate session
- * clear, not an expiry to renew; `session-recovery.ts` owns the reaction. */
+ * logout driver. See `session-recovery.ts` for how a `401` is treated while
+ * this holds. */
 export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
 
 /**
@@ -72,8 +72,7 @@ export function signedInUsername(session: runnerApi.RunnerAuthSessionView | unde
 /**
  * `POST /api/auth/logout` — clears the runner's own session cookie, then
  * invalidates the session read so the control drops the username. The runner session
- * is a stateless signed cookie, so this is the whole logout; the
- * caller reloads so the served shell's gate decides the next visit.
+ * is a stateless signed cookie, so this is the whole logout.
  */
 export function injectRunnerLogoutMutation() {
   const queryClient = inject(QueryClient);

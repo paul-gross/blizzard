@@ -68,10 +68,8 @@ const RUNNER_EVENT_INVALIDATION_REGISTRY: Record<
  * {@link LiveInvalidationSpine}'s, configured here with
  * {@link RUNNER_EVENT_INVALIDATION_REGISTRY} — a lookup, never a hand-written `case`.
  *
- * A stream `401` is terminal, and is the one thing this service handles itself, via
- * the spine's `onAuthFailed` hook: it calls
- * {@link "./session-recovery".SessionRecovery.recoverFromUnauthenticated}, so a session
- * that expires mid-stream routes through the same recovery path as any other `401`.
+ * A stream `401` is handled via the spine's `onAuthFailed` hook, which calls
+ * {@link "./session-recovery".SessionRecovery.recoverFromUnauthenticated}.
  *
  * A `401` the seam cannot classify — the session read itself
  * failed, the daemon-restart shape — is worth another shot at the stream, since it

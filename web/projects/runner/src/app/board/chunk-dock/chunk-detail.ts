@@ -28,10 +28,10 @@ import { MachineDetailHeader } from './machine-detail-header';
  * lease (the last entry of the `leases` list the shell hands in, oldest →
  * newest) — this dock owns no list read of its own.
  *
- * The header ({@link MachineDetailHeader}) is a presentational sibling. Unlike the rest of this dock's
- * facts (container-folded, "one owner"), the work-item links and the pause fact
- * are this dock's own severable enrichment — the same self-fetching shape
- * `injectChunkTitleQuery` already established for the chunks list — read through
+ * The header ({@link MachineDetailHeader}) is a presentational sibling. Unlike the
+ * rest of this dock's facts (container-folded, "one owner"), the work-item links and
+ * the pause fact are this dock's own severable enrichment — self-fetching, like
+ * `injectChunkTitleQuery` — read through
  * {@link injectChunkDetailQuery}, the runner's pass-through proxy serving the
  * hub's `ChunkDetail` aggregate whole. `pause` is the *only*
  * way this panel learns a chunk is paused (it sits independently of the derived

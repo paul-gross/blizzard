@@ -451,7 +451,7 @@ describe('LocalPanel', () => {
     });
   });
 
-  describe('the work-item enrichment stays severable (issue #28)', () => {
+  describe('the work-item enrichment stays severable', () => {
     it('renders chunk rows on chunk_id alone when every work-items read 502s — the panel must not depend on the hub', async () => {
       stub = stubRequestClient(runnerClient,
         routes([LEASE()], {}, (method, path) => {

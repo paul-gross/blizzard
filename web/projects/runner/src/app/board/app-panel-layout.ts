@@ -23,7 +23,7 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  *   freshness bar, over the held-environments rail, split 60/40.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
- *   detail dock for the selected chunk's execution facts —.
+ *   detail dock for the selected chunk's execution facts.
  * - **Right (330px)** — the machine's account of itself: the hub link
  *   (endpoint, reachability, last flush, buffer), the open local asks, and
  *   each declared subscription's own newest sampling attempt.
@@ -34,8 +34,7 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *
- * Owns no titlebar: the shared `BoardHeader` chrome and its trailing cluster
- * are mounted once by the app root's `AppHeader` (`../shell/nav/app-header.ts`).
+ * Owns no titlebar; see `../shell/nav/app-header.ts`.
  */
 @Component({
   selector: 'app-panel-layout',

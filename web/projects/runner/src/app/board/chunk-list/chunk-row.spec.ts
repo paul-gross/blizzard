@@ -57,9 +57,8 @@ async function render(workItemsResponse: () => unknown) {
 
 /**
  * `ChunkRow`'s own concern is the per-row {@link injectChunkTitleQuery} enrichment
- * read — markup, the derived status border, and
- * click/Enter/Space selection belong to `ChunkRowView`, plain-input
- * covered in `chunk-row-view.spec.ts` with no query stub required.
+ * read — markup, the derived status border, and click/Enter/Space selection
+ * belong to `ChunkRowView`, plain-input covered in `chunk-row-view.spec.ts` with no query stub required.
  */
 describe('ChunkRow', () => {
   it('renders on chunk_id alone when the work-items read 502s — never depends on the hub', async () => {

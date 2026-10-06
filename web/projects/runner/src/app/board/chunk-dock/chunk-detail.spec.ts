@@ -262,12 +262,11 @@ describe('MachineDetail header', () => {
 
 /**
  * Pause/Resume's own pending-disable and failure reporting: the button that fired the
- * mutation disables for its duration and
- * re-enables once it settles, and a rejected mutation renders inline rather than being
- * swallowed. Every "held pending" assertion spies on `queryClient.invalidateQueries`
- * and returns a promise it controls rather than letting the stub's fetch settle on its
- * own, `injectChunkPauseMutation`'s `onSettled` keeps `isPending()` true only
- * until its own invalidations resolve.
+ * mutation disables for its duration and re-enables once it settles, and a rejected
+ * mutation renders inline rather than being swallowed. Every "held pending" assertion
+ * spies on `queryClient.invalidateQueries` and returns a promise it controls rather than
+ * letting the stub's fetch settle on its own, because `injectChunkPauseMutation`'s
+ * `onSettled` keeps `isPending()` true only until its own invalidations resolve.
  */
 describe('MachineDetail Pause/Resume pending + failure', () => {
   let stub: RequestClientStub;
