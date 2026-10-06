@@ -9,17 +9,14 @@ import { ChunkFindingEntry } from './chunk-finding-entry';
 import { shortSha } from './short-sha';
 
 /**
- * A `FindingDelta`-shaped asset artifact, laid out — {@link parseFindingDelta}'s
- * match branch of `chunk-artifact-body.ts`'s asset body, the structured
- * alternative to the verbatim `<pre>` every other asset still gets. Presentational
+ * A `FindingDelta`-shaped asset artifact, laid out — the structured rendering of a
+ * content {@link parseFindingDelta} matched. Presentational
  * only: `delta` is already-parsed, plain data (`bzh:frontend-container-presentational`
  * — no query, no parsing here).
  *
- * Grouped by op exactly the way the hub's `garden/runs/run-delta.ts` groups a *hub-derived* finding
- * set's own added/observed/gone — this component takes that shape and its rules
- * (three distinct groups, a group with no entries hidden rather than rendered
- * empty), not its view model: an artifact's raw ops carry no live finding row to
- * join against, so an `observed`/`gone` entry here is its bare id, never a
+ * Grouped by op into three distinct groups (shape shared with `run-delta.ts`), a
+ * group with no entries hidden rather than rendered empty. An artifact's raw ops
+ * carry no live finding row to join against, so an `observed`/`gone` entry here is its bare id, never a
  * class/locus/summary read back from a table this component has no query for.
  * `add`'s payload is the candidate itself, so it renders in full.
  *
@@ -30,11 +27,8 @@ import { shortSha } from './short-sha';
  * render either way), which is why it renders beside `added` rather than looking like a
  * resolution.
  *
- * An `add` op's own body is {@link ChunkFindingEntry}, shared with the survey
- * artifact's candidates — the same fields, published by the same run, read in the
- * same tab. The raw JSON `content` stays one click away inside
- * {@link ChunkArtifactRawDisclosure}, which owns that disclosure for every
- * structurally-rendered artifact here.
+ * An `add` op's own body is {@link ChunkFindingEntry}. The raw JSON `content` stays
+ * one click away inside {@link ChunkArtifactRawDisclosure}.
  */
 @Component({
   selector: 'fleet-chunk-artifact-delta',
@@ -50,10 +44,8 @@ export class ChunkArtifactDelta {
   /** The artifact's own verbatim content, forwarded to the raw disclosure. */
   readonly raw = input.required<string>();
 
-  /** The root every handle this component renders derives from — the same
-   * convention {@link ChunkArtifactBody} itself follows, so two mounts (the
-   * Artifacts tab and the mobile single-artifact page) never collide on one
-   * `data-testid`. */
+  /** The root every handle this component renders derives from, so two mounts
+   * never collide on one `data-testid`. */
   readonly testid = input('artifact');
 
   protected readonly compactRef = compactRef;
@@ -69,7 +61,7 @@ export class ChunkArtifactDelta {
 
   /** The scope/revisions fact grid (`fleet-kit-fact-list`) — a method, not a stored
    * computed, since building the Revisions row needs the `<ng-template>` the view
-   * declares for it (`finding-panel.ts`'s own `factRows` shape). Revisions is
+   * declares for it. Revisions is
    * omitted entirely rather than rendered as an empty row when the delta names
    * none, matching the added/observed/gone groups' own hidden-when-empty rule. */
   protected factRows(delta: FindingDelta, revisionsValue: TemplateRef<unknown>): readonly KitFact[] {

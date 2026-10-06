@@ -13,10 +13,8 @@ import { TranscriptSegmentView } from './transcript-segment-view';
 import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 
 /**
- * The chunk detail page's Transcripts tab (moved into `fleet` by
- * runner-node-grouped-transcripts so both the hub and runner apps mount the same
- * component) — a nav of node-history steps, each holding its segments, beside a
- * lazily-fetched segment viewer. Mirrors `ChunkArtifactsPanel`'s nav-beside-viewer shape
+ * The chunk detail page's Transcripts tab — a nav of node-history steps, each holding
+ * its segments, beside a lazily-fetched segment viewer. Mirrors `ChunkArtifactsPanel`'s nav-beside-viewer shape
  * and, like it, is presentational (`bzh:frontend-container-presentational`):
  * the two reads behind this tab (the index on open, one segment's turns only once
  * opened) arrive as resolved-state inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
@@ -27,8 +25,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
  * separately since a 403 on the index read is its own honest state, not a generic error.
  *
  * The open segment's seam buttons, truncated/turn-cap banners, and turn list all render
- * through {@link TranscriptSegmentView} — the same shared body the node history tab's
- * per-step detail pane mounts, so neither carries its own copy of that markup.
+ * through {@link TranscriptSegmentView}.
  */
 @Component({
   selector: 'fleet-chunk-transcripts-tab',
@@ -140,8 +137,7 @@ export class ChunkTranscriptsTab {
     this.pickSidechain.emit(encodeSidechainPath(event.path));
   }
 
-  /** An "open standalone" click from *within* the standalone view (this
-   * binding didn't exist before, so these controls were dead) — its path is relative to
+  /** An "open standalone" click from *within* the standalone view — its path is relative to
    * the already-open sidechain's own turns, so the full address prepends
    * {@link parsedSidechainPath} in front. */
   protected onStandaloneOpenStandalone(event: SidechainOpenEvent): void {

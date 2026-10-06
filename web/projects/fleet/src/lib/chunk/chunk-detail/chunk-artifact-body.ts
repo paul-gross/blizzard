@@ -21,13 +21,11 @@ import { parseFindingSurvey } from './parse-finding-survey';
  * `scope`/`revisions`/`measurement`, and differ only in the delta's op-tagged
  * `findings` versus the survey's identity-less `candidates`. Delta is tried first, so
  * a document somehow carrying both reads as the delivered shape. Anything matching
- * neither renders verbatim exactly as before.
+ * neither renders verbatim.
  *
- * The single owner of that rendering. Three shells show an artifact —
- * the desktop dock's link row (`summary`), the chunk detail page's Artifacts tab
- * viewer (`full`), and the hub's mobile shell's single-artifact page (`full`) —
- * and all three compose this rather than re-typing the kind branch, so a new
- * field or a third `kind` lands once (`canon:one-owner`).
+ * The single owner of that rendering: every surface that shows an artifact
+ * composes this rather than re-typing the kind branch, so a new field or a third
+ * `kind` lands once (`canon:one-owner`).
  *
  * `body` chooses how much of an asset renders: `full` (the default) is the
  * content, verbatim or structured; `summary` renders only the head — and, for a
@@ -40,13 +38,11 @@ import { parseFindingSurvey } from './parse-finding-survey';
  * `testid` roots every handle this component renders, the same convention
  * {@link MobileTitlebar} uses, so two mounts never collide on one
  * `data-testid` (`bzh:frontend-kit`'s globally-unique handle rule). It defaults
- * to `artifact` — the desktop dock's existing handles — so that side needs no
- * input to keep its specs passing. Both structured bodies receive the same root and
+ * to `artifact`. Both structured bodies receive the same root and
  * append their own `-delta`/`-survey` suffix.
  *
- * Laid out as a flex column with the asset body taking the free space: in the
- * dock's auto-height list item that resolves to the content's own height
- * (unchanged), and in a height-capped page it gives the body the scroll region
+ * Laid out as a flex column with the asset body taking the free space: in an
+ * auto-height host that resolves to the content's own height, and in a height-capped page it gives the body the scroll region
  * a long findings text — verbatim or structured — needs.
  */
 @Component({
@@ -65,8 +61,8 @@ export class ChunkArtifactBody {
    * summarize away. */
   readonly body = input<'full' | 'summary'>('full');
 
-  /** The root every handle this component renders derives from. Defaults to the
-   * desktop dock's existing `artifact-*` handles. */
+  /** The root every handle this component renders derives from. Defaults to
+   * `artifact`. */
   readonly testid = input('artifact');
 
   protected readonly keyTestid = computed(() => `${this.testid()}-key`);
@@ -81,8 +77,7 @@ export class ChunkArtifactBody {
     return at ? formatWhen(at) : null;
   });
 
-  /** {@link when}'s full local date + time, for the stamp's hover tooltip —
-   * replaces the raw-ISO `title` this span carried before, which didn't localize. */
+  /** {@link when}'s full local date + time, for the stamp's hover tooltip. */
   protected readonly whenTitle = computed(() => formatAbsolute(this.artifact().recorded_at));
 
   protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
@@ -90,7 +85,7 @@ export class ChunkArtifactBody {
   /** The asset's content, parsed as a `FindingDelta` — `null` when there is no
    * content to try ({@link structuredCandidate}) or it fails
    * {@link parseFindingDelta}'s shape check, in which case the template falls through
-   * to the survey branch and then to the verbatim `<pre>`, unchanged. */
+   * to the survey branch and then to the verbatim `<pre>`. */
   protected readonly parsedDelta = computed<FindingDelta | null>(() => {
     const content = this.structuredCandidate();
     return content === null ? null : parseFindingDelta(content);
@@ -108,7 +103,7 @@ export class ChunkArtifactBody {
 
   /** The asset content a structured reading may be attempted on, or `null` when there
    * is none to attempt: anything that isn't an asset, isn't rendering in `full`, or
-   * carries no content. Gated on `body() === 'full'` so the dock's `summary` mounts
+   * carries no content. Gated on `body() === 'full'` so `summary` mounts
    * never spend a parse on content they don't render anyway. */
   private readonly structuredCandidate = computed<string | null>(() => {
     const artifact = this.artifact();

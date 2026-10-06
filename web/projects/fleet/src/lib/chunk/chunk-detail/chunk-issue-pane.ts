@@ -13,14 +13,9 @@ import { type WorkItemsState } from './work-items-state';
  * fetch triad, the list's is the per-issue accordion row. Presentational
  * only; the forge read itself lives in the container.
  *
- * `placement` forwards to the inner `fleet-kit-async-state`,
- * defaulting to its own `'center'` — every existing mount (the desktop dock's
- * `chunk-detail-panel.ts`, the shared `chunk-page/chunk-general-tab.ts` both
- * apps compose) keeps its prior rendering unchanged. The runner's narrow
- * single-column chunk detail route is the one caller that opts into
- * `'inline'`: its full-sentence error copy overflowed `'center'`'s
- * absolutely-positioned box at phone widths, an issue a wide desktop layout
- * never hits.
+ * `placement` forwards to the inner `fleet-kit-async-state`, defaulting to its
+ * own `'center'`; `'inline'` is for a narrow host, where `'center'`'s
+ * absolutely-positioned box overflows with full-sentence error copy.
  */
 @Component({
   selector: 'fleet-chunk-detail-issue-pane',

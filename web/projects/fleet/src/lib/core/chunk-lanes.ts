@@ -26,11 +26,9 @@ export const LANES: readonly Lane[] = [
  * The transient `delivering` shows under RUNNING and the terminal `stopped` under
  * DONE. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
  * stopped pending a human, which is what an operator's pause is. `ready` has its own
- * READY lane on the board — the ready queue *is* a board column now,
- * ordered by hub dispatch order and reshaped in place by drag-and-drop, so every
- * status maps to a lane and a chunk shows in exactly one place. The lane's key is
- * still `notready` for the renamed BACKLOG column: the key is a selector consumed by
- * styles, specs, and e2e locators, so only its rendered labels moved.
+ * READY lane, so every status maps to a lane and a chunk shows in exactly one place.
+ * The BACKLOG lane's key is `notready`: the key is a selector consumed by styles,
+ * specs, and e2e locators, independent of its rendered labels.
  *
  * Typed `Record<ChunkStatus, …>` deliberately: a new status added to the wire is then
  * a compile error here — the one place that has to decide where it belongs — instead
@@ -69,10 +67,8 @@ export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number>
 
 /**
  * Every chunk status folded onto the shared {@link Tone} vocabulary —
- * the fleet-side half of "one status-to-tone mapping consumed by both libraries";
- * the runner's `deriveMachineChunkStatus` (`runner/src/app/board/chunk-list/chunk-status.ts`) is the other half,
- * folding the runner's own lease-state derivation onto the same `Tone` union rather
- * than inventing a second one. Grouped by the same lane intent as {@link STATUS_LANE}:
+ * the fleet-side half of the status-to-tone mapping (the other half is
+ * `deriveMachineChunkStatus`). Grouped by the same lane intent as {@link STATUS_LANE}:
  * live work reads `running`, human-waiting reads `waiting`, a blocking escalation
  * reads `needs`, and a landed/backlog status reads `done`/`idle`.
  *

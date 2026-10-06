@@ -18,13 +18,10 @@ import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 
 /**
- * The chunk detail page's General tab — the hub's and the
- * runner's own `chunk-general-tab.ts` unified into the one `fleet` owner both
- * pages compose, alongside their other cross-app `chunk-page/` pieces
- * ({@link ChunkPageShell}, {@link ChunkPageHeader}).
+ * The chunk detail page's General tab.
  *
- * Every section is the same `fleet` presentational sibling the desktop dock
- * composes (`bzh:frontend-kit`) — {@link ChunkFacts} + {@link ChunkTokenBreakdown},
+ * Every section is a `fleet` presentational component (`bzh:frontend-kit`) —
+ * {@link ChunkFacts} + {@link ChunkTokenBreakdown},
  * {@link ChunkIssuePane}, {@link ChunkTimeline},
  * {@link ChunkAwaitingHuman} — this component only picks the arrangement: a
  * two-column grid at ≥720px — work item (its facts and, when the
@@ -35,10 +32,9 @@ import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
  * the three operator-action outputs plus {@link pickStep} back out, no
  * injection. {@link canControl}, {@link canAnswer}, {@link canResolve}, and
- * {@link graphLinkBase} default to read-only (off, unlinked), so `ChunkPage` forwards
- * them from its daemon's actions port and a daemon with none opts into nothing;
- * {@link issuePanePlacement} defaults to {@link ChunkIssuePane}'s own `'center'`, and
- * `ChunkPage`, a narrow single-column page at phone widths, opts into `'inline'`.
+ * {@link graphLinkBase} default to read-only (off, unlinked), so a caller with no
+ * actions opts into nothing; {@link issuePanePlacement} defaults to
+ * {@link ChunkIssuePane}'s own `'center'`.
  */
 @Component({
   selector: 'fleet-chunk-general-tab',
@@ -103,8 +99,7 @@ export class ChunkGeneralTab {
 
   /** Emitted with a node's join key when the operator activates it in this tab's own
    * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a
-   * pure activation signal this tab holds no selection state of its own for (the
-   * container routes it to the Node history tab, where the row it names is selected). */
+   * pure activation signal this tab holds no selection state of its own for. */
   readonly pickStep = output<string | null>();
 
   protected readonly pointerCount = computed(() => this.detail().work_refs?.length ?? 0);

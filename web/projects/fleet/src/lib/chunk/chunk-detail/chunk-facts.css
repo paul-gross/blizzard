@@ -1,14 +1,11 @@
 :host {
   display: block;
 }
-/* Self-padded on all four sides — this component drops straight into
-   `fleet-kit-panel`'s unpadded body in the general tab (hub and runner alike) with no
-   consumer wrapper of its own, and a bottom margin alone does not reliably show up as
-   trailing space on a last child here, so the bottom is real padding too, not left to
-   margin collapse. `--chunk-facts-pad` is an override hook (custom properties cascade
-   through view encapsulation): `chunk-detail-panel.css` overrides it to `0` for the
-   board dock; `chunk-token-breakdown.css` reads the same property, keeping the two
-   tables' padding identical regardless of context. */
+/* Self-padded on all four sides — a host may mount this with no padded wrapper,
+   and a bottom margin alone does not reliably show up as trailing space on a last
+   child, so the bottom is real padding too, not left to margin collapse.
+   `--chunk-facts-pad` is an override hook (custom properties cascade through view
+   encapsulation); see chunk-detail-panel.css and chunk-token-breakdown.css. */
 .cf-facts {
   display: block;
   margin: 0 0 8px;

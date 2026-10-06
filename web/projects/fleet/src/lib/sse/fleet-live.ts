@@ -116,8 +116,8 @@ const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([HubEve
  * majority of all frames and carry no news an operator can act on — left in, they would
  * evict every other event out of the {@link LOG_LIMIT} ring within a few cycles, so this
  * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
- * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so the fleet
- * registry's liveness column keeps refreshing on every heartbeat exactly as before.
+ * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so queries
+ * keyed on runner liveness keep refreshing on every heartbeat.
  *
  * `external-usage` is muted for a different reason: it is not an
  * operator-visible activity-feed entry, and carries no `key` — there is no fact-table row
@@ -231,11 +231,8 @@ export interface LoggedEvent {
 /**
  * Recent-event ring cap for *this live tee alone* — matches the broker's replay history
  * depth so the ring never holds more than a fresh connect's
- * own replay tail could ever deliver. This is no longer the
- * whole story for what the Activity feed panel renders: its container additionally
- * backfills on load from `GET /api/activity`, a separate, durable-store-backed source
- * this ring knows nothing about (`activity-panel.ts`'s `RENDER_LIMIT`, reconciled with
- * that read's own `limit` rather than derived from this one).
+ * own replay tail could ever deliver. It bounds only this ring, not what any
+ * consumer renders.
  */
 const LOG_LIMIT = 256;
 
@@ -281,7 +278,7 @@ export class FleetLiveUpdates {
   }
 
   /** `true` once the stream closed on a `401` — a session that expired
-   * mid-stream. The app root watches this and routes to `/login`; `false` before
+   * mid-stream; `false` before
    * {@link start} and for the whole life of a stream that never sees one. */
   get authFailed(): Signal<boolean> {
     return this.spine.authFailed;
@@ -290,7 +287,7 @@ export class FleetLiveUpdates {
   /**
    * The recent-event feed for the Activity feed, oldest → newest, capped at
    * {@link LOG_LIMIT} and excluding the muted frames ({@link isLoggable}). Empty before
-   * {@link start}; the panel reverses it for display.
+   * {@link start}.
    */
   get log(): Signal<readonly LoggedEvent[]> {
     return this._log.asReadonly();

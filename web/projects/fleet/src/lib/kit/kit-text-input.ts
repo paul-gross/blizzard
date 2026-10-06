@@ -2,17 +2,14 @@ import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } f
 
 /**
  * The text-control chrome — the font, background, border, and
- * focus-visible outline three separate call sites (a chunk's inline answer field,
- * the gardening run dialog's charge note, and its new-scope slug/description
- * fields) each hand-retyped byte-for-byte instead of sharing
- * (`bzh:frontend-kit-floor`). Presentational only, no query/client dependency: it
- * owns the chrome and a plain `value`/`valueChange` pair, leaving every consumer's
- * own form-handling — trimming, per-row draft state, submit wiring — exactly
- * where it already lived.
+ * focus-visible outline (`bzh:frontend-kit-floor`). Presentational only, no
+ * query/client dependency: it owns the chrome and a plain `value`/`valueChange`
+ * pair, leaving form-handling — trimming, per-row draft state, submit wiring —
+ * to the consumer.
  *
- * One component rather than a split `KitTextInput`/`KitTextarea`: every existing
- * consumer shares the same chrome rules, and the only real difference between the
- * single-line callers and the one multi-line one — which native element renders,
+ * One component rather than a split `KitTextInput`/`KitTextarea`: single- and
+ * multi-line controls share the same chrome rules, and the only real difference —
+ * which native element renders,
  * and whether it takes `rows` — is a single `multiline` input away rather than a
  * second component this kit would have to keep visually identical to the first by
  * hand.
@@ -26,8 +23,7 @@ import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } f
 export class KitTextInput {
   /** The control's current value — a plain controlled input, not `ngModel`: the
    * caller owns the value (a local signal or a field on some other state) and
-   * passes it back in, matching how every existing consumer already holds its
-   * own draft state. */
+   * passes it back in. */
   readonly value = input('');
 
   readonly placeholder = input<string | null>(null);

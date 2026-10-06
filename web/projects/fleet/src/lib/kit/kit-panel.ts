@@ -13,8 +13,8 @@ import { ChangeDetectionStrategy, Component, Directive, computed, contentChild, 
 export class KitPanelHeader {}
 
 /**
- * The panel shell — the chrome every board and machine-panel
- * section duplicated: the bezeled panel body, the header row with an engraved
+ * The panel shell — the chrome of a board or machine-panel
+ * section: the bezeled panel body, the header row with an engraved
  * uppercase label and an optional count, and a scrolling body slot below it.
  * Presentational only, no query/mutation/client injection: it renders exactly
  * what it is handed.
@@ -92,7 +92,7 @@ export class KitPanel {
 
   /** A design-token color (e.g. `'var(--red)'`) the label resolves to instead
    * of the default `--label` grey, and that flips the count span to
-   * `--snow` — `null` (the default) is the panel's existing look, unchanged. */
+   * `--snow` — `null` (the default) keeps the default label and count colors. */
   readonly accent = input<string | null>(null);
 
   /** Whether `.p-body` scrolls itself — `true` (the default) is every existing

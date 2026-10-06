@@ -14,16 +14,13 @@ const MAX_RENDERED_TURNS = 1000;
 
 /**
  * One open transcript segment, rendered with its own resume-seam links
- * and truncation/cap banners — the shared body both the Transcripts tab and the
- * node history tab's per-step detail pane mount, factored out once a second consumer
- * needed the same seam buttons and turn cap the Transcripts tab already carried.
+ * and truncation/cap banners.
  * Presentational (`bzh:frontend-container-presentational`): a consumer resolves
  * {@link continuedFrom}/{@link continuesIn} against its own step (`resolveSegmentSeams`,
  * `transcript-steps.ts`) and owns which segment id is actually open.
  *
  * {@link turns} is expected already merged (`mergeLateLinks`) — a consumer that also
- * needs the merged list for something else (the Transcripts tab's own standalone
- * sidechain resolution) merges once and passes the same array here, rather than this
+ * needs the merged list for something else merges once and passes the same array here, rather than this
  * component merging a second time over content the caller already folded.
  */
 @Component({
@@ -56,8 +53,8 @@ export class TranscriptSegmentView {
   /** Emitted with a seam's target segment id when the operator follows it. */
   readonly pickSegment = output<string>();
 
-  /** {@link TranscriptViewer.openStandalone}, forwarded unchanged — a consumer with no
-   * standalone concept (the node history pane) needs no listener at all, since
+  /** {@link TranscriptViewer.openStandalone}, forwarded — a consumer with no
+   * standalone concept needs no listener at all, since
    * {@link TranscriptViewer} always renders a sidechain inline too. */
   readonly openStandalone = output<SidechainOpenEvent>();
 

@@ -1,9 +1,6 @@
-/* `fleet-kit-master-detail` generates the real box (`kit-master-detail.css`'s own
-   `:host { flex: 1; min-height: 0 }`) — this host stays `display: contents` so that
-   split container is a direct flex item of `ChunkNodeHistoryContainer`'s own
-   `display: contents` host in turn, and so of the page shell's own `.cps-body`. The
-   detail pane's 8px inset is this consumer's own choice (`kit-master-detail.css`'s
-   `--kit-master-detail-detail-inset` hook). */
+/* `display: contents` — this host contributes no box, so `fleet-kit-master-detail`
+   stays a direct flex item of the enclosing flex body (see `kit-master-detail.css`).
+   The detail pane's 8px inset is this tab's own choice. */
 :host {
   display: contents;
   --kit-master-detail-detail-inset: 8px;
@@ -12,10 +9,8 @@
   display: block;
   padding: 4px 8px;
 }
-/* Matches the Transcripts tab's own `.seg-body` inset (`chunk-transcripts-tab.css`) —
-   this body wraps the same card-style turn rows and seam buttons, not a full-bleed
-   hover-state list, so the container owning its own padding is the right contract here
-   (`design/tokens.css`'s `--surface-*` note is about the *other* row style). */
+/* This body wraps card-style turn rows and seam buttons, not a full-bleed hover-state
+   list, so it owns its own padding (see `design/tokens.css`). */
 .nh-transcript-body {
   position: relative;
   padding: 6px 8px;

@@ -15,11 +15,9 @@ export interface KitChipOption {
  * list.
  *
  * Fully rounded, matching `kit-badge.ts`'s `soft` variant: the
- * board's soft-pill vocabulary is one shape language, so every chips row —
- * today the Events tab's filters, the viewport toggle, and the runner chunk
- * detail page's attempt tabs — reads the same as the badges beside it rather
- * than as a row of hard-edged boxes. Selection stays the amber border-and-text
- * highlight; only the shape changed.
+ * board's soft-pill vocabulary is one shape language, so every chips row
+ * reads the same as the badges beside it rather than as a row of hard-edged
+ * boxes. Selection is the amber border-and-text highlight.
  */
 @Component({
   selector: 'fleet-kit-chip',

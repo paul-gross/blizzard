@@ -28,25 +28,22 @@ interface SpendCellView {
 }
 
 /**
- * The mission-control titlebar — the brand, a fleet's live counts, and a
- * connection state. Shared by the hub board (the hub's all-time lane counts,
- * via {@link counts}) and the runner's local panel (its own capacity cells, via
- * {@link stats}) — pinned by `app-header.spec.ts`'s "renders the shared 48px board
- * header, not a bespoke local one" and `app.spec.ts`'s "renders the titlebar and nav,
- * and redirects the empty path to /board". It spans the whole window, above the rails.
+ * The mission-control titlebar — the brand, a fleet's live counts (via
+ * {@link counts}) or caller-supplied cells (via {@link stats}), and a
+ * connection state. It spans the whole window, above the rails.
  *
  * Presentational only: every cell is derived from plain inputs, never an
  * injected query. `stats`, given, renders in place of the count-derived lane
- * cells — the runner has no fleet counts, so it supplies its own. The trailing
+ * cells, for a caller with no fleet counts. The trailing
  * `[header-trailing]`-selected content projection is the composable slot future
  * header controls (an avatar menu, a pause toggle) slot into without this
  * component knowing about either. All color comes from the design-token layer,
  * never hard-coded hex.
  *
  * Collapses in tiers as it narrows, driven by `@container`
- * queries on the header's own inline size rather than the viewport's: the two
- * shells mount it over different layouts, so each must react to the width it
- * actually has. Below ~1150px the stat strip drops; below ~700px the spend cell
+ * queries on the header's own inline size rather than the viewport's: it is
+ * mounted over different layouts, so it must react to the width it actually
+ * has. Below ~1150px the stat strip drops; below ~700px the spend cell
  * and the brand text (wordmark and tagline both) follow, leaving the brand mark.
  * The connection cell is `flex: none` at every width and the trailing cluster
  * shrinks only into content its consumer marked shrinkable, so neither can be
@@ -54,14 +51,12 @@ interface SpendCellView {
  * strip is the only region this component shrinks on its own.
  *
  * That guarantee only covers what *this* component owns. A consumer projecting
- * more than a menu into `[header-trailing]` — the runner's local panel projects
- * a pause control and an identity block beside its menu — owns both collapsing
+ * more than a menu into `[header-trailing]` owns both collapsing
  * its own controls and deciding which of them truncates, and can do both: the
  * query container is **named**, so a consumer writes
  * `@container board-header (max-width: …)` against it in its own styles, where
  * view encapsulation reaches the nodes it declared, and it pins `flex` on those
- * same nodes to steer where the cluster's shrink lands. `app-panel-layout.ts`
- * is the worked example — a truncating username, a menu that never gives way.
+ * same nodes to steer where the cluster's shrink lands. See `app-panel-layout.ts`.
  */
 @Component({
   selector: 'fleet-board-header',
@@ -104,15 +99,13 @@ export class BoardHeader {
 
   /**
    * The live fleet counts, left → right: the whole fleet, then one cell per board
-   * lane in the board's own order — Ready among them, no longer a special case.
+   * lane in the board's own order.
    *
    * Every count is folded through {@link laneCounts} rather than by naming statuses
    * here. The header sits directly above the board and must not be able to disagree
    * with it: a status this header listed and the board did not (or the reverse) would
    * be a silent contradiction, whereas a new status added to the wire is a compile
-   * error in `chunk-lanes`, the one place that decides where it belongs. The Ready
-   * cell used to count the lane-less `ready` status the left rail owned; the READY
-   * lane makes it a plain lane tally like every other cell.
+   * error in `chunk-lanes`, the one place that decides where it belongs.
    */
   protected readonly chunkStats = computed<readonly StatCell[]>(() => {
     const counts = this.counts();

@@ -1,9 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
- * The action button — the `.act` chrome duplicated (with drift)
- * across the ready-queue and runner panels: a small bordered button in
- * three variants. Wraps a real native `<button>` so type/disabled/keyboard
+ * The action button — a small bordered button in three variants. Wraps a real native `<button>` so type/disabled/keyboard
  * semantics stay native; the click event passes through by bubbling — a
  * caller binds `(click)` on `<fleet-kit-button>` directly, no `@Output`
  * needed. `:host { display: contents }` keeps the wrapper out of layout, so a
@@ -17,7 +15,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 })
 export class KitButton {
   readonly variant = input<'default' | 'primary' | 'danger'>('default');
-  /** `default` renders byte-for-byte as the original `.act` chrome; `cta` opts a
+  /** `default` is the compact action chrome; `cta` opts a
    * caller into a larger, more emphatic treatment for a genuine call-to-action
    * rather than resizing the app's one action button for every surface. */
   readonly size = input<'default' | 'cta'>('default');

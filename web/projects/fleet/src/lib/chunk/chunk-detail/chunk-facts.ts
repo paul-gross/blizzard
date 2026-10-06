@@ -17,20 +17,14 @@ export interface EditGraphEvent {
  * The chunk's own facts — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
  * **graph**, editable inline (text-input-and-Set) while the chunk is unclaimed and has
- * not yet moved (widened by #120, narrowed by #271). The edit row is gated
+ * not yet moved. The edit row is gated
  * on {@link editable} — the fact, not a confirm — so the control simply disappears once
  * the pin is the engine's rather than staying up to fail a 409.
- *
- * A **Model** row stood beside Graph with the same inline editor until `Chunk.model`
- * was retired — a knob that never reached the envelope, so the board offered
- * an edit that changed nothing about what the fleet ran. Its replacements
- * (`default_model`/`default_effort`) deliberately have no web surface for now: they are
- * written with `blizzard hub chunk set --default-model/--default-effort` and read back
- * with `chunk show`.
+
  *
  * Projects {@link ChunkTokenBreakdown}'s cost/tokens rows into the `[token-breakdown]`
  * slot between Attempts and Graph, so the two components share one continuous
- * `<dl class="kv">` — the exact row order and grid the monolith rendered.
+ * `<dl class="kv">`.
  */
 @Component({
   selector: 'fleet-chunk-detail-facts',
@@ -51,12 +45,8 @@ export class ChunkFacts {
   /** The graphs view's own path segments, before the graph id — when set, the Graph
    * row's value links there (`/graphs/:graphId`, `graphs-page.ts`) so the operator can
    * jump straight from a chunk to its pinned graph's structure. `null` (the default)
-   * withholds the link and falls back to today's plain-text value, since this
-   * component is shared with the runner app, which has no `/graphs` route at all to
-   * point at (unlike the hub's own `board/chunk` path both apps share) — a consumer
-   * that does have somewhere to send the operator opts in explicitly
-   * (`ChunkDetailHeader.linkBase` follows the same route-address-from-outside
-   * convention, for the same cross-app reason). */
+   * withholds the link and renders a plain-text value, for a host with no
+   * graphs route to point at — a consumer that does have one opts in explicitly. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** The chunk detail route's own path segments, before a neighbor's chunk id — the
@@ -68,8 +58,7 @@ export class ChunkFacts {
    * confirm — repinning either before the chunk has run costs nothing to undo. */
   readonly editGraph = output<EditGraphEvent>();
 
-  /** The chunk's live route, read here as a plain fact — the same route the
-   * header's Detach control acts on. */
+  /** The chunk's live route, read here as a plain fact. */
   private readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
   /** The runner currently holding the chunk's route, or `—` when nothing holds it. */
@@ -88,7 +77,7 @@ export class ChunkFacts {
   /** The Graph fact row's label — the pinned graph's {@link compactRef}
    * (`G-XXXX`), with the graph's `name` and `created_at` (as `YYYYMMDD`) appended as
    * `#<name>-<YYYYMMDD>` when both are present on the detail *and* `created_at` parses.
-   * Either absent (an older payload) or unparseable (`formatUtcYmd` degrading to `''`)
+   * Either absent or unparseable (`formatUtcYmd` degrading to `''`)
    * degrades to the compact ref alone, never a dangling `#`/`-`. The full raw id stays
    * as the row's `title` tooltip, read straight off `detail().graph_id`. */
   protected readonly graphLabel = computed<string>(() => {

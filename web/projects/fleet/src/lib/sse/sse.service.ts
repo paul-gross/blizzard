@@ -16,13 +16,13 @@ import { Observable, Subject } from 'rxjs';
  * the types it wants via {@link SseConnectOptions.events} and reads them off
  * {@link SseHandle.events}. Unnamed frames still surface on {@link SseHandle.messages}.
  *
- * Now that auth has arrived, the default factory is the **fetch-based**
+ * The default factory is the **fetch-based**
  * transport ({@link fetchEventSourceFactory}) rather than native `EventSource`:
  * `EventSource` sends no cookie-auth-aware status to script (it exposes no response
  * code at all), so a session expiring mid-stream would otherwise read as an
  * indistinguishable transient blip and retry forever. The fetch-based source detects
  * a `401` specifically and reports it through {@link SseHandle.authFailed} instead of
- * scheduling a reconnect — no change to any caller above this service.
+ * scheduling a reconnect.
  */
 
 /** Connection lifecycle the UI can render (a status dot in the header). */

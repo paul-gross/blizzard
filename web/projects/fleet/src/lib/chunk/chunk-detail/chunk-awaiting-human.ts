@@ -85,8 +85,8 @@ export class ChunkAwaitingHuman {
   private readonly struckIds = signal<readonly string[]>([]);
 
   /** Each open question's in-progress answer, keyed by `question_id` — `KitTextInput`
-   * is a controlled control (`bzh:frontend-kit-floor`'s shared chrome extraction), so
-   * this dock now holds the live draft itself rather than reading a template-ref'd
+   * is a controlled control, so
+   * this dock holds the live draft itself rather than reading a template-ref'd
    * `<input>`'s `.value` at submit time, one draft per question since several can be
    * open at once. */
   private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
@@ -98,13 +98,12 @@ export class ChunkAwaitingHuman {
 
   /**
    * The chunk's recently answered questions, most recently **answered** first — the
-   * return trail. Answering used to drop the row from the dock the instant
-   * it landed, which left an operator answering from a phone with no evidence their
-   * answer went anywhere; keeping it renders who answered, what they said, and whether
-   * the runner has delivered it into the resumed session.
+   * return trail, so an operator who answered has evidence their answer went
+   * somewhere: who answered, what they said, and whether the runner has delivered it
+   * into the resumed session.
    *
-   * Sorted on `answered_at`, not on the hub's own order — that list is by `asked_at`
-   * (`chunk_store.load_questions`), and the two disagree whenever asks and answers
+   * Sorted on `answered_at`, not on the hub's own order — that list is by `asked_at`,
+   * and the two disagree whenever asks and answers
    * interleave. Since the whole question this panel answers is "did *my* answer just
    * land", ordering by when it was *asked* can push the row the operator is looking for
    * out of the cap entirely.
@@ -166,8 +165,7 @@ export class ChunkAwaitingHuman {
     this.answerDrafts.update((drafts) => ({ ...drafts, [questionId]: value }));
   }
 
-  /** Emit an answer for a question — no-op on an empty answer — and clear its draft,
-   * the same reset the old uncontrolled `<input>` did by blanking its own `.value`. */
+  /** Emit an answer for a question — no-op on an empty answer — and clear its draft. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
     if (!trimmed) return;

@@ -5,9 +5,9 @@ import { commands, page } from 'vitest/browser';
 import { KitMasterDetail } from './kit-master-detail';
 
 /**
- * The collapse rule {@link KitMasterDetail} lifts out of every two-pane tab it now
- * replaces (`bzh:web-shell-sweep`) — a real, headless-Chromium proof of the
- * `@media (min-width: 720px)` row/column flip jsdom parses without ever evaluating.
+ * {@link KitMasterDetail}'s collapse rule (`bzh:web-shell-sweep`) — a real,
+ * headless-Chromium proof of the `@media (min-width: 720px)` row/column flip jsdom
+ * parses without ever evaluating.
  *
  * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).

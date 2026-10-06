@@ -20,9 +20,7 @@ export interface RequestClientStub {
 /** A `route` return value naming a non-200 status — e.g. the hub's 404/409
  * `{"detail": "..."}` error bodies, or the runner's 503 volatile-route fault —
  * instead of the default 200 + JSON body. The one error convention both
- * generated clients' specs answer with ({@link stubRequestClient}
- * unifies the hub and runner twins, which previously answered with two
- * different conventions: a returned error value here, a thrown one there). */
+ * generated clients' specs answer with through {@link stubRequestClient}. */
 export interface StubHttpError {
   readonly status: number;
   readonly body: unknown;
@@ -63,10 +61,7 @@ interface StubbableClient {
  * assertions.
  *
  * Takes the generated client instance itself (`hubClient`/`runnerClient`) so
- * one helper serves both libraries' specs — the twin
- * `stubHubClient`/`stubRunnerClient` implementations this replaces differed
- * only in which client they configured and which error convention (return vs.
- * throw) they answered with.
+ * one helper serves both libraries' specs with a single error convention.
  */
 export function stubRequestClient(
   client: StubbableClient,
