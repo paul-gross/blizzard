@@ -973,3 +973,35 @@ def test_main_delta_on_an_unresolvable_revision_exits_the_bad_revision_code(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(m, "run_delta", raising)
     assert m.main(["--since", "nope"]) == m.BAD_REVISION_EXIT_CODE
+
+
+def test_main_refuses_delta_budget_with_a_named_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
+    assert m.main(["cli-surface", "--delta-budget", "5"]) == 1
+    assert "--delta-budget" in capsys.readouterr().err
+    assert selections == []
+    assert not (tmp_path / "mutants").exists()
+
+
+def test_scope_process_survives_a_process_group_already_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Proc:
+        pid = 4242
+        returncode = None
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def communicate(self, timeout: float | None = None) -> tuple[str, None]:
+            self.calls += 1
+            if self.calls == 1:
+                raise m.subprocess.TimeoutExpired("cmd", timeout or 0)
+            return "last line\n", None
+
+    def gone(pid: int, sig: int) -> None:
+        raise ProcessLookupError
+
+    monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **k: _Proc())
+    monkeypatch.setattr(m.os, "killpg", gone)
+    assert m._run_scope_process("cli-surface", "HEAD", 1.0) == m.ScopeRun(None, "last line")

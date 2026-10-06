@@ -597,7 +597,10 @@ def _run_scope_process(slug: str, since: str, timeout_seconds: float) -> ScopeRu
     try:
         output, _ = proc.communicate(timeout=max(timeout_seconds, 0.0))
     except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # the group exited between the timeout and the kill; its output is still collected
         output, _ = proc.communicate()
         return ScopeRun(None, _tail(output))
     return ScopeRun(proc.returncode, _tail(output))
@@ -930,7 +933,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--delta-budget",
         type=float,
-        default=DEFAULT_DELTA_BUDGET_SECONDS,
+        default=None,
         metavar="SECONDS",
         help="With --since and no scope: the wall-clock budget for the whole delta, preparation included "
         f"(default {DEFAULT_DELTA_BUDGET_SECONDS:g}). Distinct from --budget, which bounds one scope's execution.",
@@ -952,7 +955,8 @@ def main_delta(args: argparse.Namespace) -> int:
         return 1
     os.chdir(REPO_ROOT)
     try:
-        run_delta(args.since, budget_seconds=args.delta_budget)
+        budget = DEFAULT_DELTA_BUDGET_SECONDS if args.delta_budget is None else args.delta_budget
+        run_delta(args.since, budget_seconds=budget)
     except UnknownRevisionError as exc:
         print(exc, file=sys.stderr)
         return BAD_REVISION_EXIT_CODE
@@ -963,6 +967,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.scope is None:
         return main_delta(args)
+    if args.delta_budget is not None:
+        print("mutation: --delta-budget bounds a delta run; a named scope takes --budget", file=sys.stderr)
+        return 1
     try:
         scope = resolve_scope(args.scope)
     except UnknownScopeError as exc:
