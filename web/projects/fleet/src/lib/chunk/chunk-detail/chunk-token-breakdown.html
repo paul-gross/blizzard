@@ -1,14 +1,6 @@
 <div class="s-head"><span class="tag">Usage</span></div>
 <ng-template #costValue>
-  <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().estimated_cost_usd, cost().cost_partial) }}</span>
-  @if (cost().cost_partial) {
-    <span
-      class="partial-badge"
-      data-testid="cost-partial-badge"
-      title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
-      >PARTIAL</span
-    >
-  }
+  <span data-testid="cost-total-usd" [attr.title]="cost().cost_partial ? totalCostPartialTitle : null">{{ formatCost(cost().cost_usd, cost().estimated_cost_usd, cost().cost_partial) }}</span>
 </ng-template>
 <ng-template #inputValue>
   <span [class.zero]="cost().input_tokens === 0">{{ formatTokens(cost().input_tokens) }}</span>

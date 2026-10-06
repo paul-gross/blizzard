@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
-import { formatCost, formatTokens } from '../../core/cost-format';
+import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/cost-format';
 import { harnessName } from '../../core/harness-name';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { KitBadge } from '../../kit/kit-badge';
@@ -94,6 +94,7 @@ export class ChunkTimeline {
 
   protected readonly rowMark = rowMark;
   protected readonly rowChoice = rowChoice;
+  protected readonly stepCostPartialTitle = STEP_COST_PARTIAL_TITLE;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
   protected readonly harnessName = harnessName;
@@ -104,6 +105,16 @@ export class ChunkTimeline {
     if (!this.activatable() || key === null) return;
     event?.preventDefault();
     this.pickStep.emit(key === this.selectedKey() ? null : key);
+  }
+
+  /** Hands a click that landed on a row's own `pointer-events: auto` cells (node name,
+   * routed-to, timestamp, cost — kept live for their tooltips) to the row's stretched
+   * link, so the whole keyed row navigates. A click already on an anchor (the graph
+   * badge, the stretched link itself) keeps its own target. */
+  protected forwardToLink(event: Event): void {
+    const target = event.target as Element;
+    if (target.closest('a')) return;
+    (event.currentTarget as Element).querySelector<HTMLElement>('a.step-link')?.click();
   }
 
   protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail()));

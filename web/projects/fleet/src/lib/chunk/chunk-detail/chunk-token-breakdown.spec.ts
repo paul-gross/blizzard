@@ -65,7 +65,7 @@ describe('ChunkTokenBreakdown', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.42');
-    expect(el.querySelector('[data-testid="cost-partial-badge"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.hasAttribute('title')).toBe(false);
 
     // Every token count is visible without interaction, one labelled row apiece — no
     // expand toggle left to click.
@@ -77,14 +77,14 @@ describe('ChunkTokenBreakdown', () => {
     expect(el.querySelector('[data-testid="tokens-breakdown"]')).toBeNull();
   });
 
-  it('marks the chunk-total cost as PARTIAL when the derived total is a lower bound', async () => {
+  it('marks the chunk-total cost with + and a lower-bound title when the derived total is a lower bound', async () => {
     const fixture = TestBed.createComponent(ChunkTokenBreakdown);
     fixture.componentRef.setInput('detail', PARTIAL_COST_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.10+');
-    expect(el.querySelector('[data-testid="cost-partial-badge"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.getAttribute('title')).toContain('lower bound');
   });
 
   it('defaults to a zero, non-partial total when the detail carries no cost yet', async () => {
@@ -94,7 +94,7 @@ describe('ChunkTokenBreakdown', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.00');
-    expect(el.querySelector('[data-testid="cost-partial-badge"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.hasAttribute('title')).toBe(false);
     expect(el.querySelector('[data-testid="fact-tokens-input"]')?.textContent).toContain('0');
   });
 

@@ -30,14 +30,3 @@
 .s-head {
   margin-bottom: 6px;
 }
-/* The PARTIAL badge marks a cost total whose sum is a lower bound — never
-   silently understated. */
-.partial-badge {
-  margin-left: 4px;
-  padding: 0 4px;
-  border: 1px solid var(--red-dim);
-  color: var(--red);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  cursor: help;
-}

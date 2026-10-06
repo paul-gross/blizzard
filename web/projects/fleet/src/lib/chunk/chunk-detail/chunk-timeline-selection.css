@@ -136,15 +136,6 @@ a.gr:focus-visible {
 .line3 .cost {
   white-space: nowrap;
 }
-.partial-badge {
-  margin-left: 4px;
-  padding: 0 4px;
-  border: 1px solid var(--red-dim);
-  color: var(--red);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  cursor: help;
-}
 /* A bounce is a refused result — alarm red; a restart is an operator's deliberate
    move — amber-hi, the same tone a parked operator verb reads. */
 .step[data-choice='bounced'] .verdict {

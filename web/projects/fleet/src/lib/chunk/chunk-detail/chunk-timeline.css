@@ -107,11 +107,10 @@
    are excluded: each carries its own native `title` tooltip
    (`chunk-timeline.html`), and pointer-events:none would take hover — the
    thing that tooltip needs — along with the click. A click landing exactly on
-   either no longer reaches the row's own link (it falls to `.step`'s own
-   no-op handler while non-activatable) — accepted, since most of the row's
-   surface (gaps, the other columns) still does. The graph badge and the
-   verdict-routed-to tooltip make the same trade the same way, just for a
-   nested descendant instead of a direct child — see `a.gr`/`.jg-to` below. */
+   either still bubbles to `.step`'s click handler, which forwards it to the
+   row's own link (`ChunkTimeline.forwardToLink`). The verdict-routed-to
+   tooltip and the cost tooltip do the same for a nested descendant — see
+   `.jg-to`/`.step-usage .cost` below. */
 .step:has(.step-link) > *:not(.step-link):not(.nd):not(.ts) {
   pointer-events: none;
 }
@@ -207,6 +206,9 @@ a.gr:focus-visible {
 /* When the judgement landed — recency at a glance, right-aligned and dim.
    Excluded from the stretched-link sweep above (like `.nd`) — keeps this
    element's own `[title]="row.whenTitle"` reachable by hover. */
+.step-usage .cost {
+  pointer-events: auto;
+}
 .step .ts {
   color: var(--label-dim);
   font-size: var(--fs-label);
@@ -235,20 +237,6 @@ a.gr:focus-visible {
   flex: 0 0 56px;
   text-align: right;
   white-space: nowrap;
-}
-/* The PARTIAL badge marks a cost total whose sum is a lower bound. */
-.partial-badge {
-  margin-left: 4px;
-  padding: 0 4px;
-  border: 1px solid var(--red-dim);
-  color: var(--red);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  cursor: help;
-  /* `.step-usage` (its own direct-child ancestor) is stretched-link-swept to
-     `pointer-events: none`; opt this one descendant back in the same way
-     `.jg-to` does, so this badge's own `[title]` and `cursor: help` stay live. */
-  pointer-events: auto;
 }
 /* A bounce is a refused result — alarm red; a restart is an operator's deliberate
    move — amber-hi, the same tone a parked operator verb reads. */

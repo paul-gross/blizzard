@@ -8,6 +8,7 @@ and Chromium is installed (``uv run playwright install chromium``)."""
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -179,7 +180,7 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 card.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("$0.42")
-                expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)
+                expect(page.get_by_test_id("cost-total-usd")).not_to_have_attribute("title", re.compile(".+"))
 
                 # All four token classes render inline, one labelled row apiece, no expand toggle.
                 expect(page.get_by_test_id("fact-tokens-input")).to_have_text("1.2k")
@@ -193,7 +194,7 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
 
                 # Marked live, no reload: the detail total, the card figure, and the header
                 # spend-today figure all gain the trailing `+` lower-bound mark.
-                expect(page.get_by_test_id("cost-partial-badge")).to_have_count(1)
+                expect(page.get_by_test_id("cost-total-usd")).to_have_attribute("title", re.compile("lower bound"))
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("$0.42+")
                 expect(card.get_by_test_id("card-cost")).to_have_text("$0.42+")
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.42+")
@@ -229,6 +230,6 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 # never `+` — an estimate-only row does not make a chunk PARTIAL.
                 estimate_card.click()
                 expect(page.get_by_test_id("cost-total-usd")).to_have_text("~$0.07")
-                expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)
+                expect(page.get_by_test_id("cost-total-usd")).not_to_have_attribute("title", re.compile(".+"))
             finally:
                 browser.close()

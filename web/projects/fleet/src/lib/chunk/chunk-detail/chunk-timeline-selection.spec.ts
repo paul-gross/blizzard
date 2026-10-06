@@ -42,7 +42,7 @@ const COST_DETAIL: ChunkDetail = {
 
 // A subscription step: no billed cost, only a runner-reported estimate — a row
 // carrying only an estimate is not partial, so this step's own line 3 shows no
-// PARTIAL marker.
+// lower-bound title.
 const ESTIMATE_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01estimate0000000000000000000',
@@ -197,7 +197,7 @@ describe('ChunkTimelineSelection', () => {
     expect(active.querySelector('[data-testid="selection-step-usage"]')).toBeNull();
   });
 
-  it("renders a step's own estimate folded into its one cost figure, marked ~, with no PARTIAL marker for an estimate-only row", async () => {
+  it("renders a step's own estimate folded into its one cost figure, marked ~, with no lower-bound title for an estimate-only row", async () => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', ESTIMATE_DETAIL);
     await fixture.whenStable();
@@ -205,7 +205,7 @@ describe('ChunkTimelineSelection', () => {
 
     const usage = el.querySelector('[data-testid="selection-step-usage"]')!;
     expect(usage.querySelector('[data-testid="selection-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
-    expect(usage.querySelector('[data-testid="selection-step-cost-partial"]')).toBeNull();
+    expect(usage.querySelector('[data-testid="selection-step-cost"]')?.hasAttribute('title')).toBe(false);
   });
 
   it('links a multi-graph row\'s own graph badge when graphLinkBase is set', async () => {
