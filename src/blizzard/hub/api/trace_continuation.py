@@ -1,5 +1,6 @@
 """The hub continues an incoming trace only for a caller whose credential resolves, never over a websocket;
-anyone else starts a fresh root. FastAPI's telemetry extracts the headers before any middleware, so the gate wraps it."""
+anyone else starts a fresh root. FastAPI's telemetry extracts the headers before any middleware, so the gate
+wraps it."""
 
 from __future__ import annotations
 
