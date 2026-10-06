@@ -155,9 +155,9 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
     of the same *name* at its next transition. ``inherit`` (the stored ``null``, and
     every mint's default) defers to the hub's own ``follow_latest``."""
     follow_latest = None if value == "inherit" else value == "true"
-    resp = cli.post(
-        f"/api/graphs/{graph_id}/follow-latest",
-        "POST /graphs/{id}/follow-latest",
+    resp = cli.patch(
+        f"/api/graphs/{graph_id}",
+        "PATCH /graphs/{id}",
         json_body={"follow_latest": follow_latest},
         on_status={404: f"unknown graph {graph_id}"},
     )

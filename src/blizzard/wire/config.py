@@ -8,6 +8,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.routine import RoutineDocument
+from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
 
 
@@ -43,7 +45,8 @@ class ConfigChangesPage(BaseModel):
 
 class ConfigDocument(BaseModel):
     """A declarative configuration document. Each entry is the kind's own document model, so a field an
-    entry omits is left as stored; ``secrets`` lists secret names that must already be active.
+    entry omits is left as stored; scopes reconcile before routines, so a routine may name a scope the
+    same document declares; ``secrets`` lists secret names that must already be active.
     ``GET /api/config/export`` writes every field of every entry."""
 
     model_config = ConfigDict(extra="forbid")
@@ -52,6 +55,8 @@ class ConfigDocument(BaseModel):
     secrets: list[str] = []
     work_sources: list[WorkSourceDocument] = []
     repositories: list[RepositoryDocument] = []
+    scopes: list[ScopeDocument] = []
+    routines: list[RoutineDocument] = []
 
 
 class ConfigApplyOutcome(BaseModel):

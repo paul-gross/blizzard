@@ -7,7 +7,7 @@ each ``name`` marked ``effective``; the lifecycle verbs return an updated view."
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.graph_targets import ChoiceTargetKind
@@ -27,6 +27,16 @@ class GraphPolicyRequest(BaseModel):
     hub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it."""
 
     follow_latest: bool | None
+
+
+class GraphFlagsPatchRequest(BaseModel):
+    """A sparse edit of a graph's mutable flags: an absent field is unchanged, a present
+    one is set. ``follow_latest`` is the tri-state, so an explicit ``null`` reverts to
+    inheriting the hub default rather than being refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    follow_latest: bool | None = None
 
 
 class GraphValidationReport(BaseModel):

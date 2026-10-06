@@ -133,4 +133,4 @@ def test_forwards_to_the_hub_fleet_scopes_route_and_returns_the_vocabulary(tmp_p
         resp = client.get("/api/leases/lease_1/scopes", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen == [f"{_HUB_URL}/api/fleet/scopes"]
-    assert resp.json() == _SCOPES
+    assert resp.json() == [{**scope, "revision": None} for scope in _SCOPES]

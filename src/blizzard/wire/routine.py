@@ -1,7 +1,7 @@
 """Routine create/edit/run requests and their read views.
 
 A create names the graph its runs execute and a default scope (minted if unseen);
-edit changes everything but the name, which is immutable. A run mints and ingests a
+edit is sparse and changes everything but the name, which is immutable. A run mints and ingests a
 hub work item from the routine in one act; its chunk rests ``not_ready`` until promoted."""
 
 from __future__ import annotations
@@ -19,9 +19,13 @@ class RoutineCreateRequest(BaseModel):
     default_harnesses: list[str] = []
 
 
-class RoutineEditRequest(BaseModel):
-    """``name`` is required and must equal the routine's current one — the request
-    restates it so a caller cannot silently target the wrong routine's edit."""
+class RoutineDocument(BaseModel):
+    """A routine as a document entry, keyed by its immutable ``name`` — the model whose JSON Schema
+    ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope
+    always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
+    stored or declared in the same document, and ``graph_name`` must name an enabled graph."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     graph_name: str
@@ -29,10 +33,27 @@ class RoutineEditRequest(BaseModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
+    scopes: list[str] = []
+
+
+class RoutineEditRequest(BaseModel):
+    """A sparse edit: an absent field is unchanged, a present one is set. A present
+    ``name`` must equal the routine's current one; an explicit ``null`` clears
+    ``default_effort`` and is refused on every other field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    graph_name: str | None = None
+    default_scope_slug: str | None = None
+    default_model: list[str] | None = None
+    default_effort: str | None = None
+    default_harnesses: list[str] | None = None
 
 
 class RoutineLifecycleRequest(BaseModel):
-    """Retire or re-enable a routine — records who flipped it."""
+    """Retire or re-enable a routine — ``by`` is recorded on the lifecycle fact; the change
+    row's actor is the authenticated caller."""
 
     by: str = "operator"
 
@@ -49,6 +70,7 @@ class RoutineView(BaseModel):
     default_harnesses: list[str] = []
     created_at: str
     retired: bool = False
+    revision: int | None = None
 
 
 class RoutineRunRequest(BaseModel):

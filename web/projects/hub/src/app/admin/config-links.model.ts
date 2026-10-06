@@ -2,11 +2,14 @@ import { RecordKind, type RecordRefView } from 'fleet';
 
 import type { ConfigLinkVm } from './config-record-panel';
 
-/** The admin route segment each record kind's surface lives at. */
-const SURFACE_SEGMENT: Record<RecordKind, string> = {
-  [RecordKind.WORK_SOURCE]: 'work-sources',
-  [RecordKind.REPOSITORY]: 'repositories',
-  [RecordKind.SECRET]: 'secrets',
+/** The route each record kind's surface lives at — the fleet's records under admin, the
+ * gardening records under gardening. */
+const SURFACE_SEGMENT: Record<RecordKind, readonly string[]> = {
+  [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
+  [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
+  [RecordKind.SECRET]: ['/admin', 'secrets'],
+  [RecordKind.SCOPE]: ['/gardening', 'scopes'],
+  [RecordKind.ROUTINE]: ['/gardening', 'routines'],
 };
 
 /** A record kind as text — the wire value with its underscores spaced. */
@@ -17,8 +20,8 @@ export function recordKindLabel(kind: string): string {
 /** The router commands that open `key` of `kind`, or `null` for a kind the board has
  * no surface for. */
 export function recordRoute(kind: string, key: string): readonly string[] | null {
-  const segment = (SURFACE_SEGMENT as Record<string, string | undefined>)[kind];
-  return segment === undefined ? null : ['/admin', segment, key];
+  const surface = (SURFACE_SEGMENT as Record<string, readonly string[] | undefined>)[kind];
+  return surface === undefined ? null : [...surface, key];
 }
 
 /** A link to the record `ref` names. */

@@ -13,12 +13,15 @@ from sqlalchemy import insert
 
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from tests.support import build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
+
+_CTX = ChangeContext(actor="operator", door=Door.API)
 
 _SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
@@ -30,15 +33,15 @@ def _seed_scope(hub, slug: str = "blizzard") -> None:  # type: ignore[no-untyped
 
 
 def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
-    RoutineStore(hub_store_connections(hub.engine)).create(
-        Routine(
-            routine_id=Id.mint_at(ROUTINE_PREFIX, _SINCE).value,
-            name=name,
-            graph_name="g",
-            default_scope_slug=default_scope_slug,
-            created_at=_SINCE,
-        )
+    routine = Routine(
+        routine_id=Id.mint_at(ROUTINE_PREFIX, _SINCE).value,
+        name=name,
+        graph_name="g",
+        default_scope_slug=default_scope_slug,
+        created_at=_SINCE,
     )
+    change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
+    RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
 
 
 def _seed_finding(

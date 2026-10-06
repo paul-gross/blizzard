@@ -56,7 +56,9 @@ _DEPRECATED_ALIAS_PAIRS = [
     ("/api/fleet/chunks/{chunk_id}/work-items", "/api/fleet/chunks/{chunk_id}/pm-items"),
 ]
 
-_SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_ALIAS_PAIRS}
+_SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_ALIAS_PAIRS} | {
+    "POST /api/graphs/{graph_id}/follow-latest",
+}
 
 
 def test_all_new_paths_are_in_the_openapi_schema() -> None:

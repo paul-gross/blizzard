@@ -159,6 +159,7 @@ scopes = Table(
     Column("slug", String, primary_key=True),
     Column("description", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="1"),
 )
 
 # Scope retire/enable facts: append-only, newest wins.
@@ -288,6 +289,7 @@ routines = Table(
     # Nullable JSON harness preferences; empty means express none.
     Column("default_harnesses", Text, nullable=True),
     Column("created_at", UtcDateTime, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="1"),
     UniqueConstraint("name", name="uq_routines_name"),
 )
 

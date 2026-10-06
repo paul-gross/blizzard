@@ -14,7 +14,8 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import CONFIG_EDIT, FLEET_VIEW
-from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.ids import ROUTINE_PREFIX, Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -25,6 +26,8 @@ from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ConfigDeclaration,
+    DeclarableRecord,
+    DeclaredReferences,
     EntryOutcome,
     RepositoryDeclaration,
     StoredConfig,
@@ -33,6 +36,9 @@ from blizzard.hub.domain.config.apply import (
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind, RecordState
 from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceFields
+from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
+from blizzard.hub.domain.garden.routines import RoutineEdit
+from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.wire.config import (
     ConfigApplyOutcome,
     ConfigApplyResponse,
@@ -42,6 +48,8 @@ from blizzard.wire.config import (
     FieldChangeView,
 )
 from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.routine import RoutineDocument
+from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
 
 router = APIRouter(
@@ -60,7 +68,12 @@ _VIEW = Depends(require(FLEET_VIEW))
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
 
-_SCHEMAS = {"work-sources": WorkSourceDocument, "repositories": RepositoryDocument}
+_SCHEMAS = {
+    "work-sources": WorkSourceDocument,
+    "repositories": RepositoryDocument,
+    "scopes": ScopeDocument,
+    "routines": RoutineDocument,
+}
 
 
 def _view(change: ConfigChange) -> ConfigChangeView:
@@ -103,7 +116,7 @@ def list_changes(
     return ConfigChangesPage(changes=[_view(c) for c in page], next_before=page[-1].id if len(rows) > limit else None)
 
 
-def _declaration(document: ConfigDocument) -> ConfigDeclaration:
+def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
     of only the fields the entry states (``model_fields_set``)."""
     sources = []
@@ -139,18 +152,64 @@ def _declaration(document: ConfigDocument) -> ConfigDeclaration:
                 edit=RepositoryEdit(**stated),
             )
         )
+    scopes = [
+        ScopeDeclaration(
+            name=scope.slug,
+            description=scope.description,
+            edit=ScopeEdit(**{name: getattr(scope, name) for name in scope.model_fields_set if name != "slug"}),
+        )
+        for scope in document.scopes
+    ]
+    routines = []
+    for routine in document.routines:
+        stated = {name: getattr(routine, name) for name in routine.model_fields_set if name != "scopes"}
+        routines.append(
+            RoutineDeclaration(
+                name=routine.name,
+                routine_id=Id.mint(ROUTINE_PREFIX, clock).value,
+                graph_name=routine.graph_name,
+                default_scope_slug=routine.default_scope_slug,
+                default_model=routine.default_model,
+                default_effort=routine.default_effort,
+                default_harnesses=routine.default_harnesses,
+                edit=RoutineEdit(**stated),
+                scopes=routine.scopes if "scopes" in routine.model_fields_set else None,
+            )
+        )
     return ConfigDeclaration(
-        secrets=tuple(document.secrets), work_sources=tuple(sources), repositories=tuple(repositories)
+        secrets=tuple(document.secrets),
+        work_sources=tuple(sources),
+        repositories=tuple(repositories),
+        scopes=tuple(scopes),
+        routines=tuple(routines),
     )
 
 
 def _stored(declaration: ConfigDeclaration, services: HubServices) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     retired = services.secret_catalog.retired_names()
+    scopes: dict[str, DeclarableRecord] = {scope.slug: scope for scope in services.scopes.list_all()}
+    routines: dict[str, DeclarableRecord] = {}
+    linked: dict[str, tuple[str, ...]] = {}
+    graph_names: set[str] = set()
+    for entry in declaration.routines:
+        assert isinstance(entry, RoutineDeclaration)
+        graph_names.add(entry.graph_name)
+        routine = services.routines.get_by_name(entry.name)
+        if routine is not None:
+            routines[routine.name] = routine
+            linked[routine.name] = tuple(services.routine_scopes.list_scopes(routine.routine_id))
     return StoredConfig(
         work_sources=services.work_source_records.get_many([d.name for d in declaration.work_sources]),
         repositories=services.repository_records.get_many([d.name for d in declaration.repositories]),
         secrets={name: RecordState.of(name in retired) for name in secrets},
+        scopes={d.name: scopes[d.name] for d in declaration.scopes if d.name in scopes},
+        routines=routines,
+        references=DeclaredReferences(
+            scopes=frozenset(scopes) | {d.name for d in declaration.scopes},
+            enabled_graphs=frozenset(n for n in graph_names if services.graphs.get_enabled_by_name(n) is not None),
+            linked_scopes=linked,
+        ),
     )
 
 
@@ -205,7 +264,7 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument:
 def _apply(
     document: ConfigDocument, identity: ResolvedIdentity, services: HubServices, *, dry_run: bool
 ) -> ConfigApplyResponse:
-    declaration = _declaration(document)
+    declaration = _declaration(document, services.clock)
     apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, services.clock).value
     ctx = ChangeContext(actor=identity.user_id, door=Door.APPLY, apply_id=apply_id)
     try:
@@ -241,8 +300,9 @@ async def apply_config(
 
 @router.get("/export", response_model=ConfigDocument, dependencies=[_VIEW])
 def export_config(services: Annotated[HubServices, Depends(get_services)]) -> ConfigDocument:
-    """Every active, non-built-in work source and repository with every field, and every active secret name,
-    as a document that applies back as a no-op. Retired records are left out, since applying one would enable it."""
+    """Every active, non-built-in work source and repository, and every active scope and routine (its linked
+    scope set included), with every field, and every active secret name, as a document that applies back as a
+    no-op. Retired records are left out, since applying one would enable it."""
     retired = services.secret_catalog.retired_names()
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
@@ -251,4 +311,22 @@ def export_config(services: Annotated[HubServices, Depends(get_services)]) -> Co
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
         work_sources=[WorkSourceDocument(name=r.name, **vars(r.fields)) for r in sources],
         repositories=[RepositoryDocument(name=r.name, **vars(r.fields)) for r in repositories],
+        scopes=[
+            ScopeDocument(slug=s.slug, description=s.description)
+            for s in sorted(services.scopes.list_all(), key=lambda s: s.slug)
+            if not s.retired
+        ],
+        routines=[
+            RoutineDocument(
+                name=r.name,
+                graph_name=r.graph_name,
+                default_scope_slug=r.default_scope_slug,
+                default_model=r.default_model,
+                default_effort=r.default_effort,
+                default_harnesses=r.default_harnesses,
+                scopes=services.routine_scopes.list_scopes(r.routine_id),
+            )
+            for r in sorted(services.routines.list_all(), key=lambda r: r.name)
+            if not r.retired
+        ],
     )

@@ -1,14 +1,14 @@
 """Routine domain model — an operator-authored pointer at a graph, a default scope, and
 run-defaults the hub hands back unresolved.
 
-``routine_id`` is a surrogate key: ``name``, the run/finding/proposal lineage, survives
-independently of it. :class:`RoutineAuthoring` mints an unseen default scope
+``routine_id`` is a surrogate key; the immutable ``name`` is the lineage and keys its change
+rows (``bzh:configured-record``). :class:`RoutineAuthoring` mints an unseen default scope
 and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Protocol
@@ -16,10 +16,30 @@ from typing import ClassVar, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config.changes import (
+    FIELDED_RECORD_TRANSITIONS,
+    RETIRED_FIELD,
+    ChangeContext,
+    ChangeOp,
+    ConfigChange,
+    FieldChange,
+    RecordKind,
+    RecordState,
+    Verdict,
+)
+from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
-from blizzard.hub.domain.garden.scopes import Scope, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+
+#: The mutable fields, in the order a diff lists them.
+_FIELDS = ("graph_name", "default_scope_slug", "default_model", "default_effort", "default_harnesses")
+#: The fields an edit may set but never clear.
+_REQUIRED_FIELDS = ("graph_name", "default_scope_slug", "default_model", "default_harnesses")
+#: The wire name a link or unlink reports the routine's linked set under.
+SCOPES_FIELD = "scopes"
 
 
 class RunMode(StrEnum):
@@ -80,15 +100,15 @@ class RoutineVerb(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class RoutineEdit:
-    """The field set one routine edit writes — everything but ``name`` and
-    ``routine_id``."""
+    """A sparse routine edit: :data:`UNSET` leaves a field. ``name`` may only restate the
+    current one; ``None`` clears ``default_effort`` and is refused on every other field."""
 
-    routine_id: str
-    graph_name: str
-    default_scope_slug: str
-    default_model: list[str]
-    default_effort: str | None
-    default_harnesses: list[str]
+    name: str | None | UnsetType = UNSET
+    graph_name: str | None | UnsetType = UNSET
+    default_scope_slug: ScopeSlug | None | UnsetType = UNSET
+    default_model: Sequence[str] | None | UnsetType = UNSET
+    default_effort: str | None | UnsetType = UNSET
+    default_harnesses: Sequence[str] | None | UnsetType = UNSET
 
 
 def require_name_free(holder: Routine | None, name: str) -> None:
@@ -108,6 +128,11 @@ def require_graph_resolves(graph: Graph | None, graph_name: str) -> Graph:
 @domain_model
 @dataclass(frozen=True)
 class Routine:
+    """A stored routine. ``retired`` derives from the newest lifecycle fact.
+
+    Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
+    or ``None`` when the verb changes nothing and so writes nothing."""
+
     routine_id: str
     name: str
     graph_name: str
@@ -117,6 +142,10 @@ class Routine:
     default_effort: str | None = None
     # The routine's default harness preference, `default_model`'s shape: empty is no preference.
     default_harnesses: list[str] = field(default_factory=list)
+    revision: int = 1
+    retired: bool = False
+
+    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
 
     #: Which verbs are legal from which brake state; a retired routine refuses only a run.
     LEGAL_FROM: ClassVar[Mapping[RoutineVerb, frozenset[BrakeState]]] = {
@@ -137,52 +166,77 @@ class Routine:
         return BrakeState.of(retired=retired) in Routine.LEGAL_FROM[verb]
 
     @classmethod
-    def mint(
+    def new(
         cls,
         *,
         routine_id: str,
         name: str,
         graph_name: str,
-        default_scope: Scope,
-        at: datetime,
+        default_scope_slug: str,
         default_model: Sequence[str],
         default_effort: str | None,
         default_harnesses: Sequence[str],
-    ) -> Routine:
-        """A new routine pointing at ``default_scope``, created at ``at``."""
-        return cls(
+        ctx: ChangeContext,
+        at: datetime,
+    ) -> tuple[Routine, ConfigChange]:
+        """A new routine at revision 1 pointing at ``default_scope_slug``, with its ``create`` change."""
+        record = cls(
             routine_id=routine_id,
             name=name,
             graph_name=graph_name,
-            default_scope_slug=default_scope.slug,
+            default_scope_slug=default_scope_slug,
             created_at=at,
             default_model=list(default_model),
             default_effort=default_effort,
-            default_harnesses=list(default_harnesses),
+            default_harnesses=validated_harnesses(list(default_harnesses)),
         )
+        return record, ConfigChange.of(ctx, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, record._diff(None), at)
 
-    def edited(
-        self,
-        *,
-        name: str,
-        graph_name: str,
-        default_scope_slug: ScopeSlug,
-        default_model: Sequence[str],
-        default_effort: str | None,
-        default_harnesses: Sequence[str],
-    ) -> RoutineEdit:
-        """The edit to write; a name other than the current one refuses — a routine's
-        name is its lineage."""
-        if name != self.name:
+    def require_revision(self, if_match: int | None) -> None:
+        """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
+        if if_match is not None and if_match != self.revision:
+            raise ConfigRevisionConflict("routine", self.name, current=self.revision)
+
+    def edit(
+        self, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Routine, ConfigChange] | None:
+        """Apply a sparse edit, legal from either state. The revision check comes first, even
+        for an edit that changes nothing; a ``name`` other than the current one refuses — a
+        routine's name is its lineage."""
+        self.require_revision(if_match)
+        if edit.name is not UNSET and edit.name != self.name:
             raise RoutineNameImmutableError(self.name)
-        return RoutineEdit(
-            routine_id=self.routine_id,
-            graph_name=graph_name,
-            default_scope_slug=default_scope_slug.value,
-            default_model=list(default_model),
-            default_effort=default_effort,
-            default_harnesses=list(default_harnesses),
-        )
+        merged = self._merged(edit)
+        changes = merged._diff(self)
+        if not changes:
+            return None
+        edited = replace(merged, revision=self.revision + 1)
+        return edited, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, edited.revision, ChangeOp.EDIT, changes, at)
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Routine, ConfigChange] | None:
+        """Retire or enable; ``None`` when the routine already stands there (a redundant verb writes nothing)."""
+        self.require_revision(if_match)
+        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
+        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+            return None
+        moved = replace(self, revision=self.revision + 1, retired=retired)
+        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        return moved, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, moved.revision, op, flip, at)
+
+    def with_scopes(
+        self, linked: Sequence[str], scopes: Sequence[str], ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Routine, ConfigChange] | None:
+        """Move the linked set from ``linked`` to ``scopes`` — an ``edit`` whose diff field is
+        ``scopes``; ``None`` when the set is unchanged."""
+        self.require_revision(if_match)
+        old, new = sorted(set(linked)), sorted(set(scopes))
+        if old == new:
+            return None
+        moved = replace(self, revision=self.revision + 1)
+        changes = (FieldChange(SCOPES_FIELD, old, new),)
+        return moved, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, moved.revision, ChangeOp.EDIT, changes, at)
 
     def require_unlinkable(self, scope: Scope) -> None:
         """The routine's own default scope never leaves its set."""
@@ -193,6 +247,37 @@ class Routine:
         """The scope a run acts on: the override when one is named, else the
         routine's own default."""
         return override if override is not None else ScopeSlug.parse(self.default_scope_slug)
+
+    def _merged(self, edit: RoutineEdit) -> Routine:
+        """This routine with every set field of ``edit`` applied; ``None`` is refused naming
+        the field, except on ``default_effort``, which it clears."""
+        changes: dict[str, object] = {}
+        for name in _REQUIRED_FIELDS:
+            value = getattr(edit, name)
+            if value is None:
+                raise ConfigFieldError(name, "must not be null")
+            if value is not UNSET:
+                changes[name] = value
+        if isinstance(edit.default_scope_slug, ScopeSlug):
+            changes["default_scope_slug"] = edit.default_scope_slug.value
+        if "default_model" in changes:
+            changes["default_model"] = list(changes["default_model"])  # type: ignore[call-overload]
+        if "default_harnesses" in changes:
+            changes["default_harnesses"] = validated_harnesses(list(changes["default_harnesses"]))  # type: ignore[call-overload]
+        if edit.default_effort is not UNSET:
+            changes["default_effort"] = edit.default_effort
+        return replace(self, **changes)  # type: ignore[arg-type]
+
+    def _diff(self, old: Routine | None) -> tuple[FieldChange, ...]:
+        """The fields that differ from ``old``, by wire name. With no ``old`` (a create),
+        every field is listed against ``None``."""
+        changes: list[FieldChange] = []
+        for name in _FIELDS:
+            new_value = getattr(self, name)
+            old_value = None if old is None else getattr(old, name)
+            if old_value != new_value:
+                changes.append(FieldChange(name, old_value, new_value))
+        return tuple(changes)
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -222,29 +307,28 @@ class IReadRoutineRepository(Protocol):
 
 
 class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
-    """Read-write routine access. Only the domain layer depends on this variant."""
+    """Read-write routine access. Only the domain layer depends on this variant; each write
+    commits its ``change`` — and a ``scope_mint``'s own change — in the same transaction."""
 
-    def create(self, routine: Routine) -> None:
-        """Insert a routine row. A ``name`` another routine already holds — a create
-        that lost the race to it — raises :class:`RoutineNameTakenError`."""
+    def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
+        """Insert the routine row, mint its default scope when ``scope_mint`` is given, and
+        link that default into the routine's set. A ``name`` another routine already holds —
+        a create that lost the race to it — raises :class:`RoutineNameTakenError`."""
         ...
 
-    def edit(
-        self,
-        routine_id: str,
-        *,
-        graph_name: str,
-        default_scope_slug: str,
-        default_model: list[str],
-        default_effort: str | None,
-        default_harnesses: list[str],
+    def update(
+        self, routine: Routine, *, from_revision: int, change: ConfigChange, scope_mint: ScopeMint | None
     ) -> Routine:
-        """Change everything but ``name``/``routine_id`` in place."""
+        """Compare-and-set ``from_revision``, writing everything but ``name``/``routine_id``,
+        minting the default scope when ``scope_mint`` is given, and linking the default into
+        the routine's set; :class:`ConfigRevisionConflict` when the stored revision has moved."""
         ...
 
-    def record_lifecycle(self, routine_id: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins.
-        Never touches the ``routines`` row itself."""
+    def record_lifecycle(
+        self, routine: Routine, *, retired: bool, from_revision: int, at: datetime, by: str, change: ConfigChange
+    ) -> Routine:
+        """Append the ``routine.retired``/``routine.enabled`` fact and move the revision to
+        ``routine.revision``, as one compare-and-set on ``from_revision``."""
         ...
 
 
@@ -267,22 +351,21 @@ class IReadRoutineScopeRepository(Protocol):
 
 class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
     """Read-write access to the ``routine_scopes`` join. Only the domain layer depends
-    on this variant."""
+    on this variant; each write moves the routine's revision and commits ``change`` with it."""
 
-    def link(self, routine_id: str, scope_slug: str) -> None:
-        """Link ``routine_id`` to ``scope_slug`` — idempotent: a no-op if already linked."""
+    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        """Link ``scope_slug`` into ``routine``'s set as one compare-and-set on ``from_revision``."""
         ...
 
-    def unlink(self, routine_id: str, scope_slug: str) -> None:
-        """Unlink ``routine_id`` from ``scope_slug`` — idempotent: a no-op if not linked."""
+    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        """Unlink ``scope_slug`` from ``routine``'s set as one compare-and-set on ``from_revision``."""
         ...
 
 
 class RoutineAuthoring:
-    """Create and edit a routine, minting its default scope on demand
-    and linking that default into the routine's own `routine_scopes` set, so the
-    invariant — a routine's default scope is always a member of its own set — can never
-    be violated by forgetting a separate step."""
+    """Create and edit a routine, minting its default scope on demand and linking it into
+    the routine's own `routine_scopes` set, so the default is always a member of that set.
+    The mint, the routine write, the link, and both change rows commit in one transaction."""
 
     def __init__(
         self,
@@ -290,13 +373,11 @@ class RoutineAuthoring:
         routines: IWriteRoutineRepository,
         graphs: IReadGraphRepository,
         scope_registry: ScopeRegistry,
-        routine_scopes: IWriteRoutineScopeRepository,
         clock: IClock,
     ) -> None:
         self._routines = routines
         self._graphs = graphs
         self._scope_registry = scope_registry
-        self._routine_scopes = routine_scopes
         self._clock = clock
 
     def create(
@@ -305,6 +386,7 @@ class RoutineAuthoring:
         name: str,
         graph_name: str,
         default_scope_slug: ScopeSlug,
+        ctx: ChangeContext,
         default_model: list[str] | None = None,
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
@@ -312,96 +394,95 @@ class RoutineAuthoring:
         harnesses = validated_harnesses(default_harnesses or [])
         require_name_free(self._routines.get_by_name(name), name)
         require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
-        scope = self._scope_registry.ensure(default_scope_slug)
-        routine = Routine.mint(
+        scope, scope_mint = self._scope_registry.resolve(default_scope_slug, ctx)
+        routine, change = Routine.new(
             routine_id=Id.mint(ROUTINE_PREFIX, self._clock).value,
             name=name,
             graph_name=graph_name,
-            default_scope=scope,
-            at=self._clock.now(),
+            default_scope_slug=scope.slug,
             default_model=default_model or [],
             default_effort=default_effort,
             default_harnesses=harnesses,
+            ctx=ctx,
+            at=self._clock.now(),
         )
         # A concurrent create that took the name first surfaces from the port as
         # RoutineNameTakenError, the same refusal the pre-check above raises.
-        self._routines.create(routine)
-        self._routine_scopes.link(routine.routine_id, scope.slug)
-        return routine
+        return self._routines.create(routine, change=change, scope_mint=scope_mint)
 
-    def edit(
-        self,
-        routine: Routine,
-        *,
-        name: str,
-        graph_name: str,
-        default_scope_slug: ScopeSlug,
-        default_model: list[str] | None = None,
-        default_effort: str | None = None,
-        default_harnesses: list[str] | None = None,
-    ) -> Routine:
-        harnesses = validated_harnesses(default_harnesses or [])
-        edit = routine.edited(
-            name=name,
-            graph_name=graph_name,
-            default_scope_slug=default_scope_slug,
-            default_model=default_model or [],
-            default_effort=default_effort,
-            default_harnesses=harnesses,
-        )
-        require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
-        scope = self._scope_registry.ensure(default_scope_slug)
-        edited = self._routines.edit(
-            edit.routine_id,
-            graph_name=edit.graph_name,
-            default_scope_slug=edit.default_scope_slug,
-            default_model=edit.default_model,
-            default_effort=edit.default_effort,
-            default_harnesses=edit.default_harnesses,
-        )
-        # The new default is linked; a previous default is deliberately left linked —
-        # the routine still sweeps it, and a set larger than its default is legal.
-        self._routine_scopes.link(edit.routine_id, scope.slug)
-        return edited
+    def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
+        """Apply a sparse edit. Graph resolution and default-scope minting run only when their
+        field is present; an edit that changes nothing writes nothing. A new default is
+        linked; a previous default is deliberately left linked — the routine still sweeps
+        it, and a set larger than its default is legal."""
+        decided = routine.edit(edit, ctx, if_match=if_match, at=self._clock.now())
+        if isinstance(edit.graph_name, str):
+            require_graph_resolves(self._graphs.get_enabled_by_name(edit.graph_name), edit.graph_name)
+        if decided is None:
+            return routine
+        edited, change = decided
+        scope_mint = None
+        if isinstance(edit.default_scope_slug, ScopeSlug):
+            _, scope_mint = self._scope_registry.resolve(edit.default_scope_slug, ctx)
+        return self._routines.update(edited, from_revision=routine.revision, change=change, scope_mint=scope_mint)
 
 
 class RoutineScopeMembership:
     """Manage a routine's `routine_scopes` set — link/unlink take the
-    already-resolved `Routine` and `Scope` objects (`bzh:domain-takes-objects`); the
-    repository seam beneath takes their bare ids/slugs."""
+    already-resolved `Routine` and `Scope` objects (`bzh:domain-takes-objects`). Each is a
+    routine ``edit`` whose diff field is ``scopes``; one that changes nothing writes nothing."""
 
-    def __init__(self, *, routine_scopes: IWriteRoutineScopeRepository) -> None:
+    def __init__(self, *, routine_scopes: IWriteRoutineScopeRepository, clock: IClock) -> None:
         self._routine_scopes = routine_scopes
+        self._clock = clock
 
-    def link(self, routine: Routine, scope: Scope) -> None:
-        """Idempotent: a no-op if `scope` is already linked to `routine`."""
-        self._routine_scopes.link(routine.routine_id, scope.slug)
+    def link(self, routine: Routine, scope: Scope, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
+        """Link `scope` into `routine`'s set; a no-op if it is already linked."""
+        linked = self._routine_scopes.list_scopes(routine.routine_id)
+        decided = routine.with_scopes(linked, [*linked, scope.slug], ctx, if_match=if_match, at=self._clock.now())
+        if decided is None:
+            return routine
+        moved, change = decided
+        return self._routine_scopes.link(moved, scope.slug, from_revision=routine.revision, change=change)
 
-    def unlink(self, routine: Routine, scope: Scope) -> None:
-        """Idempotent: a no-op if `scope` is not linked to `routine`. Refused when
+    def unlink(self, routine: Routine, scope: Scope, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
+        """Unlink `scope` from `routine`'s set; a no-op if it is not linked. Refused when
         `scope` is `routine`'s own default: a routine's default scope is always a
         member of its own set."""
         routine.require_unlinkable(scope)
-        self._routine_scopes.unlink(routine.routine_id, scope.slug)
+        linked = self._routine_scopes.list_scopes(routine.routine_id)
+        kept = [slug for slug in linked if slug != scope.slug]
+        decided = routine.with_scopes(linked, kept, ctx, if_match=if_match, at=self._clock.now())
+        if decided is None:
+            return routine
+        moved, change = decided
+        return self._routine_scopes.unlink(moved, scope.slug, from_revision=routine.revision, change=change)
 
 
 class RoutineLifecycle:
-    """Set or clear a routine's retired brake without touching its row — the
+    """Set or clear a routine's retired brake without touching its row's fields — the
     ``ScopeLifecycle`` shape."""
 
     def __init__(self, *, routines: IWriteRoutineRepository, clock: IClock) -> None:
         self._routines = routines
         self._clock = clock
 
-    def retire(self, routine: Routine, *, by: str) -> None:
-        """Append ``routine.retired``. Idempotent: retiring an already-retired routine
-        just appends another ``retired=True`` fact, a harmless no-op via
-        newest-fact-wins."""
-        self._record(routine, BrakeVerb.RETIRE, by=by)
+    def retire(self, routine: Routine, ctx: ChangeContext, *, by: str, if_match: int | None = None) -> Routine:
+        """Append ``routine.retired``, recording ``by`` on the fact. Retiring a retired routine writes nothing."""
+        return self._record(routine, BrakeVerb.RETIRE, ctx, by=by, if_match=if_match)
 
-    def enable(self, routine: Routine, *, by: str) -> None:
-        """Append ``routine.enabled``. Idempotent on an already-enabled routine."""
-        self._record(routine, BrakeVerb.ENABLE, by=by)
+    def enable(self, routine: Routine, ctx: ChangeContext, *, by: str, if_match: int | None = None) -> Routine:
+        """Append ``routine.enabled``. Enabling an enabled routine writes nothing."""
+        return self._record(routine, BrakeVerb.ENABLE, ctx, by=by, if_match=if_match)
 
-    def _record(self, routine: Routine, verb: BrakeVerb, *, by: str) -> None:
-        self._routines.record_lifecycle(routine.routine_id, retired=verb.records_retired, at=self._clock.now(), by=by)
+    def _record(
+        self, routine: Routine, verb: BrakeVerb, ctx: ChangeContext, *, by: str, if_match: int | None
+    ) -> Routine:
+        now = self._clock.now()
+        decided = routine.set_retired(verb.records_retired, ctx, if_match=if_match, at=now)
+        if decided is None:
+            return routine
+        moved, change = decided
+        return self._routines.record_lifecycle(
+            moved, retired=verb.records_retired, from_revision=routine.revision, at=now, by=by, change=change
+        )

@@ -66,7 +66,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,
     ("POST", "/api/graphs/{graph_id}/retire"): GRAPH_EDIT,
     ("POST", "/api/graphs/{graph_id}/enable"): GRAPH_EDIT,
-    # The follow-latest policy — a graph lifecycle write like retire/enable.
+    # The graph's mutable flags, and the deprecated follow-latest alias onto the same verb.
+    ("PATCH", "/api/graphs/{graph_id}"): GRAPH_EDIT,
     ("POST", "/api/graphs/{graph_id}/follow-latest"): GRAPH_EDIT,
     # Scopes — reads take FLEET_VIEW, writes take GRAPH_EDIT.
     ("POST", "/api/scopes"): GRAPH_EDIT,

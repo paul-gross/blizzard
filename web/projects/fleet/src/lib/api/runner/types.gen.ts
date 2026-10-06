@@ -2721,6 +2721,10 @@ export type ScopeView = {
      */
     retired?: boolean;
     /**
+     * Revision
+     */
+    revision?: number | null;
+    /**
      * Slug
      */
     slug: string;

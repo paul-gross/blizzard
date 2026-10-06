@@ -8,9 +8,9 @@ that field (sparse merge, ``bzh:configured-record``); a record that already stan
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -38,6 +38,8 @@ from blizzard.hub.domain.config.work_sources import (
 SECRETS_SECTION = "secrets"
 WORK_SOURCES_SECTION = "work_sources"
 REPOSITORIES_SECTION = "repositories"
+SCOPES_SECTION = "scopes"
+ROUTINES_SECTION = "routines"
 
 
 class SecretNotActive(ConfigFieldError):
@@ -77,12 +79,68 @@ class RepositoryDeclaration:
     edit: RepositoryEdit
 
 
+class DeclarableRecord(Protocol):
+    """A configured record of a kind owned outside this package, reconciled by its own verbs. Each verb
+    returns the record to write with its change, or ``None`` when it changes nothing."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def retired(self) -> bool: ...
+
+    def edit(
+        self, edit: Any, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredReferences:
+    """What an entry's reference checks read: every scope slug stored or declared in the document, the
+    graph names that resolve to an enabled graph, and each stored routine's linked scope set by name."""
+
+    scopes: frozenset[str] = frozenset()
+    enabled_graphs: frozenset[str] = frozenset()
+    linked_scopes: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+class RecordDeclaration(Protocol):
+    """An entry of a kind owned outside this package: the sparse ``edit`` of the fields it states, its
+    reference ``check``, the record it ``create``s, and any write that ``settle``s the record afterwards."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def edit(self) -> object: ...
+
+    def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
+        """:class:`ConfigFieldError` naming the field whose reference does not resolve."""
+        ...
+
+    def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[DeclarableRecord, ConfigChange]: ...
+
+    def settle(
+        self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
+
+
 @domain_model
 @dataclass(frozen=True)
 class ConfigDeclaration:
     secrets: tuple[str, ...] = ()
     work_sources: tuple[WorkSourceDeclaration, ...] = ()
     repositories: tuple[RepositoryDeclaration, ...] = ()
+    scopes: tuple[RecordDeclaration, ...] = ()
+    routines: tuple[RecordDeclaration, ...] = ()
 
 
 @domain_model
@@ -94,6 +152,9 @@ class StoredConfig:
     repositories: Mapping[str, ConfiguredRepository]
     #: The lifecycle state of each listed secret that exists; an absent name is unknown.
     secrets: Mapping[str, RecordState]
+    scopes: Mapping[str, DeclarableRecord] = field(default_factory=dict)
+    routines: Mapping[str, DeclarableRecord] = field(default_factory=dict)
+    references: DeclaredReferences = DeclaredReferences()
 
 
 @domain_model
@@ -104,7 +165,7 @@ class PlannedWrite:
 
     section: str
     index: int
-    record: ConfiguredWorkSource | ConfiguredRepository
+    record: ConfiguredWorkSource | ConfiguredRepository | DeclarableRecord
     from_revision: int | None
     change: ConfigChange
 
@@ -155,7 +216,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         at,
         writes,
         outcomes,
-        guard=require_configurable,
+        guard=lambda d, _: require_configurable(d.name),
         create=lambda d: ConfiguredWorkSource.new(d.name, d.fields, ctx, at=at),
     )
     _reconcile_section(
@@ -167,36 +228,56 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         at,
         writes,
         outcomes,
-        guard=lambda name: None,
+        guard=lambda d, _: None,
         create=lambda d: ConfiguredRepository.new(d.name, d.fields, ctx, at=at),
     )
+    # Scopes reconcile first, so a routine may name a scope the same document declares.
+    for section, kind, declared, stored_records in (
+        (SCOPES_SECTION, RecordKind.SCOPE, declaration.scopes, stored.scopes),
+        (ROUTINES_SECTION, RecordKind.ROUTINE, declaration.routines, stored.routines),
+    ):
+        _reconcile_section(
+            section,
+            kind,
+            declared,
+            stored_records,
+            ctx,
+            at,
+            writes,
+            outcomes,
+            guard=lambda d, record: d.check(stored.references, record),
+            create=lambda d: d.create(ctx, at=at),
+            settle=lambda d, record: d.settle(record, stored.references, ctx, at=at),
+        )
     return ApplyPlan(writes=tuple(writes), outcomes=tuple(outcomes))
 
 
 def _reconcile_section(
     section: str,
     kind: RecordKind,
-    declared: Sequence[WorkSourceDeclaration] | Sequence[RepositoryDeclaration],
-    stored: Mapping[str, ConfiguredWorkSource] | Mapping[str, ConfiguredRepository],
+    declared: Sequence[Any],
+    stored: Mapping[str, Any],
     ctx: ChangeContext,
     at: datetime,
     writes: list[PlannedWrite],
     outcomes: list[EntryOutcome],
     *,
-    guard: Callable[[str], None],
-    create: Callable[..., tuple[ConfiguredWorkSource | ConfiguredRepository, ConfigChange]],
+    guard: Callable[[Any, Any], None],
+    create: Callable[[Any], tuple[Any, ConfigChange]],
+    settle: Callable[[Any, Any], tuple[Any, ConfigChange] | None] = lambda d, record: None,
 ) -> None:
     seen: set[str] = set()
     for index, entry in enumerate(declared):
         try:
-            guard(entry.name)
             if entry.name in seen:
                 raise ConfigFieldError("name", f"{entry.name!r} is named twice in this document")
             seen.add(entry.name)
             record = stored.get(entry.name)
+            guard(entry, record)
             if record is None:
-                created, change = create(entry)
-                _write(section, index, kind, created, None, change, writes, outcomes)
+                record, change = create(entry)
+                _write(section, index, kind, record, None, change, writes, outcomes)
+                _settle(section, index, kind, settle(entry, record), writes, outcomes)
                 continue
             written = False
             if record.retired:
@@ -209,18 +290,36 @@ def _reconcile_section(
             if decided is not None:
                 edited, change = decided
                 _write(section, index, kind, edited, record.revision, change, writes, outcomes)
+                record = edited
                 written = True
+            written = _settle(section, index, kind, settle(entry, record), writes, outcomes) or written
             if not written:
                 outcomes.append(EntryOutcome(kind, entry.name, None))
         except (ConfigFieldError, BuiltInWorkSource) as exc:
             raise ApplyEntryRefused(section, index, exc) from exc
 
 
+def _settle(
+    section: str,
+    index: int,
+    kind: RecordKind,
+    decided: tuple[Any, ConfigChange] | None,
+    writes: list[PlannedWrite],
+    outcomes: list[EntryOutcome],
+) -> bool:
+    """Plan the write that settles a record after its create or edit; ``False`` when it needs none."""
+    if decided is None:
+        return False
+    settled, change = decided
+    _write(section, index, kind, settled, change.revision - 1, change, writes, outcomes)
+    return True
+
+
 def _write(
     section: str,
     index: int,
     kind: RecordKind,
-    record: ConfiguredWorkSource | ConfiguredRepository,
+    record: ConfiguredWorkSource | ConfiguredRepository | DeclarableRecord,
     from_revision: int | None,
     change: ConfigChange,
     writes: list[PlannedWrite],

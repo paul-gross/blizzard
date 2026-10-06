@@ -8,9 +8,9 @@ resolving what it names, and nothing here filters by scope; that is a separate s
 
 `blizzard hub scope create <slug> [--description]`, `list`, `edit <slug> --description <text>`, `retire <slug>`, and
 `enable <slug>` are the scope verbs. `create` is a mint-or-no-op: naming an existing slug leaves its stored description
-untouched — `edit` is the only verb that changes it. `retire`/`enable` are the graph lifecycle's own reversible,
-append-only brake: retiring a scope appends `scope.retired`, `enable` appends `scope.enabled`, and neither touches the
-stored slug or description.
+untouched — `edit` is the only verb that changes it. `retire`/`enable` are a reversible brake: retiring a scope appends
+`scope.retired`, `enable` appends `scope.enabled`, and neither touches the stored slug or description. Retiring a
+retired scope, or enabling an enabled one, writes nothing.
 
 The hub board's Gardening tab renders the same reads from its own Scopes sub-tab: every scope beside the selected one's
 own panel, which names the routines related to it — marking which of them default here — edits the description in
@@ -24,15 +24,15 @@ list. The selected child route remains in the URL, so a detail can still be open
 ## Routines
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,
-`show
-<routine_id>`, and `edit <routine_id> --graph <name> --scope <slug> [--model] [--effort]` are the routine verbs.
+`show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort]` are the routine
+verbs. `edit` sends only the options given; anything left out stands.
 `GRAPH_NAME` must resolve to a currently-enabled graph — a create or edit naming one that does not refuses, naming it.
 `DEFAULT_SCOPE_SLUG` is minted through the same path `scope create` uses if the slug is unseen, so a routine's default
 scope never needs a separate `scope create` first.
 
 A routine's `name` is its lineage and is immutable once minted: `routine edit` never changes it, and a create naming an
 already-existing routine name is refused rather than duplicating it. `routine_id` is the id every other verb addresses
-the routine by; `edit` still requires the current name be restated, and refuses a request that names a different one. A
+the routine by; an edit may restate the current name, which changes nothing, and is refused if it names a different one. A
 routine running the `garden-routine` graph resolves its axis from this same `name` — the target project's gardening-axes
 registry must declare an entry under it. Naming one the registry does not declare is not refused at create time: every
 run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is immutable, that
@@ -50,12 +50,26 @@ that set. Both are idempotent and never mint or retire a scope — naming one `s
 `routine_id` no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's
 own default scope, which stays a member of its set for as long as it is the default.
 
-`routine retire <name> [--by operator]` and `routine enable <name> [--by operator]` are a routine's own reversible,
-append-only brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends
-`routine.enabled`, and neither touches the stored row, its findings, proposals, or closures. `routine list
+`routine retire <name> [--by operator]` and `routine enable <name> [--by operator]` are a routine's own reversible
+brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and
+neither touches the stored row, its findings, proposals, or closures. A repeated retire or enable writes nothing.
+`routine list
 --include-retired` includes a retired routine in the listing, marked; every other verb still resolves a retired
 routine's `name` to its `routine_id` the same way a live one does, so it reaches the domain's own retired refusal
 rather than reading as unknown.
+
+## Revisions and the change log
+
+Scopes and routines are configured records. Each carries a `revision` that every committed write moves by one — an
+edit, a retire or enable that flips the state, and a routine's scope link or unlink — and each such write appends one
+row to the configuration change log ([config-changes.md](config-changes.md)), keyed by the scope's slug or the
+routine's `name`. A write that would change nothing writes nothing: no revision, no row.
+
+Over HTTP, `PATCH /api/scopes/{slug}` and `PATCH /api/routines/{routine_id}` are sparse: an absent field is unchanged,
+a present one is set, and a field that is not part of the record is refused. A routine's `graph_name` and
+`default_scope_slug` refuse an explicit `null`; `default_effort` takes `null` to clear it. Send `If-Match: <revision>`
+to refuse the write with `409` if the record moved since you read it. Both kinds can also be declared in a
+configuration document ([config-documents.md](config-documents.md)).
 
 ## Running one
 

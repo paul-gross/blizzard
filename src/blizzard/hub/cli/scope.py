@@ -33,7 +33,7 @@ def scope_create(cli: CliContext, slug: str, description: str) -> None:
 
     A re-create never overwrites a stored description — ``scope edit`` is the verb that
     changes it."""
-    resp = cli.post("/api/scopes", "POST /scopes", json_body={"slug": slug, "description": description})
+    resp = cli.post("/api/scopes", "POST /scopes", json_body={"slug": slug, "description": description}, door=True)
     body = resp.json()
     cli.show_lines(body, f"scope {body['slug']} ready")
 
@@ -55,6 +55,7 @@ def scope_edit(cli: CliContext, slug: str, description: str) -> None:
         "PATCH /scopes/{slug}",
         json_body={"description": description},
         on_status={404: f"unknown scope {slug}"},
+        door=True,
     )
     body = resp.json()
     cli.show_lines(body, f"scope {slug} updated")
@@ -82,6 +83,7 @@ def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str) -> N
         f"POST /scopes/{{slug}}/{verb}",
         json_body={"by": by},
         on_status={404: f"unknown scope {slug}"},
+        door=True,
     )
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"

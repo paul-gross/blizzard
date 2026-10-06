@@ -907,12 +907,11 @@ def build_services(
         config_changes=core.config_changes,
         routines=routine_store,
         routine_scopes=routine_scope_store,
-        routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store),
+        routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
         routine_authoring=RoutineAuthoring(
             routines=routine_store,
             graphs=graph_store,
             scope_registry=scope_registry,
-            routine_scopes=routine_scope_store,
             clock=clock,
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),

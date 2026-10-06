@@ -1,6 +1,6 @@
 # Configuration documents
 
-A configuration document declares work sources and repositories in one YAML or JSON file. `blizzard hub config apply`
+A configuration document declares work sources, repositories, scopes, and routines in one YAML or JSON file. `blizzard hub config apply`
 reconciles the hub's stored records to it in a single transaction, and `blizzard hub config export` writes the current
 records back out as a document.
 
@@ -28,20 +28,35 @@ repositories:
     repo: blizzard
     base_branch: master
     secret_name: gh-token
+scopes:
+  - slug: blizzard
+    description: The blizzard repository
+routines:
+  - name: architecture-drift
+    graph_name: garden-routine
+    default_scope_slug: blizzard
+    default_model: [claude-opus]
+    scopes: [blizzard]
 ```
 
-`version` must be `1`. Each entry carries the fields its own record takes, so [work sources](./work-sources.md) and
-[repositories](./repositories.md) own the field meanings, and `GET /api/config/schema/work-sources` and `/repositories`
-serve each entry's JSON Schema. An unknown field is refused. `secrets` lists secret names that must already exist and be
-active; a document never carries a secret's value, so set one first with `blizzard hub secret set`. Routines and scopes
-are not part of a document.
+`version` must be `1`. Each entry carries the fields its own record takes, so [work sources](./work-sources.md),
+[repositories](./repositories.md), and [scopes and routines](./routines-and-scopes.md) own the field meanings, and
+`GET /api/config/schema/work-sources`, `/repositories`, `/scopes`, and `/routines` serve each entry's JSON Schema. An
+unknown field is refused. `secrets` lists secret names that must already exist and be active; a document never carries
+a secret's value, so set one first with `blizzard hub secret set`.
+
+A scope entry is keyed by its `slug`, a routine entry by its `name`. A routine's `scopes` states its linked scope set,
+its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine entry
+names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's `scopes`
+section, and its `graph_name` must name an enabled graph; otherwise the entry is refused. An apply never creates a scope
+the document does not declare.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
 
 ## What an apply does
 
-An apply looks at each work source and repository the document names:
+An apply looks at each record the document names, scopes before routines:
 
 | The record is…                        | The apply…                                           | Outcome row |
 | ------------------------------------- | ---------------------------------------------------- | ----------- |
@@ -72,7 +87,7 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 ## Export
 
-`config export` prints every active work source and repository with every field, and every active secret name, as a
+`config export` prints every active work source, repository, scope, and routine with every field, and every active secret name, as a
 document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired records are left out,
 because applying one would enable it again. The built-in `hub` work source is never exported.
 

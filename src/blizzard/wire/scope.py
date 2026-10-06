@@ -1,12 +1,12 @@
 """Scope create/edit requests and the read view.
 
 A create names a slug and mints it if unseen, or reads back the existing scope
-unchanged; edit changes only the stored description. The lifecycle verbs return an
-updated view, the graph lifecycle shape."""
+unchanged; edit is sparse and changes only the stored description. The lifecycle verbs
+return an updated view, the graph lifecycle shape."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ScopeCreateRequest(BaseModel):
@@ -16,14 +16,28 @@ class ScopeCreateRequest(BaseModel):
     description: str = ""
 
 
-class ScopeEditRequest(BaseModel):
-    """Change a scope's stored description in place."""
+class ScopeDocument(BaseModel):
+    """A scope as a document entry — the model whose JSON Schema ``GET /api/config/schema/scopes``
+    serves. A ``description`` the entry omits is left as stored, and is empty on a create."""
 
-    description: str
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    description: str = ""
+
+
+class ScopeEditRequest(BaseModel):
+    """A sparse edit: an absent field is unchanged, a present one is set; ``null`` is
+    refused. The slug is immutable, so a body carrying it is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = None
 
 
 class ScopeLifecycleRequest(BaseModel):
-    """Retire or re-enable a scope — records who flipped it."""
+    """Retire or re-enable a scope — ``by`` is recorded on the lifecycle fact; the change
+    row's actor is the authenticated caller."""
 
     by: str = "operator"
 
@@ -35,3 +49,4 @@ class ScopeView(BaseModel):
     description: str
     created_at: str
     retired: bool = False
+    revision: int | None = None
