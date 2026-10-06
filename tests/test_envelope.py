@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.api.chunk_views import ChunkView
 from blizzard.hub.api.node_steps import node_envelope
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RestartFact, TransitionFact, WorkRef
@@ -29,7 +31,7 @@ from blizzard.wire.envelope import EnvelopeArtifact
 pytestmark = pytest.mark.unit
 
 
-def _row(name: str, epoch: int, *, node_name: str = "build") -> StoredArtifact:
+def _row(name: str, epoch: int, *, node_name: str = "build", node_id: str = "nd_build") -> StoredArtifact:
     return StoredArtifact(
         kind=ArtifactKind.ASSET,
         name=name,
@@ -38,7 +40,7 @@ def _row(name: str, epoch: int, *, node_name: str = "build") -> StoredArtifact:
         forge=None,
         artifact_id=f"art_{name}{epoch}",
         chunk_id="ch_1",
-        node_id="nd_build",
+        node_id=node_id,
         node_name=node_name,
         epoch=epoch,
     )
@@ -90,6 +92,35 @@ def test_latest_artifacts_keeps_the_highest_epoch() -> None:
     rows = [_row("findings", 1), _row("findings", 3), _row("findings", 2), _row("other", 1)]
     latest = {(r.node_name, r.name): r.epoch for r in LatestArtifacts.of(rows).rows}
     assert latest == {("build", "findings"): 3, ("build", "other"): 1}
+
+
+def test_latest_artifacts_series_continues_across_node_ids_for_one_node_name() -> None:
+    # A republication or migration re-mints the node under a new node id but the same name, so
+    # the series keys on node name: a key on node id would resolve one row per id instead.
+    rows = [
+        _row("findings", 1, node_id="nd_build_a"),
+        _row("findings", 3, node_id="nd_build_c"),
+        _row("findings", 2, node_id="nd_build_b"),
+    ]
+
+    latest = LatestArtifacts.of(rows).rows
+    assert [(r.node_id, r.epoch) for r in latest] == [("nd_build_c", 3)]
+
+    env = node_envelope(Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=rows, epoch=4))
+    assert [(a.node_name, a.name, a.epoch, a.content) for a in env.artifacts] == [("build", "findings", 3, "v3")]
+
+    # The superseded rows are history, not dropped: the chunk read still lists every one.
+    view = ChunkView(
+        services=SimpleNamespace(work_sources={}),  # type: ignore[arg-type]
+        chunk=_chunk(),
+        facts=ChunkFacts(minted=True),
+        names=None,  # type: ignore[arg-type]
+    )
+    assert [(a.key, a.node_id) for a in view._artifacts(rows)] == [
+        ("build.findings.1", "nd_build_a"),
+        ("build.findings.2", "nd_build_b"),
+        ("build.findings.3", "nd_build_c"),
+    ]
 
 
 def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
