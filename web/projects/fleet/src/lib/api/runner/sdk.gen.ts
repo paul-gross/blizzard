@@ -70,9 +70,7 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Pause Chunk
  *
- * Forward a chunk pause to the hub — interrupts the active worker, force-stopping it only if
- * it hasn't wound down within its grace period, and keeps the claim. ``409`` when the
- * chunk is not in a pausable state.
+ * Forward a chunk pause to the hub. ``409`` when the chunk is not in a pausable state.
  */
 export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pause', ...options });
 
@@ -88,7 +86,7 @@ export const runnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGet = <ThrowO
 /**
  * Requeue Chunk
  *
- * Clear a needs_human chunk's local hold — the next FILL spawns a fresh attempt.
+ * Clear a needs_human chunk's local hold.
  *
  * ``409`` while the chunk's takeover is still open (end the interactive session first),
  * or while the chunk carries no open escalation (nothing needs_human to clear).
@@ -98,7 +96,7 @@ export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends bo
 /**
  * Resume Chunk
  *
- * Forward a chunk resume to the hub — idempotent, never refused.
+ * Forward a chunk resume to the hub.
  */
 export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/resume', ...options });
 
@@ -330,38 +328,29 @@ export const recordAttachmentApiLeasesLeaseIdAttachmentsPost = <ThrowOnError ext
 /**
  * List Findings
  *
- * Forward this lease's chunk's own answered-findings read to the hub — the layered
- * pass-through. A chunk answering no accepted, minted garden proposal reaches this only
- * as the hub's own refusal, forwarded verbatim rather than answered as an empty list.
+ * Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim.
  */
 export const listFindingsApiLeasesLeaseIdFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListFindingsApiLeasesLeaseIdFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiLeasesLeaseIdFindingsGetResponses, ListFindingsApiLeasesLeaseIdFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFindingsApiLeasesLeaseIdFindingsGetResponses, ListFindingsApiLeasesLeaseIdFindingsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/findings', ...options });
 
 /**
  * Get Finding
  *
- * One finding within this lease's chunk's own answered set — forwarded the same
- * way; an id outside that set (or a chunk answering no such proposal at all) is the
- * hub's own refusal, forwarded verbatim.
+ * Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim.
  */
 export const getFindingApiLeasesLeaseIdFindingsFindingIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFindingApiLeasesLeaseIdFindingsFindingIdGetData, ThrowOnError>): RequestResult<GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/findings/{finding_id}', ...options });
 
 /**
  * List Garden Findings
  *
- * Forward this lease's chunk's finding-bucket read to the hub — the layered
- * pass-through. A chunk with no run context (not a routine run) reaches this only as
- * the hub's own refusal, forwarded verbatim rather than answered as an empty bucket.
+ * Forward this lease's chunk's finding-bucket read to the hub; its refusals pass through verbatim.
  */
 export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData, ThrowOnError>): RequestResult<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/findings', ...options });
 
 /**
  * List Garden Proposals
  *
- * Forward this lease's chunk's garden-proposals read to the hub — the layered
- * pass-through, `state` carried through unvalidated (the hub is the one source of
- * truth for which values it accepts). A chunk with no run context (not a routine run)
- * reaches this only as the hub's own refusal, forwarded verbatim rather than answered
- * as an empty bucket.
+ * Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;
+ * its refusals pass through verbatim.
  */
 export const listGardenProposalsApiLeasesLeaseIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/proposals', ...options });
 
@@ -384,10 +373,7 @@ export const recordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPost = <ThrowOn
  * Get History
  *
  * The worker's own chunk's timeline — transitions, migrations, and bounces merged
- * oldest-first into one kind-discriminated read. Does not include the in-flight
- * node-step this call is itself part of: a transition is recorded only once an
- * attempt completes, so a worker must not read its own current step's absence as a
- * gap in the history.
+ * oldest-first into one kind-discriminated read. Excludes the in-flight node-step.
  */
 export const getHistoryApiLeasesLeaseIdHistoryGet = <ThrowOnError extends boolean = false>(options: Options<GetHistoryApiLeasesLeaseIdHistoryGetData, ThrowOnError>): RequestResult<GetHistoryApiLeasesLeaseIdHistoryGetResponses, GetHistoryApiLeasesLeaseIdHistoryGetErrors, ThrowOnError> => (options.client ?? client).get<GetHistoryApiLeasesLeaseIdHistoryGetResponses, GetHistoryApiLeasesLeaseIdHistoryGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/history', ...options });
 
@@ -435,8 +421,7 @@ export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(opti
  * Set this runner's own pause brake — it starts no new workers.
  *
  * Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
- * writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
- * deferred. Not a drain: a live worker is left running, and no retry is consumed.
+ * writes the hub's flag. Not a drain: a live worker is left running.
  */
 export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
     url: '/api/runner',

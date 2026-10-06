@@ -5522,7 +5522,7 @@
         "type": "object"
       },
       "WorkspacePromptResponse": {
-        "description": "The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh\nspawn; on a resumed one, only when it differs from what that session was last given \u2014\nand then announced as updated.",
+        "description": "The effective workspace prompt prepended to a worker spawn.",
         "properties": {
           "prompt": {
             "title": "Prompt",
@@ -5738,7 +5738,7 @@
     },
     "/api/chunks/{chunk_id}/pause": {
       "post": {
-        "description": "Forward a chunk pause to the hub \u2014 interrupts the active worker, force-stopping it only if\nit hasn't wound down within its grace period, and keeps the claim. ``409`` when the\nchunk is not in a pausable state.",
+        "description": "Forward a chunk pause to the hub. ``409`` when the chunk is not in a pausable state.",
         "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
         "parameters": [
           {
@@ -5825,7 +5825,7 @@
     },
     "/api/chunks/{chunk_id}/requeues": {
       "post": {
-        "description": "Clear a needs_human chunk's local hold \u2014 the next FILL spawns a fresh attempt.\n\n``409`` while the chunk's takeover is still open (end the interactive session first),\nor while the chunk carries no open escalation (nothing needs_human to clear).",
+        "description": "Clear a needs_human chunk's local hold.\n\n``409`` while the chunk's takeover is still open (end the interactive session first),\nor while the chunk carries no open escalation (nothing needs_human to clear).",
         "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
         "parameters": [
           {
@@ -5868,7 +5868,7 @@
     },
     "/api/chunks/{chunk_id}/resume": {
       "post": {
-        "description": "Forward a chunk resume to the hub \u2014 idempotent, never refused.",
+        "description": "Forward a chunk resume to the hub.",
         "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
         "parameters": [
           {
@@ -7225,7 +7225,7 @@
     },
     "/api/leases/{lease_id}/findings": {
       "get": {
-        "description": "Forward this lease's chunk's own answered-findings read to the hub \u2014 the layered\npass-through. A chunk answering no accepted, minted garden proposal reaches this only\nas the hub's own refusal, forwarded verbatim rather than answered as an empty list.",
+        "description": "Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim.",
         "operationId": "list_findings_api_leases__lease_id__findings_get",
         "parameters": [
           {
@@ -7272,7 +7272,7 @@
     },
     "/api/leases/{lease_id}/findings/{finding_id}": {
       "get": {
-        "description": "One finding within this lease's chunk's own answered set \u2014 forwarded the same\nway; an id outside that set (or a chunk answering no such proposal at all) is the\nhub's own refusal, forwarded verbatim.",
+        "description": "Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim.",
         "operationId": "get_finding_api_leases__lease_id__findings__finding_id__get",
         "parameters": [
           {
@@ -7324,7 +7324,7 @@
     },
     "/api/leases/{lease_id}/garden/findings": {
       "get": {
-        "description": "Forward this lease's chunk's finding-bucket read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",
+        "description": "Forward this lease's chunk's finding-bucket read to the hub; its refusals pass through verbatim.",
         "operationId": "list_garden_findings_api_leases__lease_id__garden_findings_get",
         "parameters": [
           {
@@ -7371,7 +7371,7 @@
     },
     "/api/leases/{lease_id}/garden/proposals": {
       "get": {
-        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through, `state` carried through unvalidated (the hub is the one source of\ntruth for which values it accepts). A chunk with no run context (not a routine run)\nreaches this only as the hub's own refusal, forwarded verbatim rather than answered\nas an empty bucket.",
+        "description": "Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;\nits refusals pass through verbatim.",
         "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
         "parameters": [
           {
@@ -7481,7 +7481,7 @@
     },
     "/api/leases/{lease_id}/history": {
       "get": {
-        "description": "The worker's own chunk's timeline \u2014 transitions, migrations, and bounces merged\noldest-first into one kind-discriminated read. Does not include the in-flight\nnode-step this call is itself part of: a transition is recorded only once an\nattempt completes, so a worker must not read its own current step's absence as a\ngap in the history.",
+        "description": "The worker's own chunk's timeline \u2014 transitions, migrations, and bounces merged\noldest-first into one kind-discriminated read. Excludes the in-flight node-step.",
         "operationId": "get_history_api_leases__lease_id__history_get",
         "parameters": [
           {
@@ -7705,7 +7705,7 @@
         ]
       },
       "patch": {
-        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is\ndeferred. Not a drain: a live worker is left running, and no retry is consumed.",
+        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running.",
         "operationId": "patch_runner_api_runner_patch",
         "requestBody": {
           "content": {
