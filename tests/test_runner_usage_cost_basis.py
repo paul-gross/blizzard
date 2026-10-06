@@ -1,9 +1,8 @@
 """Reading a harness's reported cost figure as one invocation's cost.
 
 A harness may charge its figure against the whole session rather than the invocation
-that produced it — Claude Code began doing exactly that on a ``--resume`` at 2.1.278,
-having reported the invocation alone at 2.1.274. Which reading applies is settled per
-envelope, against what the session has already banked, never by a version lookup."""
+that produced it. Which reading applies is settled per envelope, against what the session
+has already banked, never by a version lookup."""
 
 from __future__ import annotations
 

@@ -258,7 +258,7 @@ class IReadTranscriptLedgerRepository(Protocol):
     """Read-only transcript segment ledger queries (held by read-path edges)."""
 
     def transcript_segment(self, segment_id: str) -> TranscriptSegmentState | None:
-        """The segment by id, or ``None`` — the pump and drain's per-segment read."""
+        """The segment by id, or ``None``."""
         ...
 
     def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
@@ -267,7 +267,7 @@ class IReadTranscriptLedgerRepository(Protocol):
         ...
 
     def open_transcript_segments(self) -> list[TranscriptSegmentState]:
-        """Segments with no final marker yet — the pump's per-tick work list."""
+        """Every segment with no final marker yet, across all leases."""
         ...
 
     def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentState]:
@@ -300,9 +300,8 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
         """Whether this chunk holds an UNACKED **content** row in the transcript outbound
-        buffer — the "not yet acked by the hub" half of the panel's home
-        selection. Final markers are excluded deliberately: a pending one carries no turns,
-        so the hub's copy is already complete. An existence check, not
+        buffer. Final markers are excluded: a pending one carries no turns, so the hub's
+        copy is already complete. An existence check, not
         :meth:`pending_transcript_outbound`'s payload-materializing list read."""
         ...
 
@@ -315,9 +314,9 @@ class IReadTranscriptLedgerRepository(Protocol):
         ...
 
     def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
-        """Every lease that ever recorded a session id, oldest first — the backfill's work
-        list. This store is the only source: the harness directory holds the
-        operator's own sessions too, and a sweep of it could never tell them apart."""
+        """Every lease that ever recorded a session id, oldest first. This store is the only
+        source: the harness directory holds the operator's own sessions too, and a sweep of it
+        could never tell them apart."""
         ...
 
 
@@ -334,8 +333,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
-        breached. The only field :class:`TranscriptPump`'s guard reads; idempotent,
-        keeps its first reason, and a no-op on a finalized segment. Returns whether this call
+        breached. Idempotent: keeps its first reason, and a no-op on a finalized segment. Returns whether this call
         actually set the field."""
         ...
 
@@ -379,10 +377,8 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         supersedes: str | None = None,
         spawn_cwd: str | None = None,
     ) -> str:
-        """Stamp a segment boundary outside a spawn and return its id, cursor
-        unset so the pump reads the session from the start. Every boundary the *live* lane
-        stamps stays :meth:`~blizzard.runner.leases.IWriteLeaseLivenessRepository.record_spawn`'s;
-        this one is the backfill's alone. ``supersedes`` is the re-ship's own pointer at the
+        """Stamp a segment boundary outside a spawn and return its id, cursor unset so the
+        session is read from its start. ``supersedes`` is the re-ship's own pointer at the
         segment this one replaces on the hub. ``spawn_cwd`` is the worker's working directory, when known."""
         ...
 
@@ -410,11 +406,9 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         ...
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Ack a buffered transcript row — the drain's own ack. A ``delta`` row is
-        pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
-        stays, marked acked — its own tiny row is the exactly-once receipt
-        :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
-        checks for."""
+        """Ack a buffered transcript row. A ``delta`` row is pruned outright (up to the
+        per-record cap each, nothing reads one acked); a ``final`` row stays, marked acked, as
+        the segment's exactly-once finalization receipt."""
         ...
 
     def ack_transcript_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:

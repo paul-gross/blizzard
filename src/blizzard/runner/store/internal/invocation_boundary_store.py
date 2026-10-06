@@ -176,8 +176,7 @@ class InvocationBoundaryStore:
         )
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
-        # An UPDATE over `closed_at IS NULL` — naturally idempotent under a crash-and-retry
-        # of the closure path that calls it (`Attempt.close`).
+        # An UPDATE over `closed_at IS NULL`, so a retried call is a no-op.
         with self._store.begin() as conn:
             conn.execute(
                 invocation_boundaries.update()

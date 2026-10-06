@@ -124,8 +124,8 @@ class UsageStore:
         banked = conn.execute(
             select(
                 func.coalesce(func.sum(tokens), 0),
-                # Shares sum. A pre-reading row's figure does not — it is a running total, so
-                # the largest of them already stands for everything banked before the change.
+                # Shares sum. A non-share row's figure is a running total, so the largest
+                # of them already covers every earlier one.
                 func.coalesce(func.sum(case((usage_facts.c.cost_is_share, usage_facts.c.cost_usd))), 0.0)
                 + func.coalesce(func.max(case((~usage_facts.c.cost_is_share, usage_facts.c.reported_cost_usd))), 0.0),
             )

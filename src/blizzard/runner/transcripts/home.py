@@ -34,9 +34,8 @@ def home_is_local(*, lease_active: bool, unshipped: bool) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedTranscript:
-    """A lease's transcript, resolved to a home. ``provenance`` and
-    ``hub_unreachable`` carry straight onto their wire-field namesakes
-    (``wire.transcript.TranscriptResponse``, the fields' own doc home)."""
+    """A lease's transcript, resolved to a home: which home answered (``provenance``) and
+    whether the hub was unreachable when it was consulted (``hub_unreachable``)."""
 
     transcript: Transcript
     provenance: TranscriptProvenance
@@ -83,8 +82,7 @@ def session_start_cursor(
 class ResolvedSegmentContent:
     """One segment's resolved content, read straight from its session file — never
     from the ledger's own shipped-turn accounting, which only bounds the index read.
-    ``turns`` is ``[]`` with ``available=False`` when the session file is gone; a caller
-    renders that as ``truncated=True, turns=[]`` (the wire model has no unavailability field)."""
+    ``turns`` is ``[]`` with ``available=False`` when the session file is gone."""
 
     final: bool
     available: bool

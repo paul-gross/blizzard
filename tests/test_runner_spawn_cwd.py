@@ -24,6 +24,4 @@ def test_falls_back_to_the_workdir_when_workspace_root_is_empty() -> None:
 
 @pytest.mark.unit
 def test_empty_workspace_root_and_no_fallback_is_none() -> None:
-    # The closed-lease path: the binding is always released by the time
-    # closure is recorded, so there is no fact left to fall back to.
     assert SpawnCwd("", None).path is None

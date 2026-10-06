@@ -1,6 +1,6 @@
 """SQLAlchemy adapter for the lease-liveness repository seam (package-private).
 
-Heartbeat and spawn facts — REAP's staleness baseline. :meth:`LeaseLivenessStore.record_spawn`
+Heartbeat and spawn facts. :meth:`LeaseLivenessStore.record_spawn`
 also opens/carries-forward the lease's transcript segment in the SAME transaction — a
 cross-concept write kept inside this one ``store/internal/`` package."""
 

@@ -1,5 +1,5 @@
 """per-session spawn-preamble fingerprints: one row per spawn holding the sha256 of the
-two standing preamble layers, so a resume sends a layer only when it moved. Digests, not prose.
+two standing preamble layers, so a layer's change is detectable. Digests, not prose.
 
 Revision ID: 20260727_1000_runner_session_preamble_facts
 Revises: 20260726_1000_runner_declaration_environment_id

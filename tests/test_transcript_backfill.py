@@ -501,7 +501,7 @@ def test_reship_sends_the_session_again_under_a_new_segment_id() -> None:
     assert (report.turns, report.truncated_reason) == (2, None)
     content = [b for b in _shipped_bodies(ctx) if not b["final"]]
     assert len(content) == 2
-    # Same lease coordinates, so the board files both under the one node/epoch.
+    # Both carry the same lease coordinates.
     assert {(b["chunk_id"], b["node_id"], b["epoch"]) for b in content} == {("ch_1", "nd_build", 1)}
     assert [t["text"] for t in content[1]["turns"]] == ["hello", "world"]
     assert runner_invariant_violations(ctx.stores.transcript_ledger) == []
@@ -519,8 +519,8 @@ def test_reship_leaves_the_original_segment_exactly_as_it_shipped() -> None:
 
 
 def test_reship_closes_its_new_segment_out_and_ships_a_final_marker() -> None:
-    """A superseding segment is an ordinary one — left open, the board would render it as
-    a lease still streaming, and a later backfill would try to resume it."""
+    """A reship leaves no segment open and ships a final marker for both the original and
+    the superseding segment."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
 

@@ -1,5 +1,5 @@
 """transcript_segments.supersedes — the re-ship's pointer at the segment it
-replaces, so the hub's lease read can drop the superseded one instead of concatenating both.
+replaces.
 
 Revision ID: 20260811_0900_runner_transcript_segment_supersedes
 Revises: 20260810_1200_runner_transcript_truncated_reasons_warned

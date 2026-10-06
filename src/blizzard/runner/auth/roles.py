@@ -33,8 +33,8 @@ class RolePolicy:
 class LocalRole:
     """A hub-federated ``username``/``hub_role`` pair, resolved against this runner's role policy.
 
-    ``hub_role`` is the JWT's own coarse ``role`` claim (a :class:`Role` value) — held as
-    ``str`` here since it arrives off the wire as one (``runner/auth/validate.py``)."""
+    ``hub_role`` is the JWT's own coarse ``role`` claim (a :class:`Role` value), held as the
+    unvalidated ``str`` it arrives as."""
 
     policy: RolePolicy
     username: str

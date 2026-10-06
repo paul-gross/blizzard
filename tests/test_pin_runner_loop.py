@@ -288,9 +288,8 @@ def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_pat
 
 
 class _ClaimObservingSampler:
-    """Records how many route claims the hub had taken by the time the sampler ran
-     — a scriptable :class:`ISubscriptionSampler`, since the sample no
-    longer rides on the coding-harness adapter."""
+    """A scriptable :class:`ISubscriptionSampler` recording how many route claims the hub
+    had taken by the time it ran."""
 
     def __init__(self, *, hub: FakeHub) -> None:
         self._hub = hub
@@ -303,8 +302,8 @@ class _ClaimObservingSampler:
 
 @pytest.mark.unit
 def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Its network call gates nothing any step reads, so it must never sit ahead of the
-    steps that reap and spawn and delay them on a diagnostic read."""
+    """The sample runs after FILL's claim in the same tick, so its network call never
+    delays the claim."""
     store = _store(tmp_path)
     hub = FakeHub()
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)

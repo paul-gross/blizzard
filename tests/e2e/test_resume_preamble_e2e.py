@@ -205,11 +205,8 @@ def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 
 
 
 def _transcripts_root(config, workspace: Path) -> Path:  # type: ignore[no-untyped-def]
-    """Where the mock wrote its transcripts for this run.
-
-    Mirrors the mock's own resolution order (``BZ_TRANSCRIPTS_ROOT``, else under the fence)
-    so the scenario reads the same place the writer wrote.
-    """
+    """Where the mock wrote its transcripts for this run — ``BZ_TRANSCRIPTS_ROOT``, else the
+    configured root, else under the fence; the mock harness owns that resolution order."""
     override = os.environ.get("BZ_TRANSCRIPTS_ROOT") or config.transcripts_root
     return Path(override) if override else workspace / ".blizzard-mock-harness" / "transcripts"
 

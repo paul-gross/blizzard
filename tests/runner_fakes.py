@@ -393,8 +393,7 @@ class FakeHub:
         self.transcript_high_water: dict[str, int] = {}
         # One entry per `push_transcripts` call, naming the seqs it carried.
         self.push_transcripts_calls: list[list[int]] = []
-        # Seqs to cap-reject-but-ack, scripted — the real ingest service's own
-        # size/budget/rate rejection, which no fake could otherwise surface to a test.
+        # Seqs to cap-reject-but-ack, scripted, so a test can surface a cap rejection.
         self.reject_transcript_seqs: set[int] = set()
         self.refuse_transcript_seqs: set[int] = set()  # acked, never stored: another owner's (chunk, epoch)
         self.questions: dict[str, HubQuestion] = {}
@@ -474,8 +473,8 @@ class FakeHub:
         applied, already, capped, refused = [], [], [], []
         for record in sorted(shipped, key=lambda r: r.seq):
             if record.seq <= mark:
-                # Mirrors the real hub's own replay fix: a lost-ack retry of an
-                # already-decided seq still reports its cap outcome, not bare idempotency.
+                # A lost-ack retry of an already-decided seq reports its cap outcome, not
+                # bare idempotency (contract owned by the hub's transcript ingest).
                 if record.seq in self.reject_transcript_seqs:
                     capped.append(record.seq)
                 else:
@@ -517,7 +516,7 @@ class FakeHub:
         found: dict[str, ChunkState] = {}
         for chunk_id in ids:
             if chunk_id in self.not_found:
-                continue  # omitted, never a 404 — mirrors the real hub's batch-read semantics
+                continue  # omitted, never a 404 (batch-read contract: `IChunkStatusReader.chunk_statuses`)
             if chunk_id in self.chunks:
                 found[chunk_id] = self.chunks[chunk_id]
                 continue
@@ -943,9 +942,8 @@ class FakeHarness:
         self.judge_compaction_windows.append(compaction_window)
         self.judge_output_paths.append(output_path)
         # The side effect fires at LAUNCH, before the handle is returned — a test wanting
-        # "the worker asked instead of returning a verdict" scripts it here, same as before
-        # the launch/collect split: the ask is recorded during the launch
-        # pass, and the collect half's file readback below is what parses `verdict` off it.
+        # "the worker asked instead of returning a verdict" scripts it here: the ask is
+        # recorded during the launch pass, and the collect half parses `verdict` off the file.
         if self._judge_side_effect is not None:
             self._judge_side_effect()
         with open(output_path, "w", encoding="utf-8") as f:

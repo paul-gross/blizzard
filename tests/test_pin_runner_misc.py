@@ -181,10 +181,7 @@ def test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room() -> None:
     """The observed hosted-hub restart the retry ceiling exists to ride out ran a ``502``
     from ``16:33:37Z`` through ``16:33:47Z`` (10s), with the hub answering again by
     ``16:33:55Z`` — an 18s window from first failure to recovery. ``_HUB_RETRY_CEILING``
-    must span at least that window, and it must sit strictly inside ``READ_TIMEOUT`` — the
-    worker's own client waits out the runner's whole retrying forward, not just one
-    attempt — so a ceiling wide enough for the window still leaves the worker's read some
-    margin past it rather than the two racing to the same instant."""
+    must span at least that window, and it must sit strictly inside ``READ_TIMEOUT``."""
     observed_restart_window_seconds = 18.0
     assert observed_restart_window_seconds <= _HUB_RETRY_CEILING
     assert _HUB_RETRY_CEILING < READ_TIMEOUT

@@ -2,8 +2,7 @@
 `test_daemon_spawn_sink.py` precedent, an AST fence rather than a comment's claim.
 
 ``PeriodicDriver.stop``'s unbounded join rests on every seam a tick touches being bounded;
-this pins the four seams audited (``judge`` no longer calls ``subprocess.run``
-at all — it launches detached, so it is out of this fence's scope by construction)."""
+this pins the seams listed below."""
 
 from __future__ import annotations
 

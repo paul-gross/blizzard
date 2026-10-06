@@ -127,8 +127,8 @@ class HumanLane:
 
     def demand_api(self) -> RunnerSession:
         """The human-web-lane API gate: a ``401``, not the served surface's ``302``, since a fetch
-        cannot transparently follow a cross-document redirect. A **TCP** caller against a gated hub
-        legitimately gets it — until CLI session auth lands, the socket door is that lane's path."""
+        cannot transparently follow a cross-document redirect. A **TCP** caller with no session
+        against a gated hub gets it too."""
         session = self.session
         if session is None:
             raise HTTPException(status_code=401, detail="runner session required")
@@ -300,8 +300,7 @@ def logout(request: Request, response: Response) -> Response:
     """Clear the runner's own session cookie. Public, like the bounce it complements:
     logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
     The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
-    it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
-    through the bounce; ending fleet-wide access is hub logout, which stops renewals."""
+    it *is* the logout. It ends this runner's session only, not any hub-side session."""
     response.delete_cookie(request.app.state.cookie_names.session)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

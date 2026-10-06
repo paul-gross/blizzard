@@ -27,7 +27,7 @@ _KEY = ("ch_1", "nd_build", 1)
 class FakeTranscriptRepository:
     """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id,
     the whole file. ``since`` is a stringified turn-count offset into that session's own
-    list — a slice from there onward, the same forward-cursor shape the real one gives."""
+    list — a slice from there onward."""
 
     def __init__(self, by_session_id: dict[str, Transcript] | None = None) -> None:
         self._by_session_id = by_session_id or {}

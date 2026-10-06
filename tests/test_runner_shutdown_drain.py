@@ -83,8 +83,8 @@ def test_drain_sigkills_a_survivor_once_the_shared_deadline_passes() -> None:
 
 @pytest.mark.unit
 def test_drain_skips_a_lease_with_no_recorded_pgid() -> None:
-    """An unknowing caller left `pgid` unrecorded — nothing durable to signal, so the
-    drain leaves it for the unit's own final cgroup teardown rather than guessing a group."""
+    """A lease with no recorded `pgid` has no group to signal, so the drain neither
+    interrupts nor kills anything for it, and never sleeps."""
     probe = FakeProbe(alive={(100, "start-100")})
 
     def sleep(seconds: float) -> None:

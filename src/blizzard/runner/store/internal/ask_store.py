@@ -1,10 +1,8 @@
 """SQLAlchemy adapter for the ask/park repository seam (package-private).
 
-:meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from
-``base.PAUSE_PARKED_LEASE_IDS``, the union both concepts' Protocols agree
-:meth:`~blizzard.runner.leases.asks.IReadAskRepository.parked_lease_ids` answers — never
-by reaching into the pause adapter itself, a sibling-adapter edge the concept split exists
-to avoid."""
+:meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from the shared
+``base.PAUSE_PARKED_LEASE_IDS`` query, never from the pause adapter, so this adapter holds no
+sibling-adapter edge."""
 
 from __future__ import annotations
 

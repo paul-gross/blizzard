@@ -226,8 +226,8 @@ def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
 
 
 def _enclosing_winter_workspace() -> Path | None:
-    """The winter workspace this repo develops inside, found by the shim's own rule —
-    cloned to mint the fixture workspace, the way ``blizzard-mock`` mints one."""
+    """The winter workspace this repo develops inside — the nearest ancestor holding both
+    ``.winter/config.toml`` and ``tools/winter-cli`` — cloned to mint the fixture workspace."""
     for directory in Path(__file__).resolve().parents:
         if (directory / ".winter" / "config.toml").is_file() and (directory / "tools" / "winter-cli").is_dir():
             return directory

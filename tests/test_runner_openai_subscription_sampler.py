@@ -163,7 +163,7 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
 
 @pytest.mark.unit
 def test_the_request_does_not_carry_the_default_client_user_agent(tmp_path: Path) -> None:
-    """Pins the header the edge in front of this endpoint 403s on."""
+    """The request's ``User-Agent`` is not httpx's default."""
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
     seen: list[str] = []
@@ -318,9 +318,8 @@ def test_missing_account_id_returns_credential_unreadable_and_warns_once(tmp_pat
 def test_expired_token_returns_credential_lapsed_warns_once_and_never_writes_the_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pins the read-only decision: the vendor CLI owns the refresh flow and its lock, and
-    rotates the refresh token, so writing here could both corrupt the file mid-refresh and
-    invalidate the login it just renewed. An expired token is a miss, never a write."""
+    """An expired token is a ``CREDENTIAL_LAPSED`` miss with one warning, and the
+    credentials file is never written — the sampler only reads it."""
     clock = FixedClock(_NOW)
     creds = _write_credentials(
         tmp_path / "auth.json", access_token=_jwt(expires_at=clock.instant - timedelta(minutes=1))
@@ -490,7 +489,7 @@ def test_a_non_finite_window_length_skips_its_window_instead_of_raising(tmp_path
 
 @pytest.mark.unit
 def test_two_windows_reporting_one_length_yield_a_single_labelled_window(tmp_path: Path) -> None:
-    """The board keys its per-window render on the label, so a collision must not ship."""
+    """Two windows of one length collapse to one labelled window, the first one's figure kept."""
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 

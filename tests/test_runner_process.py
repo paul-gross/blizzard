@@ -123,8 +123,7 @@ def test_interrupt_group_of_an_already_gone_group_is_a_noop() -> None:
     probe.interrupt_group(proc.pid)  # no live group left — must not raise
 
 
-# `kill_owned_process` — the one shared, liveness-checked, pgid-preferring teardown every
-# owned-process kill site (attempt, dormant, takeover) routes through.
+# `kill_owned_process` — the liveness-checked, pgid-preferring owned-process teardown.
 
 
 @pytest.mark.unit
@@ -181,8 +180,8 @@ def _await_start_time(probe: LinuxProcessProbe, pid: int) -> str:
     raise AssertionError("never read the child's start time")
 
 
-# `interrupt_owned_process` — the shared guarded SIGINT the shutdown drain and the pause park
-# both route through: the same leader-identity guard `kill_owned_process` keeps.
+# `interrupt_owned_process` — the owned-process SIGINT, under the same leader-identity guard
+# as `kill_owned_process`.
 
 
 @pytest.mark.unit

@@ -699,9 +699,9 @@ class _RaisingTranscriptSource:
 
 
 def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
-    """`TranscriptDrain.run` is not the last step in `tick`, so an uncaught raise must not
-    propagate past it. One segment's own `turns_since` raising is isolated at the pump's
-    per-segment level, so the buffered flush proceeds in the SAME run."""
+    """One segment's `turns_since` raising does not propagate out of `TranscriptDrain.run`:
+    it is logged once at the pump's per-segment level, the buffered flush proceeds in the
+    same run, and the next healthy run recovers."""
     hub = FakeHub()
     store = make_store("sqlite://")
     harness = FakeHarness(
@@ -718,8 +718,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
-    # A buffered record with nothing to do with this tick's own (failing) pump read: the raise
-    # used to propagate out of `run()` and abort `_run_unsafe` before it reached this flush.
+    # A buffered record with nothing to do with this tick's own (failing) pump read.
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
 
     with capture_logs() as logs:

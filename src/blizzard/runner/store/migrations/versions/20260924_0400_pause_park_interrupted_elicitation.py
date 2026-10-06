@@ -1,5 +1,5 @@
-"""Add the interrupted-elicitation column to pause_parks — nullable, unpopulated
-on every historical row: a park recorded before it owes no elicitation teardown.
+"""Add the interrupted-elicitation column to pause_parks — nullable, NULL on every
+historical row: a park recorded before it carries no interrupted elicitation.
 
 Revision ID: 20260924_0400_pause_park_interrupted_elicitation
 Revises: 20260922_1200_external_usage_miss_reason

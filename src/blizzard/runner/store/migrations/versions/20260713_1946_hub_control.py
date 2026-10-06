@@ -1,5 +1,5 @@
-"""hub control mirror — the last ``paused`` value PULL read back from the hub registry,
-so FILL adheres while the hub is unreachable (runner store tree)
+"""hub control mirror — the last ``paused`` value read back from the hub registry, kept
+locally so it survives the hub being unreachable (runner store tree)
 
 Revision ID: 20260713_1946_runner_hub_control
 Revises: 20260713_1801_runner_asks_and_parks

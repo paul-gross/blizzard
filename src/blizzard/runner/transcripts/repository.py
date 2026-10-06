@@ -20,9 +20,8 @@ from blizzard.foundation.transcripts import TranscriptUnavailable, TurnKind
 @dataclass(frozen=True)
 class ToolCall:
     """A tool invocation, structured — mirrors
-    :class:`~blizzard.runner.harness.transcript.ToolCall`. Carried through, never
-    re-materialized to a JSON string — rendering structured ``input``
-    is the viewer's job."""
+    :class:`~blizzard.runner.harness.transcript.ToolCall`. ``input`` stays structured, never
+    re-materialized to a JSON string."""
 
     name: str
     input: Mapping[str, object]
@@ -85,7 +84,7 @@ class Transcript:
     """A lease's parsed session — the transcript read model. ``available=False`` carries
     ``reason`` and an empty ``turns``, so a caller must check it before reading ``turns``.
     ``truncated`` is file-level: the tail-byte cap, ``MAX_TURNS``, or a sidechain-only read
-    budget cut content the panel renders, distinct from a turn's own :attr:`Turn.truncated`."""
+    budget cut content, distinct from a turn's own :attr:`Turn.truncated`."""
 
     session_id: str | None
     available: bool
