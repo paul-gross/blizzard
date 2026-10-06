@@ -26,7 +26,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 
 
 class IBuiltInWorkSource(IWorkSource, IWorkEditor, IWorkCloser, Protocol):
@@ -67,7 +67,16 @@ class StoreWorkSourceRegistry:
         self._close_forge_writes_enabled = close_forge_writes_enabled
 
     def _built(self, name: str) -> BuiltWorkSource | None:
-        return self._objects.get(RecordKind.WORK_SOURCE, name, lambda: self._build_current(name))
+        """The source's adapter, or ``None`` when it is unknown — or retired with a secret that no
+        longer reveals: nothing stops that secret being retired once the source is, and the read
+        paths over items already ingested must not fail on it. An active source that cannot be built raises."""
+        try:
+            return self._objects.get(RecordKind.WORK_SOURCE, name, lambda: self._build_current(name))
+        except WorkSourceError:
+            record = self._records.get(name)
+            if record is not None and record.retired:
+                return None
+            raise
 
     def _build_current(self, name: str) -> BuiltWorkSource:
         record = self._records.get(name)

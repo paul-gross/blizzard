@@ -39,11 +39,14 @@ class CacheKey:
 
 class ConfigObjectCache:
     """Process-local; one per process, built in the composition root and shared by every
-    store-backed reader. A replaced or vanished entry's object is closed when it has a ``close``."""
+    store-backed reader. A replaced or vanished entry's object is closed when it has a ``close`` —
+    one replacement later, not at once, so a caller still mid-request on the object it was handed
+    is not cut off by an edit landing under it."""
 
     def __init__(self, revisions: IReadConfigRevisions) -> None:
         self._revisions = revisions
         self._entries: dict[tuple[RecordKind, str], tuple[CacheKey, object]] = {}
+        self._superseded: dict[tuple[RecordKind, str], object] = {}
         self._lock = threading.Lock()
 
     def get[T](self, kind: RecordKind, key: str, build: Callable[[], T]) -> T | None:
@@ -55,16 +58,23 @@ class ConfigObjectCache:
             if current is None:
                 if held is not None:
                     del self._entries[(kind, key)]
-                    _close(held[1])
+                    self._supersede(kind, key, held[1])
                 return None
             wanted = CacheKey.of(kind, key, current)
             if held is not None and held[0] == wanted:
                 return cast(T, held[1])
             built = build()
             self._entries[(kind, key)] = (wanted, built)
-        if held is not None:
-            _close(held[1])
+            if held is not None:
+                self._supersede(kind, key, held[1])
         return built
+
+    def _supersede(self, kind: RecordKind, key: str, replaced: object) -> None:
+        """Close what an earlier replacement set aside, and set ``replaced`` aside in its place."""
+        older = self._superseded.pop((kind, key), None)
+        self._superseded[(kind, key)] = replaced
+        if older is not None:
+            _close(older)
 
 
 def _close(obj: object) -> None:

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from blizzard.hub.domain.config.repositories import CommitOrigin, IReadRepositoryRecordRepository, resolve_repository
-from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
+from blizzard.hub.domain.config.secrets import ISecretReader, SecretName
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 
 
@@ -36,7 +36,6 @@ class RepositoryCommitResolver:
             return self._forge.resolve(
                 row.fields.repo, commit, forge_url=row.fields.forge_api_url, owner=row.fields.owner, token=token
             )
-        except (SecretNotFound, SecretRetired):
-            return None
         except Exception:
+            # A secret that cannot be revealed reads as no forge, like any other fault here.
             return None

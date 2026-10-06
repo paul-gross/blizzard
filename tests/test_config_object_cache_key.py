@@ -49,7 +49,7 @@ def test_any_moved_component_rebuilds(moved: ConfigRevisions) -> None:
 
     second = cache.get(RecordKind.WORK_SOURCE, "w", _Obj)
 
-    assert first is not None and first.closed and second is not first
+    assert first is not None and not first.closed and second is not first
 
 
 def test_kinds_sharing_a_key_are_separate_entries() -> None:
@@ -62,7 +62,7 @@ def test_kinds_sharing_a_key_are_separate_entries() -> None:
     assert cache.get(RecordKind.WORK_SOURCE, "x", _Obj) is not cache.get(RecordKind.REPOSITORY, "x", _Obj)
 
 
-def test_a_vanished_record_closes_its_entry() -> None:
+def test_a_vanished_record_sets_its_entry_aside_and_a_later_vanishing_closes_it() -> None:
     revisions = _Revisions()
     revisions.rows[(RecordKind.SECRET, "s")] = ConfigRevisions(revision=1, secret_name="s", secret_revision=1)
     cache = ConfigObjectCache(revisions)
@@ -70,4 +70,9 @@ def test_a_vanished_record_closes_its_entry() -> None:
     del revisions.rows[(RecordKind.SECRET, "s")]
 
     assert cache.get(RecordKind.SECRET, "s", _Obj) is None
-    assert first is not None and first.closed
+    assert first is not None and not first.closed
+    revisions.rows[(RecordKind.SECRET, "s")] = ConfigRevisions(revision=2, secret_name="s", secret_revision=1)
+    second = cache.get(RecordKind.SECRET, "s", _Obj)
+    del revisions.rows[(RecordKind.SECRET, "s")]
+    assert cache.get(RecordKind.SECRET, "s", _Obj) is None
+    assert first.closed and second is not None and not second.closed

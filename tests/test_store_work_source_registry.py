@@ -109,7 +109,7 @@ def test_a_source_created_mid_run_claims_ingest_with_no_rebuild(
     assert services.work_sources.get("widget") is not None
 
 
-def test_a_secret_replace_reaches_the_next_get_and_closes_the_replaced_client(
+def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replaced_client(
     hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
 ) -> None:
     client, services = hub
@@ -122,6 +122,9 @@ def test_a_secret_replace_reaches_the_next_get_and_closes_the_replaced_client(
 
     after = _adapter(services)
     assert after._client.headers["Authorization"] == "token tok-b"
+    assert not before._client.is_closed  # a caller may still be mid-request on it
+    assert client.put("/api/secrets/gh/value", json={"value": "tok-c"}).status_code == 200
+    _adapter(services)
     assert before._client.is_closed
 
 
@@ -183,6 +186,20 @@ def test_a_retired_source_refuses_ingest_while_its_ingested_item_still_closes_an
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}  # type: ignore[index]
     closer.close(pointer, trace=None)
     assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+
+
+def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_error(
+    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+) -> None:
+    client, services = hub
+    _create(client, forge[1])
+    assert client.post("/api/work-sources/widget/retire").status_code == 200
+    assert client.post("/api/secrets/gh/retire").status_code == 200
+
+    assert services.work_sources.get("widget") is None
+    assert services.work_sources.closer("widget") is None
+    assert services.work_sources.annotator("widget") is None
+    assert services.work_sources.label_clearer("widget") is None
 
 
 def test_legacy_work_source_blocks_are_ignored_with_one_start_up_warning(tmp_path: Path) -> None:

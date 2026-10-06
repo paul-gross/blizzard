@@ -88,23 +88,35 @@ def test_a_hit_reuses_the_built_object(world: _World) -> None:
     assert first is not None and not first.closed
 
 
-def test_a_record_edit_rebuilds_and_closes_the_replaced_object(world: _World) -> None:
+def test_a_record_edit_rebuilds_and_sets_the_replaced_object_aside(world: _World) -> None:
     first = world.client()
     world.authoring.edit_work_source(world.source(), WorkSourceEdit(annotate=True), OP)
 
     second = world.client()
 
-    assert first is not None and first.closed
+    assert first is not None and not first.closed
     assert second is not None and second.annotate and not second.closed
 
 
-def test_a_retire_rebuilds_and_closes_the_replaced_object(world: _World) -> None:
+def test_a_replaced_object_is_closed_by_the_replacement_after_next(world: _World) -> None:
+    first = world.client()
+    world.authoring.edit_work_source(world.source(), WorkSourceEdit(annotate=True), OP)
+    world.client()
+    assert first is not None and not first.closed
+    world.authoring.edit_work_source(world.source(), WorkSourceEdit(annotate=False), OP)
+
+    world.client()
+
+    assert first.closed
+
+
+def test_a_retire_rebuilds_and_sets_the_replaced_object_aside(world: _World) -> None:
     first = world.client()
     world.authoring.retire_work_source(world.source(), OP)
 
     second = world.client()
 
-    assert first is not None and first.closed
+    assert first is not None and not first.closed
     assert second is not None and second is not first
 
 
@@ -116,7 +128,7 @@ def test_a_secret_replace_rebuilds_with_the_new_value(world: _World) -> None:
 
     second = world.client()
 
-    assert first is not None and first.closed and first.token == "tok-a"
+    assert first is not None and not first.closed and first.token == "tok-a"
     assert second is not None and second.token == "tok-b"
 
 
