@@ -53,15 +53,17 @@ and the unit never starts; make any required config edit in the same maintenance
 restart. The migrate-on-start safety story covers additive or backfill schema revisions only — not a destructive
 revision whose `upgrade()` deletes rows, and not a config change the new wheel requires.
 
-### The one destructive migration
+### The table-dropping migration
 
-The `20260929_1100_drop_open_pr_facts` migration is the first in either store whose `upgrade()` deletes rows: it drops
-the retired `delivery_pr_opened` and `delivery_pr_closed` tables, rows included; `downgrade()` recreates both empty and
-never restores the rows. No delivery path writes either table any more, so a store the current wheel produced holds
-none, but the drop is unconditional and irreversible — stop the hub, then copy its store file (sqlite `hub.db` with any
-`hub.db-wal` beside it, or the postgres equivalent) before restarting into a wheel carrying it; the revision-mismatch
-guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and its `-wal` sidecar together — and remove
-any `hub.db-wal` already at the destination first, or its stale frames replay over the restored file.
+The `20260929_1100_drop_open_pr_facts` migration is the first in either store whose `upgrade()` drops tables, rows
+included (`20260716_2206_pr_opened_idempotent` is the earliest to delete rows, only the duplicate `delivery_pr_opened`
+rows its unique constraint rejects): it drops the retired `delivery_pr_opened` and `delivery_pr_closed` tables;
+`downgrade()` recreates both empty and never restores the rows. No delivery path writes either table any more, so a
+store the current wheel produced holds none, but the drop is unconditional and irreversible — stop the hub, then copy
+its store file (sqlite `hub.db` with any `hub.db-wal` beside it, or the postgres equivalent) before restarting into a
+wheel carrying it; the revision-mismatch guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and
+its `-wal` sidecar together — and remove any `hub.db-wal` already at the destination first, or its stale frames replay
+over the restored file.
 
 ### Work sources and forge settings are records
 
