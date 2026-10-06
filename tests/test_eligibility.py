@@ -332,3 +332,66 @@ def test_holds_no_repository_clock_or_framework_import() -> None:
             module_parts = (stmt.module or "").split(".")
             assert not set(module_parts) & set(banned_modules)
             assert not {alias.name for alias in stmt.names} & banned_names
+
+
+# --- Peek and claim agree with the predicate ---
+
+_BUILD = _node("build")
+_RUNNERLESS = _node("ship", executor=Executor.HUB)
+_DECLARED = _node("build", session_source="code")
+
+
+def _agreement_rows() -> list[tuple[str, Graph, Chunk, list[RunnerCapability], bool]]:
+    one = _graph([_BUILD])
+    named = _graph([_DECLARED], sessions=[SessionDecl("code", harnesses=["special-harness"])])
+    no_runner = _graph([_RUNNERLESS])
+    return [
+        ("empty", one, _chunk(), [], False),
+        ("matching", one, _chunk(), [_capability("claude", default=True)], True),
+        ("non-matching harness", one, _chunk(default_harnesses=["special-harness"]), [_capability("claude")], False),
+        ("unavailable", one, _chunk(), [_capability("claude", default=True, available=False)], False),
+        ("empty, no runner node", no_runner, _chunk(), [], False),
+        ("named session unmet", named, _chunk(), [_capability("claude", default=True)], False),
+        ("named session met", named, _chunk(), [_capability("special-harness")], True),
+    ]
+
+
+@pytest.mark.parametrize("row", _agreement_rows(), ids=lambda row: row[0])
+def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None:  # type: ignore[no-untyped-def]
+    from blizzard.hub.domain.chunk.model import ChunkFacts
+    from blizzard.hub.domain.execution.claim import ClaimAdmission, ClaimDeniedIncompatible
+    from blizzard.hub.domain.operations.queue import QueueMatchPolicy, select_matched_entry
+    from blizzard.hub.domain.runners.registration import RunnerRegistration
+
+    _, graph, chunk, capabilities, expected = row
+    node = graph.node_by_id(graph.entry_node_id)
+    assert node is not None
+    facts = ChunkFacts(minted=True, promoted=True)
+    now = datetime(2026, 7, 13, tzinfo=UTC)
+    registration = RunnerRegistration(
+        runner_id="r1",
+        workspace_id="w1",
+        registered_at=now,
+        last_seen_at=now,
+        hub_paused=False,
+        capabilities=tuple(capabilities),
+    )
+
+    eligible = EligibilityCheck(chunk, graph, node, capabilities).eligible
+    peeked = select_matched_entry(
+        [chunk],
+        graphs={graph.graph_id: graph},
+        facts={chunk.chunk_id: facts},
+        capabilities=capabilities,
+        blocked={},
+        policy=QueueMatchPolicy.PASS_OVER,
+    )
+    try:
+        ClaimAdmission(chunk, graph, facts).node(
+            runner_id="r1", existing_route=None, unmet_prerequisite=None, registration=registration
+        )
+        claimable = True
+    except ClaimDeniedIncompatible:
+        claimable = False
+
+    assert (eligible, peeked is not None, claimable) == (expected, expected, expected)

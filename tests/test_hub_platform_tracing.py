@@ -107,7 +107,17 @@ def test_a_runner_bearer_stamps_caller_and_runner_id_and_a_forged_caller_header_
 ) -> None:
     config = _config(tmp_path)
     warn = TestClient(hub_app.build_hosted_app(config))
-    assert warn.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).status_code == 201
+    assert (
+        warn.post(
+            "/api/fleet/runners",
+            json={
+                "runner_id": "runner-a",
+                "workspace_id": "ws-a",
+                "capabilities": [{"harness_id": "claude", "default": True}],
+            },
+        ).status_code
+        == 201
+    )
     token = warn.post("/api/runners/runner-a/enrollments").json()["token"]
     exporter = InMemorySpanExporter()
     enforced = replace(config, runner_auth_mode=RUNNER_AUTH_ENFORCE)
@@ -168,7 +178,17 @@ _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-0
 
 
 def _enrolled_token(client: TestClient, runner_id: str) -> str:
-    assert client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": "ws-a"}).status_code == 201
+    assert (
+        client.post(
+            "/api/fleet/runners",
+            json={
+                "runner_id": runner_id,
+                "workspace_id": "ws-a",
+                "capabilities": [{"harness_id": "claude", "default": True}],
+            },
+        ).status_code
+        == 201
+    )
     return client.post(f"/api/runners/{runner_id}/enrollments").json()["token"]
 
 
@@ -304,7 +324,17 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-        assert client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+        assert (
+            client.post(
+                "/api/fleet/runners",
+                json={
+                    "runner_id": "r1",
+                    "workspace_id": "w1",
+                    "capabilities": [{"harness_id": "claude", "default": True}],
+                },
+            ).status_code
+            == 201
+        )
         claim = client.post(
             "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},

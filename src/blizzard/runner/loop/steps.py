@@ -455,19 +455,10 @@ class Fill(Step):
             )
             return
         slots = open_slots(ctx.config.max_agents, ctx.stores.lease_record.count_active_leases())
-        # Whether this runner asserts capabilities at all is a registry-shape question —
-        # read from the registry, never by building a snapshot that probes every binary.
-        if ctx.harnesses.known_harnesses:
-            # A capability-asserting runner peeks per attempt, not once per fill
-            # — the single-entry peek response leaves no cache to reuse.
-            for _ in range(slots):
-                if not ReadyQueue.peeked(ctx).claim_one():
-                    break
-        else:
-            queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill — legacy path only
-            for _ in range(slots):
-                if not queue.claim_one():
-                    break
+        # Peek per attempt, not once per fill — the single-entry peek response leaves no cache to reuse.
+        for _ in range(slots):
+            if not ReadyQueue.peeked(ctx).claim_one():
+                break
 
 
 class Advance(Step):

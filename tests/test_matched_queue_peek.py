@@ -106,17 +106,17 @@ def test_an_unavailable_default_capability_is_treated_as_incompatible(tmp_path: 
     assert unavailable not in [e["chunk_id"] for e in entries]
 
 
-def test_no_capabilities_asserted_applies_no_capability_filter(tmp_path: Path) -> None:
+def test_no_capabilities_asserted_gets_no_entry(tmp_path: Path) -> None:
     """An empty ``capabilities`` — an unenrolled snapshot, or a request declaring none —
-    applies no capability filter at all: the head is returned even though no real
-    capability set would ever satisfy it."""
+    is eligible for nothing: no entry comes back, whatever the ready chunks declare."""
     hub = build_hub(tmp_path)
     token = _token(hub)
-    head = _ingest(hub, "1", default_harnesses=["special-harness"])
+    _ingest(hub, "1", default_harnesses=["special-harness"])
+    _ingest(hub, "2")
 
     resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=_bearer(token))
     assert resp.status_code == 200, resp.text
-    assert [e["chunk_id"] for e in resp.json()["entries"]] == [head]
+    assert resp.json()["entries"] == []
 
 
 def test_an_unrecognized_policy_value_round_trips_as_pass_over(tmp_path: Path) -> None:
@@ -147,14 +147,16 @@ def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_p
 
     # Pass-over (the default): the blocked head is skipped in favor of `prerequisite`,
     # itself unblocked and capability-unfiltered — never renumbered from its own position.
-    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=_bearer(token))
     assert resp.status_code == 200, resp.text
     entries = resp.json()["entries"]
     assert [e["chunk_id"] for e in entries] == [prerequisite]
     assert entries[0]["position"] == 1
 
     # Hold: the blocked head yields nothing, and `prerequisite` is never examined.
-    resp = hub.client.post("/api/fleet/queue/peek", json={"policy": "hold"}, headers=_bearer(token))
+    resp = hub.client.post(
+        "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"}, headers=_bearer(token)
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["entries"] == []
 
@@ -198,7 +200,9 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
     results: dict[str, int] = {}
 
     def call(hub, key: str, token: str) -> None:  # type: ignore[no-untyped-def]
-        resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=_bearer(token))
+        resp = hub.client.post(
+            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=_bearer(token)
+        )
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json()["entries"])
 

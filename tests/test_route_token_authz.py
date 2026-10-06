@@ -309,7 +309,14 @@ def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None
     warn_hub = build_hub(tmp_path)
     for runner_id in ("r1", "r2"):
         assert (
-            warn_hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": "w1"}).status_code
+            warn_hub.client.post(
+                "/api/fleet/runners",
+                json={
+                    "runner_id": runner_id,
+                    "workspace_id": "w1",
+                    "capabilities": [{"harness_id": "claude", "default": True}],
+                },
+            ).status_code
             == 201
         )
     token_r1 = warn_hub.client.post("/api/runners/r1/enrollments").json()["token"]

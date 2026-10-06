@@ -74,7 +74,7 @@ chunk through. A runner whose registered capabilities can no longer run every st
 current position is denied the same way, with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of
 the marking's `prerequisite_chunk_id` — re-derived fresh under the same row lock, for the same reason: a capability
 change landing between a runner's peek and its claim is denied rather than raced. A registration carrying no
-capabilities at all is never checked against this denial, so a runner that has never asserted any never meets it.
+capabilities at all fits no chunk, so every claim it makes meets this denial.
 
 A runner's own FILL step does not have to run into that denial to make progress. The legacy `GET /api/fleet/queue/peek`
 carries the marking on every entry it returns, and a runner filling from that unfiltered order reaches past a marked

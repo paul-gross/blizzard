@@ -76,11 +76,8 @@ class MatchedEntry:
 def _capability_ineligible(
     chunk: Chunk, graph: Graph, facts: ChunkFacts | None, capabilities: Sequence[RunnerCapability]
 ) -> bool:
-    """Whether ``capabilities`` cannot work ``chunk``'s current node. An empty
-    snapshot applies no capability filter; pinned by
-    ``test_no_capabilities_asserted_applies_no_capability_filter``."""
-    if not capabilities:
-        return False
+    """Whether ``capabilities`` cannot work ``chunk``'s current node — an empty snapshot
+    included, which :class:`EligibilityCheck` answers."""
     node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
     node = graph.node_by_id(node_id)
     if node is None:  # pragma: no cover - a pinned graph always resolves its own node

@@ -62,7 +62,12 @@ _GRAPH = make_graph(
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
 _READY = ChunkFacts(minted=True, promoted=True)
 _REGISTERED = RunnerRegistration(
-    runner_id="runner-a", workspace_id="ws-a", registered_at=_T0, last_seen_at=_T0, hub_paused=False
+    runner_id="runner-a",
+    workspace_id="ws-a",
+    registered_at=_T0,
+    last_seen_at=_T0,
+    hub_paused=False,
+    capabilities=(RunnerCapability(harness_id="claude_code", default=True),),
 )
 
 
@@ -204,7 +209,12 @@ def test_an_unregistered_runner_is_refused_after_the_chunk_admits_it() -> None:
         _admit(ChunkFacts(minted=True), registration=None)
 
 
-def test_a_registration_reporting_no_capabilities_is_not_capability_checked() -> None:
+def test_a_registration_reporting_no_capabilities_is_refused() -> None:
+    with pytest.raises(ClaimDeniedIncompatible):
+        _admit(_READY, registration=replace(_REGISTERED, capabilities=()))
+
+
+def test_a_registration_with_a_default_capability_is_admitted() -> None:
     assert _admit(_READY, registration=_REGISTERED) == _NODE
 
 

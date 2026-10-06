@@ -79,7 +79,7 @@ from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExi
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerCapability
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -672,7 +672,7 @@ class RunnerFleetClient(TestClient):
     def _register(self, runner_id: str, workspace_id: str) -> None:
         with self._registering:
             if self._registry.get_runner(runner_id) is None:
-                self._fleet.register(runner_id, workspace_id)
+                self._fleet.register(runner_id, workspace_id, capabilities=(RunnerCapability("claude", default=True),))
 
 
 @dataclass

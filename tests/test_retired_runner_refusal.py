@@ -16,7 +16,12 @@ from blizzard.hub.domain.execution.facts import PushedFact
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, RunnerRetired
+from blizzard.hub.domain.runners.registration import (
+    IWriteRunnerRegistry,
+    RunnerCapability,
+    RunnerRegistration,
+    RunnerRetired,
+)
 from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 from tests.support import HubHarness, build_hub, make_ready, report_lease
@@ -28,7 +33,7 @@ _RUNNER = "runner-a"
 
 def _retired_hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path)
-    hub.services.fleet.register(_RUNNER, "ws-a")
+    hub.services.fleet.register(_RUNNER, "ws-a", capabilities=(RunnerCapability("claude", default=True),))
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op")
     return hub
@@ -108,7 +113,7 @@ class _Routed:
 
     def __init__(self, tmp_path: Path) -> None:
         self.hub = build_hub(tmp_path)
-        self.hub.services.fleet.register(_RUNNER, "ws-a")
+        self.hub.services.fleet.register(_RUNNER, "ws-a", capabilities=(RunnerCapability("claude", default=True),))
         self.chunk_id = self.hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
         assert self.hub.client.post(f"/api/chunks/{self.chunk_id}/promote").status_code == 202
         make_ready(self.hub, self.chunk_id)

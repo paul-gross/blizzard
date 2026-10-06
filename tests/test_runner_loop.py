@@ -1519,41 +1519,6 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
 
 
 @pytest.mark.unit
-def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_legacy_path(tmp_path):  # type: ignore[no-untyped-def]
-    """Hoist, preserved for the legacy (non-capability-asserting)
-    path only: one ``Fill.run()`` peeks the hub ONCE, filling every open
-    slot off that one cached snapshot — the reverse of the matched path's own discipline."""
-    from blizzard.runner.hub.client import ClaimConflict, RouteClaimOutcome
-
-    store = _store(tmp_path)
-    hub = FakeHub()
-    hub.queue = [
-        QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
-        QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
-    ]
-    # Both claims lose the race — spawning is never reached, which is what lets this test
-    # assert `capabilities=[]` cleanly (no adapter needs to resolve through `ctx.harnesses`).
-    hub.claim_outcome = RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
-    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=provider,
-        harness=harness,
-        probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2),
-    )
-    ctx = replace(ctx, harnesses=HarnessRegistry({}))  # no capabilities asserted — the legacy path
-
-    Fill(ctx).run()
-
-    assert hub.peek_queue_calls == 1  # one hub peek for the whole fill, not one per claim
-    assert [c.harness_id for c in hub.peek_queue_requests[0].capabilities] == []
-    assert len(hub.claims) == 2  # both slots still attempted off the one peeked snapshot
-
-
-@pytest.mark.unit
 def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # type: ignore[no-untyped-def]
     """A capability-asserting runner peeks fresh before every
     ``claim_one()`` attempt, since the single-entry response leaves no cache behind —

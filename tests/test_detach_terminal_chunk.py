@@ -30,7 +30,14 @@ nodes:
 
 
 def _claimed_chunk(hub) -> str:  # type: ignore[no-untyped-def]
-    assert hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).is_success
+    assert hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": "runner-a",
+            "workspace_id": "ws-a",
+            "capabilities": [{"harness_id": "claude", "default": True}],
+        },
+    ).is_success
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "664"})]}
