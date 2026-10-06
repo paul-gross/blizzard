@@ -24,9 +24,7 @@ DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parent / "contracts"
 
 class CorpusConfigurationError(RuntimeError):
     """A binding declared an admitted range with no committed corpus manifest inside it under
-    ``corpus_root`` — the two-part admitted-range claim (declared *and* backed by at least one
-    corpus fixture) must land together. Signals the defect only: its one caller
-    (``OpenCodeHealthProbe.__init__``) catches and logs it rather than raising further."""
+    ``corpus_root`` — an admitted range must be backed by at least one corpus fixture."""
 
 
 def admitted_corpus_versions(

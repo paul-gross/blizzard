@@ -111,7 +111,7 @@ class IReadEnvironmentRepository(Protocol):
 
 
 class IWriteEnvironmentRepository(IReadEnvironmentRepository, Protocol):
-    """Read-write environment-binding store — held only by the domain."""
+    """Read-write environment-binding store."""
 
     def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
         """Persist a chunk→env binding fact (written with the route claim)."""

@@ -77,9 +77,7 @@ _FLEET_API = "/api/fleet"
 #: Overrides the shared client's own default timeout for this one call.
 _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 
-#: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count — a tick's primed id
-#: set (``tick.py``'s ``_primed_chunk_ids``) carries no fleet-wide bound, so one oversized
-#: batch must not become one oversized URL (`drain.py`'s ``_DRAIN_LIMIT`` precedent).
+#: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count, bounding its URL length.
 _CHUNK_STATUSES_BATCH_LIMIT = 500
 
 

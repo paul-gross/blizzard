@@ -27,10 +27,7 @@ DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 10.0
 
 
 class HarnessSpawnError(RuntimeError):
-    """The harness binary could not be launched (missing binary, bad workdir).
-
-    Part of the adapter contract (``spawn`` raises it), so it lives on the public seam
-    rather than an internal adapter."""
+    """The harness binary could not be launched (missing binary, bad workdir); ``spawn`` raises it."""
 
 
 class WorkerIdentityError(RuntimeError):

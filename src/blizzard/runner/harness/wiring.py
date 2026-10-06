@@ -1,9 +1,8 @@
-"""The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`;
-every other consumer iterates what it declares (``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS`
-declares the harness order once, Claude Code first (the first enabled binding is the default), and
-:func:`harness_catalog` pairs each section kind with its binding's declaration by id. Importing it loads
-only each adapter's ``section`` module, so the config roster and lazy command map never pay for an
-adapter's graph; a declaration loads the first time a caller builds, publishes, or reports from it."""
+"""The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`
+(``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS` declares the harness order once, Claude Code
+first (the first enabled binding is the default), and :func:`harness_catalog` pairs each section kind
+with its binding's declaration by id. Importing it loads only each adapter's ``section`` module; a
+declaration's own graph loads on first use."""
 
 from __future__ import annotations
 
@@ -193,8 +192,7 @@ def build_production_harness_health_probes(
     settings: HarnessSettings, *, spawn_root: str
 ) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
-    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — the
-    composition root reaches both only through this module."""
+    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry`."""
     shared = shared_inputs(settings)
     return {
         declaration.harness_id: declaration.health_probe(section, shared, spawn_root=spawn_root)

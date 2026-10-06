@@ -140,9 +140,8 @@ class FileRead:
 
 
 class _SidecarJoin:
-    """One session's subagent sidecar files, read under a shared byte budget. I/O only —
-    candidate enumeration and reading; the agent-id join itself is the normalizer's job
-    (:meth:`NormalizedFile.join_sidecars`)."""
+    """One session's subagent sidecar files, enumerated and read under a shared byte budget —
+    I/O only; the join is :meth:`NormalizedFile.join_sidecars`."""
 
     def __init__(
         self,

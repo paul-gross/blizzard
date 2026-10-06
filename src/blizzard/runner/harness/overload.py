@@ -1,9 +1,5 @@
-"""The provider-overload classification value.
-
-A single fact an adapter translates from its own harness's raw exit signal, never a
-decision (``bzh:deterministic-shell``): the loop is what backs a lease off from it, the
-same shape :mod:`blizzard.runner.harness.usage`'s ``UsageLimit`` already established for a
-sibling exit reason."""
+"""The provider-overload classification value — a fact translated from a harness's raw exit
+signal, never a decision (``bzh:deterministic-shell``)."""
 
 from __future__ import annotations
 

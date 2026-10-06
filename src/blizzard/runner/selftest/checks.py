@@ -211,10 +211,7 @@ class Resume(Check):
         if not verdict.passed:
             return verdict
         worker = Worker(scratch.process, resumed.pid)
-        # Bounded wait first, so a fast-finishing resume actually flushes its own output —
-        # `UsageParsing` reads this same file, and reaping (killing) immediately here left
-        # it always empty, unable to catch a real parse-usage regression. A hung resume
-        # still gets killed by `reap()` below, exactly as before.
+        # Bounded wait first so a fast-finishing resume flushes its stdout before it is reaped.
         worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
@@ -258,11 +255,8 @@ class UsageParsing(Check):
 
 
 class TranscriptReadability(Check):
-    """Whether the adapter's transcript source can be queried without raising. No null
-    check of its own: a :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`
-    binding already reads back as an absent-but-healthy transcript by its own contract, and
-    a canary session may leave no real transcript behind either — only an actual exception
-    fails this check, sniffing no concrete source class to decide whether to run it."""
+    """Whether the adapter's transcript source can be queried without raising. An absent
+    transcript passes; only an exception fails."""
 
     def run(self) -> SelfTestCheck:
         scratch = self.scratch

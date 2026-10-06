@@ -120,10 +120,7 @@ class LoopWiring:
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
-        # The subscription-sampling seam — each declaration paired with its
-        # resolved binding; an unknown provider selects `None` (declared, unsampled). Every
-        # sampler shares one lazily-built HTTP client, owned by this context,
-        # rather than opening its own.
+        # Each subscription declaration paired with its resolved sampler; all share one HTTP client.
         usage_http_client = _LazyUsageHttpClient()
         resolved_subscriptions = tuple(
             ResolvedSubscription(

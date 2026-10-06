@@ -72,9 +72,7 @@ export default plugin;
 
 
 def write_plugin(path: Path) -> str:
-    """Render and persist the plugin at ``path``, idempotently — ``blizzard runner init``
-    scaffolds it exactly as it does the worker config, and a re-run overwrites it with the
-    current generated content rather than leaving a stale one behind."""
+    """Render and persist the plugin at ``path``, overwriting any existing file."""
     source = render_plugin_source()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")
@@ -82,9 +80,7 @@ def write_plugin(path: Path) -> str:
 
 
 def plugin_reference(path: Path) -> str:
-    """The ``file://`` form the runner-owned worker config's ``plugin`` array carries for a
-    scaffolded plugin at ``path`` — the same shape the pinned compatibility corpus's own
-    fixtures already use."""
+    """The ``file://`` reference to a scaffolded plugin at ``path``."""
     return f"file://{path}"
 
 

@@ -1,8 +1,6 @@
 """The disposable git repository binding used by the OpenCode proof.
 
-The compatibility diagnostic never runs in a caller's checkout. This adapter creates one
-initialized repository with a baseline commit and removes the tree on context exit. It remains
-separate from the selftest binding because the proofs own different seams and lifetimes.
+Creates one initialized repository with a baseline commit and removes the tree on context exit.
 """
 
 from __future__ import annotations

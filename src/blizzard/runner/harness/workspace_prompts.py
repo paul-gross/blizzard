@@ -58,21 +58,20 @@ class IReadWorkspacePromptRepository(Protocol):
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
         """The runtime workspace-prompt override for this workspace, or ``None``.
 
-        ``None`` means never overridden — the caller falls back to the static config
-        prompt. A present row (even an empty string) is a deliberate override that wins
-        over config."""
+        ``None`` means never overridden; a present row, even an empty string, is a deliberate
+        override."""
         ...
 
 
 class IWriteWorkspacePromptRepository(IReadWorkspacePromptRepository, Protocol):
-    """Read-write runtime workspace-prompt override store — held only by the domain."""
+    """Read-write runtime workspace-prompt override store."""
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
-        """Set the runtime workspace-prompt override (upsert) — read at spawn."""
+        """Set the runtime workspace-prompt override (upsert)."""
         ...
 
     def clear_workspace_prompt(self, workspace_id: str) -> bool:
-        """Drop the runtime workspace-prompt override, returning whether one was there (#344).
+        """Drop the runtime workspace-prompt override, returning whether one was there.
 
         Removing the row is what distinguishes clearing from overriding with empty text: the
         absent row is the only state that resolves back to the configured prompt."""

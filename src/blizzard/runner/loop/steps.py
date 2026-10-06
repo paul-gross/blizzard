@@ -84,8 +84,7 @@ __all__ = [
 
 _log = get_logger("blizzard.runner.loop")
 
-# The env count a chunk gets when nothing says otherwise — a default, not a structural
-# assumption; a chunk holding several is representable.
+# The env count a chunk gets when nothing says otherwise.
 _DEFAULT_ENV_COUNT = 1
 
 # Crash points (``bzh:crash-point-registry``): armed, each SIGKILLs the tick subprocess at
@@ -355,12 +354,9 @@ class Pull(Step):
         ctx.stores.pause.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
 
     def _reconcile_leases(self) -> None:
-        """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
-        no longer routes it here, park it if the operator paused it, preempt it if a
-        restart moved the chunk out from under it. All three share **one** ``ctx.chunk_views.get``
-        per lease — a per-tick cache primed at tick start, not a fresh hub round trip
-        each time — and a transport failure reads as none of them. The pause branch keys on the
-        pause *fact*, which an ask-park masks."""
+        """Reconcile every active lease against its chunk's view — abandon, park, or preempt it
+        per ``lease_reconcile_move`` — from one ``ctx.chunk_views.get`` per lease. A transport
+        failure leaves the lease as it is."""
         ctx = self.ctx
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
         fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
@@ -389,16 +385,9 @@ class Pull(Step):
                 Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
-        """Close a local escalation on every arm that supersedes one (domain:
-        escalation.md#Supersession) — one ``ctx.chunk_views.get`` each, the same per-tick cache
-        read ``_reconcile_leases`` above makes. An escalated lease is already
-        closed, so ``_reconcile_leases`` above never sees it; the fourth arm, this runner's own
-        next lease mint, never reaches this read either, filtered out of ``open_escalations()`` by
-        ``LIVE_ESCALATION`` before it gets here. The remaining three collapse into one condition —
-        the hub no longer routes this chunk to this runner at this epoch — shared with the routing
-        and fencing reads ``_reconcile_leases`` makes for its own leases: requeued away (route
-        gone), reassigned to another runner (route moved), or an operator restart at or past this
-        epoch (``Fenced``). The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
+        """Close every open local escalation its chunk's view supersedes, from one
+        ``ctx.chunk_views.get`` each; an unreadable chunk leaves it open. Supersession is owned by
+        ``blizzard-context:/domain/humans/escalation.md`` §Supersession."""
         ctx = self.ctx
         fenced = Fenced(TakeoverHolds.of(ctx.stores.takeover.open_takeovers()))
         for escalation in ctx.stores.escalations.open_escalations():

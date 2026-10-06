@@ -1,8 +1,4 @@
-"""This runner's own capability snapshot — shared by every outbound call
-that carries one: the registration push (``steps.py``'s ``Pull._sync_registry``) and the
-matched fleet peek (``claim.py``'s ``ReadyQueue.peeked``). A free function rather than a
-method on either caller's own module, since ``steps.py`` imports ``claim.py`` — a method
-on one would make the other's use of it circular."""
+"""This runner's own capability snapshot, shared by every outbound call that carries one."""
 
 from __future__ import annotations
 

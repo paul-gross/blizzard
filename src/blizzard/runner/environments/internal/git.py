@@ -1,8 +1,7 @@
 """Git plumbing shared by the workspace bindings (package-private).
 
-The winter binding's reset-on-acquire removes the previous tenant's **untracked** files — the
-one reset step winter has no verb for. ``-fd``, not ``-fdx``: ignored files stay, since the
-dependency trees they hold cost more to rebuild than the tick allows.
+Removes the previous tenant's **untracked** files. Ignored files stay: the dependency trees
+they hold cost more to rebuild than the tick allows.
 """
 
 from __future__ import annotations

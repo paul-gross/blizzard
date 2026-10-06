@@ -63,19 +63,15 @@ class ClaudeCodeHealthProbe:
         # the probe never consults the daemon's own ambient state.
         self._ambient_sources = ambient_sources
         self._permission_mode = permission_mode
-        # Injectable for testability (`bzh:dependency-injection`); defaults to the same
-        # OAuth credential file `AnthropicSubscriptionSampler` already reads for usage sampling.
+        # Injectable (`bzh:dependency-injection`); defaults to the account's OAuth credential file.
         self._credentials_path = Path(credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH)
 
     def binary_present(self) -> bool:
         return harness_shared.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
-        """Claude Code exposes no ``--version``-adjacent auth-status flag either, so this
-        checks the same OAuth credential file ``AnthropicSubscriptionSampler`` already reads
-        for usage sampling — a token recorded there is the account's own authentication
-        signal, independent of this probe's binary responding. Expiry is not checked: an
-        expired-but-present token still reads as authenticated."""
+        """Authenticated when the binary responds and the OAuth credential file holds an access
+        token. Expiry is not checked: an expired-but-present token still reads as authenticated."""
         if harness_shared.observe_version(self._binary) is None:
             return False
         return self._has_access_token()

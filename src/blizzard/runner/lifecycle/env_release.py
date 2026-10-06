@@ -23,10 +23,8 @@ class EnvironmentRelease:
     events: IRunnerEventPublisher | None = None
 
     def release_chunk(self, chunk_id: str) -> None:
-        """Release every environment held at the chunk's tenure end.
-
-        A released lease's worker stdout/stderr is left in place — only
-        `Retention`'s own age-based sweep prunes it, on a much longer clock."""
+        """Release every environment held at the chunk's tenure end; the lease's worker
+        stdout/stderr is left in place."""
         held = self.environments.bindings_for_chunk(chunk_id)
         for environment_id, released_at in release_instants(
             held, [binding.environment_id for binding in held], self.clock.now()

@@ -129,10 +129,8 @@ class DormantSession:
 
     def park_on_ask(self, ask: OpenAsk) -> None:
         """Park the chunk on a question: forward it to the hub and stop the reap clock; env
-        bindings stay held so the session is warm for the resume. Parking itself needs no
-        harness — only the generation's usage spend does, so an unresolvable owner there just
-        skips that record, logged rather than escalated, since nothing here resumes a session
-        to leave half-done."""
+        bindings stay held so the session is warm for the resume. Only the usage record needs
+        a harness, so an unresolvable one skips that record and nothing else."""
         lease = self.lease
         now = self.ctx.clock.now()
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)

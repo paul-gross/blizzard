@@ -234,8 +234,7 @@ class OpenCodeAdapter:
     ) -> None:
         self._binary = binary
         self._command = OpenCodeCommand(binary)
-        # Empty is a legitimate default (unlike Claude Code's pinned `DEFAULT_WORKER_MODEL`):
-        # OpenCode ships no built-in tier mapping, so it resolves its own configured default.
+        # Empty is a legitimate default: OpenCode resolves its own configured model.
         self._model = model
         self._model_aliases = dict(model_aliases)
         self._effort_aliases = dict(effort_aliases)
@@ -244,8 +243,7 @@ class OpenCodeAdapter:
         # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
         # launches is built from — the declared passthrough plus any `PATH` prepend.
         self._worker_env = worker_env
-        # The runner-owned permission/plugin document; `None` when this runtime
-        # predates the OpenCode binding, or a deployment chose not to scaffold one.
+        # The runner-owned permission/plugin document; `None` when none is scaffolded.
         self._worker_config_path = worker_config_path
         self._effective_config_dir = effective_config_dir
         # `--auto` auto-approves what the permission map does not deny; `Normal` omits it.
@@ -512,8 +510,7 @@ class OpenCodeAdapter:
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
     ) -> dict[str, str]:
-        """Shared base with Claude Code (``harness_shared.build_identity_env``), layering
-        this binding's own runner-owned OpenCode config vars on top."""
+        """The shared identity env with this binding's runner-owned OpenCode config vars layered on top."""
         env = harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
@@ -526,8 +523,7 @@ class OpenCodeAdapter:
     def _config_env(self) -> dict[str, str]:
         env = dict(self._worker_env.variables)
         if self._worker_config_path:
-            # The runner-owned permission/plugin document — supplied both as a path and
-            # its serialized content, as the compatibility proof's `configuration_isolation` probe established.
+            # Supplied both as a path and as its serialized content.
             env["OPENCODE_CONFIG"] = self._worker_config_path
             with open(self._worker_config_path, encoding="utf-8") as f:
                 content = f.read()
@@ -830,7 +826,7 @@ class OpenCodeAdapter:
 
     def _estimate_unbilled(self, steps: Sequence[_UsageStep], model: str | None) -> float | None:
         """The summed estimate of every zero-cost step at its own ``(provider, model)``, else the
-        invocation's. All-or-nothing: one unpriceable step leaves it ``None``, as does no zero-cost step."""
+        invocation's; ``None`` if any such step is unpriceable or there is none."""
         unbilled = [step for step in steps if not step.part.cost]
         if not unbilled:
             return None

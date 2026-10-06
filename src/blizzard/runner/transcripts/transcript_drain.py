@@ -1,8 +1,7 @@
 """Draining the transcript lane's own outbound buffer — one or more records
 per ``push_transcripts`` batch, in order, until one batch will not deliver or
-this tick's own bound is reached. Structurally apart from ``drain.py``'s ``OutboundDrain``:
-its own FIFO, its own hub call, its own crash-point family — a transport failure here
-stops only this lane, never the fact lane's."""
+this tick's own bound is reached. This lane has its own FIFO, hub call and crash-point
+family, so a transport failure here stops only this lane."""
 
 from __future__ import annotations
 
@@ -118,9 +117,7 @@ class TranscriptDrain:
 
     def _batches(self, pending: list[BufferedTranscriptDelta]) -> Iterator[list[BufferedTranscriptDelta]]:
         """Greedily group pending deltas into batches at or below the per-record byte cap
-        (one oversized record still ships alone). Sizes each delta from its own already-
-        stored fields — never renders or ``model_dump_json``s a record just to measure it;
-        ``_deliver_batch`` is the one place a record is actually rendered."""
+        (one oversized record still ships alone), sized by :meth:`_estimated_size`."""
         cap = self._record_max_bytes
         batch: list[BufferedTranscriptDelta] = []
         batch_bytes = 0
