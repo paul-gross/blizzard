@@ -1,12 +1,10 @@
 """``ContextSample`` — the tick's live session-context warn lane.
 
-The bounds a graph declares are evaluated at SPAWN time, against the pool head a node-step
-is about to resume; that leaves the inside of a long invocation unobserved, which is where
-a runaway session actually spends. This step samples a *running* lease's context on a
-cadence and warns once on crossing.
+This step samples a *running* lease's context on a cadence and warns once on crossing a
+configured line.
 
-Observation only, and these tests pin that: crossing the line enqueues a report and changes
-nothing else — no lease is killed, requeued, or made ineligible by anything here.
+Observation only: crossing the line enqueues a report and records the sample, and the
+tests assert no more than that sampled state and the report.
 """
 
 from __future__ import annotations

@@ -122,8 +122,8 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> None:
-    """A naive (no-offset) ISO string is parsed as local time by a JS ``Date``, so pin
-    the literal serialized bytes, not just the round-tripped value."""
+    """Timestamps carry an explicit ``+00:00`` offset — asserted on the literal serialized
+    strings, not just the round-tripped value."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
     store.record_spawn(
@@ -142,12 +142,10 @@ def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> Non
     item = body["items"][0]
     assert item["created_at"] == "2026-07-16T12:00:00+00:00"
     assert item["last_heartbeat_at"] == "2026-07-16T12:01:00+00:00"
-    # Via the shared walker rather than an ad hoc field-by-field loop, so a later
-    # route addition is covered without touching this test.
+    # Every timestamp in the response, via the shared walker.
     assert_all_timestamps_utc(body)
 
-    # And the property that actually matters: a JS-equivalent parse recovers the true
-    # instant, not one shifted by the reader's offset.
+    # Parsing the string recovers the true instant.
     assert datetime.fromisoformat(item["last_heartbeat_at"]) == _NOW + timedelta(minutes=1)
 
 

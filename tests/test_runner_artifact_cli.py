@@ -152,8 +152,8 @@ def test_list_includes_staged_submissions_marked_as_such(monkeypatch: pytest.Mon
 @pytest.mark.unit
 def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """A transient failure reading the runner's own local `attachments` store must not take
-    down a `list` call whose primary `artifacts` read already succeeded — staged visibility is
-    a value-add on top of a call that worked standalone before this feature existed."""
+    down a `list` call whose primary `artifacts` read already succeeded: the staged half is
+    omitted with a stderr notice and the rest is listed."""
 
     def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
         if url.endswith("/attachments"):
@@ -236,7 +236,7 @@ def test_list_scope_node_still_fetches_staged(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.unit
 def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare ``list`` sends no ``scope`` at all — never an empty string a route would have
-    to special-case — so the hub-proxied node half and the store-read graph half both run."""
+    to special-case — so the route applies no scope filter."""
     calls: list[dict | None] = []
     routes = {"artifacts": _FakeResponse(payload=[]), "attachments": _FakeResponse(payload=[])}
 
@@ -291,8 +291,7 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A ``merged/<repo>`` delivery marker must reach the runner with the
-    slash preserved in the URL rather than treated as a second path segment."""
+    """A ``merged/<repo>`` name is requested with its slash intact in the URL path."""
     calls: list[str] = []
 
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:

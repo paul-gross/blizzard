@@ -388,9 +388,7 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
 
 
 def test_dormant_park_on_ask_publishes_lease_changed_dormant(tmp_path: Path) -> None:
-    """LeaseActivity.state flips to "parked" the instant `record_park` lands — the leases
-    rail needs a frame to catch that, distinct from the ask itself (already covered by
-    `record_ask`'s own 'asked' frame)."""
+    """Parking a lease on an ask publishes a `lease-changed` frame with cause "dormant"."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)
@@ -617,8 +615,7 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
 
 
 def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: Path) -> None:
-    """The enqueue frame alone leaves the fact log's ✓/· flush marker stuck unacked until
-    the next backstop poll — the drain's own ack must re-announce."""
+    """The drain's ack publishes a second `fact-changed` frame carrying the enqueue frame's seq."""
     store = _store(tmp_path)
     events = EventBroker()
     hub = FakeHub()
@@ -647,9 +644,8 @@ def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: P
 
 
 def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
-    """`record_local_pause` inserts straight into outbound_buffer, bypassing enqueue_outbound
-    (the one member the prior census mapped to fact-changed) — so the fact-log row it always
-    buffers went unannounced until the backstop next polled."""
+    """`record_local_pause` inserts straight into outbound_buffer, bypassing
+    enqueue_outbound, and publishes its own `fact-changed` frame."""
     store = _store(tmp_path)
     events = EventBroker()
     record_usage(
@@ -710,9 +706,9 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
 
 
 def test_usage_recorder_publishes_fact_changed_and_an_exact_replay_publishes_nothing(tmp_path: Path) -> None:
-    """`record_usage` also inserts straight into outbound_buffer — names only the usage
-    sampler's own elapsed-time readout as backstop-bounded, not this fact-log row. An exact
-    replay (same lease/generation/kind) enqueues nothing, so nothing is announced either."""
+    """`record_usage` also inserts straight into outbound_buffer and publishes
+    `fact-changed`. An exact replay (same lease/generation/kind) enqueues nothing, so
+    nothing is announced either."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)
@@ -747,8 +743,8 @@ def test_usage_recorder_publishes_fact_changed_and_an_exact_replay_publishes_not
 
 
 def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
-    """`record_context_sample` buffers a report only on a first crossing — this pins that the
-    occasional row it does buffer is announced, distinct from its elapsed-time-derived cadence."""
+    """`record_context_sample` buffers a report only on a first crossing, and that row is
+    announced with a `fact-changed` frame."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)

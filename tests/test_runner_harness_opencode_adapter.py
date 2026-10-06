@@ -1,8 +1,8 @@
 """The OpenCode adapter — command composition (unit) and a real subprocess (component).
 
-Mirrors ``tests/test_runner_harness_adapter.py``'s split: unit tests drive command building
-and model/effort/compaction resolution against a monkeypatched ``subprocess.Popen``; component
-tests launch a real fake ``opencode`` binary (``tests/support_opencode_binary.py``)."""
+Unit tests drive command building and model/effort/compaction resolution against a
+monkeypatched ``subprocess.Popen``; component tests launch a fake ``opencode`` binary
+(``tests/support_opencode_binary.py``)."""
 
 from __future__ import annotations
 

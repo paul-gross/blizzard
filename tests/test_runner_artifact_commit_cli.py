@@ -187,9 +187,7 @@ def test_commit_verb_surfaces_a_transport_failure_as_a_nonzero_exit(monkeypatch:
 def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A 400 naming an unknown repo carries the env's actual repo list in its body. That
-    guidance is the whole point of rejecting at declare time rather than dropping the
-    declaration later, so it must survive to the worker's terminal."""
+    """A 400's detail text reaches the worker's terminal, with a nonzero exit."""
 
     class _RejectingResponse:
         status_code = 400
@@ -221,8 +219,7 @@ def test_commit_verb_requires_repo_branch_and_commit() -> None:
 
 @pytest.mark.unit
 def test_commit_verb_has_no_forge_flag() -> None:
-    """Structural pin: the flag is gone, not merely unused. Re-adding a worker-supplied
-    forge re-opens the mismatch class the manifest lookup closed."""
+    """``--forge`` is not an option of the verb: passing it is a CLI usage error."""
     result = CliRunner().invoke(
         runner_group,
         ["artifact", "commit", "--forge", "github", "--repo", "r", "--branch", "b", "--commit", "c"],
@@ -235,9 +232,7 @@ def test_commit_verb_has_no_forge_flag() -> None:
 
 @pytest.mark.unit
 def test_commit_verb_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A git-commit declaration is node-scoped by nature — ``--scope graph`` refuses
-    before ever reaching the network, rather than posting a declaration nothing baked into
-    the graph mint could ever hold."""
+    """A git-commit declaration is node-scoped: ``--scope graph`` refuses before any post."""
     posted = False
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:

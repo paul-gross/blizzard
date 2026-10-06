@@ -230,9 +230,8 @@ def test_forwards_by_name_to_the_hub(tmp_path: Path, suffix: str) -> None:
 @pytest.mark.parametrize("suffix", _ROUTES)
 def test_a_scan_that_runs_the_whole_attempt_is_not_retried(tmp_path: Path, suffix: str) -> None:
     """The forward's whole budget is one attempt's worth, not the proxy's multi-retry
-    ceiling: a counts/spend scan that legitimately runs the full per-attempt bound has
-    nothing left to retry with, so the hub never fields a second, overlapping scan while
-    the first still drains its pool connection. A fast failure keeps its retries."""
+    ceiling: a scan that consumes the full per-attempt bound has no budget left, so the
+    forward makes one attempt and answers 502."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     clock = app.state.hub_retry_clock

@@ -1,7 +1,7 @@
 """The harness-health evaluator's pure policy — one case per cause, the
-priority ordering across simultaneous failures, and the explicit non-failure decisions the
-plan calls out: a never-run selftest, a binding declaring no version range at all, and a
-corpus-free binding's own admitted-but-unclassifiable carve-out."""
+priority ordering across simultaneous failures, and the non-failure decisions: a never-run
+selftest, a binding declaring no version range at all, and a corpus-free binding's
+admitted-but-unclassifiable carve-out."""
 
 from __future__ import annotations
 

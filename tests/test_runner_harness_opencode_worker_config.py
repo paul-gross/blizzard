@@ -15,8 +15,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_render_worker_config_denies_the_question_tool() -> None:
-    # A headless worker has no one to answer OpenCode's native `question` tool;
-    # `blizzard runner ask` is its lease-authenticated replacement.
+    # A headless worker has no one to answer OpenCode's native `question` tool.
     document = render_worker_config()
     parsed = parse_worker_config(document)
     assert parsed.permissions["question"] == "deny"

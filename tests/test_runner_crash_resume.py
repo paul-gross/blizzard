@@ -249,7 +249,7 @@ def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  # type
 
 @pytest.mark.unit
 def test_skips_orphaned_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """A bare kill of only the runner pid left the worker alive — re-adopted via its heartbeat, not re-spawned."""
+    """A running lease whose worker process is still alive gets no resume intent."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)

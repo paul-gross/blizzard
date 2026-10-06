@@ -46,8 +46,8 @@ def _seed_legacy_row(store, *, lease_id: str = "lease_a") -> None:
 
 
 def test_record_identified_spawn_refuses_a_lease_with_only_a_legacy_row(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A legacy row is never a genuine open provisional generation — misreading it as one
-    would let identification land on a row this plan's own phase-one write never created."""
+    """A legacy row (every two-phase column NULL) is not an open provisional generation, so
+    identification refuses rather than landing on it."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     _seed_legacy_row(store)

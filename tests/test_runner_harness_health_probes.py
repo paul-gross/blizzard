@@ -63,12 +63,9 @@ def test_claude_code_health_probe_declares_an_admitted_range_and_no_degradations
 
 
 def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(tmp_path: Path) -> None:
-    """A missing corpus manifest inside the admitted range must degrade only the OpenCode
-    binding's own health — never raise out of construction and take the whole daemon's
-    startup down with it. ``supported_version`` still reports the
-    binding's real declared range (the packaging defect is a corpus problem, not a
-    declaration problem); ``declared_degradations`` reads as empty since there is no
-    manifest anywhere under ``corpus_root`` to read one from."""
+    """Construction over a ``corpus_root`` with no manifest does not raise.
+    ``supported_version`` still reports the declared range; ``declared_degradations`` is
+    empty since there is no manifest to read one from."""
     probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=tmp_path)
 
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
@@ -76,10 +73,8 @@ def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(t
 
 
 def test_opencode_health_probe_declared_degradations_come_from_the_corpus_manifest() -> None:
-    """``declared_degradations`` is driven by each admitted version's own committed corpus
-    manifest, never a hardcoded Python literal describing only one
-    version — proven here by reading straight from the real, committed corpus root, the
-    same one construction defaults to."""
+    """``declared_degradations`` equals the committed corpus manifest's entries, read from
+    ``DEFAULT_CORPUS_ROOT``."""
     probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=DEFAULT_CORPUS_ROOT)
 
     manifest = _manifest()

@@ -1,46 +1,21 @@
 """The mixed-harness lineage boundary, end to end (`bzh:e2e-node-sessions`).
 
-One graph — `build` (the runner's own configured default, Claude Code, no `session`
-declared) hands off to `opencode-review` (a graph-level named session pinned
-`harnesses: [opencode]`) — traverses BOTH harness lineages inside one
-chunk's run, driven against a real `blizzard-hub`/`blizzard-runner` subprocess pair
-(never `LoopWiring.tick_once()` in-process, unlike `test_acceptance_loop.py`; the
-restart follows `test_runner_federation_e2e.py`'s subprocess shape instead).
+One graph — `build` (the runner's configured default, Claude Code, no `session` declared)
+hands off to `opencode-review` (a graph-level named session pinned `harnesses: [opencode]`) —
+traverses both harness lineages inside one chunk's run, driven against a real
+`blizzard-hub`/`blizzard-runner` subprocess pair.
 
-The runner daemon is restarted twice, both CLEAN operator-style restarts (SIGTERM,
-relaunch unarmed) — no crash point armed, since that recovery proof already belongs to
-`tests/crash/test_kill9_sweep.py`'s OpenCode-lineage sweep (`bzh:crash-sweep`):
+The runner daemon is restarted twice, both clean operator-style restarts (SIGTERM, relaunch
+unarmed); crash recovery belongs to `tests/crash/test_kill9_sweep.py` (`bzh:crash-sweep`):
 
-1. Right at the lineage boundary — after the hub records the transition from `build`
-   into `opencode-review`, before the runner's own next tick would otherwise discover it
-   and spawn the OpenCode worker. A RESUME turn does not re-run a node's own `prompt`
-   text (`blizzard-mock`'s own engine sends a resume/judge turn a SEPARATE, shorter
-   message, confirmed by hand while writing this scenario), so a restart that lands
-   mid-way through `opencode-review`'s own FIRST turn — after it has spawned but before
-   it committed+declared — can never recover its commit; landing this restart reliably
-   BEFORE that first turn even starts therefore needs a real gap, not a race against the
-   runner's own next tick. The FIRST start below runs on a deliberately long tick
-   interval (`_start_runner`, `_BOUNDARY_TICK_SECONDS`) for exactly this reason — this
-   test's own poll is of the RUNNER's own local store (`_wait_build_judged`, never the
-   hub's `current_node_name` — see that helper's own docstring for why that read is too
-   late), which lands mid-tick, well before the SAME tick's own remaining steps and the
-   NEXT tick's own PULL/FILL would otherwise close `build`'s lease and spawn the OpenCode
-   worker. The margin this affords is not a bare wall-clock guess: `PeriodicDriver._run`
-   sleeps BETWEEN ticks on an interruptible `threading.Event.wait(interval)`, woken the
-   instant a graceful SIGTERM sets it — so as long as this restart's own `terminate()`
-   call is delivered and processed at any point before the full `_BOUNDARY_TICK_SECONDS`
-   interval elapses (typically milliseconds after the SIGTERM lands, not a fixed-sleep
-   coin flip), the next tick never starts at all, rather than racing to interrupt one
-   already underway. `_BOUNDARY_TICK_SECONDS` is kept wide regardless, as defensive slack
-   against a genuinely overloaded machine.
-2. Mid-way through the OpenCode lineage's own session — the `opencode-review` worker
-   commits, declares, and hangs; the runner is stopped gracefully (marking a
-   resume-intent) and relaunched, which must RESUME the same lease/epoch/session rather
-   than retry it (`tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session`'s
-   own shape, reused here across the harness boundary instead of within one lineage). The
-   runner reverts to the crash tier's own brisk tick (`tests.crash.support.start_runner`,
-   `TICK_SECONDS`) for every start from here on, so the rest of the run is not needlessly
-   slow.
+1. At the lineage boundary — after the hub records the transition from `build` into
+   `opencode-review`, before the OpenCode worker spawns. The first start runs on a
+   deliberately long tick interval (`_start_runner`, `_BOUNDARY_TICK_SECONDS`) so the
+   restart lands in the gap; `_wait_build_judged` documents the poll that detects it.
+2. Mid-way through the OpenCode lineage's session — the `opencode-review` worker commits,
+   declares, and hangs; the runner is stopped gracefully and relaunched, which must resume
+   the same lease/epoch/session rather than retry it. Every start from here on uses the
+   crash tier's brisk tick (`tests.crash.support.start_runner`, `TICK_SECONDS`).
 
 Needs the sibling provisioned `blizzard-mock` worktree plus a local winter source; skips
 without `BLIZZARD_E2E=1`."""

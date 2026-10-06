@@ -249,9 +249,8 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
 
 @pytest.mark.unit
 def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None:
-    """review `TranscriptDrain.run`'s own 5 s bound is meaningless while
-    this call can run to the shared client's much longer default — it needs its own short
-    override, distinct from every other route on this client."""
+    """`push_transcripts` sends its own short read timeout, while other routes keep the
+    shared client's default."""
     seen_timeouts = []
 
     def handler(request: httpx.Request) -> httpx.Response:

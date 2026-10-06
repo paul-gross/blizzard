@@ -1054,9 +1054,8 @@ def test_size_bytes_measures_a_transcript_far_larger_than_the_read_cap(
 
 @pytest.mark.unit
 def test_read_raw_lines_unreadable_logs_warning_not_error(tmp_path: Path) -> None:
-    """Both callers (the envelope-less usage fallback, the rotation size check)
-    continue past an empty/`None` reply rather than aborting — a recoverable
-    condition, WARNING per `bzh:structlog-logging`, not the boundary-failure ERROR."""
+    """An unreadable transcript yields no lines and logs a single warning, not an error
+    (`bzh:structlog-logging`)."""
     project_dir = tmp_path / "-home-user-workspace"
     project_dir.mkdir()
     (project_dir / "sess-1.jsonl").mkdir()  # a directory forces OSError on open

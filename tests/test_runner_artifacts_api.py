@@ -571,9 +571,8 @@ _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME: dict[str, object] = {
 
 @pytest.mark.component
 def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path) -> None:
-    """A cross-graph migration can leave a node artifact colliding with a graph
-    declaration — the mint-time collision check only protects the same-graph case, so this
-    route owns its own 409 rather than assuming the collision was already impossible."""
+    """A bare name matching both a node artifact and a graph declaration answers 409,
+    naming both scopes and the ``--scope``/``--node`` narrowing options."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
