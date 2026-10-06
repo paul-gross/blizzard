@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
@@ -167,7 +168,15 @@ _SINGLETON_REASON = (
     "release history."
 )
 
+# The legacy-config import runs once per hub, offline, by an operator — never on a serving path.
+_ONE_SHOT_IMPORT_REASON = (
+    "read only by `blizzard hub config import-legacy`, an offline verb an operator runs once per hub."
+)
+
 HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
+    # --- the one-shot legacy-config import ----------------------------------------------
+    TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
+    MethodScopedAllowance(IReadConfigImports, "commit_coordinates", "artifacts", 200, _ONE_SHOT_IMPORT_REASON),
     # --- fleet-wide-by-design snapshot reads ------------------------------
     TableWideAllowance("chunk_bounces", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_completed", 200, _FLEET_SNAPSHOT_REASON),

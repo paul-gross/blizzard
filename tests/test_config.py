@@ -18,7 +18,7 @@ from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, EgressConfig, HubConfig, WorkSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, EgressConfig, HubConfig, LegacyKeys, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
@@ -709,7 +709,7 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `[[work_source]]` — the hub's configured work sources.
+# `[[work_source]]` — legacy blocks, read by `LegacyKeys` for the import alone.
 
 
 def _hub_config(tmp_path: Path) -> HubConfig:
@@ -718,21 +718,45 @@ def _hub_config(tmp_path: Path) -> HubConfig:
     return HubConfig(root=root, db_url=HubConfig.default_db_url(root))
 
 
-@pytest.mark.unit
-def test_work_sources_default_to_empty(tmp_path: Path) -> None:
-    config = _hub_config(tmp_path)
-    assert config.work_sources == ()
+_BLOCK = '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
+
+
+def _legacy(tmp_path: Path, body: str, environ: dict[str, str] | None = None) -> LegacyKeys:
+    path = tmp_path / "blizzard-hub.toml"
+    path.write_text('db_url = "sqlite:///x"\n' + body)
+    return LegacyKeys.read(path, environ or {})
 
 
 @pytest.mark.unit
-def test_work_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
-    # `HubConfig.load` -> `dataclasses.replace` -> `to_toml` -> `HubConfig.load` (the
-    # idiom `tests/crash/support.py::write_runner_config` establishes for the runner).
+def test_a_scaffolded_config_carries_no_legacy_keys(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
+    legacy = LegacyKeys.read(config.config_path, {})
+    assert not legacy.present()
+    assert "[[work_source]]" not in config.to_toml()
 
-    sources = (
+
+@pytest.mark.unit
+def test_hub_config_load_ignores_work_source_blocks(tmp_path: Path) -> None:
+    """The raw parse is the import's alone — even an invalid block never fails the load."""
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n\n[[work_source]]\nname = "hub"\n')
+    assert not hasattr(HubConfig.load(root, allow_external_db=True), "work_sources")
+
+
+@pytest.mark.unit
+def test_legacy_keys_read_blocks_and_the_variables_present(tmp_path: Path) -> None:
+    body = (
+        '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "paul-gross/blizzard"\n'
+        'token_env = "BZ_WORK_SOURCE_TOKEN"\n'
+        '\n[[work_source]]\nname = "internal"\nprovider = "github"\nrepo = "acme/internal-tool"\n'
+        'token_env = "BZ_INTERNAL_TOKEN"\napi_base = "https://git.corp.internal/api/v3"\n'
+        'web_base = "https://git.corp.internal"\n'
+    )
+    environ = {"BZ_FORGE_URL": "http://forge", "BZ_WORK_SOURCE_TOKEN": "t", "UNRELATED": "x"}
+    legacy = _legacy(tmp_path, body, environ)
+    assert legacy.sources == (
         WorkSourceConfig(
             name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="BZ_WORK_SOURCE_TOKEN"
         ),
@@ -745,146 +769,100 @@ def test_work_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> Non
             web_base="https://git.corp.internal",
         ),
     )
-    edited = dataclasses.replace(loaded, work_sources=sources)
-    edited.config_path.write_text(edited.to_toml())
+    assert legacy.variables == ("BZ_FORGE_URL", "BZ_WORK_SOURCE_TOKEN")
+    assert legacy.present()
+    assert legacy.locations() == (
+        'blizzard-hub.toml [[work_source]] "blizzard"',
+        'blizzard-hub.toml [[work_source]] "internal"',
+        "environment BZ_FORGE_URL",
+        "environment BZ_WORK_SOURCE_TOKEN",
+    )
 
-    reloaded = HubConfig.load(edited.root)
-    assert reloaded.work_sources == sources
+
+@pytest.mark.unit
+def test_legacy_keys_never_count_a_commented_out_block(tmp_path: Path) -> None:
+    commented = "".join(f"# {line}\n" for line in _BLOCK.strip().splitlines())
+    legacy = _legacy(tmp_path, commented, {"T": "secret"})
+    assert not legacy.present()
+
+
+@pytest.mark.unit
+def test_legacy_keys_count_a_forge_variable_alone(tmp_path: Path) -> None:
+    legacy = _legacy(tmp_path, "", {"BZ_FORGE_OWNER": "acme"})
+    assert legacy.present()
+    assert legacy.locations() == ("environment BZ_FORGE_OWNER",)
 
 
 @pytest.mark.unit
 def test_work_source_missing_required_key_raises(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
-    )
     with pytest.raises(HubConfigError, match="token_env"):
-        HubConfig.load(root)
+        _legacy(tmp_path, '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n')
 
 
 @pytest.mark.unit
 def test_work_source_duplicate_name_raises(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n'
-        '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
-        '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n'
-    )
     with pytest.raises(HubConfigError, match="duplicate"):
-        HubConfig.load(root)
+        _legacy(
+            tmp_path,
+            '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+            '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n',
+        )
 
 
 @pytest.mark.unit
 def test_work_source_named_hub_raises(tmp_path: Path) -> None:
     """``hub`` is reserved for the built-in, always-seated source."""
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "hub"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
-    )
     with pytest.raises(HubConfigError, match="hub"):
-        HubConfig.load(root)
+        _legacy(tmp_path, '\n[[work_source]]\nname = "hub"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n')
 
 
 @pytest.mark.unit
 def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
     # under two identities — this is what holds pointer identity uniqueness up.
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n'
-        '\n[[work_source]]\nname = "a"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
-        '\n[[work_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T2"\n'
-    )
     with pytest.raises(HubConfigError, match="duplicate"):
-        HubConfig.load(root)
+        _legacy(
+            tmp_path,
+            '\n[[work_source]]\nname = "a"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+            '\n[[work_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T2"\n',
+        )
 
 
 @pytest.mark.unit
 def test_work_source_name_with_a_colon_raises(tmp_path: Path) -> None:
     # see hub/cli/chunk.py's ingest token parsing.
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "acme:blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
-    )
     with pytest.raises(HubConfigError, match=":"):
-        HubConfig.load(root)
+        _legacy(tmp_path, _BLOCK.replace('"blizzard"', '"acme:blizzard"'))
 
 
 @pytest.mark.unit
 def test_work_source_unknown_provider_raises(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "jira"\nrepo = "o/r"\ntoken_env = "T"\n'
-    )
     with pytest.raises(HubConfigError, match="jira"):
-        HubConfig.load(root)
+        _legacy(tmp_path, _BLOCK.replace('"github"', '"jira"'))
 
 
 @pytest.mark.unit
 def test_work_source_annotate_defaults_to_false(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
-    )
-    loaded = HubConfig.load(root)
-    assert loaded.work_sources[0].annotate is False
+    assert _legacy(tmp_path, _BLOCK).sources[0].annotate is False
 
 
 @pytest.mark.unit
-def test_work_source_annotate_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
-    config = _hub_config(tmp_path)
-    config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
-
-    sources = (
-        WorkSourceConfig(
-            name="blizzard",
-            provider="github",
-            repo="paul-gross/blizzard",
-            token_env="BZ_WORK_SOURCE_TOKEN",
-            annotate=True,
-        ),
-    )
-    edited = dataclasses.replace(loaded, work_sources=sources)
-    edited.config_path.write_text(edited.to_toml())
-
-    reloaded = HubConfig.load(edited.root)
-    assert reloaded.work_sources == sources
-    assert reloaded.work_sources[0].annotate is True
+def test_work_source_annotate_is_read(tmp_path: Path) -> None:
+    assert _legacy(tmp_path, _BLOCK + "annotate = true\n").sources[0].annotate is True
 
 
 @pytest.mark.unit
 def test_work_source_annotate_non_bool_raises_naming_the_source(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
-        'token_env = "T"\nannotate = "yes"\n'
-    )
     with pytest.raises(HubConfigError, match="blizzard"):
-        HubConfig.load(root)
+        _legacy(tmp_path, _BLOCK + 'annotate = "yes"\n')
 
 
 @pytest.mark.unit
-def test_a_leftover_close_key_fails_the_load_naming_the_removal(tmp_path: Path) -> None:
-    """Closure is unconditional now — a config still hand-carrying the
-    retired `close` key fails fast, naming the removal, rather than silently parsing it
-    away."""
-    root = tmp_path / "hub"
-    root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
-        'token_env = "T"\nclose = true\n'
-    )
+def test_a_leftover_close_key_fails_the_read_naming_the_removal(tmp_path: Path) -> None:
+    """Closure is unconditional — a block still hand-carrying the retired `close` key
+    fails fast, naming the removal, rather than silently parsing it away."""
     with pytest.raises(HubConfigError, match="blizzard"):
-        HubConfig.load(root)
+        _legacy(tmp_path, _BLOCK + "close = true\n")
 
 
 @pytest.mark.unit

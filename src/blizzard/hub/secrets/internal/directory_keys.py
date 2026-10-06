@@ -31,6 +31,11 @@ class DirectoryKeyProvider:
             generation = self.mint()
             self._write_meta(current=generation.key_id, previous=None)
 
+    @staticmethod
+    def initialized(keys_dir: Path) -> bool:
+        """Whether ``keys_dir`` holds a generation already — checked without constructing, which mints one."""
+        return (keys_dir / _META_FILENAME).exists()
+
     def current(self) -> KeyGeneration:
         key_id = str(self._read_meta()["current"])
         generation = self.generation(key_id)

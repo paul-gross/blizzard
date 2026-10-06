@@ -151,6 +151,7 @@ from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOpe
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -406,6 +407,7 @@ class HubCore:
     secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
     config_apply: ConfigApplyStore
+    config_import: ConfigImportStore
     clock: IClock
 
 
@@ -422,6 +424,19 @@ def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveCon
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(core.store_connections)),
         secrets=StoreSecretReader(catalog=core.secrets, sealed=core.secrets, cipher=secret_cipher(secret_keys)),
+    )
+
+
+def build_config_authoring(core: HubCore, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
+    """The one configured-record writer, sealing under ``secret_keys``."""
+    return ConfigAuthoring(
+        work_sources=core.work_source_records,
+        repositories=core.repository_records,
+        secrets=core.secrets,
+        cipher=secret_cipher(secret_keys),
+        apply_writer=core.config_apply,
+        import_writer=core.config_import,
+        clock=core.clock,
     )
 
 
@@ -470,6 +485,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         secret_referrers=SecretReferrersStore(store_connections),
         config_changes=ConfigChangeStore(store_connections),
         config_apply=ConfigApplyStore(store_connections),
+        config_import=ConfigImportStore(store_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -907,14 +923,7 @@ def build_services(
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=core.secrets,
         secret_references=core.secret_referrers,
-        config_authoring=ConfigAuthoring(
-            work_sources=core.work_source_records,
-            repositories=core.repository_records,
-            secrets=core.secrets,
-            cipher=secret_cipher(secret_keys),
-            apply_writer=core.config_apply,
-            clock=clock,
-        ),
+        config_authoring=build_config_authoring(core, secret_keys=secret_keys),
         work_source_records=core.work_source_records,
         repository_records=core.repository_records,
         config_changes=core.config_changes,

@@ -1741,12 +1741,31 @@
           ],
           "path": "hub config export",
           "short_help": "Print every active work source, repository and secret name as a document that applies back unchanged."
+        },
+        "import-legacy": {
+          "help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host.\n\nRuns once, in one transaction, against a migrated store and an existing hub key. A record the store\nalready holds is skipped, never overwritten; any refusal writes nothing. A second run writes nothing.",
+          "params": [
+            {
+              "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub config import-legacy",
+          "short_help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host."
         }
       },
-      "help": "Operator verbs over configuration: changes, apply, export.",
+      "help": "Operator verbs over configuration: changes, apply, export, import-legacy.",
       "params": [],
       "path": "hub config",
-      "short_help": "Operator verbs over configuration: changes, apply, export."
+      "short_help": "Operator verbs over configuration: changes, apply, export, import-legacy."
     },
     "decision": {
       "commands": {

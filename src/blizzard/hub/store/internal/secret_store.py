@@ -56,6 +56,23 @@ def secret_unavailable(conn: Connection, name: str) -> bool | None:
     return True if newest is not None and newest.retired else None
 
 
+def insert_secret(
+    conn: Connection, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
+) -> None:
+    """The create body at revision 1, inside the caller's transaction; a taken name raises :class:`IntegrityError`."""
+    conn.execute(
+        insert(secrets).values(
+            name=name,
+            **_sealed_columns(sealed),
+            revision=1,
+            replaced_at=at,
+            replaced_by=by,
+            created_at=at,
+        )
+    )
+    append_change(conn, change)
+
+
 class SecretStore:
     """Read-write secret adapter over the hub store."""
 
@@ -65,17 +82,7 @@ class SecretStore:
     def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
-                conn.execute(
-                    insert(secrets).values(
-                        name=name,
-                        **_sealed_columns(sealed),
-                        revision=1,
-                        replaced_at=at,
-                        replaced_by=by,
-                        created_at=at,
-                    )
-                )
-                append_change(conn, change)
+                insert_secret(conn, name, sealed=sealed, at=at, by=by, change=change)
         except IntegrityError as exc:
             raise SecretAlreadyExists(name) from exc
         return SecretMetadata(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at)

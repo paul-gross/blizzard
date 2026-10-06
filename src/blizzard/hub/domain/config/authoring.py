@@ -6,7 +6,10 @@ and hands the write repository the record write with the :class:`ConfigChange` i
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from blizzard.foundation.clock import IClock
+from blizzard.hub.config import LegacyKeys
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import (
     ConfigDeclaration,
@@ -14,6 +17,17 @@ from blizzard.hub.domain.config.apply import (
     IConfigApplyWriter,
     StoredConfig,
     reconcile,
+)
+from blizzard.hub.domain.config.carry_over import (
+    MIGRATION_CONTEXT,
+    CommitCoordinate,
+    ExistingConfig,
+    IConfigImportWriter,
+    ImportResult,
+    ImportStatus,
+    LegacyImport,
+    SealedSecretWrite,
+    plan_import,
 )
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.repositories import (
@@ -46,6 +60,7 @@ class ConfigAuthoring:
         secrets: IWriteSecretRepository,
         cipher: ISecretCipher,
         apply_writer: IConfigApplyWriter,
+        import_writer: IConfigImportWriter,
         clock: IClock,
     ) -> None:
         self._work_sources = work_sources
@@ -53,6 +68,7 @@ class ConfigAuthoring:
         self._secrets = secrets
         self._cipher = cipher
         self._apply_writer = apply_writer
+        self._import_writer = import_writer
         self._clock = clock
 
     # --- Work sources ------------------------------------------------------------
@@ -140,6 +156,42 @@ class ConfigAuthoring:
         if plan.writes:
             self._apply_writer.apply(plan.writes, dry_run=dry_run)
         return plan.outcomes
+
+    # --- Carry-over --------------------------------------------------------------
+
+    def import_legacy(
+        self,
+        legacy: LegacyKeys,
+        values: Mapping[str, str],
+        commits: Sequence[CommitCoordinate],
+        existing: ExistingConfig,
+        *,
+        recorded: bool,
+    ) -> ImportResult:
+        """Carry ``legacy`` into records once, sealing each secret's value before the one write.
+        ``values`` holds the legacy variables' values; nothing is written when an import was
+        already recorded or no legacy key is present."""
+        if recorded:
+            return ImportResult(ImportStatus.ALREADY_IMPORTED)
+        if not legacy.present():
+            return ImportResult(ImportStatus.NOTHING_TO_IMPORT)
+        plan = plan_import(legacy, values, commits, existing, ctx=MIGRATION_CONTEXT, at=self._clock.now())
+        sealed = tuple(
+            SealedSecretWrite(
+                name=secret.name.value,
+                sealed=self._cipher.seal(
+                    SecretValue.entered(values[secret.variable]), name=secret.name.value, revision=1
+                ),
+                change=secret.change,
+            )
+            for secret in plan.secrets
+        )
+        imported = LegacyImport(
+            secrets=sealed, work_sources=plan.work_sources, repositories=plan.repositories, fact=plan.fact
+        )
+        if not self._import_writer.write(imported):
+            return ImportResult(ImportStatus.ALREADY_IMPORTED)
+        return ImportResult(ImportStatus.IMPORTED, plan.outcomes)
 
     # --- Secrets -----------------------------------------------------------------
 

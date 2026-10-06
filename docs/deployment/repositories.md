@@ -68,5 +68,6 @@ Two outcomes refuse the step before it runs, route its failure choice, and recor
 - `repositories-disagree` — the pointers resolve to records that differ on forge, owner, base branch or secret, so there
   is no single landing target.
 
-The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. Setting
-`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` in the hub's environment has no effect.
+The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. A hub whose
+environment still sets `BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` refuses to start;
+[install.md](./install.md#work-sources-and-forge-settings-are-records) owns carrying them into records.

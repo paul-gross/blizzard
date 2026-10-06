@@ -76,28 +76,8 @@ _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 # secret resolution and `type`/`issuer` validation happen where a provider is consumed.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
 
-# A fresh scaffold has no configured external source, so `to_toml()` emits this as a
-# comment rather than leaving the block undiscoverable.
-_WORK_SOURCE_EXAMPLE_COMMENT = """
-# Uncomment and edit to configure an external work source — the built-in `hub` source
-# is always seated, so `work-items` never 503s, but a chunk pointing at an external
-# forge issue needs its own [[work_source]] before that pointer's label resolves.
-#
-# [[work_source]]
-# name = "blizzard"          # names this source; ingest tokens and board labels key on it
-# provider = "github"        # the only adapter grammar that exists today
-# repo = "owner/name"        # the "owner/repo" this source is pinned to
-# token_env = "BZ_WORK_SOURCE_TOKEN"  # names an env var — the secret itself lives in this
-#                                      # runtime's env file (e.g. /etc/blizzard/hub.env), never here
-# annotate = false            # opt into the forge-status label sweep; only the canonical
-#                              # instance for a repo should ever set this to true — two
-#                              # writers against the same forge repo will fight
-# api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
-# web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
-"""
-
-# Mirrors `_WORK_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
-# login provider, so the block stays discoverable under `mode = "none"`.
+# Emitted when `[auth]` carries no configured login provider, so the block stays
+# discoverable under `mode = "none"`.
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # Uncomment and edit to declare an OAuth login provider — consumed once `mode =
 # "oauth"` and a login mechanism exist; parsed-and-carried here so the
@@ -184,7 +164,7 @@ class StoreUrl:
 @domain_model
 @dataclass(frozen=True)
 class WorkSourceConfig:
-    """One configured work source — a named, credentialed forge binding.
+    """One legacy ``[[work_source]]`` block, parsed only for :class:`LegacyKeys`.
     ``token_env`` names the environment variable carrying the credential, never the
     secret itself; ``api_base``/``web_base`` override the provider's default origins,
     and ``web_base`` derives from ``api_base`` when omitted."""
@@ -260,6 +240,46 @@ class WorkSourceConfig:
                 )
             )
         return tuple(sources)
+
+
+#: The environment variables that configured forge delivery before repositories were records.
+ENV_FORGE_URL = "BZ_FORGE_URL"
+ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
+ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
+ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
+LEGACY_FORGE_VARIABLES = (ENV_FORGE_URL, ENV_FORGE_OWNER, ENV_FORGE_BASE_BRANCH, ENV_FORGE_TOKEN)
+
+
+@domain_model
+@dataclass(frozen=True)
+class LegacyKeys:
+    """The legacy keys a hub still carries: its file's ``[[work_source]]`` blocks and the
+    names of the legacy variables set in its environment — the forge variables and every
+    variable a block's ``token_env`` names. Read from the parsed file, so a commented-out
+    block never counts. Holds names only; a value is read by the import alone."""
+
+    config_path: Path
+    sources: tuple[WorkSourceConfig, ...]
+    #: The legacy variables set in the environment, in declaration order.
+    variables: tuple[str, ...]
+
+    @classmethod
+    def read(cls, config_path: Path, environ: Mapping[str, str]) -> LegacyKeys:
+        raw = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+        sources = WorkSourceConfig.sources(raw.get("work_source", []))
+        named = [*LEGACY_FORGE_VARIABLES, *(source.token_env for source in sources)]
+        variables = tuple(dict.fromkeys(name for name in named if name in environ))
+        return cls(config_path=config_path, sources=sources, variables=variables)
+
+    def present(self) -> bool:
+        return bool(self.sources or self.variables)
+
+    def locations(self) -> tuple[str, ...]:
+        """Where each key was found — the file and block, or the variable — never a value."""
+        return (
+            *(f'{self.config_path.name} [[work_source]] "{source.name}"' for source in self.sources),
+            *(f"environment {name}" for name in self.variables),
+        )
 
 
 @domain_model
@@ -550,7 +570,6 @@ class HubConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    work_sources: tuple[WorkSourceConfig, ...] = ()
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
@@ -658,11 +677,11 @@ class HubConfig:
             "# overrides this; false (the default) keeps every chunk on the mint it started on.\n",
             f"follow_latest = {str(self.follow_latest).lower()}\n",
             "\n# Forge-status sweep cadence, in seconds. Only consulted when at\n"
-            "# least one [[work_source]] below sets annotate = true; a hub with none starts\n"
+            "# least one work source sets annotate = true; a hub with none starts\n"
             "# no sweep loop regardless of this value.\n",
             f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
             "\n# Forge-write posture for closing delivered work items. true (the\n"
-            "# default) closes through every configured [[work_source]]; set false on a\n"
+            "# default) closes through every configured work source; set false on a\n"
             "# non-canonical hub — dev, staging, or a restored snapshot — so it never writes to\n"
             "# a live forge repo. The built-in hub source is unaffected: it writes no forge.\n",
             f"close_forge_writes_enabled = {str(self.close_forge_writes_enabled).lower()}\n",
@@ -680,19 +699,6 @@ class HubConfig:
             *self.tracing.to_toml(unit="closed steps"),
             *self.egress.to_toml(),
         ]
-        if not self.work_sources:
-            lines.append(_WORK_SOURCE_EXAMPLE_COMMENT)
-        for source in self.work_sources:
-            lines.append("\n[[work_source]]\n")
-            lines.append(f'name = "{source.name}"\n')
-            lines.append(f'provider = "{source.provider}"\n')
-            lines.append(f'repo = "{source.repo}"\n')
-            lines.append(f'token_env = "{source.token_env}"\n')
-            lines.append(f"annotate = {str(source.annotate).lower()}\n")
-            if source.api_base is not None:
-                lines.append(f'api_base = "{source.api_base}"\n')
-            if source.web_base is not None:
-                lines.append(f'web_base = "{source.web_base}"\n')
         lines.append("\n[auth]\n")
         lines.append(f'mode = "{self.auth.mode}"\n')
         if self.auth.superuser is not None:
@@ -768,7 +774,6 @@ class HubConfig:
             db_url=db_url,
             host=host or env.text(ENV_HOST) or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else env.port(toml_port),
-            work_sources=WorkSourceConfig.sources(raw.get("work_source", [])),
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,

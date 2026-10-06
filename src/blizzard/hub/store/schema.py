@@ -274,6 +274,16 @@ config_changes = Table(
 )
 Index("ix_config_changes_record", config_changes.c.record_kind, config_changes.c.record_key, config_changes.c.id)
 
+# One append-only fact per carry-over of a file-configured hub into its records.
+config_import_facts = Table(
+    "config_import_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("imported_at", UtcDateTime, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("read", Text, nullable=False),  # JSON {config_path, sources, variables}; names only, never a value
+)
+
 # --- Routines (mutable graph, scope and run defaults; surrogate id) ---
 
 routines = Table(

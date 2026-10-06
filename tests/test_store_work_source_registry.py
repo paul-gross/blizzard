@@ -10,19 +10,16 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Iterator
-from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
-from structlog.testing import capture_logs
 
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices
-from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
@@ -200,21 +197,3 @@ def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_erro
     assert services.work_sources.closer("widget") is None
     assert services.work_sources.annotator("widget") is None
     assert services.work_sources.label_clearer("widget") is None
-
-
-def test_legacy_work_source_blocks_are_ignored_with_one_start_up_warning(tmp_path: Path) -> None:
-    scaffolded = hub_runtime.init_environment(tmp_path / "hub")
-    legacy = WorkSourceConfig(name="legacy", provider="github", repo="acme/legacy", token_env="UNSET_LEGACY_TOKEN")
-    scaffolded.config_path.write_text(replace(scaffolded, work_sources=(legacy,)).to_toml())
-    config = hub_app.HubConfig.load(scaffolded.root)
-
-    with capture_logs() as logs:
-        app = hub_app.build_hosted_app(config)
-
-    warnings = [entry for entry in logs if "[[work_source]]" in entry["event"]]
-    assert len(warnings) == 1
-    assert warnings[0]["sources"] == ["legacy"]
-    services: HubServices = app.state.services
-    assert services.work_sources.names() == ["hub"]
-    assert services.work_sources.get("legacy") is None
-    app.state.engine.dispose()

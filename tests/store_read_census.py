@@ -57,6 +57,7 @@ from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
 from blizzard.hub.domain.config.revisions import IReadConfigRevisions
@@ -94,6 +95,7 @@ from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
@@ -956,6 +958,7 @@ class HubWorld:
     work_items: IReadWorkItemRepository
     secrets: ISecretCatalog
     config_revisions: IReadConfigRevisions
+    config_imports: IReadConfigImports
     default_graph: Graph
     graph: Graph
     retired_graph: Graph
@@ -1133,6 +1136,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         secrets=secret_store,
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
         apply_writer=ConfigApplyStore(store_connections),
+        import_writer=ConfigImportStore(store_connections),
         clock=clock,
     )
     config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)
@@ -1764,6 +1768,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         work_items=work_items,
         secrets=secret_store,
         config_revisions=ConfigRevisionsStore(store_connections),
+        config_imports=ConfigImportStore(store_connections),
         default_graph=default_graph,
         graph=graph,
         retired_graph=retired_graph,
@@ -2095,6 +2100,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         include_retired=True
     ),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, "census-repo"),
+    (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
+    (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None
     ),

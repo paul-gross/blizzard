@@ -21,6 +21,7 @@ import pytest
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli.sessions.internal import session_file
+from blizzard.hub.config import LEGACY_FORGE_VARIABLES
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from tests.repo_files import install_repo_read_guard
@@ -132,7 +133,12 @@ def _isolated_operator_tracing_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def pytest_configure() -> None:
-    """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent."""
+    """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent.
+
+    Also drop the legacy forge variables a feature-env shell carries: every hub the suite
+    spawns inherits this environ, and a hub refuses to start while one is set."""
+    for name in LEGACY_FORGE_VARIABLES:
+        os.environ.pop(name, None)
     os.environ.update(
         {
             "GIT_CONFIG_COUNT": "2",
