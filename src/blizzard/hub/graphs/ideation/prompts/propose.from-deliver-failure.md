@@ -9,6 +9,8 @@ then republish both unchanged with `blizzard runner artifact create --name docke
 `blizzard runner artifact create --name delta` so this entry has its own completion, and select `proposed` or `none`
 exactly as before to retry delivery.
 
-**Loop bound.** Before retrying, read `blizzard runner chunk history`. If a `failure` transition has already left
-`deliver` once for this chunk, do not retry again: this is an operational fault outside what a worker session can
-repair. Escalate with `blizzard runner ask` instead so a human fixes the hub's delivery path.
+**Loop bound.** Before retrying, read `blizzard runner chunk history` and count the `failure` transitions out of
+`deliver` for this chunk — the one that sent you here is included in the count. If exactly one appears, this is the
+first failure: retry once. If two or more appear, a retry has already failed: do not retry again, because this is an
+operational fault outside what a worker session can repair. Escalate with `blizzard runner ask` instead so a human fixes
+the hub's delivery path.

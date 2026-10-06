@@ -334,6 +334,16 @@ def test_a_blank_harnesses_entry_is_rejected_naming_the_rule() -> None:
     assert any("`harnesses` entries must be non-empty strings" in e for e in result.errors)
 
 
+def test_every_blank_and_duplicate_harnesses_entry_is_reported_not_just_the_first() -> None:
+    entries = ["claude_code", " ", "", "opencode", "claude_code", "opencode"]
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": entries}}))).result
+    assert not result.ok
+    assert any("entry 2 is blank" in e for e in result.errors)
+    assert any("entry 3 is blank" in e for e in result.errors)
+    assert any("duplicate `claude_code`" in e for e in result.errors)
+    assert any("duplicate `opencode`" in e for e in result.errors)
+
+
 def test_a_well_formed_harnesses_set_naming_a_harness_no_runner_holds_mints_successfully() -> None:
     # Fleet availability is never consulted here — the hub validates shape only.
     result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["no-such-harness"]}}))).result

@@ -14,6 +14,7 @@ restatements in `propose.md`. Fix what the failure names against the real shape 
 about what you decided while you are in there — correcting a format error is not an invitation to revisit the
 shortlist.
 
-**Loop bound.** Before resubmitting, read `blizzard runner chunk history`. If an `invalid` transition has already left
-`deliver` once for this chunk, do not resubmit again: escalate with `blizzard runner ask` instead of letting the cycle
-repeat.
+**Loop bound.** Before resubmitting, read `blizzard runner chunk history` and count the `invalid` transitions out of
+`deliver` for this chunk — the one that sent you here is included in the count. If exactly one appears, this is the
+first rejection: resubmit once. If two or more appear, a resubmission has already been rejected: do not resubmit again;
+escalate with `blizzard runner ask` instead of letting the cycle repeat.

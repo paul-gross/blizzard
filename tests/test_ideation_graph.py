@@ -206,6 +206,20 @@ def test_ideation_deliver_records_or_bounces_to_propose_with_the_addendum() -> N
     assert invalid.prompt_addendum != failure.prompt_addendum
 
 
+@pytest.mark.parametrize(
+    ("prompt", "transition"),
+    [("propose.from-deliver-failure.md", "failure"), ("propose.from-deliver-invalid.md", "invalid")],
+)
+def test_ideation_deliver_loop_bound_is_a_count_the_worker_can_evaluate(prompt: str, transition: str) -> None:
+    """The transition that sent the chunk back is itself in the history, so the bound is
+    stated as a count: exactly one retries once, two or more escalates."""
+    text = " ".join((_GRAPH.path.parent / "prompts" / prompt).read_text().split())
+    assert f"count the `{transition}` transitions out of `deliver`" in text
+    assert "If exactly one appears" in text
+    assert "If two or more appear" in text
+    assert "has already left" not in text
+
+
 def test_ideation_deliver_runs_the_packaged_script_naming_its_artifacts() -> None:
     doc = _doc()
     deliver = doc.node("deliver")
