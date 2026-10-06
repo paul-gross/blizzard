@@ -25,11 +25,8 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.observability.tracing import attributes as attr
 from blizzard.hub.domain.observability.tracing.assembly import step_dimensions, step_usage, step_waits
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
-from blizzard.hub.domain.observability.tracing.steps import StepKind, StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.steps import LinkReason, StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import IntervalKind, StepSummary, folded_cost, summarize_step
-
-_LINK_WORK = "work"
-_LINK_LIFETIME = "lifetime"
 
 
 class ChunkOutcome(StrEnum):
@@ -230,7 +227,7 @@ def assemble_work(facts: StepFacts) -> tuple[FinishedSpan, ...]:
             start=start,
             end=max(finish, start),
             attributes={**_dimensions(facts), attr.CHUNK_OUTCOME: end.outcome.value, **_totals(facts)},
-            links=(SpanLink(lifetime_context(facts.chunk_id), {attr.LINK_REASON: _LINK_LIFETIME}),),
+            links=(SpanLink(lifetime_context(facts.chunk_id), {attr.LINK_REASON: LinkReason.LIFETIME.value}),),
         ),
     )
 
@@ -251,7 +248,7 @@ def _lifetime_step(
             attr.STEP_KIND: "gate" if summary.kind is StepKind.GATE else "step",
         },
         status=SpanStatus.ERROR if summary.outcome is StepOutcome.ESCALATED else SpanStatus.UNSET,
-        links=(SpanLink(step_root(summary.step_key), {attr.LINK_REASON: _LINK_WORK}),),
+        links=(SpanLink(step_root(summary.step_key), {attr.LINK_REASON: LinkReason.WORK.value}),),
         service_name=attr.CHUNK_SERVICE_NAME,
     )
 

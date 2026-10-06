@@ -15,12 +15,16 @@ from typing import cast
 
 import pytest
 import yaml
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
+from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
@@ -31,9 +35,11 @@ from blizzard.hub.delivery.hub_node import (
     ENV_REVIEW_FINDINGS_URL,
     ENV_WORK_ITEMS,
     HubEnv,
+    HubNodeExecutor,
     PollPolicy,
     PrintedChoice,
     UnconvergedDeliveryError,
+    _NoopStep,
 )
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
@@ -48,8 +54,9 @@ from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepositor
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.domain.graph.authoring import Reification
-from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc
+from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc, RunStep
 from blizzard.hub.domain.graph.validation import Validator
+from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points
 from tests.support import (
@@ -1814,3 +1821,61 @@ def test_the_env_omits_the_board_link_when_no_public_url_is_declared(tmp_path: P
     _command, _cwd, env = runner.calls[0]
     assert ENV_CHUNK_URL not in env
     assert json.loads(env[ENV_WORK_ITEMS]) == [{"label": "default#42", "reference": "acme/widget#42"}]
+
+
+def _traced_executor(runner: FakeHubCommandRunner) -> tuple[HubNodeExecutor, InMemorySpanExporter, IPlatformTracing]:
+    exporter = InMemorySpanExporter()
+    handle = build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=1.0),
+        {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
+        resource={},
+        scope="test",
+        scope_version="0",
+        exporter=exporter,
+    )
+    executor = object.__new__(HubNodeExecutor)
+    executor._runner = runner
+    executor._tracer = handle.tracer
+    return executor, exporter, handle
+
+
+def test_a_named_run_step_is_a_span_naming_it_and_carrying_its_exit_code_and_the_runner_gets_the_step() -> None:
+    runner = FakeHubCommandRunner(default=CommandResult(exit_code=3, stdout="", stderr=""))
+    executor, exporter, handle = _traced_executor(runner)
+    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
+
+    result = executor._run_step(
+        RunStep(command="land-it", name="land"), workdir="/work/dir", env={"K": "V"}, hub_exec=hub_exec
+    )
+
+    handle.shutdown(5.0)
+    assert result.exit_code == 3
+    assert runner.calls == [("land-it", "/work/dir", {"K": "V"})]
+    (span,) = exporter.get_finished_spans()
+    assert span.name == RUN_STEP_SPAN
+    assert dict(span.attributes or {}) == {RUN_STEP_NAME: "land", RUN_STEP_EXIT_CODE: 3}
+    assert span.parent is not None
+    assert (span.parent.trace_id, span.parent.span_id) == (hub_exec.trace_id, hub_exec.span_id)
+
+
+def test_an_unnamed_run_step_carries_only_its_exit_code() -> None:
+    executor, exporter, handle = _traced_executor(FakeHubCommandRunner())
+    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
+
+    executor._run_step(RunStep(command="go"), workdir="/w", env={}, hub_exec=hub_exec)
+
+    handle.shutdown(5.0)
+    (span,) = exporter.get_finished_spans()
+    assert dict(span.attributes or {}) == {RUN_STEP_EXIT_CODE: 0}
+
+
+def test_a_noop_step_runs_untraced() -> None:
+    runner = FakeHubCommandRunner()
+    executor, exporter, handle = _traced_executor(runner)
+    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
+
+    executor._run_step(_NoopStep(command="poll"), workdir="/w", env={"A": "B"}, hub_exec=hub_exec)
+
+    handle.shutdown(5.0)
+    assert runner.calls == [("poll", "/w", {"A": "B"})]
+    assert exporter.get_finished_spans() == ()

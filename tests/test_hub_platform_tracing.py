@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -397,3 +398,25 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
     server = _server_span(_spans(handle, exporter), "GET /api/chunks")
     assert f"{server.context.trace_id:032x}" == cli_span["traceId"]
     assert server.parent is not None and f"{server.parent.span_id:016x}" == cli_span["spanId"]
+
+
+def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter = InMemorySpanExporter()
+    config = replace(_config(tmp_path), auth=AuthConfig(mode=AUTH_MODE_OAUTH))
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    with TestClient(app) as client:
+        services = app.state.services
+        harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
+        user = seed_user(cast(Any, harness), username="op", role=Role.CONTRIBUTOR, email="op@example.com")
+        session = services.auth.mint_session(user)[0]
+        calls: list[str] = []
+        lookup, touch = services.sessions.get_by_hash, services.auth.touch_session
+        monkeypatch.setattr(services.sessions, "get_by_hash", lambda h: calls.append("get_by_hash") or lookup(h))
+        monkeypatch.setattr(services.auth, "touch_session", lambda s: calls.append("touch_session") or touch(s))
+        response = client.get(
+            "/api/chunks",
+            headers={"Authorization": f"Bearer {session}", "traceparent": f"00-{'a' * 32}-{'b' * 16}-01"},
+        )
+    assert response.status_code == 200, response.text
+    assert calls == ["get_by_hash", "touch_session"]

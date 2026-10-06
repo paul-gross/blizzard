@@ -1,5 +1,5 @@
-"""The hub continues an incoming trace only for a caller whose credential resolves; an anonymous request
-starts a fresh root. FastAPI's telemetry extracts the headers before any middleware runs, so the gate wraps it."""
+"""The hub continues an incoming trace only for a caller whose credential resolves, never over a websocket;
+anyone else starts a fresh root. FastAPI's telemetry extracts the headers before any middleware, so the gate wraps it."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class TraceGatedFastAPI(FastAPI):
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] in ("http", "websocket") and _carries_trace_headers(scope):
             scope["app"] = self
-            if not await run_in_threadpool(self._resolves, scope):
+            if scope["type"] == "websocket" or not await run_in_threadpool(self._resolves, scope):
                 scope["headers"] = [(k, v) for k, v in scope["headers"] if k.lower() not in _TRACE_HEADERS]
         await super().__call__(scope, receive, send)
 
