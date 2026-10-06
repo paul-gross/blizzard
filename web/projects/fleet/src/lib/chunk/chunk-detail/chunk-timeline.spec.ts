@@ -195,7 +195,10 @@ describe('ChunkTimeline', () => {
       imports: [ChunkTimeline],
       providers: [
         provideZonelessChangeDetection(),
-        provideRouter([{ path: 'board', children: [{ path: 'chunk/:id', children: [] }] }]),
+        provideRouter([
+          { path: 'board', children: [{ path: 'chunk/:id', children: [] }] },
+          { path: 'graphs/:id', children: [] },
+        ]),
       ],
     }).compileComponents();
   });
@@ -354,7 +357,8 @@ describe('ChunkTimeline', () => {
       '[data-testid="history-step-usage"]',
     );
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.00+');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.getAttribute('title')).toContain('lower bound');
+    expect(el.querySelector('.partial-badge')).toBeNull();
   });
 
   it("renders a step's own estimate folded into its one cost figure, marked ~, and not-partial for an estimate-only row", async () => {
@@ -367,7 +371,7 @@ describe('ChunkTimeline', () => {
       '[data-testid="history-step-usage"]',
     );
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.hasAttribute('title')).toBe(false);
   });
 
   it('renders no ~ marker on a step with no estimate', async () => {
@@ -550,6 +554,34 @@ describe('ChunkTimeline', () => {
     await fixture.whenStable();
     expect(router.url).toBe(`/board/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=node-history&step=nd_build:1`);
     expect(emitted).toEqual([]);
+  });
+
+  it('navigates when the node name, target, or timestamp of an authored-edge migration row is clicked, while the graph badge keeps its own target', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', {
+      ...TWO_GRAPH_DETAIL,
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
+    });
+    fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+    const expected = `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_review:2`;
+    const row = el.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
+
+    for (const selector of ['.nd', '.jg-to', '.ts']) {
+      await router.navigateByUrl('/board/chunk/other');
+      (row.querySelector(selector) as HTMLElement).click();
+      await fixture.whenStable();
+      expect(router.url, selector).toBe(expected);
+    }
+
+    await router.navigateByUrl('/board/chunk/other');
+    const graphLink = row.querySelector('a.gr') as HTMLAnchorElement;
+    expect(graphLink.getAttribute('href')).toMatch(/^\/graphs\//);
+    graphLink.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/graphs/gr_src');
   });
 
   it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a non-worker migration or an active row with no epoch yet)', async () => {

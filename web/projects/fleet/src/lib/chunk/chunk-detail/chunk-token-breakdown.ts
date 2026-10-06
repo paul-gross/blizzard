@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
 import type { ChunkDetail, ChunkUsageTotalView } from '../../api/hub';
-import { formatCost, formatTokens } from '../../core/cost-format';
+import { formatCost, formatTokens, TOTAL_COST_PARTIAL_TITLE } from '../../core/cost-format';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 
 /** The all-zero, non-partial total — this component's default before `detail().cost`
@@ -46,6 +46,7 @@ export class ChunkTokenBreakdown {
   /** The chunk aggregate to render (the derived cost/usage total). */
   readonly detail = input.required<ChunkDetail>();
 
+  protected readonly totalCostPartialTitle = TOTAL_COST_PARTIAL_TITLE;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
 

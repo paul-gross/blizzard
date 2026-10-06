@@ -57,17 +57,9 @@
           @if (usageForStep(row); as u) {
             <div class="line3" data-testid="selection-step-usage">
               <span class="tok" data-testid="selection-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
-              <span class="cost" data-testid="selection-step-cost">{{
+              <span class="cost" data-testid="selection-step-cost" [attr.title]="u.costPartial ? stepCostPartialTitle : null">{{
                 formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial)
               }}</span>
-              @if (u.costPartial) {
-                <span
-                  class="partial-badge"
-                  data-testid="selection-step-cost-partial"
-                  title="At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound."
-                  >PARTIAL</span
-                >
-              }
             </div>
           }
         </div>

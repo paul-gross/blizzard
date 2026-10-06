@@ -156,11 +156,11 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
 
       const timelineCosts = timelineRoot.querySelectorAll<HTMLElement>('[data-testid="history-step-cost"]');
       expect(timelineCosts[1]?.textContent?.trim()).toBe('~$0.07');
-      expect(timelineRoot.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
+      expect(timelineCosts[1]?.hasAttribute('title')).toBe(false);
 
       const selectionCosts = selectionRoot.querySelectorAll<HTMLElement>('[data-testid="selection-step-cost"]');
       expect(selectionCosts[1]?.textContent?.trim()).toBe('~$0.07');
-      expect(selectionRoot.querySelector('[data-testid="selection-step-cost-partial"]')).toBeNull();
+      expect(selectionCosts[1]?.hasAttribute('title')).toBe(false);
 
       const timelineList = timelineRoot.querySelector<HTMLElement>('.timeline') ?? timelineRoot;
       expect(

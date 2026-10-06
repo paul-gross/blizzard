@@ -2,25 +2,21 @@
   @if (detail().awaiting_external_merge) {
     <p class="wait" data-testid="delivery-merge-wait">Awaiting your merge</p>
   }
-  @for (pr of detail().open_prs ?? []; track pr.repo + ':' + pr.number) {
-    <div class="row">
-      <span>{{ pr.repo }}</span>
-      <a data-testid="delivery-pr-link" [href]="pr.url" target="_blank" rel="noopener noreferrer">Open PR #{{ pr.number }}</a>
-    </div>
-  }
-  @for (pr of detail().closed_prs ?? []; track pr.repo + ':' + pr.number) {
-    <div class="row">
-      <span>{{ pr.repo }}</span>
-      <a data-testid="delivery-closed-pr-link" [href]="pr.url" target="_blank" rel="noopener noreferrer">Closed PR #{{ pr.number }}</a>
-    </div>
-  }
-  @for (landed of detail().landed_repos ?? []; track landed.repo) {
-    <div class="row">
-      <span>{{ landed.repo }}</span>
-      @if (landed.url; as url) {
-        <a data-testid="delivery-landed-link" [href]="url" target="_blank" rel="noopener noreferrer">{{ landed.commit_hash }}</a>
-      } @else {
-        <span data-testid="delivery-landed-text">{{ landed.commit_hash }}</span>
+  @for (row of rows(); track row.repo) {
+    <div class="row" data-testid="delivery-row">
+      <span>{{ row.repo }}</span>
+      @if (row.openPr; as pr) {
+        <a data-testid="delivery-pr-link" [href]="pr.url" target="_blank" rel="noopener noreferrer">Open PR #{{ pr.number }}</a>
+      }
+      @if (row.closedPr; as pr) {
+        <a data-testid="delivery-closed-pr-link" [href]="pr.url" target="_blank" rel="noopener noreferrer">Closed PR #{{ pr.number }}</a>
+      }
+      @if (row.landed; as landed) {
+        @if (landed.url; as url) {
+          <a data-testid="delivery-landed-link" [href]="url" [attr.title]="landed.commit_hash" target="_blank" rel="noopener noreferrer">{{ row.sha }}</a>
+        } @else {
+          <span data-testid="delivery-landed-text" [attr.title]="landed.commit_hash">{{ row.sha }}</span>
+        }
       }
     </div>
   }

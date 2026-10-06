@@ -1,3 +1,11 @@
+/** The tooltip a step's cost figure carries when its `+` suffix marks a lower bound. */
+export const STEP_COST_PARTIAL_TITLE =
+  "At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound.";
+
+/** The tooltip a chunk's total cost figure carries when its `+` suffix marks a lower bound. */
+export const TOTAL_COST_PARTIAL_TITLE =
+  "At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend.";
+
 /**
  * A derived spend total as one figure, to the cent: `costUsd + (estimatedCostUsd ?? 0)`,
  * with a leading `~` when `estimatedCostUsd` is present (even `0`) and a trailing `+` when

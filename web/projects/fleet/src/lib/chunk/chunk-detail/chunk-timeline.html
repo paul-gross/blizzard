@@ -21,7 +21,7 @@
           [attr.title]="row.title"
           [attr.role]="activatable() && row.key !== null ? 'button' : null"
           [attr.tabindex]="activatable() && row.key !== null ? 0 : null"
-          (click)="onActivate(row.key)"
+          (click)="onActivate(row.key); forwardToLink($event)"
           (keydown.enter)="onActivate(row.key, $event)"
           (keydown.space)="onActivate(row.key, $event)"
         >
@@ -75,17 +75,9 @@
           @if (usageForStep(row); as u) {
             <span class="step-usage" data-testid="history-step-usage">
               <span class="tok" data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
-              <span class="cost" data-testid="history-step-cost">{{
+              <span class="cost" data-testid="history-step-cost" [attr.title]="u.costPartial ? stepCostPartialTitle : null">{{
                 formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial)
               }}</span>
-              @if (u.costPartial) {
-                <span
-                  class="partial-badge"
-                  data-testid="history-step-cost-partial"
-                  title="At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound."
-                  >PARTIAL</span
-                >
-              }
               @if (u.harnessId; as harnessId) {
                 <fleet-kit-badge
                   variant="pill"
