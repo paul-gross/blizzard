@@ -2,12 +2,15 @@
 
 The directory is ``0700`` and every file ``0600``; ``meta.json`` names the ``current``
 and ``previous`` generation ids, and each generation is ``<key_id>.key``. Generations
-resolve from disk on every use, so a running hub follows an offline rotation."""
+resolve from disk on every use, so a running hub follows an offline rotation. ``meta.json`` is
+replaced whole, so a reader always sees a complete one."""
 
 from __future__ import annotations
 
 import json
+import os
 import secrets
+import tempfile
 from pathlib import Path
 
 from blizzard.hub.config import ConfigError
@@ -88,8 +91,16 @@ class DirectoryKeyProvider:
         return json.loads(self._meta_path.read_text())
 
     def _write_meta(self, *, current: str, previous: str | None) -> None:
-        self._meta_path.write_text(json.dumps({"current": current, "previous": previous}))
-        self._meta_path.chmod(_FILE_MODE)
+        fd, pending = tempfile.mkstemp(dir=self._dir, prefix=f"{_META_FILENAME}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as handle:
+                handle.write(json.dumps({"current": current, "previous": previous}))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(pending, self._meta_path)
+        except BaseException:
+            Path(pending).unlink(missing_ok=True)
+            raise
 
 
 def _conforms_directory_key_provider(x: DirectoryKeyProvider) -> IHubKeyProvider:

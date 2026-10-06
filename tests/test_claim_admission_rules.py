@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 
@@ -27,6 +30,7 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
+    ClaimService,
     RekeyDeniedTerminal,
     first_unmet_prerequisite,
     refuse_paused_runner,
@@ -192,8 +196,9 @@ def test_an_unmet_prerequisite_is_refused_after_the_status_window() -> None:
 
 
 def test_a_retired_runner_is_refused() -> None:
-    with pytest.raises(RunnerRetired):
+    with pytest.raises(RunnerRetired) as refused:
         _admit(_READY, registration=replace(_REGISTERED, retired=True, retired_at=_T0, retired_by="op"))
+    assert str(refused.value) == "runner runner-a is retired — claim refused; `reinstate` it first"
 
 
 def test_a_runner_whose_capabilities_cannot_run_the_chunk_is_refused() -> None:
@@ -246,3 +251,38 @@ def test_the_first_unmet_prerequisite_is_the_earliest_declared_edge_not_done() -
     assert first_unmet_prerequisite("chk_1", [_edge("chk_absent")], facts) == "chk_absent"
     assert first_unmet_prerequisite("chk_1", [_edge("chk_done")], facts) is None
     assert first_unmet_prerequisite("chk_1", [], facts) is None
+
+
+class _RegistryOf:
+    """Only ``get_runner`` is live — the pre-lock peek."""
+
+    def __init__(self, registration: RunnerRegistration | None) -> None:
+        self._registration = registration
+
+    def get_runner(self, runner_id: str) -> RunnerRegistration | None:
+        return self._registration
+
+
+class _UnenterableExclusiveWrites:
+    @contextmanager
+    def locked(self, chunk_ids: object) -> Iterator[object]:
+        raise AssertionError("the claim entered the lock for a retired runner")
+        yield
+
+
+def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
+    retired = replace(_REGISTERED, retired=True, retired_at=_T0, retired_by="op")
+    service = ClaimService(
+        route=cast(Any, None),
+        artifacts=cast(Any, None),
+        graphs=cast(Any, None),
+        registry=cast(Any, _RegistryOf(retired)),
+        retired=cast(Any, None),
+        exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        clock=cast(Any, None),
+        label=cast(Any, None),
+    )
+    with pytest.raises(RunnerRetired) as refused:
+        service.claim(_CHUNK, _GRAPH, runner_id="runner-a", workspace_id="ws-a", environment_ids=["e1"])
+    assert refused.value.runner_id == "runner-a"
+    assert str(refused.value) == "runner runner-a is retired — claim refused; `reinstate` it first"
