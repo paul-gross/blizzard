@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.post("/chunks/{chunk_id}/requeues", response_model=RequeueResponse, status_code=status.HTTP_202_ACCEPTED)
 def requeue_chunk(chunk_id: str, request: Request) -> RequeueResponse:
-    """Clear a needs_human chunk's local hold — the next FILL spawns a fresh attempt.
+    """Clear a needs_human chunk's local hold.
 
     ``409`` while the chunk's takeover is still open (end the interactive session first),
     or while the chunk carries no open escalation (nothing needs_human to clear)."""

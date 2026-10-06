@@ -1,7 +1,6 @@
 """The runner-local session-end endpoint — ``POST /api/leases/{lease_id}/session-end``.
 
-Appends a durable session-end fact — the "declared done" signal crash-recovery reads to
-tell a worker killed mid-work from one that cleanly exited. Recorded for every lease the
+Appends a durable session-end fact — the "declared done" signal. Recorded for every lease the
 runner ever minted, a fact and not a status, so a replay or an already-closed lease is
 harmless; an identifier naming no such lease is refused with ``404``."""
 

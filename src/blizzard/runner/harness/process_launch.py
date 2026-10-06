@@ -47,9 +47,8 @@ _libc = ctypes.CDLL(None, use_errno=True)
 control_fd = int(sys.argv[1])
 ack_fd = int(sys.argv[2])
 argv = sys.argv[3:]
-# os.read returns b"" on EOF rather than raising, so it is checked explicitly: only a
-# real confirm byte disarms and execs; EOF (the launcher died before confirming) exits
-# here, still armed, rather than racing PR_SET_PDEATHSIG's own SIGKILL to decide it.
+# os.read returns b"" on EOF, so it is checked explicitly: only a real confirm byte disarms
+# and execs; EOF (the launcher died before confirming) exits here, still armed.
 confirmed = os.read(control_fd, 1) == b"1"
 os.close(control_fd)
 if not confirmed:

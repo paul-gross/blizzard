@@ -177,11 +177,9 @@ _OTLP_PATHS = frozenset({"/v1/traces", "/v1/metrics", "/v1/logs"})
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
-    — sent *after* uvicorn's own graceful-drain wait, so in the hosted daemon
-    ``EarlyShutdownServer.handle_exit`` (``cli.py``) is what actually frees a parked SSE
-    response promptly. This hook is the only signal a wrapper-less composer gets — a plain
-    ``TestClient``/``uvicorn.Server``, as the test suite uses."""
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message — sent *after*
+    uvicorn's own graceful-drain wait, so this is the only signal a composer without an
+    early-shutdown wrapper gets."""
     yield
     app.state.shutdown.set()
 
@@ -254,13 +252,10 @@ def create_app(
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harnesses = resolved_harnesses
-    # The controller-facing narrowing of `runner_stores` — every
-    # route resolves this; the write bundle itself is never stashed on `app.state`, so no
-    # route can reach it — only used here, to derive this and the five single-concept
-    # mutating services below.
+    # The controller-facing narrowing of `runner_stores`; the write bundle itself is never
+    # stashed on `app.state`.
     app.state.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
-    # The SSE broker — `None` on every composer with no stream to feed, where
-    # :class:`~blizzard.foundation.events.stream.Stream` degrades cleanly.
+    # The SSE broker; `None` when no stream is wired.
     app.state.events = events
     # Set on shutdown by `_lifespan`; the stream route's live wait races it.
     app.state.shutdown = asyncio.Event()
@@ -307,9 +302,7 @@ def create_app(
         clock=clock,
         results=runner_stores.selftest_results if runner_stores else None,
     )
-    # The runner's own health diagnostics: `build_hosted_app` passes the one instance it also
-    # hands the loop (`HostedApp.harness_health`), so a dashboard read and the loop's own
-    # registered availability can never disagree. Absent, the route and dashboard refuse.
+    # The runner's own health diagnostics; absent, the route and dashboard refuse.
     app.state.harness_health = harness_health
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
@@ -388,9 +381,7 @@ class HostedApp:
     app: FastAPI
     resume: ResumeMarking
     engine: Engine
-    #: The one `HarnessHealthCache` this process's `host` command hands to `PeriodicDriver`
-    #: too — one instance, not two independently-refreshing ones, so a
-    #: dashboard read and the availability actually registered to the hub can never disagree.
+    #: The one `HarnessHealthCache` shared with the app, so a read and the registered availability agree.
     harness_health: HarnessHealthCache
     archived_transcript_client: httpx.Client
     hub_proxy_client: httpx.Client

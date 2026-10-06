@@ -43,8 +43,7 @@ from blizzard.runner.selftest.model import (
 )
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
-# The exit-is-done poll budget: bounded so a hung/broken adapter fails the check
-# loudly rather than wedging the canary forever.
+# The exit-is-done poll budget: bounded so a hung adapter fails the check.
 _EXIT_TIMEOUT_SECONDS = 30.0
 _EXIT_POLL_INTERVAL_SECONDS = 0.05
 

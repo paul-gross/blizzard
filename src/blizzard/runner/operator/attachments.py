@@ -34,12 +34,11 @@ class AttachmentRefused(Exception):
 
 
 class AttachmentEmpty(AttachmentRefused):
-    """The attachment carries no content — the API edge maps this to ``422``."""
+    """The attachment carries no content."""
 
 
 class AttachmentOnClosedLease(AttachmentRefused):
-    """The attach names the closed reference lease an open takeover holds — the API edge
-    maps this to ``409``."""
+    """The attach names the closed reference lease an open takeover holds."""
 
 
 def check_attachable(worker: WorkerLease, *, name: str, content: str) -> None:

@@ -1,8 +1,6 @@
 """Runner runtime configuration — resolved from a runtime directory.
 
-``blizzard runner init <dir>`` scaffolds a config file and a data directory; the daemon and
-the offline ``migrate`` verb read it back. The store URL is the single portability knob
-(``bzh:sql-portable``), defaulting to embedded sqlite."""
+The store URL is the single portability knob (``bzh:sql-portable``), defaulting to embedded sqlite."""
 
 from __future__ import annotations
 
@@ -225,8 +223,7 @@ class Spend:
 class Context:
     """The ``[context]`` table — the live session-context warn lane.
 
-    Config rather than graph content on purpose: this observes, a graph's ``rotate`` block
-    decides. So the line is re-aimed without re-minting every graph declaring a bound."""
+    Config rather than graph content, so the line is re-aimed without re-minting graphs."""
 
     table: Table
 
@@ -271,10 +268,7 @@ class SubscriptionDeclaration:
     """One declared provider subscription — the runner-unique, immutable
     join key everything downstream keys on is ``slug``; ``name`` is operator-facing only.
 
-    Declarations win over the legacy ``[external_subscription_usage]`` table
-    deterministically: when any ``[[subscription]]`` is present, the legacy table is not
-    consulted; when none is, :meth:`synthesized_from_legacy` produces the sole runtime
-    entry, under :data:`LEGACY_ANTHROPIC_SLUG`."""
+    :meth:`RunnerConfig.resolved_subscriptions` owns how declarations and the legacy table combine."""
 
     slug: str
     name: str
@@ -390,10 +384,7 @@ class Transcripts:
 
     @property
     def ship(self) -> bool:
-        """Off by default — a rollout decision, not a discard-sink one: the hub's
-        durable, compressed-at-rest, operator-gated segment store (``#247``) is ready to
-        receive shipped segments, so a `True` value here is retained, not wasted
-        bandwidth."""
+        """Whether transcript segments are shipped to the hub; off by default."""
         return self.table.boolean("ship", False)
 
     @property
@@ -521,10 +512,8 @@ class RunnerConfig:
     #: An override for the credential file the external-usage sampler reads;
     #: ``None`` means the adapter's own default.
     external_usage_credentials_path: str | None = None
-    #: Every authored ``[[subscription]]`` entry, verbatim — empty when none
-    #: is declared. :meth:`resolved_subscriptions` is the runtime list every caller other
-    #: than the config layer itself should read: this field alone says nothing about the
-    #: legacy ``[external_subscription_usage]`` table's own implicit subscription.
+    #: Every authored ``[[subscription]]`` entry, verbatim — empty when none is declared.
+    #: Callers read :meth:`resolved_subscriptions`, not this.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
     #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
     context_warn_tokens: int | None = None
@@ -585,9 +574,8 @@ class RunnerConfig:
 
     @property
     def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
-        """Every configured ``[worker] path_prepend`` entry absent on disk right now —
-        ``host``'s own startup warning reads this; a missing entry still starts the runner,
-        it just never contributes to a spawned child's ``PATH``."""
+        """Every configured ``[worker] path_prepend`` entry absent on disk right now; a missing
+        entry never contributes to a spawned child's ``PATH``."""
         return tuple(entry for entry in self.worker_path_prepend if not Path(entry).exists())
 
     @property
@@ -597,9 +585,7 @@ class RunnerConfig:
 
     @property
     def public_url(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        """The canonical origin — the first declared. It is what the hub records as this runner's own
-        URL, and what a request whose ``Host`` matches no declared origin falls back to. Empty when
-        none is declared, which is how a runner registers no federation identity at all."""
+        """The canonical origin — the first declared; empty when none is declared."""
         return self.public_origins.canonical or ""
 
     @property
@@ -612,9 +598,7 @@ class RunnerConfig:
     @property
     def redirect_uris(self) -> tuple[str, ...]:
         """The redirect URIs this runner presents to the hub's IdP authorize endpoint — one
-        per declared origin, derived from :attr:`public_origins`, never independently
-        configured. The hub exact-matches a presented URI against this registered set, so an origin
-        missing from it cannot complete a bounce."""
+        per declared origin, derived from :attr:`public_origins`, never independently configured."""
         return self.public_origins.callback_uris(CALLBACK_PATH)
 
     @property
@@ -733,12 +717,10 @@ class RunnerConfig:
         return self.runner_prompt
 
     def resolved_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
-        """Every declared provider subscription, resolved — the runtime list
-        every caller but this config layer itself should read.
+        """Every declared provider subscription, resolved — the runtime list callers read.
 
-        Mirrors :meth:`resolved_workspace_prompt`'s two-knobs-one-value shape: declarations
-        win, deterministically. Any authored ``[[subscription]]`` (:attr:`subscriptions`)
-        replaces the legacy ``[external_subscription_usage]`` table entirely; none present
+        Declarations win over the legacy ``[external_subscription_usage]`` table: any authored
+        ``[[subscription]]`` (:attr:`subscriptions`) replaces it entirely; none present
         synthesizes the sole legacy-Anthropic declaration from this config's own
         already-resolved :attr:`external_usage_credentials_path` /
         :attr:`external_usage_sample_interval_seconds` — never both, and never empty."""
@@ -1012,9 +994,7 @@ class RunnerConfig:
         transcripts = Transcripts.of(raw.get("transcripts"))
         queue = Queue.of(raw.get("queue"))
         worker_stdout = WorkerStdout.of(raw.get("worker_stdout"))
-        # Authored `[[subscription]]` entries, verbatim — never synthesized here;
-        # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
-        # actually happens, from this config's own resolved fields.
+        # Authored entries only; `resolved_subscriptions()` combines them with the legacy table.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
         harness_sections = HarnessSections.parse(raw, root=root, path=path)
         harness = Table.of(raw.get("harness"))

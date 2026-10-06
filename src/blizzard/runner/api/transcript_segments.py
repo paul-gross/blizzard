@@ -1,9 +1,6 @@
-"""The runner-plane, chunk-scoped transcript segment routes (runner-node-grouped-transcripts)
-— a chunk's segment index and one segment's content by id, mirroring the hub's own
-``/api/chunks/{chunk_id}/transcripts[/{segment_id}]`` path shape. Runner-local only:
-both resolve through :class:`TranscriptService`, never calling the hub; ownership is
-structural — this runner's store only ever holds its own leases' segments. Distinct from
-``transcripts.py``'s lease-keyed ``/api/leases/{lease_id}/transcript``."""
+"""The runner-plane, chunk-scoped transcript segment routes — a chunk's segment index and one
+segment's content by id. Runner-local only: both resolve through :class:`TranscriptService`,
+never calling the hub."""
 
 from __future__ import annotations
 
@@ -46,8 +43,6 @@ def _index_entry(row: TranscriptSegmentState) -> TranscriptSegmentIndexEntry:
 
 
 def _content_view(segment_id: str, content: ResolvedSegmentContent) -> TranscriptSegmentContentView:
-    # No unavailability field on the wire view — `content.truncated`/`.turns` already
-    # carry that mapping, minted once by `TranscriptService.segment_content`, never here too.
     return TranscriptSegmentContentView(
         segment_id=segment_id,
         final=content.final,

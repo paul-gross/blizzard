@@ -1,9 +1,6 @@
 """The runner live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI
-schema. A subscriber registers with
-:class:`~blizzard.runner.events.broker.EventBroker`, replays its buffered tail, then streams
-live over the hub-shared :class:`Cursor`/:class:`Stream` machinery. Mounted in the
-``_HUMAN`` lane, gated at router inclusion. ``app.state.events`` is ``None`` on a
-stream-less composer, where :class:`Stream` degrades to an idle connection."""
+schema. Resumes from ``Last-Event-ID`` through :class:`Cursor`/:class:`Stream`; the broker and
+shutdown event are read from ``app.state`` and may be ``None``."""
 
 from __future__ import annotations
 

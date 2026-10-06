@@ -45,9 +45,8 @@ class ElicitationState(StrEnum):
         return cls.ABSENT if record is None else cls.STANDING
 
     def on(self, verb: ElicitationVerb) -> ElicitationTransition:
-        """What ``verb`` does to a record in this state — the declared table of legal writes. The
-        store's own guard mirrors it: ``started`` and ``relaunch`` against an absent record raise
-        :class:`ElicitationNotRecorded`."""
+        """What ``verb`` does to a record in this state — the declared table of legal writes;
+        ``started`` and ``relaunch`` against an absent record raise :class:`ElicitationNotRecorded`."""
         return _TRANSITIONS[verb][self]
 
 

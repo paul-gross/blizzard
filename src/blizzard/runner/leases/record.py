@@ -25,14 +25,13 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def active_lease_for_chunk(self, chunk_id: str) -> Lease | None:
-        """The chunk's single active lease, if any (P6: at most one — MAX_AGENTS math)."""
+        """The chunk's single active lease, if any (at most one)."""
         ...
 
     def active_lease(self, lease_id: str) -> Lease | None:
         """The lease by id iff it is still active (no closure fact), else ``None``.
 
-        The flusher's ack-idempotency check: an already-closed lease means the completion
-        applied on an earlier flush whose ack was lost.
+        A closed lease reads ``None``.
         """
         ...
 
@@ -48,15 +47,14 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def lease(self, lease_id: str) -> Lease | None:
-        """The lease by id, regardless of closure — the transcript read.
+        """The lease by id, regardless of closure.
 
         Distinct from :meth:`active_lease`: a transcript outlives its lease.
         """
         ...
 
     def list_closed_leases(self, limit: int) -> list[ClosedLease]:
-        """The most recently closed leases, newest first — the panel's recent-history
-        read.
+        """The most recently closed leases, newest first.
 
         ``limit`` bounds rows returned, never how long a closure fact lives on disk.
         """

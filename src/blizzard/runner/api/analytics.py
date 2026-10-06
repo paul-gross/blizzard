@@ -1,9 +1,7 @@
 """``GET /api/leases/{lease_id}/analytics/...`` — a worker's own routine-run read of the
 six operator counts/spend summaries over a window it names. Lease-scoped
-and token-authorized, then forwarded to the hub as the runner principal — the same
-pluggable-seam shape ``runner/api/garden.py``'s reads take. ``since``/``until`` are
-carried through unvalidated, exactly like garden's own ``state``: the hub is the one
-source of truth for the window's required/UTC-instant shape (``bzh:pluggable-seams``)."""
+and token-authorized, then forwarded to the hub as the runner principal. ``since``/``until``
+are carried through unvalidated (``bzh:pluggable-seams``)."""
 
 from __future__ import annotations
 

@@ -2,9 +2,8 @@
 each harness's most recently completed selftest run — its terminal status and when it was
 recorded. Latest-wins-per-``harness_id`` (``bzh:facts-not-status``): a completed run is a
 definite occurrence at a definite time, superseded only by the next run for the same
-harness. :meth:`~blizzard.runner.selftest.model.SelfTestRun.result_record` builds the one record
-written; the run's own per-check detail lives only in its in-memory ``SelfTestRun`` — nothing
-durable reads it back, so it rides no further than that."""
+harness. The record carries the
+terminal status only, never per-check detail."""
 
 from __future__ import annotations
 

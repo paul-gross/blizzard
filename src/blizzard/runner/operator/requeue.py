@@ -36,7 +36,7 @@ __all__ = [
 
 
 class RequeueError(Exception):
-    """Base for the requeue domain's refusals — the API edge maps these to ``409``."""
+    """Base for the requeue domain's refusals."""
 
 
 class RequeueBlockedByOpenTakeover(RequeueError):

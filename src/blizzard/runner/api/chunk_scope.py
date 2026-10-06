@@ -1,12 +1,8 @@
 """Chunk-scoped edge resolution for the operator-local, chunk-keyed worker verbs.
 
-The runner holds no chunk entity (``bzh:facts-not-status`` keeps each per-concept table
-independent), so resolving a ``chunk_id`` path parameter means minting a typed scope of
-exactly the facts a chunk-keyed rule reads, rather than loading an aggregate that does
-not exist. One resolver function per chunk-keyed operation, sibling to
-:mod:`~blizzard.runner.api.lease_scope` and reached the same way — through the runner's
-request wiring, its read repositories bound at the composition root
-(``bzh:dependency-injection``)."""
+The runner holds no chunk entity (``bzh:facts-not-status``), so each resolver mints a typed
+scope of the facts one chunk-keyed operation reads, from the request wiring's read
+repositories (``bzh:dependency-injection``)."""
 
 from __future__ import annotations
 
@@ -18,9 +14,7 @@ from blizzard.runner.operator.requeue import RequeueScope
 
 
 def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:
-    """The chunk-keyed facts :meth:`~blizzard.runner.operator.requeue.RequeueService.requeue`
-    reads: whether the chunk carries an open takeover, its open escalation, if any, and the
-    environments it holds on this runner."""
+    """The :class:`RequeueScope` for ``chunk_id``."""
     stores = RunnerWiring.of(request).read_stores()
     return RequeueScope(
         chunk_id=chunk_id,
@@ -31,10 +25,7 @@ def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:
 
 
 def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpenScope:
-    """The chunk-keyed facts :meth:`~blizzard.runner.lifecycle.takeover.TakeoverService.open`
-    reads: the open takeover, the held bindings, the active and latest leases, the
-    fence-epoch floor, whether a runner requeue of the chunk is pending, and whether the active
-    lease is ask-parked or has a submission buffered."""
+    """The :class:`TakeoverOpenScope` for ``chunk_id``."""
     stores = RunnerWiring.of(request).read_stores()
     active = stores.lease_record.active_lease_for_chunk(chunk_id)
     return TakeoverOpenScope(
@@ -51,7 +42,6 @@ def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpe
 
 
 def resolved_takeover_close_scope(chunk_id: str, request: Request) -> TakeoverCloseScope:
-    """The chunk-keyed fact :meth:`~blizzard.runner.lifecycle.takeover.TakeoverService.close`
-    reads: the chunk's open takeover, if any."""
+    """The :class:`TakeoverCloseScope` for ``chunk_id``."""
     stores = RunnerWiring.of(request).read_stores()
     return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id))

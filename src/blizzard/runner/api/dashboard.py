@@ -1,13 +1,9 @@
 """The runner-local composed dashboard read — ``GET /api/dashboard``.
 
-Folds the panel's nine status polls (``/runner``, ``/environments``, ``/asks?open=true``,
-``/escalations``, ``/takeovers``, ``/facts``, ``/harness-health``, ``/subscriptions``,
-``/fleet-summary``) into one response, each section built by the same extracted
-view-builder its own individual route calls (``canon:one-owner`` — one place owns each
-section's wire shape). The eight local sections are read-only over their wiring
-(``bzh:controller-read-only``) and always populate; only ``fleet_summary`` is a hub
-pass-through, so it alone degrades to ``None`` rather than failing the whole read, on a
-hub outage or an unwired runner."""
+Composes the panel's status reads into one response, each section built by its own
+route's view-builder (``canon:one-owner``). The local sections are read-only over their
+wiring (``bzh:controller-read-only``) and always populate; only ``fleet_summary`` is a hub
+pass-through, so it alone degrades to ``None`` on a hub outage or an unwired runner."""
 
 from __future__ import annotations
 
@@ -31,10 +27,8 @@ from blizzard.wire.runner_status import DashboardView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
-#: A slow hub must not stall the six local sections behind it, so this route's own
-#: outbound call fails fast rather than riding the ``HubProxy`` module default — the
-#: retry ceiling a caller-supplied ``timeout`` overrides is the whole-forward budget,
-#: so this stays a 3s degradation even under retry.
+#: A slow hub must not stall the local sections, so the hub call carries its own short
+#: whole-forward budget (see ``HubProxy.forward``).
 _DASHBOARD_HUB_TIMEOUT = 3.0
 
 
@@ -65,9 +59,7 @@ def _maybe_fleet_summary(request: Request) -> FleetSummaryView | None:
         # Unwired to a hub — the same shape an unenrolled runner already reports.
         return None
     try:
-        # A hub outage here is tolerated degradation, not an operational failure — the six
-        # local sections still stand, so this route's own unreachable-hub line logs below
-        # the module default.
+        # A hub outage is tolerated degradation, so its log line drops below the default severity.
         return _fleet_summary(proxy, timeout=_DASHBOARD_HUB_TIMEOUT, severity="warning")
     except HTTPException:
         # Hub unreachable, or answered with a non-200 — the local sections still stand.

@@ -53,10 +53,8 @@ class OverloadContext(Protocol):
 def classify_worker_overload(
     ctx: OverloadContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
-    """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
-    ``lines`` — the caller's own single read of this generation's stdout and transcript
-    range, shared with its usage-limit classification so neither pays for the other's read.
-    ``None`` when not overloaded, or the owner is unresolvable."""
+    """This generation's own spawn/resume/nudge invocation, classified over its already-read
+    ``output`` and transcript ``lines``. ``None`` when not overloaded, or the owner is unresolvable."""
     session = lease.session
     if session is None:
         return None
@@ -68,8 +66,7 @@ def classify_worker_overload(
 
 def record_worker_overload(ctx: OverloadContext, lease: Lease, overload: ProviderOverload, *, generation: int) -> bool:
     """Record this worker generation's overload fact. Returns ``True`` iff the lease should
-    now back off in place — ``False`` on the streak's fall-through, where the caller
-    proceeds on today's ordinary path (a worker judged as usual)."""
+    now back off in place — ``False`` on the streak's fall-through."""
     return _record(
         ctx, lease, overload, generation=generation, invocation_kind="worker", invocation_identity=str(generation)
     )
@@ -78,9 +75,8 @@ def record_worker_overload(ctx: OverloadContext, lease: Lease, overload: Provide
 def classify_judge_overload(
     ctx: OverloadContext, lease: Lease, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
-    """This generation's own judge elicitation, classified over its already-read output and
-    transcript range (judge boundary to tail, shared with usage-limit classification)
-    — ``None`` when not overloaded."""
+    """This generation's own judge elicitation, classified over its already-read ``output`` and
+    transcript ``lines`` — ``None`` when not overloaded."""
     session = lease.session
     if session is None:
         return None
@@ -94,8 +90,7 @@ def record_judge_overload(
     ctx: OverloadContext, lease: Lease, overload: ProviderOverload, *, generation: int, invocation_identity: str
 ) -> bool:
     """Record this judge elicitation's overload fact. Returns ``True`` iff the lease should
-    now back off in place — ``False`` on the streak's fall-through, where the caller
-    proceeds on today's ordinary path (a verdict-less judge fails as usual)."""
+    now back off in place — ``False`` on the streak's fall-through."""
     return _record(
         ctx, lease, overload, generation=generation, invocation_kind="judge", invocation_identity=invocation_identity
     )

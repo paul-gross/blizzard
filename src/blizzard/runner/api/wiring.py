@@ -1,6 +1,6 @@
 """Resolving what the composition root wired onto ``app.state`` (``bzh:dependency-injection``).
 
-Every seam is optional — the OpenAPI exporter and the unit tier build a store-free app — so a
+Every seam is optional, so a
 route asks for what it needs and is refused with a ``503`` naming it, never served on nothing.
 No accessor here resolves a write-capable store or bundle (``bzh:controller-read-only``):
 :meth:`RunnerWiring.read_stores` is the one many-concept read, and every
@@ -218,10 +218,8 @@ class RunnerWiring:
         return service if service is not None else self._refuse("workspace prompt service")
 
     def events(self) -> IRunnerEventPublisher | None:
-        """The publish seam — see :mod:`~blizzard.runner.events.publisher`
-        for why this is typed against the Protocol, not the concrete broker a composition root
-        wires. ``None`` on a composer with no stream to feed — never refused: a mutating route
-        publishes when one is wired and is a no-op otherwise, the stream route's own shape."""
+        """The publish seam, typed against :mod:`~blizzard.runner.events.publisher`'s Protocol.
+        ``None`` when none is wired — never refused."""
         return getattr(self.state, "events", None)
 
     def maybe_config(self) -> RunnerConfig | None:
