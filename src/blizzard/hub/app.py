@@ -80,7 +80,7 @@ from blizzard.hub.composition import (
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig, LegacyKeys
-from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult
+from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
@@ -486,6 +486,7 @@ def build_hosted_app(
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
+        LegacyStart.of(core.config_import, LegacyKeys.read(config.config_path, os.environ)).check()
         OrphanedProviders.of(config, services).check()
         KeyCoverage.of(core.secrets, secret_keys).check()
         # Before the hub serves: a live slot now belongs to a run the previous process died in.
