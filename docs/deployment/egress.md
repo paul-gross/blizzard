@@ -4,8 +4,8 @@ The hub can write its operational facts to a directory of immutable files, so a 
 answer cost by node by day, the slowest station of the week, or which files a station read, without calling the hub.
 Three datasets leave: `steps`, one row per closed node-step, `invocations`, one row per usage report, and `events`, the
 file reads, skill invocations and agent spawns derived from the fleet's transcripts. This is a push export to files you
-own. The pull-based HTTP exports are in [`analytics.md`](./analytics.md), which is the place to look for a quick
-answer rather than a persistent one.
+own. The pull-based HTTP exports are in [`analytics.md`](./analytics.md), which is the place to look for a quick answer
+rather than a persistent one.
 
 ## Turning it on
 
@@ -318,18 +318,56 @@ rather than when the hub last derived it.
 
 ### DuckDB
 
-Read the directory in place. Bind the dataset's name to the files, then run the dictionary's view over it. For NDJSON,
+Read the directory in place, through its manifests. A manifest lists the files its pass placed, so a file no manifest
+names, such as a stray copy or a half-finished upload, is never read. Set each dataset's file list from `_manifests/`,
+bind the dataset's name to those files, then run the dictionary's view over it. Replace `<directory>` with the export
+directory and `<dataset>` with `steps`, `invocations` or `events`; run the first statement of a pair, then the second.
+
+For NDJSON:
+
+<!-- recipe:load-ndjson -->
+
+```sql
+SET VARIABLE <dataset>_files = (
+  SELECT list('<directory>/' || file.path)
+  FROM (SELECT unnest(files) AS file FROM read_json_auto('<directory>/_manifests/*.json', union_by_name = true))
+  WHERE file.dataset = '<dataset>'
+);
+CREATE VIEW <dataset> AS
+SELECT * FROM read_json_auto(getvariable('<dataset>_files'), format = 'newline_delimited');
+```
+
 `events` also needs `union_by_name = true` and `sample_size = -1`, since a column that is null throughout one file is
 typed by another:
 
+<!-- recipe:load-events-ndjson -->
+
 ```sql
-CREATE VIEW steps AS
-SELECT * FROM read_json_auto('<directory>/steps/v1/*/*.ndjson.gz', format = 'newline_delimited');
+SET VARIABLE events_files = (
+  SELECT list('<directory>/' || file.path)
+  FROM (SELECT unnest(files) AS file FROM read_json_auto('<directory>/_manifests/*.json', union_by_name = true))
+  WHERE file.dataset = 'events'
+);
+CREATE VIEW events AS
+SELECT * FROM read_json_auto(getvariable('events_files'), format = 'newline_delimited',
+                             union_by_name = true, sample_size = -1);
 ```
 
-For Parquet, `SELECT * FROM read_parquet('<directory>/steps/v1/*/*.parquet')`. Wrap the dictionary's view
-around that relation. The cost and slowest recipes read the newest-copy view as `steps_newest`, the events recipes read
-`events_current` the same way, and a station is a graph and a node name.
+For Parquet, the same file list, read with `read_parquet`:
+
+<!-- recipe:load-parquet -->
+
+```sql
+SET VARIABLE <dataset>_files = (
+  SELECT list('<directory>/' || file.path)
+  FROM (SELECT unnest(files) AS file FROM read_json_auto('<directory>/_manifests/*.json', union_by_name = true))
+  WHERE file.dataset = '<dataset>'
+);
+CREATE VIEW <dataset> AS SELECT * FROM read_parquet(getvariable('<dataset>_files'));
+```
+
+Wrap the dictionary's view around that relation. The cost and slowest recipes read the newest-copy view as
+`steps_newest`, the events recipes read `events_current` the same way, and a station is a graph and a node name.
 
 Cost by node by day, billed and estimated kept apart as the spend surface keeps them. NDJSON carries money as a string,
 so the recipe reads it as a decimal; Parquet already is one:
@@ -405,14 +443,19 @@ decimal with scale nine.
 `blizzard hub egress status` reports whether the export is on, its directory and format, each dataset's cursor and lag,
 the last pass and file, the last error and the free space. Run it first, and again after either verb below.
 
-- **Backfill** writes the rows of a window again without moving a cursor:
-  `blizzard hub egress backfill --since <t>
-  --until <t>`, narrowed with `--dataset`. The rows are assembled as live
+- **Backfill** writes the rows of a window again without moving a cursor, narrowed with `--dataset`:
+
+  ```sh
+  blizzard hub egress backfill --since <t> --until <t>
+  ```
+
+  A time is either naive, read in the caller's own local time, or a zoned RFC 3339 instant such as an export's own times
+  (`2026-10-06T14:30:00.000000Z`, or the same instant as `2026-10-06T16:30:00+02:00`). The rows are assembled as live
   ones are, from the record as it stands, into new files with `backfill` in their names. A window over
-  `backfill_max_window`, or one whose `--until` is in the future, is refused (the command refuses a future `--until` itself, before it sends). A window that reaches past a dataset's
-  live cursor is written anyway, and the live export writes those rows again when its cursor gets there. `--dry-run`
-  counts and writes nothing, and works with the export off, which is a cheap way to size a window; without it, a hub
-  with the export off refuses the backfill.
+  `backfill_max_window`, or one whose `--until` is in the future, is refused (the command refuses a future `--until`
+  itself, before it sends). A window that reaches past a dataset's live cursor is written anyway, and the live export
+  writes those rows again when its cursor gets there. `--dry-run` counts and writes nothing, and works with the export
+  off, which is a cheap way to size a window; without it, a hub with the export off refuses the backfill.
 - **Reset** moves one dataset's cursor: `blizzard hub egress reset --dataset <name> --to <t>`. Forward skips the window
   and never exports it; back repeats it into new files. The move is recorded as an `egress-cursor-reset` event. When an
   export is turned off and on again its cursor resumes where it stopped, so the directory holds no gap unless you reset.

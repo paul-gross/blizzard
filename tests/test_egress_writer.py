@@ -91,6 +91,28 @@ def test_a_value_a_format_could_not_hold_exactly_is_an_invalid_row(overrides: di
     assert result.cause is EgressFailureCause.INVALID_ROW
 
 
+@pytest.mark.parametrize(
+    ("overrides", "problem"),
+    [
+        ({"n": -(2**63) - 1}, "column n: outside int64"),
+        ({"tags": {"a"}}, "column tags: not a sequence of str"),
+        ({"cost": Decimal("1E+50")}, "column cost: does not fit decimal(18, 9)"),
+        ({"id": "a\ud800"}, "column id: not encodable as UTF-8"),
+        ({"tags": ["ok", "b\udfff"]}, "column tags: not encodable as UTF-8"),
+    ],
+)
+def test_a_refused_value_names_the_branch_that_refused_it(overrides: dict[str, object], problem: str) -> None:
+    result = InMemoryEgressWriter().write(batch(row(**overrides)))
+    assert isinstance(result, EgressFailure)
+    assert result.cause is EgressFailureCause.INVALID_ROW
+    assert result.message == f"row 0, {problem}"
+
+
+def test_int64_bounds_are_valid() -> None:
+    result = InMemoryEgressWriter().write(batch(row(n=2**63 - 1), row(n=-(2**63))))
+    assert isinstance(result, FilesWritten)
+
+
 def test_a_row_with_missing_or_extra_columns_is_invalid() -> None:
     writer = InMemoryEgressWriter()
     assert isinstance(writer.write(batch(EgressValues("p", {"id": "a"}))), EgressFailure)

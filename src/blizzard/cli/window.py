@@ -1,8 +1,9 @@
 """The ``--since``/``--until`` window flags CLI verbs share — one declaration of each
-flag, read in the caller's local time and converted to UTC for the wire."""
+flag, a bare time read in the caller's local time and a zoned one as its own instant, converted to UTC for the wire."""
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, overload
 
@@ -10,6 +11,22 @@ import click
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.store.utc import iso_utc
+
+_ZONED = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})")
+
+
+class WindowTime(click.DateTime):
+    """The click ``datetime`` type, which also takes an RFC 3339 instant with ``Z`` or a ``±hh:mm`` offset, as an
+    export writes its times. A zoned value becomes the naive local wall clock of that instant, so every consumer
+    reads it as it reads a bare one."""
+
+    def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+        if isinstance(value, str) and _ZONED.fullmatch(value):
+            try:
+                return datetime.fromisoformat(value).astimezone().replace(tzinfo=None)
+            except ValueError:
+                self.fail(f"{value!r} is not a valid RFC 3339 time.", param, ctx)
+        return super().convert(value, param, ctx)
 
 
 @overload
@@ -27,8 +44,9 @@ def since_option(*, required: bool = False) -> Any:
     attrs: dict[str, Any] = {"required": True} if required else {"default": None}
     return click.option(
         "--since",
-        type=click.DateTime(),
-        help="Only records at/after this instant, read in the caller's own local time.",
+        type=WindowTime(),
+        help="Only records at/after this instant: a bare time is read in the caller's own local time, "
+        "one ending Z or +hh:mm is that instant.",
         **attrs,
     )
 
@@ -38,8 +56,9 @@ def until_option(*, required: bool = False) -> Any:
     attrs: dict[str, Any] = {"required": True} if required else {"default": None}
     return click.option(
         "--until",
-        type=click.DateTime(),
-        help="Only records before this instant, read in the caller's own local time.",
+        type=WindowTime(),
+        help="Only records before this instant: a bare time is read in the caller's own local time, "
+        "one ending Z or +hh:mm is that instant.",
         **attrs,
     )
 

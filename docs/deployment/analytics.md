@@ -45,7 +45,8 @@ an inapplicable flag is refused with a does-not-apply error, never silently drop
 Every dataset shares `--graph`, `--source`, `--since`, `--until`; `--extractor-version` defaults to the sweep's current
 version — an older one reads that version's rows alone, since mixing would double-count — and the event projection adds
 `--kind`, `--tool`, `--subject-prefix`, `--node`. `--since`/`--until` are read in the operator's local wall clock and
-converted to UTC before the wire — a bare 10:00 means the operator's 10am, whatever timezone the hub runs in.
+converted to UTC before the wire — a bare 10:00 means the operator's 10am, whatever timezone the hub runs in. A time
+ending `Z` or `±hh:mm` is that instant instead.
 
 None of the seven routes defaults or requires a since/until window (unlike `/api/spend`, requiring `since`, or
 `/api/activity`, defaulting to 24h): an unfiltered call costs a full scan — acceptable at today's volumes, a deliberate

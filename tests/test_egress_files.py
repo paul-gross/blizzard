@@ -11,6 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import BinaryIO
 
+import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -29,6 +30,7 @@ from blizzard.hub.egress.writer import (
     ManifestCommitted,
     PlacedFile,
 )
+from tests.egress_recipes import LOAD_NDJSON, LOAD_PARQUET, load
 from tests.test_egress_writer import PASS, SCHEMA, batch, row
 
 pytestmark = pytest.mark.component
@@ -260,6 +262,35 @@ def test_an_invalid_row_writes_nothing(fmt: str, tmp_path: Path) -> None:
     result = make(fmt, tmp_path).write(batch(row("p1"), row("p2", cost=1.5)))
     assert isinstance(result, EgressFailure) and result.cause is EgressFailureCause.INVALID_ROW
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+@pytest.mark.parametrize("poison", ["a\ud800", ["ok", "b\udfff"]])
+def test_a_lone_surrogate_is_an_invalid_row_in_both_formats(fmt: str, poison: object, tmp_path: Path) -> None:
+    column = "tags" if isinstance(poison, list) else "id"
+    result = make(fmt, tmp_path).write(batch(row("p1", **{column: poison})))
+    assert isinstance(result, EgressFailure) and result.cause is EgressFailureCause.INVALID_ROW
+    assert result.message == f"row 0, column {column}: not encodable as UTF-8"
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_the_docs_load_recipe_reads_only_the_files_a_manifest_names(fmt: str, tmp_path: Path) -> None:
+    writer = make(fmt, tmp_path)
+    written = writer.write(batch(row("p1", id="named-1"), row("p2", id="named-2")))
+    assert isinstance(written, FilesWritten)
+    assert isinstance(writer.commit_pass(PASS, written.files), ManifestCommitted)
+    # A sibling in the same partition, copied from a placed file under another name, that no manifest lists.
+    placed = tmp_path / written.files[0].path
+    stray = placed.with_name(f"stray-{placed.name}")
+    stray.write_bytes(placed.read_bytes())
+    stray_rows = read_back(fmt, stray)
+    assert stray_rows == read_back(fmt, placed)
+
+    connection = duckdb.connect()
+    load(connection, LOAD_NDJSON if fmt == "ndjson" else LOAD_PARQUET, tmp_path, SCHEMA.name)
+
+    assert connection.execute(f"SELECT id FROM {SCHEMA.name} ORDER BY id").fetchall() == [("named-1",), ("named-2",)]
 
 
 def test_parquet_is_unavailable_without_pyarrow_and_never_raises(

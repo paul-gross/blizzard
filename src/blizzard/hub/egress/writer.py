@@ -200,7 +200,9 @@ def _value_problem(column: ColumnSpec, value: object) -> str | None:
         return None if column.nullable else "null in a non-nullable column"
     match column.type:
         case ColumnType.STRING:
-            return None if isinstance(value, str) else "not a str"
+            if not isinstance(value, str):
+                return "not a str"
+            return _encoding_problem(value)
         case ColumnType.INT64:
             if isinstance(value, bool) or not isinstance(value, int):
                 return "not an int"
@@ -218,7 +220,18 @@ def _value_problem(column: ColumnSpec, value: object) -> str | None:
         case ColumnType.STRING_LIST:
             if isinstance(value, str) or not isinstance(value, list | tuple):
                 return "not a sequence of str"
-            return None if all(isinstance(item, str) for item in value) else "an element is not a str"
+            if not all(isinstance(item, str) for item in value):
+                return "an element is not a str"
+            return next((problem for item in value if (problem := _encoding_problem(item))), None)
+
+
+def _encoding_problem(value: str) -> str | None:
+    """A lone surrogate has no UTF-8 form, so Parquet cannot store it and NDJSON would only escape it."""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return "not encodable as UTF-8"
+    return None
 
 
 def _money_problem(value: object) -> str | None:

@@ -30,7 +30,7 @@
               "type": "text"
             },
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -42,7 +42,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -331,7 +331,7 @@
               "type": "text"
             },
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -343,7 +343,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -1877,7 +1877,7 @@
           "help": "Write the rows of [since, until) again, as the live export would have, without moving a cursor. The files\ncarry backfill in their names, each row lands in its own date's partition, and a loader keeps the copy with the\nlatest exported_at. A window over backfill_max_window is refused, not split.",
           "params": [
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -1889,7 +1889,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -2084,7 +2084,7 @@
           "type": "text"
         },
         {
-          "help": "Only records at/after this instant, read in the caller's own local time.",
+          "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
           "hidden": false,
           "kind": "option",
           "name": "since",
@@ -4830,7 +4830,7 @@
               "type": "text"
             },
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -4842,7 +4842,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -5196,7 +5196,7 @@
               "type": "text"
             },
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -5208,7 +5208,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -5262,7 +5262,7 @@
               "type": "text"
             },
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -5274,7 +5274,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -5349,7 +5349,7 @@
           "help": "List every run minted in --since/--until, newest first \u2014 both default to the\nlast 24 hours ending now.",
           "params": [
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -5361,7 +5361,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -6852,7 +6852,7 @@
           "help": "Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span\nids. The live cursor does not move, so spans the backend already holds arrive again \u2014 it dedupes on their\nids. A range over replay_max_window is told in windows; a failure names the --since to resume from.",
           "params": [
             {
-              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -6864,7 +6864,7 @@
               "type": "datetime"
             },
             {
-              "help": "Only records before this instant, read in the caller's own local time.",
+              "help": "Only records before this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
               "hidden": false,
               "kind": "option",
               "name": "until",
