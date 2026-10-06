@@ -519,30 +519,6 @@ def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None
     assert "serving blizzard-hub" not in result.output
 
 
-def test_hub_host_reports_an_unset_work_source_token_env_as_a_clean_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A `[[work_source]]` naming an unset `token_env` fails at boot as the same
-    clean CLI error the config-load guard raises — not an unhandled traceback; the
-    boot failure is by design, the traceback was not."""
-    runner = CliRunner()
-    root = tmp_path / "hub"
-    assert runner.invoke(blizzard, ["hub", "init", str(root)]).exit_code == 0
-    monkeypatch.delenv("BZ_WORK_SOURCE_TOKEN", raising=False)
-    (root / "blizzard-hub.toml").write_text(
-        (root / "blizzard-hub.toml").read_text() + '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\n'
-        'repo = "paul-gross/blizzard"\ntoken_env = "BZ_WORK_SOURCE_TOKEN"\n'
-    )
-
-    result = runner.invoke(blizzard, ["hub", "host", "--dir", str(root)])
-
-    assert result.exit_code != 0
-    assert result.exception is None or isinstance(result.exception, SystemExit)
-    assert "BZ_WORK_SOURCE_TOKEN" in result.output  # names the variable the operator must set
-    # It never claims to be serving a daemon it then fails to build.
-    assert "serving blizzard-hub" not in result.output
-
-
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:
     """A configured-but-missing ``runner_prompt_file`` fails at boot as a
     clean CLI error: ``PeriodicDriver`` resolves it before any socket binds, rather than

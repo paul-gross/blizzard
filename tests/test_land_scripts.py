@@ -1197,6 +1197,24 @@ def test_an_unset_forge_url_names_it_and_exits_non_zero(
 
 
 @pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
+def test_a_chunk_with_no_commits_lands_as_a_no_op_without_any_forge_variable(
+    monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name in ("BZ_FORGE_URL", "BZ_FORGE_TOKEN", "BZ_FORGE_OWNER", "BZ_HUB_BASE_BRANCH", "BZ_HUB_ARTIFACT_NAMES"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", "[]")
+    monkeypatch.setenv("BZ_HUB_EXPECT_GIT_COMMITS", "0")
+    monkeypatch.setattr(
+        module, "forge_request", lambda *a, **k: pytest.fail("must not contact the forge"), raising=False
+    )
+
+    code = module.main()
+
+    assert code in (0, None)
+    assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
+
+
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_malformed_git_commits_json_names_it_and_exits_non_zero(
     monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
 ) -> None:

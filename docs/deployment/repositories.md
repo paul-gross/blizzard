@@ -13,14 +13,14 @@ blizzard hub repo show blizzard
 
 ## Fields
 
-| Field           | Meaning                                                                    |
-| --------------- | -------------------------------------------------------------------------- |
-| `name`          | The record's handle. It never changes.                                     |
-| `forge_api_url` | The forge's API origin, an absolute `http` or `https` URL.                 |
-| `owner`         | The repository's owner on the forge.                                       |
-| `repo`          | The repository's name on the forge.                                        |
-| `base_branch`   | The branch work lands on.                                                  |
-| `secret_name`   | The stored [secret](./secrets.md) holding the forge token (`--secret`).    |
+| Field           | Meaning                                                                 |
+| --------------- | ----------------------------------------------------------------------- |
+| `name`          | The record's handle. It never changes.                                  |
+| `forge_api_url` | The forge's API origin, an absolute `http` or `https` URL.              |
+| `owner`         | The repository's owner on the forge.                                    |
+| `repo`          | The repository's name on the forge.                                     |
+| `base_branch`   | The branch work lands on.                                               |
+| `secret_name`   | The stored [secret](./secrets.md) holding the forge token (`--secret`). |
 
 Every field is required, and none can be cleared. Each `(forge_api_url, owner, repo)` belongs to one record.
 
@@ -49,7 +49,24 @@ The board's Admin page lists repositories, with each record's revision, last cha
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change.
 
-## What a record does not change yet
+## How delivery uses a record
 
-A stored repository does not yet change where the hub delivers. Delivery still takes its forge, owner, base branch, and
-token from the hub's `BZ_FORGE_*` settings described in [install.md](./install.md).
+A `deliver` step resolves its chunk's commit pointers to repository records before any command runs, and fills the forge
+variables of its environment from the record: `BZ_FORGE_URL` from `forge_api_url`, `BZ_FORGE_OWNER` from `owner`,
+`BZ_HUB_BASE_BRANCH` from `base_branch`, and `BZ_FORGE_TOKEN` from the secret, revealed for that step. Each commit's
+`repo` is qualified to the record's `owner/repo`.
+
+A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
+`file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
+after the chunk was minted, so retiring a repository never strands work already under way. A chunk with no commits has
+nothing to resolve and lands as a no-op.
+
+Two outcomes refuse the step before it runs, route its failure choice, and record an event
+([observability.md](./observability.md)):
+
+- `repository-unresolved` — no record stands for a pointer, or its name matches several records.
+- `repositories-disagree` — the pointers resolve to records that differ on forge, owner, base branch or secret, so there
+  is no single landing target.
+
+The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. Setting
+`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` in the hub's environment has no effect.

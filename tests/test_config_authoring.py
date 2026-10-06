@@ -351,6 +351,18 @@ def test_repository_edit_retire_and_enable_each_move_the_revision_and_append_one
     assert world.repos.list_all(include_retired=False) == [enabled]
 
 
+def test_a_retired_repository_reads_the_time_of_its_newest_retirement_and_an_enabled_one_none(world: _World) -> None:
+    record = world.authoring.create_repository("demo", _REPO, OP)
+    assert world.repo().retired_at is None
+
+    retired = world.authoring.retire_repository(record, OP)
+    assert (world.repo().retired, world.repo().retired_at) == (True, _NOW)
+    assert world.repos.list_all(include_retired=True)[0].retired_at == _NOW
+
+    world.authoring.enable_repository(retired, OP)
+    assert (world.repo().retired, world.repo().retired_at) == (False, None)
+
+
 def test_a_repository_write_that_changes_nothing_writes_nothing(world: _World) -> None:
     record = world.authoring.create_repository("demo", _REPO, OP)
     before = world.count()

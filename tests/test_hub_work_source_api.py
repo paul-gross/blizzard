@@ -1,6 +1,6 @@
 """``GET /chunks/{id}/work-items`` renders a hub-owned pointer through the unchanged
-handler (component tier) — the built-in ``hub`` source needs no
-``[[work_source]]`` to resolve at ingest or render at read.
+handler (component tier) — the built-in ``hub`` source needs no configured
+record to resolve at ingest or render at read.
 
 Also exercises the source-addressed editor routes: ``/api/work-sources``
 and its ``{source}/items``/``{source}/items/{ref}`` children."""

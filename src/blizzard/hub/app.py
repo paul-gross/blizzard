@@ -72,7 +72,7 @@ from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
-from blizzard.hub.composition import HubServices, build_process_core, build_services
+from blizzard.hub.composition import HubServices, build_live_config, build_process_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -90,16 +90,6 @@ from blizzard.hub.secrets import KeyCoverage, hub_key_provider
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
-
-ENV_FORGE_URL = "BZ_FORGE_URL"
-ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-# Qualifies a bare (worktree-name-only) delivery repo into the forge's ``owner/name`` coordinate.
-ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
-# Defaults to "blizzard" when unset, qualifying a bare repo name into that owner.
-DEFAULT_FORGE_OWNER = "blizzard"
-# The branch every PR/merge targets, so a PR's ``base`` resolves instead of 422-ing.
-ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
-DEFAULT_FORGE_BASE_BRANCH = "main"
 
 #: The transcript-event derivation sweep's own interval — a module
 #: constant; its own change probe skips the pass when nothing changed.
@@ -400,12 +390,16 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
     # The one process-scoped clock and the stores and leaf services built once over it —
     # the work-source registry and `build_services` below both take the same core.
     core = build_process_core(engine)
+    # Minted here on first start when no key source exists yet.
+    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+    live = build_live_config(core, secret_keys=secret_keys)
     work_source_registry = WorkSourceEntry.registry(
-        config.work_sources,
+        records=core.work_source_records,
+        objects=live.objects,
+        secrets=live.secrets,
         users=core.users,
         work_item_store=core.work_item_store,
         edits=core.work_item_edits,
@@ -413,7 +407,7 @@ def build_hosted_app(
         close_forge_writes_enabled=config.close_forge_writes_enabled,
         instrument_client=platform_tracing.instrument_client,
     )
-    base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
+    _announce_ignored_work_source_blocks(config)
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -422,8 +416,6 @@ def build_hosted_app(
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
-    # Minted here on first start when no key source exists yet.
-    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
     oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
     forge_client = httpx.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
@@ -433,12 +425,9 @@ def build_hosted_app(
         core,
         events=EventBroker(),
         work_sources=work_source_registry,
-        base_branch=base_branch,
+        secrets=live.secrets,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
-        forge_url=os.environ.get(ENV_FORGE_URL),
-        forge_token=os.environ.get(ENV_FORGE_TOKEN),
-        forge_owner=owner,
         public_url=config.public_url,
         forge_http_client=forge_client,
         oauth_providers=oauth_providers,
@@ -494,6 +483,17 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
     )
+
+
+def _announce_ignored_work_source_blocks(config: HubConfig) -> None:
+    """Work sources are records; the file's ``[[work_source]]`` blocks are parsed and never read.
+    One warning per start names them, so an operator sees which blocks to carry over and drop."""
+    if config.work_sources:
+        get_logger("blizzard.hub").warning(
+            "ignoring [[work_source]] blocks: work sources are records, configured through `blizzard hub source`",
+            config=str(config.config_path),
+            sources=[source.name for source in config.work_sources],
+        )
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:

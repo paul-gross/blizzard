@@ -37,17 +37,17 @@ owns what that assumption still costs.
 
 ### Configuring what workers do
 
-| File                                                                             | When to read                                                                                                                                         |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deployment/config-changes.md`](./deployment/config-changes.md)                 | You are asking who changed a work source, a repository, or a secret, when, through which door, and what changed                                      |
-| [`deployment/config-documents.md`](./deployment/config-documents.md)             | You are declaring work sources and repositories in one YAML or JSON file, applying it, dry-running it, or exporting the current records              |
-| [`deployment/work-sources.md`](./deployment/work-sources.md)                     | You are declaring the `[[work_source]]` bindings a chunk's work item is read through: credentials, label projection, delivery closure, ingest tokens |
-| [`deployment/repositories.md`](./deployment/repositories.md)                     | You are storing the repositories work lands in: forge, owner, repo, base branch, and the secret that authenticates                                   |
-| [`deployment/worker-spawn.md`](./deployment/worker-spawn.md)                     | You are deciding what a worker process is handed: forwarded environment vars, model and effort tiers, session stickiness, and the spawn preamble     |
-| [`deployment/artifacts.md`](./deployment/artifacts.md)                           | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                               |
-| [`deployment/transcripts.md`](./deployment/transcripts.md)                       | You are turning on either transcript lane — the context warn lane, or shipping session content to the hub; both off by default                       |
-| [`deployment/routines-and-scopes.md`](./deployment/routines-and-scopes.md)       | You are authoring a routine's graph and run defaults, or a scope's slug and description                                                              |
-| [`deployment/findings-and-proposals.md`](./deployment/findings-and-proposals.md) | You are reading a routine's findings bucket, or listing the garden proposals waiting on a decision                                                   |
+| File                                                                             | When to read                                                                                                                                     |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`deployment/config-changes.md`](./deployment/config-changes.md)                 | You are asking who changed a work source, a repository, or a secret, when, through which door, and what changed                                  |
+| [`deployment/config-documents.md`](./deployment/config-documents.md)             | You are declaring work sources and repositories in one YAML or JSON file, applying it, dry-running it, or exporting the current records          |
+| [`deployment/work-sources.md`](./deployment/work-sources.md)                     | You are creating the work source records a chunk's work item is read through: credentials, label projection, delivery closure, ingest tokens     |
+| [`deployment/repositories.md`](./deployment/repositories.md)                     | You are storing the repositories work lands in: forge, owner, repo, base branch, and the secret that authenticates                               |
+| [`deployment/worker-spawn.md`](./deployment/worker-spawn.md)                     | You are deciding what a worker process is handed: forwarded environment vars, model and effort tiers, session stickiness, and the spawn preamble |
+| [`deployment/artifacts.md`](./deployment/artifacts.md)                           | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                           |
+| [`deployment/transcripts.md`](./deployment/transcripts.md)                       | You are turning on either transcript lane — the context warn lane, or shipping session content to the hub; both off by default                   |
+| [`deployment/routines-and-scopes.md`](./deployment/routines-and-scopes.md)       | You are authoring a routine's graph and run defaults, or a scope's slug and description                                                          |
+| [`deployment/findings-and-proposals.md`](./deployment/findings-and-proposals.md) | You are reading a routine's findings bucket, or listing the garden proposals waiting on a decision                                               |
 
 ### Operating a running fleet
 

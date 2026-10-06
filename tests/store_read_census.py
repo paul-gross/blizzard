@@ -57,8 +57,9 @@ from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges
+from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
+from blizzard.hub.domain.config.revisions import IReadConfigRevisions
 from blizzard.hub.domain.config.secrets import ISecretCatalog, SecretName
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
@@ -93,6 +94,7 @@ from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -947,6 +949,7 @@ class HubWorld:
     garden_trend: IReadGardenTrendRepository
     work_items: IReadWorkItemRepository
     secrets: ISecretCatalog
+    config_revisions: IReadConfigRevisions
     default_graph: Graph
     graph: Graph
     retired_graph: Graph
@@ -1754,6 +1757,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         garden_trend=garden_trend_store,
         work_items=work_items,
         secrets=secret_store,
+        config_revisions=ConfigRevisionsStore(store_connections),
         default_graph=default_graph,
         graph=graph,
         retired_graph=retired_graph,
@@ -2084,6 +2088,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
         include_retired=True
     ),
+    (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, "census-repo"),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None
     ),

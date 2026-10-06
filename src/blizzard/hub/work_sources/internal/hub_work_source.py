@@ -1,5 +1,5 @@
 """The built-in ``hub`` work source — always seated, no
-``[[work_source]]`` stanza, no credential. Unlike every other binding, this one's own
+configured record, no credential. Unlike every other binding, this one's own
 store is the item's system of record rather than a cache of an external one: nothing
 here is fetched from a forge.
 """
@@ -122,27 +122,6 @@ class HubWorkSource:
         if item is None:
             raise WorkItemRefUnknownError(pointer)
         return item
-
-
-def seat_hub_work_source(
-    sources: dict[str, IWorkSource],
-    editors: dict[str, IWorkEditor],
-    closers: dict[str, IWorkCloser],
-    *,
-    users: IReadUserRepository,
-    items: IReadWorkItemRepository,
-    edits: WorkItemEditService,
-    resolution: GardenProposalDeliveryResolution,
-) -> None:
-    """Seats the built-in ``hub`` binding in place — reached from both
-    :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
-    ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
-    ``edits``/``resolution`` are the composition root's own instances, so every write
-    path shares the same claim-locked instances."""
-    hub_source = HubWorkSource(items, edits, users, resolution)
-    sources[RESERVED_HUB_SOURCE_NAME] = hub_source
-    editors[RESERVED_HUB_SOURCE_NAME] = hub_source
-    closers[RESERVED_HUB_SOURCE_NAME] = hub_source
 
 
 def _conforms_work_source(x: HubWorkSource) -> IWorkSource:

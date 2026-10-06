@@ -71,7 +71,7 @@ def source_create(
     """Add work source NAME at revision 1.
 
     Refused when the name or the provider and locator are already taken — a retired source keeps its claim —
-    or when the secret is missing or retired. A stored source does not yet change what the hub ingests."""
+    or when the secret is missing or retired. The hub reads the record on its next use of the source."""
     body = {
         "name": name,
         "provider": provider,

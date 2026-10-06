@@ -60,6 +60,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
@@ -86,7 +87,13 @@ from tests.crash.support import (
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import daemon_log_sink, free_port, write_work_sources
+from tests.support import (
+    create_repositories,
+    create_work_sources,
+    daemon_log_sink,
+    fixture_repositories,
+    free_port,
+)
 
 pytestmark = [
     pytest.mark.e2e,
@@ -157,10 +164,11 @@ _BOUNDARY_TICK_SECONDS = "8"
 _TRACING = TracingConfig(sweep_seconds=1, settle_seconds=0)
 
 
-def _scaffold_traced_hub(hub_dir: Path, forge_port: int) -> None:
+def _scaffold_traced_hub(hub_dir: Path) -> None:
+    """Init the hub with the trace sweep tuned; its work source is seeded once it answers."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = dataclasses.replace(write_work_sources(hub_dir, default_work_sources(forge_port)), tracing=_TRACING)
+    config = dataclasses.replace(HubConfig.load(hub_dir), tracing=_TRACING)
     config.config_path.write_text(config.to_toml())
 
 
@@ -430,9 +438,14 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
     try:
         with forge_daemon(bin_dir, origins, forge_port) as forge:
             if fleet_traces.available:
-                _scaffold_traced_hub(hub_dir, forge_port)
+                _scaffold_traced_hub(hub_dir)
             hub_proc = start_hub(hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, extra_env=otel_env)
             await_http(hub, "/api/health", proc=hub_proc)
+            if fleet_traces.available:
+                create_work_sources(hub, default_work_sources(forge_port))
+                create_repositories(
+                    hub, fixture_repositories(default_work_sources(forge_port), f"http://127.0.0.1:{forge_port}")
+                )
 
             # 1. Mint the mixed graph and resolve each node's id (`GET/POST /api/graphs`'s
             # own `GraphView` — the wire shape this test's board/analytics assertions below

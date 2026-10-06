@@ -17,12 +17,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import HubConfig, WorkSourceConfig
+from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.tools.invariants import Invariants
+from blizzard.wire.work_source import WorkSourceDocument
 from tests.crash.support import (
     OWNER,
-    WORK_SOURCE_TOKEN_ENV,
     await_http,
     forge_daemon,
     git_bare,
@@ -34,7 +34,7 @@ from tests.crash.support import (
     winter_source,
     write_runner_config,
 )
-from tests.support import free_port
+from tests.support import fixture_work_source, free_port
 
 pytestmark = [
     pytest.mark.journey,
@@ -56,27 +56,14 @@ API_REPO = "toy-api"
 WEB_REPO = "toy-web"
 
 
-def _work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
-    """Two ``[[work_source]]`` bindings — one per fixture repo — since the
-    journey files issues across both. This is the case that proves the
-    repo-matching resolver: a first-entry shim would fetch half these issues from the
-    wrong repo the moment two sources are configured."""
+def _work_sources(forge_port: int) -> tuple[WorkSourceDocument, ...]:
+    """Two work sources — one per fixture repo — since the journey files issues across
+    both. This is the case that proves the repo-matching resolver: a first-entry shim
+    would fetch half these issues from the wrong repo the moment two sources are configured."""
     api_base = f"http://127.0.0.1:{forge_port}"
     return (
-        WorkSourceConfig(
-            name=API_REPO,
-            provider="github",
-            repo=f"{OWNER}/{API_REPO}",
-            token_env=WORK_SOURCE_TOKEN_ENV,
-            api_base=api_base,
-        ),
-        WorkSourceConfig(
-            name=WEB_REPO,
-            provider="github",
-            repo=f"{OWNER}/{WEB_REPO}",
-            token_env=WORK_SOURCE_TOKEN_ENV,
-            api_base=api_base,
-        ),
+        fixture_work_source(API_REPO, f"{OWNER}/{API_REPO}", api_base),
+        fixture_work_source(WEB_REPO, f"{OWNER}/{WEB_REPO}", api_base),
     )
 
 

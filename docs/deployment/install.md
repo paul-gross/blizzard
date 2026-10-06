@@ -16,11 +16,11 @@
 
 ## Configuration and credentials
 
-The hub's delivery credentials (`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`) go in `/etc/blizzard/hub.env`, alongside
-`BZ_FORGE_OWNER` — the owner used to qualify a bare repo name, defaulting to blizzard when unset; its work sources are
-`[[work_source]]` blocks in `blizzard-hub.toml`, owned by [work-sources.md](./work-sources.md); the runner's workspace
-and harness bindings live in its own `blizzard-runner.toml` and carry no credentials. Credentials the hub stores itself,
-written once and never read back, are owned by [secrets.md](./secrets.md).
+The hub's forge credentials are stored secrets, not environment variables: its work sources are records owned by
+[work-sources.md](./work-sources.md), the repositories it delivers to are records owned by
+[repositories.md](./repositories.md), and each names a secret owned by [secrets.md](./secrets.md) — create them with
+`blizzard hub secret`, `source` and `repo` once the hub answers. `/etc/blizzard/hub.env` carries deployment values only.
+The runner's workspace and harness bindings live in its own `blizzard-runner.toml` and carry no credentials.
 
 The hub's deployment-varying values — db_url, host, port — also resolve from the environment at load, precedence CLI
 flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_HUB_HOST`, `BZ_HUB_PORT`, with
@@ -63,15 +63,13 @@ none, but the drop is unconditional and irreversible — stop the hub, then copy
 guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and its `-wal` sidecar together — and remove
 any `hub.db-wal` already at the destination first, or its stale frames replay over the restored file.
 
-### The `[[work_source]]` rename
+### Work sources and forge settings are records
 
-A hub whose `blizzard-hub.toml` still declares `[[pm_source]]` will not start on this wheel: the key is renamed
-`[[work_source]]` with the block's contents unchanged, and `HubConfig.load` raises naming the new key — under the
-systemd layout `ExecStartPre`'s migrate is what fails, so the daemon never comes up; edit the toml before the restart.
-The refusal is deliberate rather than a silent alias: an ignored `[[pm_source]]` block would parse as zero external work
-sources, booting the hub clean while every external pointer's board label renders null; the built-in hub source needs no
-entry and is unaffected. `token_env` values need no change: only the table key was renamed — the scaffold's example
-value changed, but the variable name is your own choice.
+A hub whose `blizzard-hub.toml` still declares `[[work_source]]` blocks, or whose environment still sets `BZ_FORGE_URL`,
+`BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH`, starts and ignores them, logging one warning naming the
+blocks. Before the restart that carries the change, create the equivalent secrets, work source records and repository
+records, or ingest from those sources stops and every `deliver` step is refused with `repository-unresolved`; then
+delete the leftovers.
 
 Response bodies carry no rename alias: `pm_pointers` is now `work_refs` on every chunk, queue, and envelope view; a
 client reading the old name gets an empty list, not an error, so client code must change whichever path it calls.

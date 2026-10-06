@@ -59,7 +59,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
@@ -141,14 +141,17 @@ from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
+from blizzard.hub.forge.repository_commits import RepositoryCommitResolver
 from blizzard.hub.graphs import PACKAGED
-from blizzard.hub.secrets import secret_cipher
+from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.secrets import StoreSecretReader, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -309,7 +312,7 @@ class HubServices:
     secret_references: ISecretReferences
     #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
     config_authoring: ConfigAuthoring
-    #: Stored work-source records (the read half; ``work_sources`` is the boot-built registry).
+    #: Stored work-source records (the read half; ``work_sources`` reads through them on every call).
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
     repository_records: IReadRepositoryRecordRepository
@@ -404,6 +407,22 @@ class HubCore:
     config_changes: ConfigChangeStore
     config_apply: ConfigApplyStore
     clock: IClock
+
+
+@dataclass(frozen=True)
+class LiveConfig:
+    """The process's one built-object cache and the one secret reader its builders reveal
+    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
+
+    objects: ConfigObjectCache
+    secrets: ISecretReader
+
+
+def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
+    return LiveConfig(
+        objects=ConfigObjectCache(ConfigRevisionsStore(core.store_connections)),
+        secrets=StoreSecretReader(catalog=core.secrets, sealed=core.secrets, cipher=secret_cipher(secret_keys)),
+    )
 
 
 def build_process_core(engine: Engine) -> HubCore:
@@ -508,14 +527,11 @@ def build_services(
     *,
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
-    base_branch: str = "main",
+    secrets: ISecretReader,
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
     hub_workdir_root: Path | None = None,
     hub_marker_callback_base_url: str = "",
-    forge_url: str | None = None,
-    forge_token: str | None = None,
-    forge_owner: str | None = None,
     public_url: str | None = None,
     forge_http_client: httpx.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
@@ -672,12 +688,10 @@ def build_services(
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
         clock=clock,
         marker_authority=marker_authority,
-        base_branch=base_branch,
+        repositories=core.repository_records,
+        secrets=secrets,
         marker_callback_base_url=hub_marker_callback_base_url,
         tracer=platform_tracer,
-        forge_url=forge_url,
-        forge_token=forge_token,
-        forge_owner=forge_owner,
         public_url=public_url,
         work_sources=work_sources,
     )
@@ -740,11 +754,10 @@ def build_services(
     garden_formats = GardenFormats()
     # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
-    commit_resolver = GitHubCommitResolver(
-        forge_http_client or httpx.Client(timeout=10.0),
-        forge_url=forge_url,
-        forge_token=forge_token,
-        forge_owner=forge_owner,
+    commit_resolver = RepositoryCommitResolver(
+        repositories=core.repository_records,
+        secrets=secrets,
+        forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
     ).resolve
     work_ref_label = _work_ref_label(work_sources)
     return HubServices(

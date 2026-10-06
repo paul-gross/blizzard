@@ -4062,7 +4062,7 @@
     "repo": {
       "commands": {
         "create": {
-          "help": "Add repository NAME at revision 1.\n\nRefused when the name or the forge, owner and repo are already taken \u2014 a retired repository keeps its\nclaim \u2014 or when the secret is missing or retired. A stored repository does not yet change where the hub\ndelivers.",
+          "help": "Add repository NAME at revision 1.\n\nRefused when the name or the forge, owner and repo are already taken \u2014 a retired repository keeps its\nclaim \u2014 or when the secret is missing or retired. The hub resolves a chunk's commits against the record\non its next deliver.",
           "params": [
             {
               "hidden": false,
@@ -6342,7 +6342,7 @@
     "source": {
       "commands": {
         "create": {
-          "help": "Add work source NAME at revision 1.\n\nRefused when the name or the provider and locator are already taken \u2014 a retired source keeps its claim \u2014\nor when the secret is missing or retired. A stored source does not yet change what the hub ingests.",
+          "help": "Add work source NAME at revision 1.\n\nRefused when the name or the provider and locator are already taken \u2014 a retired source keeps its claim \u2014\nor when the secret is missing or retired. The hub reads the record on its next use of the source.",
           "params": [
             {
               "hidden": false,

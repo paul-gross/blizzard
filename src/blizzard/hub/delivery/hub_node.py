@@ -40,6 +40,15 @@ from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRe
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.config.repositories import (
+    CommitOrigin,
+    IReadRepositoryRecordRepository,
+    RepositoryOutcome,
+    RepositoryResolution,
+    ResolvedRepository,
+    resolve_chunk_repositories,
+)
+from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -164,14 +173,20 @@ class GitCommits:
                 latest[identity] = row  # identical re-declaration: a correction, not a second unit
         return cls(list(latest.values()))
 
-    @property
-    def payload(self) -> list[dict[str, str | None]]:
-        """:data:`ENV_GIT_COMMITS`'s content: ``repo`` is the row's identity — owner-qualified when
-        its origin encodes one, so a chunk spanning two owners addresses each correctly, else the
-        bare name for the script's configured-owner fallback to qualify."""
+    def origins(self) -> list[CommitOrigin]:
+        """Each row's repository as its origin names it, in :attr:`rows` order."""
+        return [CommitOrigin.of(row.forge, row.repo or row.name) for row in self.rows]
+
+    def payload(self, qualified: tuple[str, ...] = ()) -> list[dict[str, str | None]]:
+        """:data:`ENV_GIT_COMMITS`'s content: ``repo`` is the ``owner/repo`` of the repository record
+        the row resolved to (``qualified``, in :attr:`rows` order); unresolved, the row's own identity."""
         return [
-            {"repo": self._identity(row), "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
-            for row in self.rows
+            {
+                "repo": qualified[index] if qualified else self._identity(row),
+                "branch": row.data.partition(":")[0],
+                "commit": row.data.partition(":")[2],
+            }
+            for index, row in enumerate(self.rows)
         ]
 
     @staticmethod
@@ -189,13 +204,15 @@ class HubEnv:
     workdir: str
     epoch: int
     artifacts: list  # list[StoredArtifact] — untyped here to avoid a domain->storage import cycle
-    base_branch: str
     marker_callback_url: str
     garden_delivery_url: str = ""
     review_findings_url: str = ""
-    forge_url: str | None = None
+    #: The repository record the chunk's commits resolved to; ``None`` when there are no commits to land.
+    repository: ResolvedRepository | None = None
+    #: The repository's revealed secret, placed in the step's env — the one place a value leaves the hub.
     forge_token: str | None = None
-    forge_owner: str | None = None
+    #: ``owner/repo`` per commit row, in row order, filling each pointer's ``repo``.
+    qualified_repos: tuple[str, ...] = ()
     feature_title: str | None = None
     expects_git_commits: bool = True
     marker_token: str = ""
@@ -216,8 +233,7 @@ class HubEnv:
             ENV_NODE_ID: self.node.node_id,
             ENV_NODE_NAME: self.node.name,
             ENV_EPOCH: str(self.epoch),
-            ENV_BASE_BRANCH: self.base_branch,
-            ENV_GIT_COMMITS: json.dumps(GitCommits.of(self.artifacts).payload),
+            ENV_GIT_COMMITS: json.dumps(GitCommits.of(self.artifacts).payload(self.qualified_repos)),
             ENV_ARTIFACT_NAMES: json.dumps(names),
             ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
             ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
@@ -229,12 +245,12 @@ class HubEnv:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.review_findings_url:
             env[ENV_REVIEW_FINDINGS_URL] = self.review_findings_url
-        if self.forge_url:
-            env[ENV_FORGE_URL] = self.forge_url
+        if self.repository is not None:
+            env[ENV_BASE_BRANCH] = self.repository.base_branch
+            env[ENV_FORGE_URL] = self.repository.forge_api_url
+            env[ENV_FORGE_OWNER] = self.repository.owner
         if self.forge_token:
             env[ENV_FORGE_TOKEN] = self.forge_token
-        if self.forge_owner:
-            env[ENV_FORGE_OWNER] = self.forge_owner
         if self.feature_title:
             env[ENV_FEATURE_TITLE] = self.feature_title
         if self.marker_token:
@@ -311,11 +327,9 @@ class HubNodeExecutor:
         workdir: IHubWorkdir,
         clock: IClock,
         marker_authority: MarkerAuthority,
-        base_branch: str = "main",
+        repositories: IReadRepositoryRecordRepository,
+        secrets: ISecretReader,
         marker_callback_base_url: str = "",
-        forge_url: str | None = None,
-        forge_token: str | None = None,
-        forge_owner: str | None = None,
         public_url: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
@@ -331,11 +345,9 @@ class HubNodeExecutor:
         self._workdir = workdir
         self._clock = clock
         self._marker_authority = marker_authority
-        self._base_branch = base_branch
+        self._repositories = repositories
+        self._secrets = secrets
         self._marker_callback_base_url = marker_callback_base_url
-        self._forge_url = forge_url
-        self._forge_token = forge_token
-        self._forge_owner = forge_owner
         self._public_url = public_url
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
@@ -438,39 +450,44 @@ class HubNodeExecutor:
         marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         try:
             try:
-                env = HubEnv(
-                    chunk=chunk,
-                    node=node,
-                    workdir=workdir,
-                    epoch=epoch,
-                    artifacts=artifacts,
-                    base_branch=self._base_branch,
-                    marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
-                    garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
-                    review_findings_url=self._review_findings_url(chunk.chunk_id, node.node_id, epoch),
-                    forge_url=self._forge_url,
-                    forge_token=self._forge_token,
-                    forge_owner=self._forge_owner,
-                    feature_title=self._resolve_feature_title(chunk),
-                    expects_git_commits=graph.declares_git_commit,
-                    marker_token=marker_token,
-                    work_items=self._resolve_work_items(chunk),
-                    public_url=self._public_url,
-                ).vars
+                git_commits = GitCommits.of(artifacts)
             except UnconvergedDeliveryError as exc:
                 # Routed as a `failure` rather than allowed to escape, which would
                 # crash-loop the tick (tests/test_pin_hub_delivery.py).
-                self._artifacts.record_hub_artifact(
-                    chunk.chunk_id,
-                    node_id=node.node_id,
-                    node_name=node.name,
-                    epoch=epoch,
-                    admission=EpochAdmission.AT_OR_ABOVE,
-                    name=self._log_name(1, "unconverged-delivery", None),
-                    content=f"[unconverged delivery]\n{exc}\n",
-                    at=self._clock.now(),
-                )
-                return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
+                return self._refuse(chunk, graph, node, epoch=epoch, step="unconverged-delivery", detail=str(exc))
+            resolution = resolve_chunk_repositories(
+                git_commits.origins(), self._repositories.list_all(include_retired=True), minted_at=chunk.minted_at
+            )
+            refusal = self._resolution_refusal(resolution)
+            token: str | None = None
+            if resolution.target is not None and refusal is None:
+                try:
+                    token = self._secrets.reveal(SecretName.parse(resolution.target.secret_name)).expose()
+                except (SecretNotFound, SecretRetired) as exc:
+                    refusal = ("repository-secret-unavailable", str(exc))
+            if refusal is not None:
+                step, detail = refusal
+                if resolution.outcome in (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.DISAGREE):
+                    self._record_refusal_event(chunk, node, resolution, epoch=epoch)
+                return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
+            env = HubEnv(
+                chunk=chunk,
+                node=node,
+                workdir=workdir,
+                epoch=epoch,
+                artifacts=artifacts,
+                marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
+                garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
+                review_findings_url=self._review_findings_url(chunk.chunk_id, node.node_id, epoch),
+                repository=resolution.target,
+                forge_token=token,
+                qualified_repos=resolution.qualified,
+                feature_title=self._resolve_feature_title(chunk),
+                expects_git_commits=graph.declares_git_commit,
+                marker_token=marker_token,
+                work_items=self._resolve_work_items(chunk),
+                public_url=self._public_url,
+            ).vars
 
             choice_names = frozenset(c.name for c in node.choices)
             chosen: str | None = None
@@ -524,6 +541,42 @@ class HubNodeExecutor:
             return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits)
         finally:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+
+    @staticmethod
+    def _resolution_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
+        """The ``(hub-log step, detail)`` a refused resolution routes with, or ``None`` when it stands."""
+        if resolution.outcome in (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.DISAGREE):
+            return resolution.outcome.value, resolution.detail
+        return None
+
+    def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
+        kind: EventLogKind = (
+            "repository-unresolved" if resolution.outcome is RepositoryOutcome.UNRESOLVED else "repositories-disagree"
+        )
+        self._events.record(
+            kind=kind,
+            runner_id=None,
+            chunk_id=chunk.chunk_id,
+            lease_id=None,
+            node_name=node.name,
+            message=resolution.detail,
+            detail={"epoch": epoch},
+            at=self._clock.now(),
+        )
+
+    def _refuse(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, step: str, detail: str) -> HubRunResult:
+        """Record why the visit refused to run, and route its failure choice — before any command runs."""
+        self._artifacts.record_hub_artifact(
+            chunk.chunk_id,
+            node_id=node.node_id,
+            node_name=node.name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=self._log_name(1, step, None),
+            content=f"[{step.replace('-', ' ')}]\n{detail}\n",
+            at=self._clock.now(),
+        )
+        return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
 
     def _run_step(
         self, step: RunStep | _NoopStep, *, workdir: str, env: dict[str, str], hub_exec: DerivedContext

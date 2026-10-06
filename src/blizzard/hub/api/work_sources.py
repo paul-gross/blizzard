@@ -66,7 +66,7 @@ router = APIRouter(prefix="/api", tags=["work-sources"], dependencies=[Depends(r
 def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IWorkEditor]:
     """The named source and its editor, or the refusal: 404 for an unknown source,
     409 for a known one with no editor — a structural refusal for every source but
-    ``hub``, since no ``[[work_source]]`` field could ever opt a configured source into
+    ``hub``, since no work-source record field could ever opt a configured source into
     editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
     in" the way ``annotate`` is."""
     source_obj = services.work_sources.get(source)

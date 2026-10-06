@@ -209,7 +209,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
         assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
-        reference = {"repo": REPO_NAME, "number": pulls[0]["number"], "url": pulls[0]["html_url"]}
+        reference = {"repo": REPO, "number": pulls[0]["number"], "url": pulls[0]["html_url"]}
         assert pending["open_prs"] == [reference]
         assert pending["awaiting_external_merge"] is False
         assert pending["landed_repos"] == []
@@ -251,7 +251,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         assert done["status"] == "done", f"did not land after CI went green (status {done['status']!r})"
         assert done["landed"] is True
         landed = done["landed_repos"]
-        assert len(landed) == 1 and landed[0]["repo"] == REPO_NAME
+        assert len(landed) == 1 and landed[0]["repo"] == REPO
         assert done["open_prs"] == []
         assert done["closed_prs"] == [reference]
         assert forge.get(landed[0]["url"]).status_code == 200
