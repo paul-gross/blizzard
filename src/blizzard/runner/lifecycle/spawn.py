@@ -31,7 +31,7 @@ from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnes
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
-from blizzard.runner.hub.client import IHubClient
+from blizzard.runner.hub.client import HubClientError, IHubClient
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import (
@@ -53,6 +53,7 @@ from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRep
 from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.model import (
     MintOwnerSource,
+    chunk_paused,
     escalation_mint_admitted,
     mint_owner_source,
     next_lease_epoch,
@@ -205,8 +206,8 @@ class Spawner:
     """Every path that puts a worker process behind a lease: the fresh, fresh-epoch spawn, and
     the per-lease identity a resume or a judgement re-supplies.
 
-    The local-pause brake is checked here, before any mutation — so a suppressed
-    start writes no fact, kills no pid and mints no lease."""
+    The runner's brakes and the chunk's own pause are checked here, before any mutation — so a
+    suppressed start writes no fact, kills no pid and mints no lease."""
 
     ctx: SpawnContext
 
@@ -216,20 +217,34 @@ class Spawner:
         return RunnerBrakes(local=pause.local_paused(), hub=pause.hub_paused())
 
     def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
-        """True — and logged once — when the runner's brakes block this start.
+        """True — and logged once — when the runner's brakes or the chunk's own pause block this start.
 
         Which call sites must consult it is held mechanically by
         ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
-        if self.brakes().starts_processes:
+        if not self.brakes().starts_processes:
+            self._log_suppressed("spawn suppressed — locally paused", via, chunk_id, lease_id)
+            return True
+        if self._chunk_paused(chunk_id):
+            self._log_suppressed("spawn suppressed — chunk paused", via, chunk_id, lease_id)
+            return True
+        return False
+
+    def _chunk_paused(self, chunk_id: str) -> bool:
+        """A per-chunk pause stands at the hub. Unreadable reads as not paused — PULL parks the
+        lease on the next tick that reads the pause."""
+        try:
+            return chunk_paused(self.ctx.chunk_views.get(chunk_id))
+        except HubClientError:
             return False
+
+    def _log_suppressed(self, event: str, via: str, chunk_id: str, lease_id: str | None) -> None:
         _log.info(
-            "spawn suppressed — locally paused",
+            event,
             runner_name=self.ctx.config.runner_name,
             via=via,
             chunk_id=chunk_id,
             lease_id=lease_id,
         )
-        return True
 
     def spawn(
         self,
